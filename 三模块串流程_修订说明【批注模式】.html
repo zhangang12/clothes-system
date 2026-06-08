@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>三模块串流程 · 修订说明（v1.0）</title>
+<style>
+:root{
+  --indigo:#1E3A5F;--indigo-l:#2C5180;
+  --linen:#F5EDDC;--linen-d:#E8DCC0;--canvas:#FBF8F2;
+  --rust:#D17A40;--rust-d:#B86530;--vermilion:#C04042;
+  --teal:#3E8E7E;--amber:#C8901E;
+  --green:#2E7D32;--green-bg:#E8F5E9;
+  --red-bg:#FFEBEE;
+  --gray-9:#1F1F22;--gray-7:#37383C;--gray-5:#6F7178;
+  --gray-3:#B5B7BD;--gray-1:#E5E2DA;--gray-0:#F4F1EA;
+  --font:"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:13px/1.55 var(--font);color:var(--gray-9);background:#EEEAE0;padding:0}
+.topbar{position:sticky;top:0;background:var(--indigo);color:#fff;padding:14px 32px;border-bottom:3px solid var(--rust);z-index:10}
+.topbar h1{font-size:18px;font-weight:600}
+.topbar h1 small{font-size:12px;color:#C9D6E5;margin-left:10px;font-weight:400}
+.main{max-width:1200px;margin:0 auto;padding:24px 32px 60px}
+.cover{background:linear-gradient(135deg,var(--rust) 0%,#A85423 100%);color:#fff;padding:28px 32px;border-radius:10px;margin-bottom:20px;box-shadow:0 4px 12px rgba(0,0,0,.1)}
+.cover h2{font-size:22px;margin-bottom:8px;font-weight:600}
+.cover p{font-size:14px;line-height:1.8;color:#FFE0C2}
+.cover .meta{margin-top:12px;font-size:12px;color:#FFD49C}
+.cover .meta span{display:inline-block;background:rgba(255,255,255,.15);padding:3px 10px;border-radius:12px;margin-right:8px}
+
+.summary{background:#fff;border:1px solid var(--gray-1);border-radius:8px;padding:18px 22px;margin-bottom:20px}
+.summary h3{color:var(--indigo);font-size:16px;font-weight:600;margin-bottom:10px;border-bottom:2px solid var(--linen);padding-bottom:6px}
+.summary .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px}
+.stat-card{background:var(--canvas);border:1px solid var(--gray-1);border-left:3px solid var(--indigo);border-radius:6px;padding:12px 14px}
+.stat-card .num{font-size:22px;font-weight:700;color:var(--indigo)}
+.stat-card .label{font-size:11px;color:var(--gray-5);margin-top:3px}
+.stat-card.rust{border-left-color:var(--rust)}.stat-card.rust .num{color:var(--rust)}
+.stat-card.teal{border-left-color:var(--teal)}.stat-card.teal .num{color:var(--teal)}
+.stat-card.amber{border-left-color:var(--amber)}.stat-card.amber .num{color:var(--amber)}
+
+section.module{background:#fff;border:1px solid var(--gray-1);border-radius:8px;margin-bottom:20px;overflow:hidden}
+section.module .head{padding:14px 22px;background:linear-gradient(135deg,var(--indigo) 0%,var(--indigo-l) 100%);color:#fff;display:flex;justify-content:space-between;align-items:center}
+section.module .head h2{font-size:16px;font-weight:600}
+section.module .head .badge{display:inline-block;background:rgba(255,255,255,.18);padding:3px 10px;border-radius:12px;font-size:11px}
+section.module .head .badge.major{background:var(--rust)}
+section.module .body{padding:18px 22px}
+
+table.diff{width:100%;border-collapse:collapse;font-size:12.5px;margin:8px 0 16px;border:1px solid var(--gray-1);border-radius:4px;overflow:hidden}
+table.diff th{background:#EDF1F7;color:var(--indigo);font-weight:600;text-align:left;padding:7px 10px;font-size:11.5px;border-bottom:1px solid var(--gray-1)}
+table.diff td{padding:7px 10px;border-top:1px solid var(--gray-1);vertical-align:top;line-height:1.6}
+table.diff tr:nth-child(odd) td{background:var(--canvas)}
+table.diff tr.major td{background:#FFF3E0}
+.before{color:var(--gray-5);text-decoration:line-through;font-size:11.5px}
+.after{color:var(--green);font-weight:500}
+.tag{display:inline-block;font-size:10px;padding:1px 6px;border-radius:8px;margin:0 3px;font-weight:600}
+.tag.major{background:var(--rust);color:#fff}
+.tag.q{background:#EDF1F7;color:var(--indigo)}
+.tag.anno{background:var(--vermilion);color:#fff}
+.tag.add{background:var(--green-bg);color:var(--green);border:1px solid var(--green)}
+.tag.del{background:var(--red-bg);color:var(--vermilion);border:1px solid var(--vermilion)}
+.tag.chg{background:#FFF3E0;color:var(--rust);border:1px solid var(--rust)}
+
+h3.sub{color:var(--indigo);font-size:14px;font-weight:600;margin-top:14px;margin-bottom:8px;padding:6px 0;border-bottom:1px dashed var(--gray-1)}
+.note-box{background:var(--linen);border-left:3px solid var(--rust);padding:10px 14px;margin:8px 0;border-radius:0 4px 4px 0;font-size:12px;color:#7A5810;line-height:1.7}
+.note-box b{color:var(--rust)}
+.warn-box{background:#FFF3E0;border-left:3px solid var(--amber);padding:10px 14px;margin:8px 0;border-radius:0 4px 4px 0;font-size:12px;color:#7A5810;line-height:1.7}
+
+.qa-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:8px}
+.qa-card{background:var(--canvas);border:1px solid var(--gray-1);border-radius:4px;padding:8px 12px;font-size:12px}
+.qa-card .qa-id{display:inline-block;background:var(--indigo);color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:600;margin-right:6px}
+.qa-card .qa-q{color:var(--gray-7);font-weight:500}
+.qa-card .qa-a{color:var(--green);margin-top:3px;font-size:11.5px}
+.qa-card .qa-a:before{content:"→ ";color:var(--rust)}
+
+.flow-box{background:#FCFAF4;border:1px solid var(--gray-1);border-radius:6px;padding:16px;font-family:Monaco,monospace;font-size:11.5px;line-height:1.8;color:var(--gray-9);white-space:pre;overflow-x:auto}
+
+.toc{background:#fff;border:1px solid var(--gray-1);border-radius:8px;padding:16px 22px;margin-bottom:20px}
+.toc h3{color:var(--indigo);font-size:14px;margin-bottom:8px}
+.toc ul{list-style:none;display:grid;grid-template-columns:repeat(2,1fr);gap:4px 16px}
+.toc li{padding:4px 0;font-size:12.5px}
+.toc a{color:var(--indigo);text-decoration:none;border-left:3px solid transparent;padding:2px 8px;display:block;border-radius:2px}
+.toc a:hover{background:var(--linen);border-left-color:var(--rust)}
+.toc a .impact{display:inline-block;font-size:10px;padding:1px 6px;border-radius:8px;margin-left:6px}
+.toc a .high{background:var(--rust);color:#fff}
+.toc a .mid{background:var(--amber);color:#fff}
+.toc a .low{background:var(--teal);color:#fff}
+
+/* —— 批注功能 —— */
+.topbar{display:flex;justify-content:space-between;align-items:center}
+.topbar-actions{display:flex;gap:8px;align-items:center}
+.anno-toggle,.anno-export{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);padding:5px 12px;border-radius:14px;font-size:12px;cursor:pointer;font-family:inherit}
+.anno-toggle:hover,.anno-export:hover{background:rgba(255,255,255,.25)}
+.anno-toggle.on{background:var(--rust);border-color:var(--rust)}
+.anno-count{display:inline-block;background:#fff;color:var(--rust);padding:1px 7px;border-radius:10px;font-weight:600;margin-left:4px;font-size:11px}
+.anno-icon{display:none;position:absolute;background:var(--rust);color:#fff;width:20px;height:20px;border-radius:50%;font-size:12px;line-height:20px;text-align:center;cursor:pointer;z-index:50;box-shadow:0 2px 4px rgba(0,0,0,.2);border:none;font-family:inherit;padding:0;right:-24px;top:4px}
+.anno-icon:hover{transform:scale(1.2)}
+.anno-icon.has-note{background:var(--vermilion)}
+body.anno-on .anno-icon{display:inline-block}
+body.anno-on [data-anno-target]{position:relative;outline:1px dashed rgba(209,122,64,.3);outline-offset:2px;transition:all .15s}
+body.anno-on [data-anno-target]:hover{outline:1px solid var(--rust);background:rgba(255,247,234,.5)}
+.anno-modal-mask{position:fixed;inset:0;background:rgba(30,58,95,.5);display:none;z-index:1000;align-items:center;justify-content:center}
+.anno-modal-mask.open{display:flex}
+.anno-modal{background:#fff;border-radius:8px;width:540px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.anno-modal-head{background:var(--rust);color:#fff;padding:12px 18px;border-radius:8px 8px 0 0;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.anno-modal-head .x{cursor:pointer;font-size:18px;line-height:1}
+.anno-modal-body{padding:18px}
+.anno-modal-body label{display:block;font-size:11px;color:var(--gray-5);margin-bottom:4px}
+.anno-modal-body .target-info{font-size:13px;color:var(--gray-9);margin-bottom:10px;padding:6px 10px;background:var(--canvas);border-radius:4px;border-left:3px solid var(--rust)}
+.anno-modal-body textarea{width:100%;min-height:140px;border:1px solid var(--gray-1);border-radius:4px;padding:8px 10px;font:13px/1.6 var(--font);resize:vertical}
+.anno-modal-foot{padding:12px 18px;background:var(--canvas);border-top:1px solid var(--gray-1);display:flex;justify-content:flex-end;gap:8px;border-radius:0 0 8px 8px}
+.btn-mini{display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:4px;font-size:12px;cursor:pointer;border:1px solid;line-height:1.5;font-family:inherit}
+.btn-mini.btn-p{background:var(--indigo);color:#fff;border-color:var(--indigo)}
+.btn-mini.btn-c{background:var(--rust);color:#fff;border-color:var(--rust)}
+.btn-mini.btn-s{background:#fff;color:var(--gray-7);border-color:var(--gray-1)}
+.btn-mini.btn-g{background:#fff;color:var(--vermilion);border-color:var(--gray-1)}
+.anno-tip{background:#FFF7EA;border:1px solid #EDD8A8;border-radius:4px;padding:10px 14px;font-size:12px;color:#5C4307;margin-bottom:16px;display:none}
+body.anno-on .anno-tip{display:block}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>📋 三模块串流程 · 修订说明<small>v1.0 · 2026-05-29 · 业务方答完 40 个问题 + 4 条 UI 批注后定版</small></h1>
+  <div class="topbar-actions">
+    <button id="annoToggle" class="anno-toggle" onclick="toggleAnno()">💬 批注模式：OFF</button>
+    <button id="annoExport" class="anno-export" onclick="exportAnno()" style="display:none">📥 导出批注 <span id="annoCount" class="anno-count">0</span></button>
+    <button id="annoClear" class="anno-export" onclick="clearAnno()" style="display:none">🗑 清空</button>
+  </div>
+</div>
+
+<main class="main">
+
+  <div class="anno-tip">
+    <b>💬 批注模式已开启</b>　将鼠标移到任一表格行 / 表格 / 区块 / 卡片上，点击右侧 <b style="background:#D17A40;color:#fff;padding:1px 7px;border-radius:50%;font-size:11px">💬</b> 即可写下评审意见。批注保存到浏览器，完成后点 <b>📥 导出批注</b> 下载 .md 发给设计师。
+  </div>
+
+<div class="cover">
+  <h2>📐 修订说明（READ ME FIRST）</h2>
+  <p>本文档汇总业务方对「三模块串流程问题清单」40 个问题的回答 + 客户报价 UI 设计稿的 4 条批注，按模块拆解出所有修改点，作为后续开发的设计依据。</p>
+  <p style="margin-top:8px">设计稿 + docx 需求书已按本文档同步更新（标记 ✅）。</p>
+  <div class="meta">
+    <span>📅 2026-05-29</span>
+    <span>📊 40 个问题 / 4 条批注</span>
+    <span>🎯 32 项修改点</span>
+    <span>📦 3 模块同步更新</span>
+  </div>
+</div>
+
+<div class="toc">
+  <h3>📑 目录</h3>
+  <ul>
+    <li><a href="#summary">① 总览：统计 + 关键决策</a></li>
+    <li><a href="#cross">② 跨模块业务规则（10 项）<span class="impact high">P0</span></a></li>
+    <li><a href="#m1">③ 模块 1：基础资料 修改点<span class="impact high">P0</span></a></li>
+    <li><a href="#m2">④ 模块 2：样衣管理 修改点<span class="impact mid">P1</span></a></li>
+    <li><a href="#m3">⑤ 模块 3：客户报价 修改点<span class="impact high">P0 重大</span></a></li>
+    <li><a href="#flow">⑥ 整合后的端到端业务流图</a></li>
+    <li><a href="#qa-all">⑦ 全部 40 问题 + 答案明细</a></li>
+    <li><a href="#pending">⑧ 仍待业务方进一步确认的项</a></li>
+  </ul>
+</div>
+
+<!-- ========== ① 总览 ========== -->
+<section class="module" id="summary">
+  <div class="head"><h2>① 总览：业务方决策统计</h2><span class="badge">40 问 + 4 批注</span></div>
+  <div class="body">
+    <div class="summary" style="border:none;padding:0;margin-bottom:0">
+      <div class="stat-grid">
+        <div class="stat-card"><div class="num">40</div><div class="label">问题清单 已回答</div></div>
+        <div class="stat-card rust"><div class="num">4</div><div class="label">客户报价 UI 批注</div></div>
+        <div class="stat-card amber"><div class="num">32</div><div class="label">本次修改点</div></div>
+        <div class="stat-card teal"><div class="num">3</div><div class="label">模块同步更新</div></div>
+      </div>
+    </div>
+
+    <h3 class="sub">🔥 8 个最关键决策（影响开发架构）</h3>
+    <div class="qa-grid">
+      <div class="qa-card"><span class="qa-id">A1</span><span class="qa-q">样衣 → 报价 1:N 还是 1:1？</span><div class="qa-a">1:1 ❗（要再报价必须复制新建）</div></div>
+      <div class="qa-card"><span class="qa-id">A2</span><span class="qa-q">颜色字段怎么映射？</span><div class="qa-a">多颜色用 "/" 分隔合并到一个字段</div></div>
+      <div class="qa-card"><span class="qa-id">A5</span><span class="qa-q">样衣修改后报价是否同步？</span><div class="qa-a">不同步（报价是快照）</div></div>
+      <div class="qa-card"><span class="qa-id">B1</span><span class="qa-q">已成单是否反向更新样衣？</span><div class="qa-a">列表标绿，未成单不显示颜色</div></div>
+      <div class="qa-card"><span class="qa-id">C1</span><span class="qa-q">基础资料改了是否同步？</span><div class="qa-a">实时同步（中间商改名 → 所有引用自动更新）</div></div>
+      <div class="qa-card"><span class="qa-id">D1</span><span class="qa-q">编号格式怎么区分？</span><div class="qa-a">加前缀：样衣 S-、报价 Q-</div></div>
+      <div class="qa-card"><span class="qa-id">D2</span><span class="qa-q">客户/工厂编号自动 vs 手填？</span><div class="qa-a">改自动生成（CN001 / S001 系统递增）</div></div>
+      <div class="qa-card"><span class="qa-id">F2</span><span class="qa-q">报价里改耗用是否反向同步？</span><div class="qa-a">能改但不影响样衣（独立快照）</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== ② 跨模块规则 ========== -->
+<section class="module" id="cross">
+  <div class="head"><h2>② 跨模块业务规则（共 10 项）</h2><span class="badge major">P0 优先实现</span></div>
+  <div class="body">
+    <table class="diff">
+      <thead><tr><th style="width:120px">规则</th><th style="width:380px">具体行为</th><th style="width:280px">影响模块</th><th>问题号</th></tr></thead>
+      <tbody>
+        <tr class="major"><td><b>编号前缀</b> <span class="tag chg">改</span></td>
+            <td>样衣 → <code>S-20260528-01</code>　客户报价 → <code>Q-20260528-01</code><br><span class="before">原：纯日期+序号</span></td>
+            <td>样衣管理 / 客户报价</td><td>D1</td></tr>
+        <tr class="major"><td><b>客户/工厂编号</b> <span class="tag chg">改</span></td>
+            <td>改为系统自动递增：客户 <code>CN001</code> / 工厂 <code>S001</code><br><span class="before">原：业务手填</span></td>
+            <td>基础资料</td><td>D2</td></tr>
+        <tr><td><b>实时同步</b> <span class="tag add">新</span></td>
+            <td>客户资料 / 工厂资料 修改 → 所有引用单据自动更新显示</td>
+            <td>样衣管理 / 客户报价 引用层</td><td>C1</td></tr>
+        <tr><td><b>阻止删除</b> <span class="tag add">新</span></td>
+            <td>客户/工厂/样衣 被引用时 → 提示"已有 N 张关联单据"阻止删除</td>
+            <td>三模块联动</td><td>A6 / C2 / C3</td></tr>
+        <tr><td><b>样衣:报价 = 1:1</b> <span class="tag chg">改</span></td>
+            <td>一个样衣只能对应一张报价；要再报价必须用「复制建新报价」<br><span class="before">原方案：1:N</span></td>
+            <td>客户报价</td><td>A1</td></tr>
+        <tr><td><b>颜色字段映射</b> <span class="tag add">新</span></td>
+            <td>样衣的颜色 1/2/3 多列 → 报价单一个"颜色"字段，用 "/" 分隔合并（如 "白 / 藏青 / 灰"）</td>
+            <td>样衣管理 → 客户报价</td><td>A2</td></tr>
+        <tr><td><b>报价快照</b> <span class="tag add">新</span></td>
+            <td>报价生成后是快照——样衣后续修改 <b>不</b> 同步到报价（业务可在报价里改耗用，不反向影响样衣）</td>
+            <td>客户报价</td><td>A5 / F2</td></tr>
+        <tr><td><b>权限分层</b> <span class="tag add">新</span></td>
+            <td>版师/打样间 <b>不能</b> 看客户报价；财务能看样衣，仅看对账金额相关字段</td>
+            <td>客户报价 / 样衣管理</td><td>F1 / F3</td></tr>
+        <tr><td><b>报价已成单标绿</b> <span class="tag add">新</span></td>
+            <td>样衣列表中：有成单报价的样衣 → 整行标绿；未成单 → 默认色</td>
+            <td>样衣管理 列表页</td><td>B1</td></tr>
+        <tr><td><b>报价需审批</b> <span class="tag add">新</span></td>
+            <td>业务出报价 → 主管审批 → 状态从"草稿"→"已报价" 才能发给客户</td>
+            <td>客户报价</td><td>H2</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ========== ③ 基础资料 ========== -->
+<section class="module" id="m1">
+  <div class="head"><h2>③ 模块 1：基础资料 · 修改点</h2><span class="badge">5 项</span></div>
+  <div class="body">
+    <table class="diff">
+      <thead><tr><th style="width:140px">变更项</th><th style="width:350px">具体说明</th><th>处置</th></tr></thead>
+      <tbody>
+        <tr class="major">
+          <td><b>工厂编号</b> <span class="tag chg">改</span></td>
+          <td><span class="before">原：业务手填</span><br><span class="after">新：系统自动生成 <code>S001</code> 递增，业务不可改</span></td>
+          <td>D2 决策；改"工厂资料"主表"工厂编号"字段属性为只读+自动</td>
+        </tr>
+        <tr class="major">
+          <td><b>客户编号</b> <span class="tag chg">改</span></td>
+          <td><span class="before">原：业务手填</span><br><span class="after">新：系统自动生成 <code>CN001</code> 递增</span></td>
+          <td>D2 决策；同上</td>
+        </tr>
+        <tr>
+          <td><b>客户资料 删除</b> <span class="tag add">新</span></td>
+          <td>删除时校验是否有关联单据，有则 <b>阻止删除</b>（提示"已有 N 张样衣/报价引用"）</td>
+          <td>C2 决策</td>
+        </tr>
+        <tr>
+          <td><b>工厂资料 删除</b> <span class="tag add">新</span></td>
+          <td>同上：被样衣管理材料明细引用时阻止删除</td>
+          <td>C3 决策</td>
+        </tr>
+        <tr>
+          <td><b>资料修改 联动</b> <span class="tag add">新</span></td>
+          <td>修改客户/工厂的名称等字段后，所有引用单据 <b>实时显示更新值</b>（业务可见最新名称）；价格条款/结汇方式/贸易国别等历史关键字段同样同步</td>
+          <td>C1 决策（实时同步全字段）</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="note-box"><b>📌 实现要点</b>：编号自动生成意味着旧数据迁移问题（J3 决策：<b>不迁，重新建档</b>）— 新系统上线时所有客户/工厂从 001 开始。</div>
+  </div>
+</section>
+
+<!-- ========== ④ 样衣管理 ========== -->
+<section class="module" id="m2">
+  <div class="head"><h2>④ 模块 2：样衣管理 · 修改点</h2><span class="badge">7 项</span></div>
+  <div class="body">
+    <table class="diff">
+      <thead><tr><th style="width:140px">变更项</th><th style="width:350px">具体说明</th><th>处置</th></tr></thead>
+      <tbody>
+        <tr class="major">
+          <td><b>样衣编号格式</b> <span class="tag chg">改</span></td>
+          <td><span class="before">原：<code>20260528-01</code></span><br><span class="after">新：<code>S-20260528-01</code>（加 S 前缀）</span></td>
+          <td>D1 决策</td>
+        </tr>
+        <tr class="major">
+          <td><b>板房样衣单价</b> <span class="tag chg">改</span></td>
+          <td>明确为 <b>固定人民币 CNY</b>（不跟客户报价的币种走）</td>
+          <td>E1 决策</td>
+        </tr>
+        <tr class="major">
+          <td><b>列表页 已成单标绿</b> <span class="tag add">新</span></td>
+          <td>样衣列表新增"成单状态" 列：<br>· 已有报价已成单的样衣 → 整行背景 <span style="background:#D1FAE5;color:#065F46;padding:1px 6px;border-radius:6px">绿色</span><br>· 未成单 → 默认白色</td>
+          <td>B1 决策（取代之前"反向更新状态字段"方案）</td>
+        </tr>
+        <tr>
+          <td><b>阻止删除</b> <span class="tag add">新</span></td>
+          <td>样衣被客户报价引用时 → 提示"已有 N 张报价单引用"阻止删除</td>
+          <td>A6 决策</td>
+        </tr>
+        <tr>
+          <td><b>允许预报价</b> <span class="tag add">新</span></td>
+          <td>样衣在"待派单/制版中/打样中"状态下，业务可提前出客户报价（材料/耗用版师还没填全时业务先估算填）</td>
+          <td>B3 决策</td>
+        </tr>
+        <tr>
+          <td><b>客户/工厂改动联动</b> <span class="tag add">新</span></td>
+          <td>样衣关联的中间商/最终买家/供应商修改后 → 样衣单页面自动显示更新值</td>
+          <td>C1 决策</td>
+        </tr>
+        <tr>
+          <td><b>复制功能</b> <span class="tag add">新</span></td>
+          <td>列表页 [复制] 按钮：复制基本信息建新样衣（材料/寄样 不复制，需要重新做）</td>
+          <td>K3 决策</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="note-box"><b>📌 样衣管理 v1.x → v2.0</b>：本次主要是<b>跨模块联动 + 视觉调整</b>，单据内部字段无变化。</div>
+  </div>
+</section>
+
+<!-- ========== ⑤ 客户报价（重大改造） ========== -->
+<section class="module" id="m3">
+  <div class="head"><h2>⑤ 模块 3：客户报价 · 修改点（重大改造）</h2><span class="badge major">12 项 · 含 4 条 UI 批注</span></div>
+  <div class="body">
+
+    <h3 class="sub">📝 主要信息（18 → 19 字段）</h3>
+    <table class="diff">
+      <thead><tr><th style="width:140px">变更项</th><th style="width:350px">具体说明</th><th>处置</th></tr></thead>
+      <tbody>
+        <tr class="major">
+          <td><b>报价单号格式</b> <span class="tag chg">改</span></td>
+          <td><span class="before">原：<code>20260528-01</code></span><br><span class="after">新：<code>Q-20260528-01</code>（加 Q 前缀）</span></td>
+          <td>D1 决策</td>
+        </tr>
+        <tr>
+          <td><b>关联样衣编号</b> <span class="tag chg">改</span></td>
+          <td>格式：<code>S-20260528-01</code>（呼应样衣管理的 S 前缀）</td>
+          <td>D1 决策</td>
+        </tr>
+        <tr>
+          <td><b>汇率</b> <span class="tag chg">改</span></td>
+          <td>业务<b>手填</b>（不再从"货币代码"字典自动带）；精度 <b>保留 2 位小数</b></td>
+          <td>E2 / E3 决策</td>
+        </tr>
+        <tr>
+          <td><b>客户款号</b> <span class="tag chg">改</span></td>
+          <td>从关联样衣自动带，但业务<b>可改</b>（不锁定）</td>
+          <td>K4 决策</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 class="sub">📸 图片信息（批注 1）</h3>
+    <table class="diff">
+      <tbody><tr>
+        <td style="width:140px"><b>图片上传方式</b> <span class="tag chg">改</span></td>
+        <td style="width:350px">从单一"上传按钮"改为支持 <b>截图粘贴 + 拖本地文件</b> 双方式</td>
+        <td>批注 1</td>
+      </tr></tbody>
+    </table>
+
+    <h3 class="sub">🧵 报价明细子表（批注 3 重大改造）</h3>
+    <table class="diff">
+      <thead><tr><th style="width:140px">变更项</th><th style="width:350px">具体说明</th><th>处置</th></tr></thead>
+      <tbody>
+        <tr class="major">
+          <td><b>删除 2 列</b> <span class="tag del">删</span></td>
+          <td>❌ 人民币合计　❌ 美金合计（不再显示）</td>
+          <td>批注 3</td>
+        </tr>
+        <tr class="major">
+          <td><b>新增 2 列</b> <span class="tag add">新</span></td>
+          <td>✅ <b>损耗（%）</b>：默认 3%（数字字段，可改）<br>✅ <b>含损金额</b>：公式自动 = 人民币合计 × (1 + 损耗)</td>
+          <td>批注 3</td>
+        </tr>
+        <tr>
+          <td><b>报价耗用 可改</b> <span class="tag chg">改</span></td>
+          <td>从样衣"实际耗用"导入后，<b>业务可调整</b>（不影响样衣的实际耗用，独立快照）</td>
+          <td>A3 / F2 决策</td>
+        </tr>
+        <tr>
+          <td><b>颜色字段</b> <span class="tag chg">改</span></td>
+          <td>样衣的颜色 1/2/3 多列 → "/"分隔合并到一个"颜色"字段</td>
+          <td>A2 决策</td>
+        </tr>
+        <tr>
+          <td><b>供应商名称</b> <span class="tag add">新</span></td>
+          <td>保留供应商列（业务可见）；导出 PDF 时<b>默认隐藏</b>（不给客户看）</td>
+          <td>A4 决策</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 class="sub">💰 费用明细子表（批注 2）</h3>
+    <table class="diff">
+      <thead><tr><th style="width:140px">变更项</th><th style="width:350px">具体说明</th><th>处置</th></tr></thead>
+      <tbody>
+        <tr class="major">
+          <td><b>删除 2 列</b> <span class="tag del">删</span></td>
+          <td>❌ 人民币合计　❌ 美金合计（不显示）</td>
+          <td>批注 2</td>
+        </tr>
+        <tr class="major">
+          <td><b>新建时自动带入 6 行</b> <span class="tag add">新</span></td>
+          <td>新建报价单时，费用明细自动预填以下行（业务可改/可删）：<br>1. 加工费　2. 线　3. 包装<br>4. 样衣费　5. 测试费　6. 运费</td>
+          <td>批注 2</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 class="sub">📊 报价合计表单（批注 4 大幅简化）</h3>
+    <table class="diff">
+      <thead><tr><th style="width:140px">变更项</th><th style="width:350px">具体说明</th><th>处置</th></tr></thead>
+      <tbody>
+        <tr class="major">
+          <td><b>9 字段 → 3 字段</b> <span class="tag del">删 6</span></td>
+          <td>只保留 3 项：<br>✅ <b>报价人民币价格</b>（含利润率后总价）<br>✅ <b>报价美金价格</b>（含利润率后总价）<br>✅ <b>备注说明</b>（文本框）<br><br><span class="before">删除：报价人民币价格(无利润)/报价美元价格(无利润)/报价排料人民币/美金合计/报价费用人民币/美金合计</span></td>
+          <td>批注 4</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 class="sub">🔘 操作按钮 / 状态机</h3>
+    <table class="diff">
+      <thead><tr><th style="width:140px">变更项</th><th style="width:350px">具体说明</th><th>处置</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>审批流</b> <span class="tag add">新</span></td>
+          <td>业务出报价（草稿）→ <b>主管审批</b> → 才能从"草稿"变"已报价"发给客户</td>
+          <td>H2 决策</td>
+        </tr>
+        <tr>
+          <td><b>转销售合同</b> <span class="tag add">无审批</span></td>
+          <td>转销售合同<b>不需要审批</b>（业务确认后直接转）</td>
+          <td>H3 决策</td>
+        </tr>
+        <tr>
+          <td><b>复制建新报价</b> <span class="tag add">新</span></td>
+          <td>当一张报价转销售合同后，要给其他客户报价 → 使用 [📋 复制] 按钮新建</td>
+          <td>K1 / K3 决策</td>
+        </tr>
+        <tr>
+          <td><b>草稿永久保留</b> <span class="tag add">新</span></td>
+          <td>"草稿" 状态报价单永久保留，不自动归档</td>
+          <td>K2 决策</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ========== ⑥ 业务流图 ========== -->
+<section class="module" id="flow">
+  <div class="head"><h2>⑥ 整合后的端到端业务流图</h2><span class="badge">v2.0 定稿</span></div>
+  <div class="body">
+    <div class="flow-box">
+[基础资料]                                                            [部分员工]                   [财务]
+  ├─ 工厂资料（S001 自动）─┐                                              │                           │
+  └─ 客户资料（CN001 自动）─┤                                              │                           │
+                            ▼ 引用（实时同步）                              │                           │
+                       [样衣管理]                                          │                           │
+                          编号: S-20260528-01                              │                           │
+                          材料明细 / 寄样跟踪 / 三角色协作                     │                           │
+                            │                                              │                           │
+                            ├─ 业务派单 → 版师做纸板 → 业务派 → 打样间做样衣  │                           │
+                            │                                              │                           │
+                       【1:1】═════════════════════════════════════════════ │                           │
+                            │                                              │                           │
+                            ▼ 业务点 [📥 从样衣导入]                          │                           │
+                       [客户报价]                                          │                           │
+                          编号: Q-20260528-01                              │                           │
+                          报价明细（从样衣快照 + 损耗% + 含损金额）            │                           │
+                          费用明细（自动带 6 行：加工/线/包装/样衣/测试/运费）  │                           │
+                          报价合计（仅 3 字段：人民币价/美金价/备注）          │                           │
+                            │                                              │                           │
+                            ▼ 主管审批                                      │                           │
+                       [已报价] → 发客户                                    │                           │
+                            │                                              │                           │
+                            ▼ 客户确认成单                                    │                           │
+                       [已成单] ══════════════════════════════════════════►  样衣列表"标绿" 提示
+                            │                                              │                           │
+                            ▼ 转销售合同（全带，无审批）                       │                           │
+                       [销售合同] ──> 后续生产/出货/对账/付款流程              │                           │
+                                                                          │                           ▼
+                                                                          │                      [财务付款]
+    </div>
+
+    <div class="note-box"><b>📌 状态变化关键点</b>：
+      <ul style="margin-left:18px;margin-top:6px">
+        <li>样衣管理状态独立（5 个：待派单/制版中/打样中/已寄出/已对账完成）</li>
+        <li>客户报价状态独立（5 个：草稿/已报价/客户调整/已成单/已撤销）</li>
+        <li>两个状态<b>不直接联动</b>，但报价"已成单" → 触发样衣列表标绿</li>
+        <li>样衣可在任意状态下被业务建报价（B3 允许预报价）</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ========== ⑦ 全部 40 问题 + 答案明细 ========== -->
+<section class="module" id="qa-all">
+  <div class="head"><h2>⑦ 业务方 40 个问题 · 答案全清单</h2><span class="badge">便于追溯</span></div>
+  <div class="body">
+
+    <h3 class="sub">A. 数据流转：样衣 → 客户报价（6 问）</h3>
+    <table class="diff">
+      <thead><tr><th style="width:50px">序</th><th style="width:300px">问题</th><th>业务方回答</th></tr></thead>
+      <tbody>
+        <tr><td>A1</td><td>样衣 → 报价 1:N 还是 1:1？</td><td class="after"><b>1:1</b>（要再报价必须复制新建）</td></tr>
+        <tr><td>A2</td><td>颜色字段怎么映射？</td><td class="after"><b>多颜色用 "/" 分隔合并到一个字段</b></td></tr>
+        <tr><td>A3</td><td>实际耗用直接作为报价耗用？</td><td class="after"><b>报价时业务可调整</b>（如 ×1.05 加损耗）</td></tr>
+        <tr><td>A4</td><td>供应商要不要带到报价？</td><td class="after"><b>带，但 PDF 默认隐藏</b></td></tr>
+        <tr><td>A5</td><td>样衣修改后报价同步吗？</td><td class="after"><b>不同步</b>（报价是快照）</td></tr>
+        <tr><td>A6</td><td>样衣删除时关联报价怎么办？</td><td class="after"><b>阻止删除</b>（提示已有 N 张报价引用）</td></tr>
+      </tbody>
+    </table>
+
+    <h3 class="sub">B. 状态机联动（3 问）</h3>
+    <table class="diff">
+      <tbody>
+        <tr><td style="width:50px">B1</td><td style="width:300px">已成单是否反向更新样衣？</td><td class="after"><b>列表中已成单的款号自动标绿，未成单不显示颜色</b>（按颜色区分）</td></tr>
+        <tr><td>B2</td><td>已撤销时样衣怎么处理？</td><td class="after"><b>样衣状态不变</b>（撤销只是这张报价的事）</td></tr>
+        <tr><td>B3</td><td>样衣未完成时能提前出报价？</td><td class="after"><b>允许</b>（材料/耗用没填全也可估算填）</td></tr>
+      </tbody>
+    </table>
+
+    <h3 class="sub">C. 引用一致性（3 问）</h3>
+    <table class="diff">
+      <tbody>
+        <tr><td style="width:50px">C1</td><td style="width:300px">客户/工厂改了是否同步？</td><td class="after"><b>实时同步</b>（改名 → 所有引用单据自动更新）</td></tr>
+        <tr><td>C2</td><td>客户资料删除怎么办？</td><td class="after"><b>阻止删除</b>（提示有 N 张关联单据）</td></tr>
+        <tr><td>C3</td><td>工厂资料删除怎么办？</td><td class="after"><b>阻止删除</b>（提示有 N 张样衣单引用）</td></tr>
+      </tbody>
+    </table>
+
+    <h3 class="sub">D. 编号体系（3 问）</h3>
+    <table class="diff">
+      <tbody>
+        <tr><td style="width:50px">D1</td><td style="width:300px">两个模块编号会不会冲突？</td><td class="after"><b>加前缀</b>：样衣 S-20260528-01、报价 Q-20260528-01</td></tr>
+        <tr><td>D2</td><td>客户/工厂编号自动还是手填？</td><td class="after"><b>改自动生成</b>（CN001 / S001 系统递增）</td></tr>
+        <tr><td>D3</td><td>同一天序号怎么定？</td><td class="after"><b>按当天创建顺序</b> 1/2/3...</td></tr>
+      </tbody>
+    </table>
+
+    <h3 class="sub">E. 货币 / 汇率（3 问）</h3>
+    <table class="diff">
+      <tbody>
+        <tr><td style="width:50px">E1</td><td style="width:300px">板房样衣单价等什么币种？</td><td class="after"><b>固定人民币 CNY</b></td></tr>
+        <tr><td>E2</td><td>报价汇率从哪里来？</td><td class="after"><b>业务填报价时手填</b>（不从字典自动带）</td></tr>
+        <tr><td>E3</td><td>汇率精度？</td><td class="after"><b>保留 2 位小数</b></td></tr>
+      </tbody>
+    </table>
+
+    <h3 class="sub">F. 角色权限（3 问）</h3>
+    <table class="diff">
+      <tbody>
+        <tr><td style="width:50px">F1</td><td style="width:300px">版师/打样间能看报价吗？</td><td class="after"><b>不能</b>（报价是业务+客户之间的事）</td></tr>
+        <tr><td>F2</td><td>业务在报价里改耗用？</td><td class="after"><b>能改，且不影响样衣管理</b>（独立快照）</td></tr>
+        <tr><td>F3</td><td>财务能看样衣吗？</td><td class="after"><b>能看，仅看对账金额相关字段</b></td></tr>
+      </tbody>
+    </table>
+
+    <h3 class="sub">G. 附件 / 打印 / 导出（3 问）</h3>
+    <table class="diff">
+      <tbody>
+        <tr><td style="width:50px">G1</td><td style="width:300px">附件是否带到客户报价？</td><td class="after"><b>只带"样衣图稿"</b>（让客户看款式）</td></tr>
+        <tr><td>G2</td><td>PDF 报价单包含哪些？</td><td class="after">公司抬头/Logo、报价单号+询价日期、报价明细表、费用明细表、合计、样衣图片、业务员+联系方式、报价有效期（<b>不含</b>客户信息）</td></tr>
+        <tr><td>G3</td><td>打印 vs 导出区别？</td><td class="after"><b>打印</b>=浏览器打印 A4；<b>导出</b>=生成 PDF 文件下载</td></tr>
+      </tbody>
+    </table>
+
+
+    <h3 class="sub">H. 审批流（3 问）</h3>
+    <table class="diff">
+      <tbody>
+        <tr><td style="width:50px">H1</td><td style="width:300px">样衣管理需审批？</td><td class="after"><b>不需要</b>，业务员直接创建保存</td></tr>
+        <tr><td>H2</td><td>客户报价需审批？</td><td class="after"><b>需要业务主管审批</b>才能从「草稿」变「已报价」</td></tr>
+        <tr><td>H3</td><td>报价改报价单需审批？</td><td class="after"><b>不需要</b>，业务员可直接修改（不做版本控制）</td></tr>
+      </tbody>
+    </table>
+
+    <h3 class="sub">I. 报价单维护与分析（2 问）</h3>
+    <table class="diff">
+      <tbody>
+        <tr><td style="width:50px">I1</td><td style="width:300px">报价单是否按客户分类统计？</td><td class="after">是，<b>按客户成单率</b>做简单统计</td></tr>
+        <tr><td>I2</td><td>报价单合并发给客户？</td><td class="after"><b>业务自由勾选合并</b>（多个报价 PDF 合一）</td></tr>
+      </tbody>
+    </table>
+
+    <h3 class="sub">J. 历史数据迁移（3 问）</h3>
+    <table class="diff">
+      <tbody>
+        <tr><td style="width:50px">J1</td><td style="width:300px">历史样衣迁过来？</td><td class="after"><b>不迁</b>，新系统从零开始</td></tr>
+        <tr><td>J2</td><td>历史客户报价迁过来？</td><td class="after"><b>不迁</b></td></tr>
+        <tr><td>J3</td><td>历史基础资料迁过来？</td><td class="after"><b>不迁</b>，重新录</td></tr>
+      </tbody>
+    </table>
+
+    <h3 class="sub">K. 其他细节（5 问）</h3>
+    <table class="diff">
+      <tbody>
+        <tr><td style="width:50px">K1</td><td style="width:300px">客户报价复制时怎么处理？</td><td class="after"><b>复制新建</b>，新建一张草稿；编号不复制（自动新生成）</td></tr>
+        <tr><td>K2</td><td>客户停用后历史单据怎么处理？</td><td class="after"><b>永久保留</b>，不删数据；客户列表标记停用</td></tr>
+        <tr><td>K3</td><td>样衣/客户报价 是否都需复制功能？</td><td class="after"><b>都需要</b>复制功能</td></tr>
+        <tr><td>K4</td><td>样衣/报价的客户款号 可不同？</td><td class="after"><b>可以不同</b>（不强制等于样衣的款号）</td></tr>
+        <tr><td>K5</td><td>客户/工厂改名后历史单据怎么处理？</td><td class="after"><b>不处理</b>（草稿/已报价 实时同步；已成单 保留旧名 — C1）</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ========== ⑧ 仍待业务方确认 ========== -->
+<section class="module" id="pending">
+  <div class="head" style="background:linear-gradient(135deg,var(--amber) 0%,#A5731B 100%)"><h2>⑧ 仍待业务方进一步确认的项</h2><span class="badge">3 项</span></div>
+  <div class="body">
+    <div class="warn-box">虽然本次主体决策完成，但以下细节实现时仍需业务方拍板：</div>
+    <table class="diff">
+      <thead><tr><th style="width:50px">序</th><th style="width:200px">项</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td><b>PDF 报价单模板细节</b></td>
+            <td>G2 业务方勾选了 PDF 要包含哪些内容，但具体的 <b>排版样式（表头/Logo 位置/字体/页眉页脚）</b> 待 UI 设计师做模板后业务方再确认</td></tr>
+        <tr><td>2</td><td><b>含损金额参与转合同的金额计算？</b></td>
+            <td>当前设计：转销售合同时直接带含损金额；如客户合同按非含损金额结算，需另说明</td></tr>
+        <tr><td>3</td><td><b>报价数量与报价明细的报价耗用 是否联动</b></td>
+            <td>当前两个字段独立；如需联动（例如：报价数量改变 → 报价耗用按比例调整）需明确规则</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ========== 末尾 ========== -->
+<div style="text-align:center;padding:30px;color:var(--gray-5);font-size:12px;border-top:1px solid var(--gray-1);margin-top:30px">
+  本文档为三模块串流程修订说明 v1.0<br>
+  与之同步更新：01-基础资料.docx + 设计稿　·　02-样衣管理.docx + 设计稿　·　02-客户报价.docx + 设计稿
+</div>
+
+</main>
+
+<!-- 批注 Modal -->
+<div class="anno-modal-mask" id="annoModal">
+  <div class="anno-modal">
+    <div class="anno-modal-head">
+      <span>💬 添加批注</span>
+      <span class="x" onclick="closeAnnoModal()">×</span>
+    </div>
+    <div class="anno-modal-body">
+      <label>对哪个元素的批注</label>
+      <div class="target-info" id="annoTarget">—</div>
+      <label>批注内容（评审意见 / 修改建议 / 疑问）</label>
+      <textarea id="annoText" placeholder="例如：&#10;- 这个改造点理解是否正确？&#10;- 这条决策需要再确认&#10;- 建议补充：……"></textarea>
+    </div>
+    <div class="anno-modal-foot">
+      <button class="btn-mini btn-g" id="annoDelBtn" onclick="deleteAnno()" style="display:none">删除批注</button>
+      <span style="flex:1"></span>
+      <button class="btn-mini btn-s" onclick="closeAnnoModal()">取消</button>
+      <button class="btn-mini btn-c" onclick="saveAnno()">💾 保存批注</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'sanmokuai_xiuding_annotations_v1';
+let currentAnno = null;
+function loadAnnos() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch(e) { return {}; } }
+function saveAnnos(a) { localStorage.setItem(STORAGE_KEY, JSON.stringify(a)); }
+
+function getTextSummary(el) {
+  if (el.tagName === 'TR') {
+    const tds = el.querySelectorAll('td');
+    if (tds.length >= 2) {
+      const a = tds[0].textContent.trim().slice(0,30);
+      const b = tds[1].textContent.trim().slice(0,40);
+      return '表格行 · ' + a + ' / ' + b;
+    }
+    return '表格行';
+  }
+  if (el.tagName === 'TABLE') {
+    const sec = el.closest('section.module');
+    const head = sec ? sec.querySelector('.head h2') : null;
+    return '整表 · ' + (head ? head.textContent.trim() : '?');
+  }
+  if (el.classList.contains('rule-card')) {
+    const h4 = el.querySelector('h4'); return '规则卡 · ' + (h4 ? h4.textContent.trim() : '?');
+  }
+  if (el.classList.contains('stat-card')) {
+    const label = el.querySelector('.label'); return '统计卡 · ' + (label ? label.textContent.trim() : '?');
+  }
+  if (el.classList.contains('warn-box') || el.classList.contains('note-box') || el.classList.contains('flow-box')) {
+    return '提示框 · ' + el.textContent.trim().slice(0,40);
+  }
+  if (el.classList.contains('cover')) { return '封面卡 · 修订说明'; }
+  if (el.classList.contains('summary')) {
+    const h3 = el.querySelector('h3'); return '汇总卡 · ' + (h3 ? h3.textContent.trim() : '?');
+  }
+  return el.textContent.trim().slice(0,40) || '元素';
+}
+function findSection(el) {
+  const s = el.closest('section.module');
+  if (s) { const h = s.querySelector('.head h2'); if (h) return h.textContent.replace(/\s+/g,' ').trim(); }
+  if (el.closest('.cover')) return '封面';
+  if (el.closest('.summary')) return '汇总';
+  return '通用';
+}
+const SELECTORS = ['section.module table.diff tbody tr', 'section.module table.diff', '.rule-card', '.stat-card', '.warn-box', '.note-box', '.flow-box', '.cover', '.summary'];
+let idCounter = 0;
+function setupAnnotatables() {
+  document.querySelectorAll(SELECTORS.join(',')).forEach(el => {
+    if (el.hasAttribute('data-anno-target')) return;
+    idCounter++;
+    const summary = getTextSummary(el);
+    const section = findSection(el);
+    const annoId = section + '|' + summary + '|#' + idCounter;
+    el.setAttribute('data-anno-target', annoId);
+    const btn = document.createElement('button');
+    btn.className = 'anno-icon'; btn.textContent = '💬';
+    btn.onclick = (e) => { e.stopPropagation(); openAnnoModal(annoId, summary, section); };
+    el.appendChild(btn);
+  });
+  refreshAnnoIcons();
+}
+function refreshAnnoIcons() {
+  const annos = loadAnnos();
+  document.querySelectorAll('[data-anno-target]').forEach(el => {
+    const id = el.getAttribute('data-anno-target');
+    const btn = el.querySelector(':scope > .anno-icon');
+    if (btn) {
+      if (annos[id]) { btn.classList.add('has-note'); btn.textContent = '✓'; }
+      else { btn.classList.remove('has-note'); btn.textContent = '💬'; }
+    }
+  });
+  const count = Object.keys(loadAnnos()).length;
+  const c = document.getElementById('annoCount'); if (c) c.textContent = count;
+  const ex = document.getElementById('annoExport'); if (ex) ex.style.display = count > 0 ? 'inline-block' : 'none';
+  const cl = document.getElementById('annoClear'); if (cl) cl.style.display = count > 0 ? 'inline-block' : 'none';
+}
+function toggleAnno() {
+  const on = document.body.classList.toggle('anno-on');
+  const btn = document.getElementById('annoToggle');
+  btn.textContent = '💬 批注模式：' + (on ? 'ON' : 'OFF');
+  btn.classList.toggle('on', on);
+  if (on && !document.querySelector('[data-anno-target]')) setupAnnotatables();
+  else if (on) refreshAnnoIcons();
+}
+function openAnnoModal(id, summary, section) {
+  currentAnno = id;
+  document.getElementById('annoTarget').innerHTML = '<b>[' + section + ']</b> ' + summary;
+  const annos = loadAnnos();
+  const ex = annos[id];
+  document.getElementById('annoText').value = ex ? ex.text : '';
+  document.getElementById('annoDelBtn').style.display = ex ? 'inline-block' : 'none';
+  document.getElementById('annoModal').classList.add('open');
+  setTimeout(() => document.getElementById('annoText').focus(), 50);
+}
+function closeAnnoModal() { document.getElementById('annoModal').classList.remove('open'); currentAnno = null; }
+function saveAnno() {
+  const text = document.getElementById('annoText').value.trim();
+  if (!text) { alert('请输入批注内容'); return; }
+  const annos = loadAnnos();
+  annos[currentAnno] = { text, target: document.getElementById('annoTarget').textContent, date: new Date().toISOString() };
+  saveAnnos(annos); refreshAnnoIcons(); closeAnnoModal();
+}
+function deleteAnno() {
+  if (!confirm('确认删除该批注？')) return;
+  const a = loadAnnos(); delete a[currentAnno]; saveAnnos(a); refreshAnnoIcons(); closeAnnoModal();
+}
+function clearAnno() {
+  if (!confirm('确认清空所有批注？（建议先导出）')) return;
+  localStorage.removeItem(STORAGE_KEY); refreshAnnoIcons();
+}
+function exportAnno() {
+  const annos = loadAnnos();
+  const keys = Object.keys(annos);
+  if (keys.length === 0) { alert('暂无批注'); return; }
+  const grouped = {};
+  keys.forEach(k => {
+    const sec = k.split('|')[0];
+    if (!grouped[sec]) grouped[sec] = [];
+    grouped[sec].push({ id: k, ...annos[k] });
+  });
+  let md = '# 三模块串流程 · 修订说明 · 业务方批注\n\n';
+  md += '> 导出时间：' + new Date().toLocaleString('zh-CN') + '\n';
+  md += '> 批注总数：' + keys.length + '\n\n---\n\n';
+  Object.keys(grouped).forEach(sec => {
+    md += '## ' + sec + '\n\n';
+    grouped[sec].forEach((a, i) => {
+      md += '### 批注 ' + (i+1) + '：' + a.target.replace(/^\[[^\]]+\]\s*/, '') + '\n\n';
+      md += a.text.split('\n').map(l => '> ' + l).join('\n') + '\n\n';
+    });
+    md += '---\n\n';
+  });
+  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '三模块修订说明_批注_' + new Date().toISOString().slice(0,10) + '.md';
+  a.click();
+}
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('annoModal').onclick = (e) => { if (e.target.id === 'annoModal') closeAnnoModal(); };
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAnnoModal(); });
+});
+</script>
+
+</body></html>

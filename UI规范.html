@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>新系统设计系统 · I9 服装制造管理</title>
+<style>
+:root{
+  /* —— 服装制造业风 配色 —— */
+  --indigo:#1E3A5F;          /* 靛蓝 主色（denim） */
+  --indigo-d:#152A45;
+  --indigo-l:#2C5180;
+  --linen:#F5EDDC;           /* 棉麻米色 浅背景 */
+  --linen-d:#E8DCC0;
+  --canvas:#FBF8F2;          /* 米白 卡片背景 */
+  --rust:#D17A40;            /* 暖橙 强调/CTA */
+  --rust-d:#B86530;
+  --vermilion:#C04042;       /* 朱砂红 错误/警示 */
+  --teal:#3E8E7E;            /* 织布青 成功 */
+  --amber:#C8901E;           /* 琥珀 提示 */
+  --gray-9:#1F1F22;          /* 主文本 */
+  --gray-7:#37383C;
+  --gray-5:#6F7178;
+  --gray-3:#B5B7BD;
+  --gray-1:#E5E2DA;          /* 边框 偏米色 */
+  --gray-0:#F4F1EA;          /* 极浅背景 */
+  --white:#FFFFFF;
+  /* —— 排印 —— */
+  --font:"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;
+  --font-mono:Consolas,"Courier New",monospace;
+  /* —— 尺度 —— */
+  --r:4px; --r-lg:6px;
+  --shadow-sm:0 1px 2px rgba(30,58,95,0.05);
+  --shadow:0 2px 6px rgba(30,58,95,0.08);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:14px/1.55 var(--font);color:var(--gray-9);background:var(--gray-0)}
+a{color:var(--indigo);text-decoration:none}
+.wrap{max-width:1280px;margin:0 auto;padding:0 32px 80px}
+header.brand{background:var(--indigo);color:#fff;padding:18px 32px;border-bottom:3px solid var(--rust)}
+header.brand h1{font-size:18px;font-weight:600;letter-spacing:.5px}
+header.brand small{display:block;font-size:12px;color:#C9D6E5;margin-top:3px;font-weight:400}
+section{margin-top:36px}
+section > h2{font-size:18px;color:var(--indigo);padding:8px 0;border-bottom:2px solid var(--indigo);margin-bottom:18px;font-weight:600}
+section > h3{font-size:14px;color:var(--gray-7);margin:18px 0 10px;font-weight:600}
+.intro{background:var(--linen);border-left:3px solid var(--rust);padding:14px 18px;margin:16px 0 28px;font-size:13px;line-height:1.7;border-radius:var(--r)}
+
+/* —— 色彩 —— */
+.palette{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
+.swatch{background:var(--canvas);border:1px solid var(--gray-1);border-radius:var(--r-lg);overflow:hidden}
+.swatch .chip{height:64px}
+.swatch .meta{padding:8px 10px;font-size:11px;color:var(--gray-5)}
+.swatch .meta b{display:block;color:var(--gray-9);font-size:12px;margin-bottom:2px}
+
+/* —— 字号 —— */
+.type-row{display:flex;align-items:baseline;gap:18px;padding:8px 0;border-bottom:1px dashed var(--gray-1)}
+.type-row b{display:inline-block;width:80px;color:var(--gray-5);font-weight:400;font-size:11px}
+.t-title{font-size:24px;font-weight:600;color:var(--gray-9)}
+.t-h1{font-size:18px;font-weight:600;color:var(--indigo)}
+.t-h2{font-size:15px;font-weight:600;color:var(--gray-9)}
+.t-h3{font-size:13px;font-weight:600;color:var(--gray-7)}
+.t-body{font-size:14px;color:var(--gray-9)}
+.t-small{font-size:12px;color:var(--gray-5)}
+.t-mono{font-family:var(--font-mono);font-size:12px;color:var(--gray-7)}
+
+/* —— 按钮 —— */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border-radius:var(--r);font-size:13px;cursor:pointer;border:1px solid;line-height:1.4;transition:all .15s;font-family:inherit}
+.btn-p{background:var(--indigo);color:#fff;border-color:var(--indigo)}.btn-p:hover{background:var(--indigo-d)}
+.btn-c{background:var(--rust);color:#fff;border-color:var(--rust)}.btn-c:hover{background:var(--rust-d)}
+.btn-s{background:#fff;color:var(--gray-7);border-color:var(--gray-1)}.btn-s:hover{border-color:var(--indigo);color:var(--indigo)}
+.btn-g{background:#fff;color:var(--vermilion);border-color:var(--gray-1)}.btn-g:hover{background:#FBF0EF}
+.btn-t{background:transparent;color:var(--indigo);border-color:transparent;padding:6px 10px}
+.btn-t:hover{background:var(--gray-0)}
+.btn-sm{padding:3px 10px;font-size:12px}
+
+/* —— 输入控件 —— */
+.field{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.field label{width:90px;text-align:right;color:var(--gray-5);font-size:13px;flex-shrink:0}
+.field label .req{color:var(--vermilion);margin-right:3px}
+.input,.select,.date,.btn-edit{flex:1;background:#fff;border:1px solid var(--gray-1);border-radius:var(--r);padding:6px 10px;font:13px/1.5 var(--font);color:var(--gray-9);transition:border .15s}
+.input:focus,.select:focus,.date:focus{outline:none;border-color:var(--indigo);box-shadow:0 0 0 2px rgba(30,58,95,.08)}
+.input[readonly]{background:var(--gray-0);color:var(--gray-5)}
+.input[disabled]{background:var(--gray-0);color:var(--gray-3);cursor:not-allowed}
+.select{padding-right:24px;background-image:linear-gradient(45deg,transparent 50%,var(--gray-5) 50%),linear-gradient(135deg,var(--gray-5) 50%,transparent 50%);background-position:calc(100% - 14px) center,calc(100% - 9px) center;background-size:5px 5px;background-repeat:no-repeat;appearance:none}
+.btn-edit{display:flex;align-items:center;padding:0;overflow:hidden}
+.btn-edit .v{flex:1;padding:6px 10px;color:var(--gray-3)}
+.btn-edit .v.has{color:var(--gray-9)}
+.btn-edit button{background:var(--gray-0);border:none;border-left:1px solid var(--gray-1);padding:6px 10px;cursor:pointer;color:var(--gray-5);font-size:14px}
+.btn-edit button:hover{background:var(--linen);color:var(--indigo)}
+.checkbox{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px}
+.checkbox input{width:14px;height:14px;accent-color:var(--indigo)}
+.image-box{width:120px;height:90px;background:var(--gray-0);border:1px dashed var(--gray-1);border-radius:var(--r);display:flex;align-items:center;justify-content:center;color:var(--gray-3);font-size:12px;cursor:pointer}
+.image-box:hover{border-color:var(--indigo);color:var(--indigo)}
+.memo{flex:1;background:#fff;border:1px solid var(--gray-1);border-radius:var(--r);padding:8px 10px;min-height:60px;font:13px/1.5 var(--font)}
+
+/* —— 状态徽章 —— */
+.badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:500;line-height:1.6;border:1px solid}
+.badge-i{background:#EDF1F7;color:var(--indigo);border-color:#D5DDE8}
+.badge-s{background:#E8F4F0;color:var(--teal);border-color:#C8E2D9}
+.badge-w{background:#FBF1DA;color:var(--amber);border-color:#EDD8A8}
+.badge-e{background:#FBEAEA;color:var(--vermilion);border-color:#E8C7C7}
+.badge-r{background:#FBE8DD;color:var(--rust);border-color:#EDD2BC}
+
+/* —— 表格 —— */
+.table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);overflow:hidden}
+.table th{background:var(--gray-0);text-align:left;padding:8px 12px;font-size:12px;font-weight:600;color:var(--gray-7);border-bottom:1px solid var(--gray-1)}
+.table td{padding:8px 12px;font-size:13px;color:var(--gray-9);border-bottom:1px solid var(--gray-1)}
+.table tbody tr:nth-child(even) td{background:var(--canvas)}
+.table tbody tr:hover td{background:var(--linen)}
+.table tbody tr.checked td{background:#EDF1F7}
+.table-actions{display:flex;gap:6px;padding:8px;background:var(--gray-0);border:1px solid var(--gray-1);border-top:none;border-radius:0 0 var(--r-lg) var(--r-lg)}
+
+/* —— 卡片 / 分组 —— */
+.card{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);padding:18px;box-shadow:var(--shadow-sm)}
+.card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.card-head h3{font-size:14px;color:var(--indigo);font-weight:600}
+.card-head .meta{font-size:11px;color:var(--gray-5)}
+.fieldset{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);margin-bottom:16px;overflow:hidden}
+.fieldset-head{background:linear-gradient(135deg,var(--linen) 0%,var(--canvas) 100%);padding:8px 16px;border-bottom:1px solid var(--gray-1);font-size:13px;font-weight:600;color:var(--indigo);display:flex;justify-content:space-between;align-items:center}
+.fieldset-head .count{color:var(--gray-5);font-weight:400;font-size:11px}
+.fieldset-body{padding:16px}
+.fieldset-body.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:0 32px}
+.fieldset-body.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 24px}
+
+/* —— 标签页 —— */
+.tabs{display:flex;border-bottom:2px solid var(--gray-1);margin-bottom:18px}
+.tab{padding:8px 18px;cursor:pointer;color:var(--gray-5);font-size:13px;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s}
+.tab:hover{color:var(--indigo)}
+.tab.active{color:var(--indigo);border-bottom-color:var(--rust);font-weight:600}
+
+/* —— 工具栏 —— */
+.toolbar{display:flex;justify-content:space-between;align-items:center;background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);padding:8px 12px;margin-bottom:16px}
+.toolbar .group{display:flex;gap:6px;align-items:center}
+
+/* —— 对话框 / 抽屉 —— */
+.dialog-demo{position:relative;width:520px;background:#fff;border-radius:var(--r-lg);box-shadow:0 16px 48px rgba(30,58,95,.18);overflow:hidden}
+.dialog-head{background:var(--indigo);color:#fff;padding:12px 18px;font-size:14px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.dialog-head .x{cursor:pointer;color:#C9D6E5}
+.dialog-body{padding:18px}
+.dialog-foot{padding:12px 18px;background:var(--gray-0);border-top:1px solid var(--gray-1);display:flex;justify-content:flex-end;gap:8px}
+
+/* —— 提示框 —— */
+.alert{padding:10px 16px;border-radius:var(--r);font-size:13px;margin:10px 0;border-left:3px solid;display:flex;gap:10px;align-items:flex-start}
+.alert b{font-weight:600;flex-shrink:0}
+.alert-i{background:#EDF1F7;border-color:var(--indigo);color:var(--indigo-d)}
+.alert-s{background:#E8F4F0;border-color:var(--teal);color:#1F5C50}
+.alert-w{background:#FBF1DA;border-color:var(--amber);color:#7A5810}
+.alert-e{background:#FBEAEA;border-color:var(--vermilion);color:#7A2828}
+
+/* —— 工作流卡片 —— */
+.flow{display:flex;align-items:center;gap:0;flex-wrap:wrap;background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);padding:18px}
+.flow-step{padding:8px 14px;border:1px solid var(--gray-1);border-radius:var(--r);background:var(--canvas);font-size:12px;color:var(--gray-7);min-width:90px;text-align:center}
+.flow-step.active{background:var(--indigo);color:#fff;border-color:var(--indigo)}
+.flow-step.done{background:var(--teal);color:#fff;border-color:var(--teal)}
+.flow-arrow{color:var(--gray-3);font-size:14px;margin:0 8px}
+
+/* —— 页面模板（mini 预览）—— */
+.tmpl{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);overflow:hidden;height:280px;position:relative}
+.tmpl .head{background:var(--indigo);color:#fff;padding:6px 12px;font-size:11px;display:flex;justify-content:space-between}
+.tmpl .body{padding:8px;font-size:9px;color:var(--gray-5)}
+.tmpl-row{height:8px;background:var(--gray-0);margin:3px 0;border-radius:2px}
+.tmpl-row.wide{height:12px}
+.tmpl-row.dark{background:var(--gray-1)}
+.tmpl-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;padding:6px}
+.tmpl-cell{height:18px;background:var(--gray-0);border-radius:2px;display:flex;align-items:center;padding-left:4px;font-size:8px;color:var(--gray-5)}
+.tmpl-tbl{margin-top:6px;border:1px solid var(--gray-1);border-radius:2px}
+.tmpl-tbl-h{background:var(--linen);height:14px;display:flex;font-size:8px;align-items:center;padding-left:6px;color:var(--indigo)}
+.tmpl-tbl-r{height:10px;background:#fff;border-top:1px solid var(--gray-1)}
+.tmpl-side{position:absolute;left:0;top:24px;bottom:0;width:60px;background:var(--gray-0);border-right:1px solid var(--gray-1)}
+.tmpl-side div{height:8px;margin:6px 8px;background:var(--gray-1);border-radius:1px}
+.tmpl-side div.act{background:var(--indigo)}
+.tmpl-main{margin-left:60px}
+
+/* —— 微图标 —— */
+.ico{display:inline-block;width:14px;height:14px;vertical-align:middle}
+
+</style>
+</head>
+<body>
+
+<header class="brand">
+  <h1>新系统 · 设计系统</h1>
+  <small>I9 服装制造管理系统 → 新系统原型 · 服装制造业风（靛蓝 + 棉麻米色 + 暖橙）· v1</small>
+</header>
+
+<div class="wrap">
+
+<div class="intro">
+  <b>这份文档是什么</b>：新系统所有原型页面共用的"积木库"——配色 / 字号 / 控件 / 表格 / 卡片 / 对话框 / 标签页 / 工作流 / 三套页面模板。
+  10 张样板单据页面都会基于本设计系统生成。<b>业务方</b>主要看配色感受和页面模板；<b>开发</b>关注组件规格和交互。
+</div>
+
+<!-- 1. 配色 -->
+<section>
+  <h2>1 · 配色（服装制造业风）</h2>
+  <p style="font-size:13px;color:var(--gray-5);margin-bottom:14px">
+    主色靛蓝（denim 牛仔布的颜色），辅以棉麻米色做浅背景营造织物温度；CTA 用暖橙（rust 染色）；
+    深灰文本 + 偏米色边框，整体冷色稳重而不冰冷，符合纺织服装行业的视觉气质。
+  </p>
+  <div class="palette">
+    <div class="swatch"><div class="chip" style="background:var(--indigo)"></div><div class="meta"><b>靛蓝 主色</b>#1E3A5F · indigo</div></div>
+    <div class="swatch"><div class="chip" style="background:var(--linen)"></div><div class="meta"><b>棉麻米色 浅背景</b>#F5EDDC · linen</div></div>
+    <div class="swatch"><div class="chip" style="background:var(--canvas)"></div><div class="meta"><b>米白 卡片</b>#FBF8F2 · canvas</div></div>
+    <div class="swatch"><div class="chip" style="background:var(--rust)"></div><div class="meta"><b>暖橙 CTA/强调</b>#D17A40 · rust</div></div>
+    <div class="swatch"><div class="chip" style="background:var(--vermilion)"></div><div class="meta"><b>朱砂红 错误</b>#C04042 · vermilion</div></div>
+    <div class="swatch"><div class="chip" style="background:var(--teal)"></div><div class="meta"><b>织布青 成功</b>#3E8E7E · teal</div></div>
+    <div class="swatch"><div class="chip" style="background:var(--amber)"></div><div class="meta"><b>琥珀 警告</b>#C8901E · amber</div></div>
+    <div class="swatch"><div class="chip" style="background:var(--gray-9)"></div><div class="meta"><b>深灰 主文本</b>#1F1F22</div></div>
+    <div class="swatch"><div class="chip" style="background:var(--gray-5)"></div><div class="meta"><b>中灰 辅助</b>#6F7178</div></div>
+    <div class="swatch"><div class="chip" style="background:var(--gray-1);border-right:1px solid var(--gray-1)"></div><div class="meta"><b>米色边框</b>#E5E2DA</div></div>
+    <div class="swatch"><div class="chip" style="background:var(--gray-0);border-right:1px solid var(--gray-1)"></div><div class="meta"><b>极浅背景</b>#F4F1EA</div></div>
+    <div class="swatch"><div class="chip" style="background:#fff;border-right:1px solid var(--gray-1)"></div><div class="meta"><b>纯白</b>#FFFFFF</div></div>
+  </div>
+</section>
+
+<!-- 2. 字号 -->
+<section>
+  <h2>2 · 字号阶梯</h2>
+  <div class="type-row"><b>页标题</b><span class="t-title">客户报价 · 编辑</span></div>
+  <div class="type-row"><b>区块标题</b><span class="t-h1">① 主要信息</span></div>
+  <div class="type-row"><b>子段标题</b><span class="t-h2">字段联动规则</span></div>
+  <div class="type-row"><b>小标题</b><span class="t-h3">必填字段</span></div>
+  <div class="type-row"><b>正文</b><span class="t-body">客户报价是公司向客户发出的正式报价单……</span></div>
+  <div class="type-row"><b>辅助</b><span class="t-small">编制日期 · 2026-05-16</span></div>
+  <div class="type-row"><b>等宽</b><span class="t-mono">KHBJ.QuotationNo</span></div>
+</section>
+
+<!-- 3. 按钮 -->
+<section>
+  <h2>3 · 按钮</h2>
+  <h3>主按钮（保存/确认）/ 暖橙强调（下推/导入等 CTA）/ 次按钮（默认）/ 危险（删除）/ 文字按钮</h3>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+    <button class="btn btn-p">保存</button>
+    <button class="btn btn-c">自动生成销售合同</button>
+    <button class="btn btn-s">取消</button>
+    <button class="btn btn-s">+ 新增行</button>
+    <button class="btn btn-s">导入 Excel</button>
+    <button class="btn btn-g">删除</button>
+    <button class="btn btn-t">查看历史</button>
+  </div>
+  <h3>小尺寸（表格内 / 紧凑场景）</h3>
+  <div style="display:flex;gap:8px">
+    <button class="btn btn-p btn-sm">审批通过</button>
+    <button class="btn btn-s btn-sm">编辑</button>
+    <button class="btn btn-g btn-sm">删除</button>
+  </div>
+</section>
+
+<!-- 4. 输入控件 -->
+<section>
+  <h2>4 · 输入控件</h2>
+  <div class="card" style="max-width:760px">
+    <div class="field"><label><span class="req">*</span>报价单号</label><input class="input" placeholder="自动生成"></div>
+    <div class="field"><label><span class="req">*</span>询价日期</label><input class="date" type="date" value="2026-05-16"></div>
+    <div class="field"><label><span class="req">*</span>客户类型</label><select class="select"><option>中间商</option><option>最终买家</option></select></div>
+    <div class="field"><label><span class="req">*</span>中间商编号</label><div class="btn-edit"><div class="v has">CN001  ·  上海福德贸易有限公司</div><button>…</button></div></div>
+    <div class="field"><label>关联中间商</label><div class="btn-edit"><div class="v">点击选择 …</div><button>…</button></div></div>
+    <div class="field"><label>外销币种</label><select class="select" style="flex:0 0 180px"><option>USD</option><option>EUR</option><option>RMB</option></select></div>
+    <div class="field"><label>汇率</label><input class="input" type="number" value="7.18" step="0.0001" readonly></div>
+    <div class="field"><label>是否开票</label><label class="checkbox" style="margin-left:0"><input type="checkbox" checked>已开票</label></div>
+    <div class="field"><label>样衣照片</label><div class="image-box">+ 上传</div></div>
+    <div class="field"><label>备注</label><textarea class="memo" placeholder="多行文本说明…"></textarea></div>
+  </div>
+</section>
+
+<!-- 5. 徽章 / 状态 -->
+<section>
+  <h2>5 · 状态徽章</h2>
+  <div style="display:flex;gap:10px;flex-wrap:wrap">
+    <span class="badge badge-i">草稿</span>
+    <span class="badge badge-s">已审批</span>
+    <span class="badge badge-w">待审批</span>
+    <span class="badge badge-e">已驳回</span>
+    <span class="badge badge-r">已下推</span>
+    <span class="badge badge-i">机密 etSecret</span>
+    <span class="badge badge-s">一般 etGeneral</span>
+  </div>
+</section>
+
+<!-- 6. 提示框 -->
+<section>
+  <h2>6 · 提示框</h2>
+  <div class="alert alert-i"><b>提示</b><div>客户报价确认后，可点击右上「自动生成销售合同」一键下推到下游单据。</div></div>
+  <div class="alert alert-s"><b>成功</b><div>报价单 KHBJ-20260516-001 已保存。</div></div>
+  <div class="alert alert-w"><b>警告</b><div>当前汇率距今 3 天未刷新，建议确认后再保存。</div></div>
+  <div class="alert alert-e"><b>错误</b><div>「报价耗用」明细表不能为空，请至少录入一条记录。</div></div>
+</section>
+
+<!-- 7. 表格 -->
+<section>
+  <h2>7 · 明细表格（含工具条）</h2>
+  <table class="table">
+    <thead><tr>
+      <th style="width:30px"><input type="checkbox"></th>
+      <th>材料编号</th><th>材料品名</th><th>部位</th><th>计量单位</th>
+      <th style="text-align:right">人民币单价</th><th style="text-align:right">美金单价</th><th style="text-align:right">报价耗用</th><th style="text-align:right">人民币合计</th>
+    </tr></thead>
+    <tbody>
+      <tr><td><input type="checkbox" checked></td><td>F-001</td><td>32S 全棉府绸</td><td>面布</td><td>米</td><td style="text-align:right">28.50</td><td style="text-align:right">3.97</td><td style="text-align:right">2.10</td><td style="text-align:right">59.85</td></tr>
+      <tr class="checked"><td><input type="checkbox" checked></td><td>F-008</td><td>40S 精梳棉</td><td>里布</td><td>米</td><td style="text-align:right">22.00</td><td style="text-align:right">3.06</td><td style="text-align:right">1.20</td><td style="text-align:right">26.40</td></tr>
+      <tr><td><input type="checkbox"></td><td>A-021</td><td>YKK 5# 拉链</td><td>辅料</td><td>条</td><td style="text-align:right">1.80</td><td style="text-align:right">0.25</td><td style="text-align:right">1.00</td><td style="text-align:right">1.80</td></tr>
+      <tr><td colspan="8" style="text-align:right;color:var(--gray-5);font-style:italic">— 共 3 行 —</td><td style="text-align:right;font-weight:600;color:var(--indigo)">¥ 88.05</td></tr>
+    </tbody>
+  </table>
+  <div class="table-actions">
+    <button class="btn btn-s btn-sm">+ 新增行</button>
+    <button class="btn btn-g btn-sm">— 删除</button>
+    <button class="btn btn-s btn-sm">↑↓ 排序</button>
+    <button class="btn btn-s btn-sm">从面料库导入</button>
+    <button class="btn btn-s btn-sm">粘贴 Excel</button>
+  </div>
+</section>
+
+<!-- 8. 分组卡片 -->
+<section>
+  <h2>8 · 字段分组卡片（编辑页主体）</h2>
+  <div class="fieldset">
+    <div class="fieldset-head">① 主要信息 <span class="count">21 字段</span></div>
+    <div class="fieldset-body grid-3">
+      <div class="field"><label><span class="req">*</span>报价单号</label><input class="input" placeholder="KHBJ-001"></div>
+      <div class="field"><label><span class="req">*</span>询价日期</label><input class="date" value="2026-05-16"></div>
+      <div class="field"><label><span class="req">*</span>客户类型</label><select class="select"><option>中间商</option></select></div>
+      <div class="field"><label><span class="req">*</span>中间商编号</label><div class="btn-edit"><div class="v">点击…</div><button>…</button></div></div>
+      <div class="field"><label>中间商名称</label><input class="input" readonly placeholder="自动带出"></div>
+      <div class="field"><label>外销币种</label><select class="select"><option>USD</option></select></div>
+    </div>
+  </div>
+  <div class="fieldset">
+    <div class="fieldset-head">② 第一次报价合计 <span class="count">8 字段 · 计算字段</span></div>
+    <div class="fieldset-body grid-3">
+      <div class="field"><label>人民币总计</label><input class="input" readonly value="¥ 88.05"></div>
+      <div class="field"><label>利润率</label><input class="input" value="20"><span style="margin-left:-30px;color:var(--gray-5);font-size:12px">%</span></div>
+      <div class="field"><label>报价人民币</label><input class="input" readonly value="¥ 105.66"></div>
+      <div class="field"><label>报价美元</label><input class="input" readonly value="$ 14.72"></div>
+    </div>
+  </div>
+</section>
+
+<!-- 9. 标签页 -->
+<section>
+  <h2>9 · 标签页（单据多分组导航）</h2>
+  <div class="tabs">
+    <div class="tab active">① 主要信息</div>
+    <div class="tab">② 图片信息</div>
+    <div class="tab">③ 第一次报价（3）</div>
+    <div class="tab">④ 最终报价明细</div>
+    <div class="tab">⑤ 第一次费用明细</div>
+    <div class="tab">⑥ 最终费用明细</div>
+    <div class="tab">⑦ 第一报价合计</div>
+    <div class="tab">⑧ 最终报价合计</div>
+  </div>
+  <p style="font-size:12px;color:var(--gray-5)">配合分组卡片用——大单据（74 字段+）按 Tab 切；中小单据直接堆叠分组卡片。</p>
+</section>
+
+<!-- 10. 顶部工具栏 -->
+<section>
+  <h2>10 · 顶部工具栏（每张单据顶部）</h2>
+  <div class="toolbar">
+    <div class="group">
+      <span style="font-size:14px;color:var(--indigo);font-weight:600">客户报价 · KHBJ-20260516-001</span>
+      <span class="badge badge-w">待审批</span>
+    </div>
+    <div class="group">
+      <button class="btn btn-p"><span>💾</span> 保存</button>
+      <button class="btn btn-c">自动生成销售合同 →</button>
+      <button class="btn btn-s">复制</button>
+      <button class="btn btn-s">导出 PDF</button>
+      <button class="btn btn-s">打印</button>
+      <button class="btn btn-s">···</button>
+    </div>
+  </div>
+</section>
+
+<!-- 11. 对话框 -->
+<section>
+  <h2>11 · 对话框（弹窗选择 / 关联档案）</h2>
+  <div class="dialog-demo">
+    <div class="dialog-head">选择中间商 <span class="x">×</span></div>
+    <div class="dialog-body" style="max-height:280px;overflow:auto">
+      <div style="display:flex;gap:8px;margin-bottom:12px"><input class="input" placeholder="按编号 / 名称搜索…" style="flex:1"><button class="btn btn-s btn-sm">查询</button></div>
+      <table class="table">
+        <thead><tr><th></th><th>编号</th><th>名称</th><th>国别</th><th>开发日期</th></tr></thead>
+        <tbody>
+          <tr><td><input type="radio" name="x" checked></td><td>CN001</td><td>上海福德贸易有限公司</td><td>美国</td><td>2024-03-10</td></tr>
+          <tr><td><input type="radio" name="x"></td><td>CN002</td><td>Atlantic Trading Co.</td><td>美国</td><td>2024-05-22</td></tr>
+          <tr><td><input type="radio" name="x"></td><td>CN015</td><td>Euro Fashion GmbH</td><td>德国</td><td>2025-01-08</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="dialog-foot">
+      <button class="btn btn-s">取消</button>
+      <button class="btn btn-p">确认选择</button>
+    </div>
+  </div>
+</section>
+
+<!-- 12. 工作流 -->
+<section>
+  <h2>12 · 审批工作流卡片</h2>
+  <div class="flow">
+    <div class="flow-step done">业务员提交</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step done">部门主管审批<br><span style="font-size:10px;opacity:.8">吴付林 · 已通过</span></div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step active">财务审批<br><span style="font-size:10px;opacity:.9">袁丹丹 · 处理中</span></div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">总经理审批</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">财务付款</div>
+  </div>
+</section>
+
+<!-- 13. 页面模板 -->
+<section>
+  <h2>13 · 三套页面模板</h2>
+  <p style="font-size:13px;color:var(--gray-5);margin-bottom:14px">所有单据的<b>编辑页 / 列表页 / 查询页</b>都基于这三个模板，左侧导航始终在场。</p>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px">
+
+    <!-- 编辑页 -->
+    <div>
+      <div class="tmpl">
+        <div class="head"><span>I9 · 客户报价 编辑</span><span>👤</span></div>
+        <div class="tmpl-side"><div class="act"></div><div></div><div></div><div></div><div></div><div></div></div>
+        <div class="tmpl-main" style="padding:6px">
+          <div style="display:flex;gap:3px;margin-bottom:4px"><div style="background:var(--indigo);color:#fff;font-size:8px;padding:2px 6px;border-radius:2px">保存</div><div style="background:var(--rust);color:#fff;font-size:8px;padding:2px 6px;border-radius:2px">下推</div><div style="background:#fff;border:1px solid var(--gray-1);font-size:8px;padding:2px 6px;border-radius:2px">复制</div></div>
+          <div style="display:flex;gap:4px;border-bottom:2px solid var(--rust);padding-bottom:2px;margin-bottom:4px"><span style="font-size:8px;color:var(--indigo);font-weight:600">主要</span><span style="font-size:8px;color:var(--gray-5)">报价</span><span style="font-size:8px;color:var(--gray-5)">费用</span></div>
+          <div style="background:var(--linen);font-size:8px;padding:2px 6px;color:var(--indigo);font-weight:600;border-radius:2px 2px 0 0">① 主要信息</div>
+          <div class="tmpl-grid"><div class="tmpl-cell">报价号</div><div class="tmpl-cell">日期</div><div class="tmpl-cell">客户</div><div class="tmpl-cell">币种</div><div class="tmpl-cell">汇率</div><div class="tmpl-cell">利润</div></div>
+          <div style="background:var(--linen);font-size:8px;padding:2px 6px;color:var(--indigo);font-weight:600;border-radius:2px 2px 0 0;margin-top:3px">② 报价明细</div>
+          <div class="tmpl-tbl"><div class="tmpl-tbl-h">材料 · 部位 · 单价 · 数量</div><div class="tmpl-tbl-r"></div><div class="tmpl-tbl-r"></div><div class="tmpl-tbl-r"></div></div>
+        </div>
+      </div>
+      <p style="text-align:center;font-size:12px;margin-top:8px;color:var(--gray-7);font-weight:600">编辑页（录入界面）</p>
+      <p style="font-size:11px;color:var(--gray-5);text-align:center;line-height:1.6">左侧导航 + 顶部工具栏（含 CTA 下推按钮）<br>+ 标签页切换 + 分组卡片 + 明细表</p>
+    </div>
+
+    <!-- 列表页 -->
+    <div>
+      <div class="tmpl">
+        <div class="head"><span>I9 · 客户报价 列表</span><span>👤</span></div>
+        <div class="tmpl-side"><div></div><div class="act"></div><div></div><div></div><div></div><div></div></div>
+        <div class="tmpl-main" style="padding:6px">
+          <div style="display:flex;gap:3px;margin-bottom:4px"><div style="background:var(--indigo);color:#fff;font-size:8px;padding:2px 6px;border-radius:2px">+ 新建</div><div style="background:#fff;border:1px solid var(--gray-1);font-size:8px;padding:2px 6px;border-radius:2px">导入</div><div style="background:#fff;border:1px solid var(--gray-1);font-size:8px;padding:2px 6px;border-radius:2px">导出</div></div>
+          <div style="background:var(--canvas);padding:4px;border:1px solid var(--gray-1);border-radius:2px;display:flex;gap:4px;margin-bottom:4px"><div style="font-size:7px;background:#fff;padding:2px 6px;border:1px solid var(--gray-1);border-radius:2px">客户</div><div style="font-size:7px;background:#fff;padding:2px 6px;border:1px solid var(--gray-1);border-radius:2px">日期</div><div style="font-size:7px;background:var(--indigo);color:#fff;padding:2px 6px;border-radius:2px">搜索</div></div>
+          <div class="tmpl-tbl"><div class="tmpl-tbl-h">单号 · 客户 · 状态 · 金额</div><div class="tmpl-tbl-r"></div><div class="tmpl-tbl-r"></div><div class="tmpl-tbl-r"></div><div class="tmpl-tbl-r"></div><div class="tmpl-tbl-r"></div><div class="tmpl-tbl-r"></div><div class="tmpl-tbl-r"></div><div class="tmpl-tbl-r"></div></div>
+          <div style="text-align:right;font-size:8px;color:var(--gray-5);margin-top:3px">共 248 条 · 1/13 页</div>
+        </div>
+      </div>
+      <p style="text-align:center;font-size:12px;margin-top:8px;color:var(--gray-7);font-weight:600">列表页（记录一览）</p>
+      <p style="font-size:11px;color:var(--gray-5);text-align:center;line-height:1.6">快速筛选条 + 数据表格<br>+ 排序/列冻结/多选 + 分页</p>
+    </div>
+
+    <!-- 查询页 -->
+    <div>
+      <div class="tmpl">
+        <div class="head"><span>I9 · 客户报价 查询</span><span>👤</span></div>
+        <div class="tmpl-side"><div></div><div></div><div class="act"></div><div></div><div></div><div></div></div>
+        <div class="tmpl-main" style="padding:6px">
+          <div style="background:var(--linen);padding:4px;border-radius:2px;margin-bottom:4px;font-size:8px;color:var(--indigo);font-weight:600">智能搜索</div>
+          <div style="background:#fff;border:1px solid var(--gray-1);padding:4px;border-radius:2px;font-size:9px;color:var(--gray-3);margin-bottom:4px">🔍 按编号/品名/客户…模糊匹配</div>
+          <div style="background:var(--linen);padding:4px;border-radius:2px;margin:6px 0 4px;font-size:8px;color:var(--indigo);font-weight:600">字段筛选</div>
+          <div class="tmpl-grid" style="grid-template-columns:1fr 1fr"><div class="tmpl-cell">客户</div><div class="tmpl-cell">日期范围</div><div class="tmpl-cell">币种</div><div class="tmpl-cell">状态</div></div>
+          <div class="tmpl-tbl" style="margin-top:6px"><div class="tmpl-tbl-h">搜索结果（12 条）</div><div class="tmpl-tbl-r"></div><div class="tmpl-tbl-r"></div></div>
+        </div>
+      </div>
+      <p style="text-align:center;font-size:12px;margin-top:8px;color:var(--gray-7);font-weight:600">查询页（检索）</p>
+      <p style="font-size:11px;color:var(--gray-5);text-align:center;line-height:1.6">智能搜索（模糊匹配多字段）<br>+ 字段精确筛选 + 结果表</p>
+    </div>
+  </div>
+</section>
+
+<section style="text-align:center;color:var(--gray-5);font-size:12px;margin-top:60px">
+  设计系统 v1 · 服装制造业风 · 2026-05-16<br>
+  下一步：基于本系统输出 10 张样板单据的可点击原型
+</section>
+
+</div>
+</body>
+</html>

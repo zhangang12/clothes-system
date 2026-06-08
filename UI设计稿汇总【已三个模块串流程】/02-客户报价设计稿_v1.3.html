@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>客户报价 · UI 设计稿 v1.3（评审版）</title>
+<style>
+:root{
+  --indigo:#1E3A5F;--indigo-d:#152A45;--indigo-l:#2C5180;
+  --linen:#F5EDDC;--linen-d:#E8DCC0;--canvas:#FBF8F2;
+  --rust:#D17A40;--rust-d:#B86530;--vermilion:#C04042;
+  --teal:#3E8E7E;--amber:#C8901E;
+  --gray-9:#1F1F22;--gray-7:#37383C;--gray-5:#6F7178;
+  --gray-3:#B5B7BD;--gray-1:#E5E2DA;--gray-0:#F4F1EA;
+  --font:"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:13px/1.55 var(--font);color:var(--gray-9);background:#EEEAE0}
+a{color:var(--indigo);text-decoration:none}
+
+.topbar{position:fixed;top:0;left:0;right:0;height:48px;background:var(--indigo);color:#fff;display:flex;align-items:center;padding:0 24px;z-index:100;border-bottom:3px solid var(--rust)}
+.topbar .logo{font-size:15px;font-weight:600}
+.topbar .logo small{font-size:11px;color:#C9D6E5;margin-left:8px}
+.topbar .actions{margin-left:auto;display:flex;gap:8px;align-items:center}
+
+.sidenav{position:fixed;top:48px;left:0;bottom:0;width:240px;background:#fff;border-right:1px solid var(--gray-1);overflow-y:auto;padding:14px 0;font-size:13px}
+.sidenav .nav-cat{padding:10px 16px 4px;color:var(--gray-5);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;border-top:1px solid var(--gray-1);margin-top:6px}
+.sidenav a.nav-dj{display:block;padding:8px 16px;color:var(--indigo);font-weight:600;font-size:13px;border-left:3px solid transparent}
+.sidenav a.nav-dj:hover{background:var(--linen);border-left-color:var(--rust)}
+.sidenav a.nav-sub{display:block;padding:5px 16px;color:var(--gray-7);font-size:12.5px;border-left:3px solid transparent}
+.sidenav a.nav-sub:hover{background:var(--canvas);color:var(--indigo);border-left-color:var(--gray-3)}
+
+.main{margin-left:240px;padding:64px 32px 80px;max-width:1280px}
+.dj-block{padding:28px 32px;background:linear-gradient(135deg,var(--indigo) 0%,var(--indigo-l) 100%);color:#fff;border-radius:8px;margin:30px 0 16px}
+.dj-block h1{font-size:22px;margin-bottom:6px;font-weight:600}
+.dj-block h1 small{font-family:Monaco,monospace;color:#C9D6E5;font-size:14px;margin-left:8px}
+.dj-block .dj-summary{font-size:13px;color:#D5DDE8;line-height:1.7}
+
+.design-section{margin-bottom:32px}
+.sect-head{display:flex;justify-content:space-between;align-items:flex-start;margin:0 8px 12px;padding-bottom:8px;border-bottom:2px solid var(--gray-1)}
+.sect-head h2{font-size:16px;color:var(--gray-9);font-weight:600;margin-bottom:4px}
+.sect-head .sect-no{display:inline-block;background:var(--rust);color:#fff;padding:1px 8px;border-radius:3px;font-size:13px;margin-right:8px}
+.sect-head .sect-desc{font-size:12px;color:var(--gray-5)}
+
+.biz-notes{background:#FFF7EA;border:1px solid #EDD8A8;border-left:3px solid var(--amber);border-radius:4px;padding:12px 16px;margin:0 8px 14px}
+.biz-notes b{color:#7A5810;font-size:12.5px}
+.biz-notes ul{list-style:none;margin-top:6px}
+.biz-notes li{font-size:12px;color:#5C4307;line-height:1.7;padding:2px 0 2px 18px;position:relative}
+.biz-notes li:before{content:"▸";position:absolute;left:6px;color:var(--amber)}
+
+.design-frame{background:#fff;border:1px solid var(--gray-1);border-radius:8px;padding:16px}
+
+.page-toolbar{display:flex;justify-content:space-between;align-items:center;background:#FBF8F2;border:1px solid var(--gray-1);border-radius:6px;padding:8px 14px;margin-bottom:14px;flex-wrap:wrap;gap:6px}
+.tb-left{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tb-right{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.page-title{font-size:14px;color:var(--indigo);font-weight:600}
+
+.btn{display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:4px;font-size:12.5px;cursor:pointer;border:1px solid;line-height:1.5}
+.btn-p{background:var(--indigo);color:#fff;border-color:var(--indigo)}
+.btn-c{background:var(--rust);color:#fff;border-color:var(--rust)}
+.btn-s{background:#fff;color:var(--gray-7);border-color:var(--gray-1)}
+.btn-g{background:#fff;color:var(--vermilion);border-color:var(--gray-1)}
+.btn-t{background:transparent;color:var(--indigo);border-color:transparent;padding:3px 8px}
+.btn-sm{padding:3px 9px;font-size:11.5px}
+.req{color:var(--vermilion);margin-right:3px}
+
+.section-divider{font-size:14px;color:var(--indigo);font-weight:600;padding:14px 12px 8px;margin-top:8px;border-bottom:2px solid var(--linen);background:linear-gradient(90deg,var(--linen) 0%,transparent 60%);border-radius:4px 4px 0 0}
+
+.fieldset{background:#fff;border:1px solid var(--gray-1);border-radius:6px;margin-bottom:12px;overflow:hidden}
+.fieldset-head{background:linear-gradient(135deg,var(--linen) 0%,var(--canvas) 100%);padding:8px 16px;border-bottom:1px solid var(--gray-1);font-size:13px;font-weight:600;color:var(--indigo);display:flex;justify-content:space-between;align-items:center}
+.fieldset-head .count{color:var(--gray-5);font-weight:400;font-size:11px}
+.fieldset-body{padding:14px 18px}
+.fieldset-body.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:4px 28px}
+
+.field{display:flex;align-items:center;gap:8px;margin-bottom:8px;min-height:30px}
+.field label{width:120px;text-align:right;color:var(--gray-7);font-size:12.5px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-end;gap:4px}
+.input,.select,.date,.memo{flex:1;background:#fff;border:1px solid var(--gray-1);border-radius:4px;padding:5px 9px;font:12.5px/1.4 var(--font);color:var(--gray-9);min-width:0}
+.input.readonly{background:var(--gray-0);color:var(--gray-5)}
+.input.mini{width:70px;max-width:70px}
+.memo{min-height:48px;resize:vertical}
+.btn-edit{display:flex;align-items:center;padding:0;overflow:hidden;border:1px solid var(--gray-1);border-radius:4px;background:#fff;cursor:pointer;flex:1}
+.btn-edit .v{flex:1;padding:5px 9px;color:var(--gray-3);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btn-edit .v.has{color:var(--gray-9)}
+.btn-edit button{background:var(--gray-0);border:none;border-left:1px solid var(--gray-1);padding:5px 9px;cursor:pointer;color:var(--gray-5)}
+.multiselect{flex:1;border:1px solid var(--gray-1);background:#fff;padding:5px 9px;border-radius:4px;font-size:12.5px}
+.image-box{width:100%;height:50px;background:var(--gray-0);border:1px dashed var(--gray-3);border-radius:4px;display:flex;align-items:center;justify-content:center;color:var(--gray-3);font-size:11px;cursor:pointer}
+
+.by-sys{display:inline-block;font-size:9.5px;padding:0 4px;border-radius:3px;background:#E8F4F0;color:var(--teal);margin-left:4px}
+.by-pat{display:inline-block;font-size:9.5px;padding:0 4px;border-radius:3px;background:#FBF1DA;color:#7A5810;margin-left:4px}
+
+.subtable-wrap{background:#fff;border:1px solid var(--gray-1);border-radius:6px;margin-bottom:12px;overflow:hidden}
+.subtable-head{background:linear-gradient(135deg,#F0E8D2 0%,var(--canvas) 100%);padding:8px 14px;border-bottom:1px solid var(--gray-1);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px}
+.subtable-head .st-title{color:var(--indigo);font-size:13px;font-weight:600}
+.subtable-head .count{color:var(--gray-5);font-weight:400;font-size:11px}
+.subtable-head .st-tools{display:flex;gap:5px;flex-wrap:wrap}
+.table{width:100%;border-collapse:collapse;font-size:12px}
+.table th{background:var(--gray-0);text-align:left;padding:6px 10px;font-weight:600;color:var(--gray-7);border-bottom:1px solid var(--gray-1);white-space:nowrap}
+.table td{padding:5px 10px;color:var(--gray-9);border-bottom:1px solid var(--gray-1)}
+.table tbody tr:hover td{background:var(--linen)}
+.table td.row-act{white-space:nowrap;color:var(--rust);font-size:11px}
+
+.deleted-fields{background:#FBEAEA;border-top:1px solid var(--gray-1);padding:8px 18px}
+.deleted-fields .df-head{color:var(--vermilion);font-size:11.5px;font-weight:600;margin-bottom:4px}
+.deleted-fields ul{list-style:none;display:grid;grid-template-columns:repeat(3,1fr);gap:2px 18px;font-size:11px}
+.deleted-fields li{padding:1px 0;color:var(--gray-7);text-decoration:line-through}
+.deleted-fields li b{color:var(--vermilion)}
+
+.status{display:inline-block;padding:1px 7px;border-radius:9px;font-size:10.5px;font-weight:500}
+.status-pending{background:#E5E7EB;color:#374151}
+.status-doing{background:#FBF1DA;color:#7A5810}
+.status-sent{background:#DBEAFE;color:#1E3A5F}
+.status-returned{background:#FFE4E1;color:#B71C1C}
+.status-done{background:#D1FAE5;color:#065F46}
+
+.smart-search-bar{display:flex;gap:8px;align-items:center;background:linear-gradient(135deg,var(--linen) 0%,var(--canvas) 100%);border:1px solid var(--linen-d);border-radius:6px;padding:10px 14px;margin-bottom:10px}
+.smart-search-bar .ss-icon{font-size:16px;color:var(--indigo)}
+.smart-search-bar .ss-input{flex:1;border-color:var(--linen-d);font-size:13px;padding:6px 10px;background:#fff}
+.adv-filter-panel{background:#FBFBFB;border:1px solid var(--gray-1);border-top:3px solid var(--indigo);border-radius:4px;padding:10px 14px 12px;margin-bottom:12px}
+.adv-filter-panel .afp-head{font-size:11.5px;color:var(--indigo);font-weight:600;margin-bottom:8px}
+.adv-filter-panel .afp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px 22px}
+.pagination{margin-top:14px;display:flex;gap:6px;align-items:center;justify-content:flex-end;font-size:12px;color:var(--gray-5);flex-wrap:wrap}
+
+.badge{display:inline-block;padding:1px 7px;border-radius:9px;font-size:10.5px;font-weight:500;border:1px solid}
+.badge-i{background:#EDF1F7;color:var(--indigo);border-color:#D5DDE8}
+.badge-s{background:#E8F4F0;color:var(--teal);border-color:#C8E2D9}
+.badge-w{background:#FBF1DA;color:var(--amber);border-color:#EDD8A8}
+
+.field-logic-wrap{border-top:1px solid var(--gray-1);background:#FCFAF4;padding:0 18px 12px;margin-bottom:14px}
+.field-logic-wrap .flw-head{color:var(--indigo);font-size:12px;font-weight:600;padding:10px 0 6px}
+.field-logic-table{width:100%;border-collapse:collapse;font-size:11.5px;background:#fff;border:1px solid var(--gray-1);border-radius:4px}
+.field-logic-table th{background:#EDF1F7;text-align:left;padding:5px 8px;font-weight:600;color:var(--indigo);border-bottom:1px solid var(--gray-1);font-size:11px}
+.field-logic-table td{padding:5px 8px;color:var(--gray-9);border-bottom:1px solid var(--gray-1);vertical-align:top;line-height:1.6}
+.field-logic-table tbody tr:nth-child(even) td{background:#FBF8F2}
+.field-logic-table .dt-cell{color:var(--teal);font-size:11px;white-space:nowrap}
+.field-logic-table .rule-cell{color:var(--gray-7)}
+.req-tag{display:inline-block;background:#FBEAEA;color:var(--vermilion);font-size:10px;padding:1px 6px;border-radius:8px;font-weight:600}
+.opt-tag{display:inline-block;background:var(--gray-0);color:var(--gray-5);font-size:10px;padding:1px 6px;border-radius:8px}
+.by-tag{display:inline-block;font-size:10px;padding:1px 5px;border-radius:3px}
+.by-tag.by-sys{background:#E8F4F0;color:var(--teal)}
+.by-tag.by-pat{background:#FBF1DA;color:#7A5810}
+.by-tag.by-biz{background:#EDF1F7;color:var(--indigo)}
+.anno-mark{display:inline-block;background:var(--rust);color:#fff;font-size:9.5px;padding:1px 5px;border-radius:3px;margin-left:6px;font-weight:600}
+
+.page-logic-panel{background:#fff;border:1px solid var(--indigo);border-radius:6px;margin-top:14px;overflow:hidden}
+.plp-head{background:linear-gradient(135deg,var(--indigo) 0%,var(--indigo-l) 100%);color:#fff;padding:10px 16px;font-size:13px;font-weight:600}
+.plp-body{padding:16px 18px;display:grid;grid-template-columns:1fr;gap:14px}
+.pl-cat h4{color:var(--indigo);font-size:12.5px;font-weight:600;margin-bottom:6px;border-bottom:1px solid var(--linen);padding-bottom:4px}
+.pl-table{width:100%;border-collapse:collapse;font-size:12px;background:var(--canvas);border:1px solid var(--gray-1);border-radius:4px}
+.pl-table th{background:#E8EFF6;text-align:left;padding:5px 8px;font-weight:600;color:var(--indigo);font-size:11px}
+.pl-table td{padding:6px 8px;color:var(--gray-9);border-top:1px solid var(--gray-1);vertical-align:top;line-height:1.65}
+.pl-table td:first-child{font-weight:600;color:var(--indigo);white-space:nowrap}
+.pl-ul{list-style:none;padding:0;margin:0}
+.pl-ul li{padding:5px 10px 5px 22px;background:var(--canvas);border-left:3px solid var(--teal);margin-bottom:4px;border-radius:0 4px 4px 0;font-size:12px;line-height:1.7;position:relative}
+.pl-ul li:before{content:"▸";position:absolute;left:8px;color:var(--teal);font-weight:bold}
+
+/* —— 批注功能 —— */
+.anno-toggle,.anno-export{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);padding:5px 12px;border-radius:14px;font-size:12px;cursor:pointer;font-family:inherit}
+.anno-toggle:hover,.anno-export:hover{background:rgba(255,255,255,.25)}
+.anno-toggle.on{background:var(--rust);border-color:var(--rust)}
+.anno-count{display:inline-block;background:#fff;color:var(--rust);padding:1px 7px;border-radius:10px;font-weight:600;margin-left:4px;font-size:11px}
+.anno-icon{display:none;position:absolute;background:var(--rust);color:#fff;width:18px;height:18px;border-radius:50%;font-size:11px;line-height:18px;text-align:center;cursor:pointer;z-index:50;box-shadow:0 2px 4px rgba(0,0,0,.2);border:none;font-family:inherit;padding:0}
+.anno-icon:hover{transform:scale(1.2)}
+.anno-icon.has-note{background:var(--vermilion)}
+body.anno-on .anno-icon{display:inline-block}
+body.anno-on [data-anno-target]{position:relative;outline:1px dashed rgba(209,122,64,.3);outline-offset:2px}
+body.anno-on [data-anno-target]:hover{outline:1px solid var(--rust);background:rgba(255,247,234,.5)}
+.anno-modal-mask{position:fixed;inset:0;background:rgba(30,58,95,.5);display:none;z-index:1000;align-items:center;justify-content:center}
+.anno-modal-mask.open{display:flex}
+.anno-modal{background:#fff;border-radius:8px;width:520px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.anno-modal-head{background:var(--rust);color:#fff;padding:12px 18px;border-radius:8px 8px 0 0;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.anno-modal-head .x{cursor:pointer;font-size:18px;line-height:1}
+.anno-modal-body{padding:18px}
+.anno-modal-body label{display:block;font-size:11px;color:var(--gray-5);margin-bottom:4px}
+.anno-modal-body .target-info{font-size:13px;color:var(--gray-9);margin-bottom:10px;padding:6px 10px;background:var(--canvas);border-radius:4px}
+.anno-modal-body textarea{width:100%;min-height:140px;border:1px solid var(--gray-1);border-radius:4px;padding:8px 10px;font:13px/1.6 var(--font);resize:vertical}
+.anno-modal-foot{padding:12px 18px;background:var(--canvas);border-top:1px solid var(--gray-1);display:flex;justify-content:flex-end;gap:8px;border-radius:0 0 8px 8px}
+.anno-tip{background:#FFF7EA;border:1px solid #EDD8A8;border-radius:4px;padding:10px 14px;font-size:12px;color:#5C4307;margin:0 8px 14px;display:none}
+body.anno-on .anno-tip{display:block}
+</style>
+</head><body>
+
+<div class="topbar">
+  <div class="logo">🪡 样衣制造管理系统 · 新版 UI 设计稿<small>02.2 客户报价 · v1.3 评审版</small></div>
+  <div class="actions">
+    <button id="annoToggle" class="anno-toggle" onclick="toggleAnno()">💬 批注模式：OFF</button>
+    <button id="annoExport" class="anno-export" onclick="exportAnno()" style="display:none">📥 导出批注 <span id="annoCount" class="anno-count">0</span></button>
+    <button id="annoClear" class="anno-export" onclick="clearAnno()" style="display:none">🗑 清空</button>
+  </div>
+</div>
+
+
+<nav class="sidenav">
+  <div class="nav-cat" style="border:none;margin-top:0">客户报价 · 1 单据</div>
+  <div class="nav-group">
+    <a class="nav-dj" href="#overview">📐 业务流位置</a>
+    <a class="nav-sub" href="#editor">　编辑页（业务视图）</a>
+    <a class="nav-sub" href="#list">　列表页（浏览+检索）</a>
+  </div>
+</nav>
+
+
+<main class="main">
+  <div class="anno-tip">
+    <b>💬 批注模式已开启</b>　将鼠标移到任一字段 / 分组 / 按钮上，点击 <b style="background:#D17A40;color:#fff;padding:1px 7px;border-radius:50%;font-size:11px">💬</b> 即可写下想改的内容。批注保存到浏览器，完成后点 <b>📥 导出批注</b> 下载发给设计师。
+  </div>
+
+  <div class="dj-block" style="background:linear-gradient(135deg,var(--rust) 0%,#A85423 100%)">
+    <h1>📐 客户报价 · UI 设计稿<small>02.2 · 数据表 KHBJ · v1.3</small></h1>
+    <p class="dj-summary">
+    客户报价记录的是公司向客户发出的<b>正式报价单</b>——业务流上承接「样衣管理」（材料 / 单耗 / 规格自动导入），下游对接「销售合同」（报价确认后转合同）。本版按业务方答复（三模块串流程问题清单 40 题）+ 4 条 UI 批注重构。<br>
+    <b>编号规则</b>：Q-YYYYMMDD-序号（D1：加 Q 前缀，如 Q-20260528-01），自动生成，当天顺序<br>
+    <span style="background:rgba(255,255,255,.18);padding:2px 8px;border-radius:4px;font-size:12px">📌 v1.3 改造：① 加 Q 前缀 ② 报价明细删合计列+新增损耗/含损金额 ③ 费用明细删合计列+自动带 6 行 ④ 报价合计简化为 3 字段 ⑤ 移除版本控制 ⑥ 图片支持截图粘贴+拖文件 ⑦ 供应商带过来但 PDF 隐藏</span>
+    </p>
+  </div>
+
+  <div id="overview" class="dj-block">
+    <h1>📐 业务流位置</h1>
+    <p class="dj-summary">客户报价是业务流中段单据，上承样衣管理（S-...），下接销售合同。</p>
+  </div>
+  
+<svg viewBox="0 0 1200 360" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;background:#FBF8F2;border:1px solid var(--gray-1);border-radius:8px">
+  <defs>
+    <marker id="arr" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#1E3A5F"/>
+    </marker>
+    <marker id="arr-rust" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#D17A40"/>
+    </marker>
+  </defs>
+
+  <rect x="100" y="60" width="200" height="100" rx="6" fill="#fff" stroke="#1E3A5F" stroke-width="2"/>
+  <text x="200" y="90" font-size="13" fill="#1E3A5F" font-weight="700" text-anchor="middle">① 样衣管理</text>
+  <text x="200" y="110" font-size="11" fill="#6F7178" text-anchor="middle">S-YYYYMMDD-序号</text>
+  <text x="200" y="128" font-size="11" fill="#6F7178" text-anchor="middle">业务+版师+打样间</text>
+  <text x="200" y="148" font-size="10" fill="#3E8E7E" text-anchor="middle">上游单据</text>
+
+  <rect x="460" y="40" width="280" height="140" rx="8" fill="#1E3A5F" stroke="#D17A40" stroke-width="3"/>
+  <text x="600" y="80" font-size="14" fill="#fff" font-weight="700" text-anchor="middle">⭐ 客户报价 Q-...</text>
+  <text x="600" y="100" font-size="11" fill="#FFE0C2" text-anchor="middle">（业务流中段）</text>
+  <text x="600" y="122" font-size="10" fill="#fff" text-anchor="middle">主表 + 报价明细 + 费用明细</text>
+  <text x="600" y="140" font-size="10" fill="#fff" text-anchor="middle">+ 报价合计（3 字段）</text>
+  <text x="600" y="160" font-size="11" fill="#FFE0C2" text-anchor="middle">本设计稿主体</text>
+
+  <line x1="300" y1="110" x2="460" y2="110" stroke="#D17A40" stroke-width="2" marker-end="url(#arr-rust)"/>
+  <text x="380" y="100" font-size="10" fill="#D17A40" text-anchor="middle">📥 从样衣导入</text>
+  <text x="380" y="115" font-size="10" fill="#D17A40" text-anchor="middle">材料/单耗/供应商</text>
+
+  <rect x="900" y="60" width="200" height="100" rx="6" fill="#fff" stroke="#1E3A5F" stroke-width="2"/>
+  <text x="1000" y="90" font-size="13" fill="#1E3A5F" font-weight="700" text-anchor="middle">③ 销售合同</text>
+  <text x="1000" y="110" font-size="11" fill="#6F7178" text-anchor="middle">报价确认后</text>
+  <text x="1000" y="128" font-size="11" fill="#6F7178" text-anchor="middle">一键转合同</text>
+  <text x="1000" y="148" font-size="10" fill="#3E8E7E" text-anchor="middle">下游单据</text>
+
+  <line x1="740" y1="110" x2="900" y2="110" stroke="#1E3A5F" stroke-width="2" marker-end="url(#arr)"/>
+  <text x="820" y="100" font-size="10" fill="#1E3A5F" text-anchor="middle">🔵 转销售合同</text>
+
+  <rect x="100" y="220" width="1000" height="100" rx="6" fill="#FFF7EA" stroke="#EDD8A8"/>
+  <text x="120" y="245" font-size="13" fill="#7A5810" font-weight="600">📌 本设计稿 v1.3 改造</text>
+  <text x="120" y="265" font-size="11" fill="#5C4307">① 编号加 Q 前缀 ② 报价明细 删合计列 + 新增 损耗/含损金额 ③ 费用明细 删合计列 + 新建自动带 6 行</text>
+  <text x="120" y="282" font-size="11" fill="#5C4307">④ 报价合计 简化为 3 字段（人民币价/美元价/备注） ⑤ 移除版本控制 ⑥ 图片支持截图粘贴+拖文件</text>
+  <text x="120" y="302" font-size="11" fill="#7A5810" font-weight="600">关键公式：</text>
+  <text x="220" y="302" font-size="11" fill="#5C4307">含损金额 = 人民币单价 × 报价耗用 × (1 + 损耗)；损耗默认 3% 可改</text>
+</svg>
+
+
+  <div class="biz-notes"><b>📌 客户报价 · 业务规则（v1.3）</b><ul><li>🔑 业务流位置：基础资料 → 样衣管理 → 客户报价 → 销售合同</li><li>📋 编号规则（D1）：报价单号 Q-YYYYMMDD-序号；关联样衣单号 S-YYYYMMDD-序号</li><li>🔄 一轮报价（v1.0 已确认）：取消「两轮报价」双子表</li><li>📥 报价从关联样衣导入：部位 / 品名 / 门幅 / 颜色 / 供应商 / 耗用全自动带入</li><li>🔥 报价耗用业务可改（F2）：写入报价的独立快照，不回写样衣管理</li><li>💰 含损金额公式：人民币单价 × 报价耗用 × (1 + 损耗)；损耗默认 3% 可改</li><li>📑 费用明细新建自动带 6 行：加工费 / 线 / 包装 / 样衣费 / 测试费 / 运费</li><li>🧾 报价合计精简：只保留 3 项（报价人民币价格 / 报价美元价格 / 备注说明）</li><li>🖨 PDF 导出：供应商列默认隐藏（不对客户展示）</li><li>🚫 不做版本控制（业务方已确认）：编辑直接覆盖，状态流转 草稿→已报价→（客户调整/已成单）</li><li>🔒 转销售合同（G1）：主表 + 报价明细 + 费用明细 + 合计全部带过去，业务不可选行</li></ul></div>
+
+  <section id="editor" class="design-section">
+    <div class="sect-head">
+      <div>
+        <h2><span class="sect-no">A</span> 编辑页（业务视图）</h2>
+        <p class="sect-desc">业务员主用 · 主要信息 + 图片 + 报价明细 + 费用明细 + 报价合计</p>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span class="badge badge-i">业务员主用</span>
+        <span class="badge badge-s">39 字段 / 5 分组</span>
+      </div>
+    </div>
+    <div class="design-frame">
+      
+    <div class="page-toolbar">
+      <div class="tb-left">
+        <span class="page-title">客户报价 · 编辑</span>
+        <span class="badge badge-s">一般 etGeneral</span>
+        <span class="badge badge-w">草稿</span>
+      </div>
+      <div class="tb-right">
+        <button class="btn btn-p">💾 保存</button>
+        <button class="btn btn-c">📥 从样衣导入</button>
+        <button class="btn btn-p">🔵 转销售合同</button>
+        <button class="btn btn-s">🖨 打印</button>
+        <button class="btn btn-s">复制</button>
+        <button class="btn btn-s">导出 PDF</button>
+        <button class="btn btn-s">···</button>
+      </div>
+    </div>
+    <h3 class="section-divider">▣ 主要信息</h3>
+    <div class="fieldset">
+      <div class="fieldset-head">主要信息 <span class="count">18 字段（原 23，删 5）</span></div>
+      <div class="fieldset-body grid-3"><div class="field"><label><span class="req">*</span>报价单号<span class="by-sys">系统</span></label><input class="input readonly" value="Q-20260528-01" readonly></div><div class="field"><label><span class="req">*</span>询价日期</label><input class="input" type="date" value="2026-05-28"></div><div class="field"><label>关联样衣编号</label><div class="btn-edit"><div class="v has">🔗 S-20260527-01</div><button>…</button></div></div><div class="field"><label><span class="req">*</span>中间商编号</label><div class="btn-edit"><div class="v has">CN001</div><button>…</button></div></div><div class="field"><label><span class="req">*</span>中间商名称<span class="by-sys">系统</span></label><input class="input readonly" value="上海福德贸易" readonly></div><div class="field"><label><span class="req">*</span>最终买家</label><div class="btn-edit"><div class="v has">H&amp;M Asia</div><button>…</button></div></div><div class="field"><label>最终买家编号<span class="by-sys">系统</span></label><input class="input readonly" value="CN032" readonly></div><div class="field"><label><span class="req">*</span>客户款号</label><input class="input" value="H-2026-S001"></div><div class="field"><label>中间商联系人</label><div class="btn-edit"><div class="v has">点击选择 …</div><button>…</button></div></div><div class="field"><label>结算类别<span class="by-sys">系统</span></label><input class="input readonly" value="" readonly></div><div class="field"><label><span class="req">*</span>外销币种</label><select class="select"><option>请选择</option></select></div><div class="field"><label><span class="req">*</span>汇率</label><input class="input" type="number" value="7.0"></div><div class="field"><label>贸易国别</label><div class="btn-edit"><div class="v has">点击选择 …</div><button>…</button></div></div><div class="field"><label><span class="req">*</span>结汇方式</label><div class="btn-edit"><div class="v has">点击选择 …</div><button>…</button></div></div><div class="field"><label><span class="req">*</span>价格条款</label><div class="btn-edit"><div class="v has">点击选择 …</div><button>…</button></div></div><div class="field"><label><span class="req">*</span>外销员</label><select class="select"><option>请选择</option></select></div><div class="field"><label><span class="req">*</span>利润率</label><input class="input" type="number" value="15"></div><div class="field"><label>报价数量</label><input class="input" value=""></div></div>
+      
+        <div class="deleted-fields">
+          <div class="df-head">❌ 业务方明确删除 5 项</div>
+          <ul><li><b>我方公司</b> <span style="color:var(--gray-5)">— v1.0 已删</span></li><li><b>出运口岸</b> <span style="color:var(--gray-5)">— v1.0 已删</span></li><li><b>目的口岸</b> <span style="color:var(--gray-5)">— v1.0 已删</span></li><li><b>包装方式</b> <span style="color:var(--gray-5)">— v1.0 已删</span></li><li><b>当前版本号</b> <span style="color:var(--gray-5)">— v1.3 撤销版本控制（业务方决定不要版本管理）</span></li></ul>
+        </div>
+    </div>
+        <div class="field-logic-wrap">
+          <div class="flw-head">📋 字段操作逻辑（18 个）</div>
+          <table class="field-logic-table">
+            <thead><tr>
+              <th style="width:160px">字段</th>
+              <th style="width:75px">类型</th>
+              <th style="width:55px">必填</th>
+              <th style="width:80px">控件</th>
+              <th style="width:60px">填写人</th>
+              <th>操作逻辑 / 业务规则</th>
+            </tr></thead>
+            <tbody><tr><td><b>报价单号</b><span class="anno-mark">改前缀 [D1]</span></td><td class="dt-cell">文本</td><td><span class="req-tag">必填</span></td><td>只读文本</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">自动生成 Q-YYYYMMDD-序号（D1：加 Q 前缀）</td></tr><tr><td><b>询价日期</b></td><td class="dt-cell">日期</td><td><span class="req-tag">必填</span></td><td>日期</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">默认填今天</td></tr><tr><td><b>关联样衣编号</b><span class="anno-mark">[A1/D1]</span></td><td class="dt-cell">选择带出</td><td><span class="opt-tag">选填</span></td><td>点选弹窗</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">从样衣管理选样衣单（S-YYYYMMDD-序号），自动带客户/中间商/材料明细等</td></tr><tr><td><b>中间商编号</b></td><td class="dt-cell">选择带出</td><td><span class="req-tag">必填</span></td><td>点选弹窗</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">点按钮从【客户资料】挑中间商，自动带名称、价格条款、结汇方式、贸易国别</td></tr><tr><td><b>中间商名称</b></td><td class="dt-cell">文本</td><td><span class="req-tag">必填</span></td><td>只读文本</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">系统自动填，只读</td></tr><tr><td><b>最终买家</b></td><td class="dt-cell">选择带出</td><td><span class="req-tag">必填</span></td><td>点选弹窗</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">点按钮从【客户资料】挑最终买家，自动带最终买家编号</td></tr><tr><td><b>最终买家编号</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>只读文本</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">系统自动填</td></tr><tr><td><b>客户款号</b></td><td class="dt-cell">文本</td><td><span class="req-tag">必填</span></td><td>文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">从关联样衣自动带（也可手填）</td></tr><tr><td><b>中间商联系人</b></td><td class="dt-cell">选择带出</td><td><span class="opt-tag">选填</span></td><td>点选弹窗</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">点按钮从该中间商的联系人明细挑选，对话框显示职务</td></tr><tr><td><b>结算类别</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>只读文本</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">系统自动填，只读</td></tr><tr><td><b>外销币种</b></td><td class="dt-cell">下拉选项</td><td><span class="req-tag">必填</span></td><td>下拉单选</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">下拉选择，默认 USD；切换币种时按「货币代码」表自动带出新汇率</td></tr><tr><td><b>汇率</b></td><td class="dt-cell">数字</td><td><span class="req-tag">必填</span></td><td>数字</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">数字；可手工调整；币种切换后自动带入</td></tr><tr><td><b>贸易国别</b></td><td class="dt-cell">选择带出</td><td><span class="opt-tag">选填</span></td><td>点选弹窗</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">点按钮从【贸易国别】字典选择，默认 UK</td></tr><tr><td><b>结汇方式</b></td><td class="dt-cell">选择带出</td><td><span class="req-tag">必填</span></td><td>点选弹窗</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">点按钮从【结汇方式】字典选择，默认 T/T</td></tr><tr><td><b>价格条款</b></td><td class="dt-cell">选择带出</td><td><span class="req-tag">必填</span></td><td>点选弹窗</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">点按钮从【价格条款】字典选择，默认 FOB</td></tr><tr><td><b>外销员</b></td><td class="dt-cell">下拉选项</td><td><span class="req-tag">必填</span></td><td>下拉单选</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">默认填当前登录人</td></tr><tr><td><b>利润率</b></td><td class="dt-cell">数字</td><td><span class="req-tag">必填</span></td><td>数字</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">数字；默认 0，可调整。淡青色背景，参与价格计算</td></tr><tr><td><b>报价数量</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">本次报价对应的件数</td></tr></tbody>
+          </table>
+        </div><h3 class="section-divider">▣ 图片信息</h3>
+    <div class="fieldset">
+      <div class="fieldset-head">图片信息 <span class="count">2 字段</span></div>
+      <div class="fieldset-body grid-3"><div class="field"><label>图片 1</label><div class="image-box">📷 点选 / Ctrl+V 粘贴 / 拖文件</div></div><div class="field"><label>图片 2</label><div class="image-box">📷 点选 / Ctrl+V 粘贴 / 拖文件</div></div></div>
+      
+    </div>
+        <div class="field-logic-wrap">
+          <div class="flw-head">📋 字段操作逻辑（2 个）</div>
+          <table class="field-logic-table">
+            <thead><tr>
+              <th style="width:160px">字段</th>
+              <th style="width:75px">类型</th>
+              <th style="width:55px">必填</th>
+              <th style="width:80px">控件</th>
+              <th style="width:60px">填写人</th>
+              <th>操作逻辑 / 业务规则</th>
+            </tr></thead>
+            <tbody><tr><td><b>图片 1</b><span class="anno-mark">改交互 [#1]</span></td><td class="dt-cell">图片</td><td><span class="opt-tag">选填</span></td><td>图片上传</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">★ 支持：① 点框上传 ② Ctrl+V 截图粘贴 ③ 拖本地文件到框内（UI 批注 #1）</td></tr><tr><td><b>图片 2</b><span class="anno-mark">改交互 [#1]</span></td><td class="dt-cell">图片</td><td><span class="opt-tag">选填</span></td><td>图片上传</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">同上：截图粘贴 + 拖文件</td></tr></tbody>
+          </table>
+        </div><h3 class="section-divider">▣ 报价明细（从样衣导入）</h3>
+    <div class="subtable-wrap">
+      <div class="subtable-head">
+        <span class="st-title">▸ 报价明细（从样衣导入）<span class="count"> · 12 字段（原 16，删 4） · 示例 3 行</span></span>
+        <div class="st-tools"><button class="btn btn-s btn-sm">[+ 添加行]</button><button class="btn btn-s btn-sm">[— 删除]</button><button class="btn btn-s btn-sm">[📥 从样衣导入]</button><button class="btn btn-s btn-sm">[📋 Excel 粘贴]</button></div>
+      </div>
+      <div style="overflow-x:auto">
+      <table class="table">
+        <thead><tr><th style="width:30px"><input type="checkbox"></th><th>部位</th><th>品名</th><th>门幅</th><th>颜色</th><th>供应商</th><th>计量单位</th><th>报价耗用(数量)</th><th>人民币单价</th><th>美金单价</th><th>损耗</th><th>含损金额</th><th>备注</th></tr></thead>
+        <tbody><tr><td><input type="checkbox"></td><td>主面料</td><td>32S 全棉府绸</td><td>147cm</td><td>白</td><td>上海福德</td><td>米</td><td>1.20</td><td>28.50</td><td>4.07</td><td>3</td><td>35.23</td><td>从样衣 S-20260527-01 导入</td></tr><tr><td><input type="checkbox"></td><td>里料</td><td>65/35 涤棉</td><td>150cm</td><td>本色</td><td>南通织造厂</td><td>米</td><td>0.40</td><td>18.20</td><td>2.60</td><td>3</td><td>7.50</td><td>从样衣导入</td></tr><tr><td><input type="checkbox"></td><td>拉链</td><td>YKK 5#</td><td>—</td><td>黑</td><td>YKK 中国</td><td>条</td><td>1</td><td>1.80</td><td>0.26</td><td>0</td><td>1.80</td><td>辅料无损耗</td></tr></tbody>
+      </table>
+      </div>
+      
+        <div class="deleted-fields">
+          <div class="df-head">❌ 业务方明确删除/合并 4 项</div>
+          <ul><li><b>人民币合计</b> <span style="color:var(--gray-5)">— UI 批注 #3：人民币合计/美金合计不显示，替换成「损耗 + 含损金额」</span></li><li><b>美金合计</b> <span style="color:var(--gray-5)">— UI 批注 #3：同上</span></li><li><b>第二轮报价（最终报价明细）</b> <span style="color:var(--gray-5)">— v1.0 已删（只保留一轮报价）</span></li><li><b>材料编号</b> <span style="color:var(--gray-5)">— v1.0 已删（不挂料库）</span></li></ul>
+        </div>
+    </div>
+        <div class="field-logic-wrap">
+          <div class="flw-head">📋 字段操作逻辑（12 个）</div>
+          <table class="field-logic-table">
+            <thead><tr>
+              <th style="width:160px">字段</th>
+              <th style="width:75px">类型</th>
+              <th style="width:55px">必填</th>
+              <th style="width:80px">控件</th>
+              <th style="width:60px">填写人</th>
+              <th>操作逻辑 / 业务规则</th>
+            </tr></thead>
+            <tbody><tr><td><b>部位</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">从关联样衣自动带，可改</td></tr><tr><td><b>品名</b></td><td class="dt-cell">文本</td><td><span class="req-tag">必填</span></td><td>文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">面辅料品名（直接录入）</td></tr><tr><td><b>门幅</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">从关联样衣自动带</td></tr><tr><td><b>颜色</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">从关联样衣自动带</td></tr><tr><td><b>供应商</b><span class="anno-mark">[A4]</span></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">★ 从样衣带过来，业务可改；PDF 默认隐藏（不对客户展示）</td></tr><tr><td><b>计量单位</b></td><td class="dt-cell">下拉选项</td><td><span class="req-tag">必填</span></td><td>下拉单选</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">米 / 码 / 个 等</td></tr><tr><td><b>报价耗用(数量)</b><span class="anno-mark">[F2]</span></td><td class="dt-cell">数字</td><td><span class="req-tag">必填</span></td><td>数字</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">🔥 从样衣「实际耗用」带入；★ 业务可改（独立快照，不回写样衣）</td></tr><tr><td><b>人民币单价</b></td><td class="dt-cell">数字</td><td><span class="req-tag">必填</span></td><td>数字</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">💰 业务填单价；淡青色背景</td></tr><tr><td><b>美金单价</b></td><td class="dt-cell">数字</td><td><span class="opt-tag">选填</span></td><td>只读数字</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">系统自动算：人民币单价 / 汇率，只读</td></tr><tr><td><b>损耗</b><span class="anno-mark">新增 [#3]</span></td><td class="dt-cell">数字</td><td><span class="req-tag">必填</span></td><td>数字</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">★ 默认 3%（可改）；参与含损金额计算（UI 批注 #3）</td></tr><tr><td><b>含损金额</b><span class="anno-mark">新增 [#3]</span></td><td class="dt-cell">数字</td><td><span class="opt-tag">选填</span></td><td>只读数字</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">★ 系统自动算：人民币单价 × 报价耗用 × (1 + 损耗)，只读（UI 批注 #3）</td></tr><tr><td><b>备注</b></td><td class="dt-cell">多行文本</td><td><span class="opt-tag">选填</span></td><td>多行文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">—</td></tr></tbody>
+          </table>
+        </div><h3 class="section-divider">▣ 费用明细</h3>
+    <div class="subtable-wrap">
+      <div class="subtable-head">
+        <span class="st-title">▸ 费用明细<span class="count"> · 4 字段（原 7，删 3） · 示例 6 行</span></span>
+        <div class="st-tools"><button class="btn btn-s btn-sm">[+ 添加行]</button><button class="btn btn-s btn-sm">[— 删除]</button></div>
+      </div>
+      <div style="overflow-x:auto">
+      <table class="table">
+        <thead><tr><th style="width:30px"><input type="checkbox"></th><th>费用名称</th><th>人民币单价</th><th>美金单价</th><th>报价耗用(数量)</th></tr></thead>
+        <tbody><tr><td><input type="checkbox"></td><td>加工费</td><td>8.50</td><td>1.21</td><td>1</td></tr><tr><td><input type="checkbox"></td><td>线</td><td>0.80</td><td>0.11</td><td>1</td></tr><tr><td><input type="checkbox"></td><td>包装</td><td>1.20</td><td>0.17</td><td>1</td></tr><tr><td><input type="checkbox"></td><td>样衣费</td><td>5.00</td><td>0.71</td><td>1</td></tr><tr><td><input type="checkbox"></td><td>测试费</td><td>2.50</td><td>0.36</td><td>1</td></tr><tr><td><input type="checkbox"></td><td>运费</td><td>3.00</td><td>0.43</td><td>1</td></tr></tbody>
+      </table>
+      </div>
+      
+        <div class="deleted-fields">
+          <div class="df-head">❌ 业务方明确删除/合并 3 项</div>
+          <ul><li><b>人民币合计</b> <span style="color:var(--gray-5)">— UI 批注 #2：不再显示合计列</span></li><li><b>美金合计</b> <span style="color:var(--gray-5)">— UI 批注 #2：同上</span></li><li><b>最终费用明细 6 字段</b> <span style="color:var(--gray-5)">— v1.0 已删（只保留一轮）</span></li></ul>
+        </div>
+    </div>
+        <div class="field-logic-wrap">
+          <div class="flw-head">📋 字段操作逻辑（4 个）</div>
+          <table class="field-logic-table">
+            <thead><tr>
+              <th style="width:160px">字段</th>
+              <th style="width:75px">类型</th>
+              <th style="width:55px">必填</th>
+              <th style="width:80px">控件</th>
+              <th style="width:60px">填写人</th>
+              <th>操作逻辑 / 业务规则</th>
+            </tr></thead>
+            <tbody><tr><td><b>费用名称</b><span class="anno-mark">改 [#2]</span></td><td class="dt-cell">文本</td><td><span class="req-tag">必填</span></td><td>文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">★ 新建时自动带入 6 行：加工费 / 线 / 包装 / 样衣费 / 测试费 / 运费（UI 批注 #2）</td></tr><tr><td><b>人民币单价</b></td><td class="dt-cell">数字</td><td><span class="req-tag">必填</span></td><td>数字</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">业务填；淡青色背景</td></tr><tr><td><b>美金单价</b></td><td class="dt-cell">数字</td><td><span class="opt-tag">选填</span></td><td>只读数字</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">系统自动算：人民币单价 / 汇率，只读</td></tr><tr><td><b>报价耗用(数量)</b></td><td class="dt-cell">数字</td><td><span class="req-tag">必填</span></td><td>数字</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">默认 1，可改</td></tr></tbody>
+          </table>
+        </div><h3 class="section-divider">▣ 报价合计</h3>
+    <div class="fieldset">
+      <div class="fieldset-head">报价合计 <span class="count">3 字段（原 9，删 6）</span></div>
+      <div class="fieldset-body grid-3"><div class="field"><label>报价人民币价格<span class="by-sys">系统</span></label><input class="input readonly" value="¥ 99,820 (含15%利润)" readonly></div><div class="field"><label>报价美元价格<span class="by-sys">系统</span></label><input class="input readonly" value="$ 14,260 (含15%利润)" readonly></div><div class="field"><label>备注说明</label><textarea class="memo"></textarea></div></div>
+      
+        <div class="deleted-fields">
+          <div class="df-head">❌ 业务方明确删除 6 项</div>
+          <ul><li><b>人民币总计</b> <span style="color:var(--gray-5)">— UI 批注 #4：只保留 3 项</span></li><li><b>美金总计</b> <span style="color:var(--gray-5)">— UI 批注 #4：同上</span></li><li><b>报价排料人民币合计</b> <span style="color:var(--gray-5)">— UI 批注 #4：同上</span></li><li><b>报价排料美金合计</b> <span style="color:var(--gray-5)">— UI 批注 #4：同上</span></li><li><b>报价费用人民币合计</b> <span style="color:var(--gray-5)">— UI 批注 #4：同上</span></li><li><b>报价费用美金合计</b> <span style="color:var(--gray-5)">— UI 批注 #4：同上</span></li></ul>
+        </div>
+    </div>
+        <div class="field-logic-wrap">
+          <div class="flw-head">📋 字段操作逻辑（3 个）</div>
+          <table class="field-logic-table">
+            <thead><tr>
+              <th style="width:160px">字段</th>
+              <th style="width:75px">类型</th>
+              <th style="width:55px">必填</th>
+              <th style="width:80px">控件</th>
+              <th style="width:60px">填写人</th>
+              <th>操作逻辑 / 业务规则</th>
+            </tr></thead>
+            <tbody><tr><td><b>报价人民币价格</b><span class="anno-mark">改 [#4]</span></td><td class="dt-cell">数字</td><td><span class="opt-tag">选填</span></td><td>公式计算</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">★ 含利润率后的总价（含损金额合计 + 费用合计）×（1 + 利润率），只读；浅红背景突出（UI 批注 #4）</td></tr><tr><td><b>报价美元价格</b><span class="anno-mark">改 [#4]</span></td><td class="dt-cell">数字</td><td><span class="opt-tag">选填</span></td><td>公式计算</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">★ 含利润率后的总价，按汇率换算美金，只读；浅红背景突出（UI 批注 #4）</td></tr><tr><td><b>备注说明</b><span class="anno-mark">保留 [#4]</span></td><td class="dt-cell">多行文本</td><td><span class="opt-tag">选填</span></td><td>多行文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">★ 报价的说明 / 条款 / 有效期等（UI 批注 #4）</td></tr></tbody>
+          </table>
+        </div>
+    </div>
+    <div class="page-logic-panel"><div class="plp-head">⚙ 页面级操作逻辑（按钮 / 事件 / 校验 / 联动）</div><div class="plp-body"><div class="pl-cat"><h4>🔘 操作按钮</h4><table class="pl-table"><thead><tr><th style="width:180px">按钮</th><th>行为</th></tr></thead><tbody><tr><td>💾 保存</td><td>保存客户报价信息（直接覆盖，无版本管理）</td></tr><tr><td>📥 从样衣导入</td><td>🟢 关键操作：选关联样衣单后，自动把样衣的材料明细拉到报价明细子表（部位/品名/规格/颜色/供应商/耗用），业务只需填单价 + 损耗</td></tr><tr><td>🔵 转销售合同</td><td>报价确认后一键转销售合同；主表 + 报价明细 + 费用明细 + 合计全部带过去，业务不可选行（G1）</td></tr><tr><td>复制</td><td>复制本报价单为新报价（基本信息复制；明细可选）</td></tr><tr><td>🖨 导出 PDF</td><td>导出 PDF 报价单给客户（★ 供应商列默认隐藏）</td></tr><tr><td>🖨 打印</td><td>直接打印本张报价单（★ 供应商列默认隐藏）</td></tr></tbody></table></div><div class="pl-cat"><h4>⚡ 页面事件</h4><table class="pl-table"><thead><tr><th style="width:180px">时机</th><th>系统做什么</th></tr></thead><tbody><tr><td>新建时</td><td>自动生成报价单号 Q-YYYYMMDD-序号 / 询价日期=今天 / 外销员=当前登录人 / ★ 费用明细自动带 6 行（加工费/线/包装/样衣费/测试费/运费）</td></tr><tr><td>选关联样衣编号后</td><td>🔥 自动带客户/中间商/客户款号 + 把样衣材料明细复制到报价明细子表（含供应商）</td></tr><tr><td>选中间商后</td><td>自动带中间商名称、价格条款、结汇方式、贸易国别</td></tr><tr><td>选最终买家后</td><td>自动带最终买家编号</td></tr><tr><td>切换外销币种</td><td>按「货币代码」表自动带出新汇率（汇率字段也可手改）</td></tr><tr><td>业务填人民币单价或改损耗</td><td>① 美金单价 = 人民币单价/汇率 ② 含损金额 = 人民币单价×报价耗用×(1+损耗) ③ 报价合计实时更新</td></tr><tr><td>业务改报价耗用</td><td>★ 仅写入本报价独立快照，不回写样衣管理（F2）</td></tr><tr><td>调整利润率</td><td>报价人民币价格 / 报价美元价格 实时按 (1+利润率) 重算</td></tr><tr><td>业务点「转销售合同」</td><td>把主表 + 报价明细 + 费用明细 + 合计全部带到销售合同（不能勾选）</td></tr><tr><td>★ 图片字段交互</td><td>① 点框选本地文件 ② 按 Ctrl+V 把剪贴板截图粘贴进来 ③ 把文件拖进框（UI 批注 #1）</td></tr></tbody></table></div><div class="pl-cat"><h4>✅ 字段校验</h4><ul class="pl-ul"><li>必填：报价单号 / 询价日期 / 中间商 / 最终买家 / 客户款号 / 结汇方式 / 价格条款 / 外销员 / 利润率</li><li>唯一：报价单号（Q-YYYYMMDD-序号，全局唯一）</li><li>报价明细 至少 1 行；明细的「品名」「计量单位」「报价耗用」「人民币单价」「损耗」必填</li><li>损耗 范围：0 ~ 100（百分比，可填 0）</li><li>汇率必须 &gt; 0</li></ul></div><div class="pl-cat"><h4>🔗 字段联动 / 公式</h4><ul class="pl-ul"><li>中间商编号 → 自动带中间商名称、价格条款、结汇方式、贸易国别</li><li>关联样衣 → 自动带客户款号 + 复制材料明细到报价明细子表（含供应商）</li><li>外销币种切换 → 自动按「货币代码」表带出汇率</li><li>人民币单价 → 美金单价（公式）→ 含损金额（公式）→ 报价合计（公式）</li><li>损耗调整 → 含损金额（公式）→ 报价合计（公式）</li><li>利润率调整 → 报价人民币价格/美元价格（含利润率）实时重算</li></ul></div></div></div>
+  </section>
+
+  <section id="list" class="design-section">
+    <div class="sect-head">
+      <div>
+        <h2><span class="sect-no">B</span> 列表页（浏览 + 检索一体）</h2>
+        <p class="sect-desc">浏览、检索、筛选、批量操作客户报价记录</p>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span class="badge badge-s">列表 + 检索一体</span>
+      </div>
+    </div>
+    <div class="design-frame">
+      
+    <div class="page-toolbar">
+      <div class="tb-left"><span class="page-title">客户报价 · 列表</span></div>
+      <div class="tb-right">
+        <button class="btn btn-p btn-sm">+ 新建</button>
+        <button class="btn btn-c btn-sm">📥 从样衣建报价</button>
+        <button class="btn btn-s btn-sm">导出</button>
+        <button class="btn btn-s btn-sm">批量打印</button>
+        <button class="btn btn-s btn-sm">删除</button>
+        <button class="btn btn-s btn-sm">···</button>
+      </div>
+    </div>
+    <div class="smart-search-bar">
+      <span class="ss-icon">🔍</span>
+      <input class="input ss-input" placeholder="智能搜索 — 在 报价单号 / 中间商 / 最终买家 / 客户款号 / 业务员 中模糊匹配…">
+      <button class="btn btn-p btn-sm">搜索</button>
+      <button class="btn btn-t btn-sm">清空</button>
+      <button class="btn btn-s btn-sm">高级筛选 ▾</button>
+    </div>
+    <div class="adv-filter-panel">
+      <div class="afp-head">高级筛选</div>
+      <div class="afp-grid">
+        <div class="field"><label>报价单号</label><input class="input" placeholder="Q-YYYYMMDD-序号"></div>
+        <div class="field"><label>客户款号</label><input class="input"></div>
+        <div class="field"><label>中间商</label><input class="input"></div>
+        <div class="field"><label>最终买家</label><input class="input"></div>
+        <div class="field"><label>业务员</label><select class="select"><option>全部</option></select></div>
+        <div class="field"><label>状态</label><select class="select"><option>全部</option><option>草稿</option><option>已报价</option><option>客户调整</option><option>已成单</option></select></div>
+        <div class="field"><label>询价日期</label><div style="display:flex;gap:6px;flex:1"><input class="date" type="date" style="flex:1"><span style="line-height:28px">~</span><input class="date" type="date" style="flex:1"></div></div>
+      </div>
+    </div>
+    <table class="table table-list">
+      <thead><tr>
+        <th style="width:30px"><input type="checkbox"></th>
+        <th>报价单号</th><th>中间商</th><th>最终买家</th><th>客户款号</th><th>询价日期</th><th>数量</th><th>美金总计</th><th>状态</th><th>业务员</th><th>操作</th>
+      </tr></thead>
+      <tbody><tr><td><input type="checkbox"></td><td>Q-20260528-01</td><td>CN001 上海福德</td><td>H&M Asia</td><td>H-2026-S001</td><td>2026-05-28</td><td>1000</td><td>$ 12,400</td><td><span class='status status-doing'>已报价</span></td><td>张三</td><td><button class="btn btn-t btn-sm">编辑</button> <button class="btn btn-t btn-sm">复制</button></td></tr><tr><td><input type="checkbox"></td><td>Q-20260527-03</td><td>CN002 Atlantic</td><td>Atlantic Trading</td><td>ATL-2026-K12</td><td>2026-05-27</td><td>500</td><td>$ 6,800</td><td><span class='status status-done'>已成单</span></td><td>李四</td><td><button class="btn btn-t btn-sm">编辑</button> <button class="btn btn-t btn-sm">复制</button></td></tr><tr><td><input type="checkbox"></td><td>Q-20260526-02</td><td>CN015 Euro Fashion</td><td>Euro Fashion</td><td>EF-2026-G7</td><td>2026-05-26</td><td>800</td><td>$ 9,200</td><td><span class='status status-pending'>草稿</span></td><td>赵六</td><td><button class="btn btn-t btn-sm">编辑</button> <button class="btn btn-t btn-sm">复制</button></td></tr><tr><td><input type="checkbox"></td><td>Q-20260525-01</td><td>CN023 Sakura</td><td>Sakura Apparel</td><td>SAKURA-26-S3</td><td>2026-05-25</td><td>300</td><td>$ 4,150</td><td><span class='status status-returned'>客户调整</span></td><td>李四</td><td><button class="btn btn-t btn-sm">编辑</button> <button class="btn btn-t btn-sm">复制</button></td></tr></tbody>
+    </table>
+    <div class="pagination">
+      共 24 条 · <select class="select" style="display:inline-block;width:80px"><option>10/页</option></select> ·
+      <button class="btn btn-s btn-sm">‹</button>
+      <button class="btn btn-p btn-sm">1</button>
+      <button class="btn btn-s btn-sm">2</button>
+      <button class="btn btn-s btn-sm">3</button>
+      <button class="btn btn-s btn-sm">›</button>
+    </div>
+    
+        <div class="field-logic-wrap">
+          <div class="flw-head">📋 元素操作逻辑（工具栏 / 搜索 / 表格 / 行 / 分页）</div>
+          <table class="field-logic-table">
+            <thead><tr><th style="width:200px">元素</th><th>操作逻辑 / 业务规则</th></tr></thead>
+            <tbody>
+              <tr><td colspan="2" style="background:#EDF1F7;font-weight:600;color:var(--indigo);padding:4px 8px">▸ 顶部工具栏按钮</td></tr>
+              <tr><td><b>+ 新建</b></td><td>跳转编辑页空白态；自动生成 Q-YYYYMMDD-序号；★ 费用明细自动带 6 行</td></tr>
+              <tr><td><b>从样衣建报价</b></td><td>选样衣单后跳编辑页，自动带客户信息+材料明细，业务只需填单价+损耗</td></tr>
+              <tr><td><b>导出</b></td><td>当前列表导出 Excel</td></tr>
+              <tr><td><b>批量打印</b></td><td>选中多张报价单批量打印 PDF（供应商列默认隐藏）</td></tr>
+
+              <tr><td colspan="2" style="background:#EDF1F7;font-weight:600;color:var(--indigo);padding:4px 8px">▸ 智能搜索 + 高级筛选</td></tr>
+              <tr><td><b>🔍 智能搜索框</b></td><td>关键字模糊匹配：<b>报价单号 / 中间商 / 最终买家 / 客户款号 / 业务员</b></td></tr>
+              <tr><td><b>高级筛选 ▾</b></td><td>展开下方面板：状态 / 业务员 / 中间商 / 询价日期范围 等</td></tr>
+
+              <tr><td colspan="2" style="background:#EDF1F7;font-weight:600;color:var(--indigo);padding:4px 8px">▸ 表格列</td></tr>
+              <tr><td><b>状态列</b></td><td>枚举：<span class="status status-pending">草稿</span> / <span class="status status-doing">已报价</span> / <span class="status status-returned">客户调整</span> / <span class="status status-done">已成单</span></td></tr>
+              <tr><td><b>美金总计列</b></td><td>报价总金额（含利润率），按汇率换算的美元金额</td></tr>
+              <tr><td><b>操作列：编辑 / 复制</b></td><td>编辑跳详情；复制为新报价（基本信息复制可改）</td></tr>
+            </tbody>
+          </table>
+        </div>
+    
+    </div>
+  </section>
+</main>
+
+<!-- 批注 Modal -->
+<div class="anno-modal-mask" id="annoModal">
+  <div class="anno-modal">
+    <div class="anno-modal-head">
+      <span>💬 添加批注</span>
+      <span class="x" onclick="closeAnnoModal()">×</span>
+    </div>
+    <div class="anno-modal-body">
+      <label>对哪个元素的批注</label>
+      <div class="target-info" id="annoTarget">—</div>
+      <label>批注内容（描述您想怎么改）</label>
+      <textarea id="annoText" placeholder="例如：&#10;- 这个字段我们不需要&#10;- 改成下拉单选&#10;- 加一列「客户料号」"></textarea>
+    </div>
+    <div class="anno-modal-foot">
+      <button class="btn btn-g btn-sm" id="annoDelBtn" onclick="deleteAnno()" style="display:none">删除批注</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-s btn-sm" onclick="closeAnnoModal()">取消</button>
+      <button class="btn btn-c btn-sm" onclick="saveAnno()">💾 保存批注</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'khbj_designboard_annotations_v13';
+let currentAnno = null;
+function loadAnnos() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch(e) { return {}; } }
+function saveAnnos(a) { localStorage.setItem(STORAGE_KEY, JSON.stringify(a)); }
+function getTextSummary(el) {
+  if (el.classList.contains('field')) { const lbl = el.querySelector('label'); return '字段 · ' + (lbl ? lbl.textContent.replace(/[*✕]/g,'').trim() : '?'); }
+  if (el.classList.contains('fieldset-head')) return '分组 · ' + el.textContent.replace(/\s+/g,' ').trim().slice(0,40);
+  if (el.classList.contains('subtable-head')) { const t = el.querySelector('.st-title'); return '子表 · ' + (t ? t.textContent.replace(/\s+/g,' ').trim().slice(0,40) : '?'); }
+  if (el.classList.contains('section-divider')) return '区块 · ' + el.textContent.replace(/▣/g,'').trim();
+  if (el.classList.contains('page-toolbar')) { const t = el.querySelector('.page-title'); return '工具栏 · ' + (t ? t.textContent.trim() : '?'); }
+  if (el.classList.contains('smart-search-bar')) return '智能搜索栏';
+  if (el.classList.contains('adv-filter-panel')) return '高级筛选面板';
+  if (el.classList.contains('biz-notes')) return '业务规则卡';
+  if (el.classList.contains('field-logic-wrap')) { const h = el.querySelector('.flw-head'); return '操作逻辑表 · ' + (h ? h.textContent.trim() : ''); }
+  if (el.classList.contains('page-logic-panel')) return '页面级操作逻辑';
+  if (el.classList.contains('deleted-fields')) return '已删除字段提示';
+  return el.textContent.trim().slice(0,40) || '元素';
+}
+function findSection(el) {
+  const s = el.closest('section.design-section');
+  if (s) { const h = s.querySelector('.sect-head h2'); if (h) return h.textContent.replace(/\s+/g,' ').trim(); }
+  return '通用';
+}
+const SELECTORS = ['.field', '.fieldset-head', '.subtable-head', '.section-divider', '.page-toolbar', '.smart-search-bar', '.adv-filter-panel', '.biz-notes', '.field-logic-wrap', '.page-logic-panel', '.table-list', '.pagination', '.deleted-fields'];
+let idCounter = 0;
+function setupAnnotatables() {
+  document.querySelectorAll(SELECTORS.join(',')).forEach(el => {
+    if (el.hasAttribute('data-anno-target')) return;
+    idCounter++;
+    const summary = getTextSummary(el);
+    const section = findSection(el);
+    const annoId = section + '|' + summary + '|#' + idCounter;
+    el.setAttribute('data-anno-target', annoId);
+    const btn = document.createElement('button');
+    btn.className = 'anno-icon'; btn.textContent = '💬';
+    btn.style.right = '-22px'; btn.style.top = '0';
+    btn.onclick = (e) => { e.stopPropagation(); openAnnoModal(annoId, summary, section); };
+    el.appendChild(btn);
+  });
+  refreshAnnoIcons();
+}
+function refreshAnnoIcons() {
+  const annos = loadAnnos();
+  document.querySelectorAll('[data-anno-target]').forEach(el => {
+    const id = el.getAttribute('data-anno-target');
+    const btn = el.querySelector(':scope > .anno-icon');
+    if (btn) {
+      if (annos[id]) { btn.classList.add('has-note'); btn.textContent = '✓'; }
+      else { btn.classList.remove('has-note'); btn.textContent = '💬'; }
+    }
+  });
+  const count = Object.keys(loadAnnos()).length;
+  const c = document.getElementById('annoCount'); if (c) c.textContent = count;
+  const ex = document.getElementById('annoExport'); if (ex) ex.style.display = count > 0 ? 'inline-block' : 'none';
+  const cl = document.getElementById('annoClear'); if (cl) cl.style.display = count > 0 ? 'inline-block' : 'none';
+}
+function toggleAnno() {
+  const on = document.body.classList.toggle('anno-on');
+  const btn = document.getElementById('annoToggle');
+  btn.textContent = '💬 批注模式：' + (on ? 'ON' : 'OFF');
+  btn.classList.toggle('on', on);
+  if (on && !document.querySelector('[data-anno-target]')) setupAnnotatables();
+  else if (on) refreshAnnoIcons();
+}
+function openAnnoModal(id, summary, section) {
+  currentAnno = id;
+  document.getElementById('annoTarget').innerHTML = '<b>[' + section + ']</b> ' + summary;
+  const annos = loadAnnos();
+  const ex = annos[id];
+  document.getElementById('annoText').value = ex ? ex.text : '';
+  document.getElementById('annoDelBtn').style.display = ex ? 'inline-block' : 'none';
+  document.getElementById('annoModal').classList.add('open');
+  setTimeout(() => document.getElementById('annoText').focus(), 50);
+}
+function closeAnnoModal() { document.getElementById('annoModal').classList.remove('open'); currentAnno = null; }
+function saveAnno() {
+  const text = document.getElementById('annoText').value.trim();
+  if (!text) { alert('请输入批注内容'); return; }
+  const annos = loadAnnos();
+  annos[currentAnno] = { text, target: document.getElementById('annoTarget').textContent, date: new Date().toISOString() };
+  saveAnnos(annos); refreshAnnoIcons(); closeAnnoModal();
+}
+function deleteAnno() {
+  if (!confirm('确认删除？')) return;
+  const a = loadAnnos(); delete a[currentAnno]; saveAnnos(a); refreshAnnoIcons(); closeAnnoModal();
+}
+function clearAnno() {
+  if (!confirm('确认清空所有批注？')) return;
+  localStorage.removeItem(STORAGE_KEY); refreshAnnoIcons();
+}
+function exportAnno() {
+  const annos = loadAnnos();
+  const keys = Object.keys(annos);
+  if (keys.length === 0) { alert('暂无批注'); return; }
+  const grouped = {};
+  keys.forEach(k => {
+    const sec = k.split('|')[0];
+    if (!grouped[sec]) grouped[sec] = [];
+    grouped[sec].push({ id: k, ...annos[k] });
+  });
+  let md = '# 客户报价 UI 设计稿 v1.3 · 业务方批注\n\n';
+  md += '> 导出时间：' + new Date().toLocaleString('zh-CN') + '\n';
+  md += '> 批注总数：' + keys.length + '\n\n---\n\n';
+  Object.keys(grouped).forEach(sec => {
+    md += '## ' + sec + '\n\n';
+    grouped[sec].forEach((a, i) => {
+      md += '### 批注 ' + (i+1) + '：' + a.target.replace(/^\[[^\]]+\]\s*/, '') + '\n\n';
+      md += a.text.split('\n').map(l => '> ' + l).join('\n') + '\n\n';
+    });
+    md += '---\n\n';
+  });
+  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '客户报价_批注_' + new Date().toISOString().slice(0,10) + '.md';
+  a.click();
+}
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('annoModal').onclick = (e) => { if (e.target.id === 'annoModal') closeAnnoModal(); };
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAnnoModal(); });
+});
+</script>
+</body></html>

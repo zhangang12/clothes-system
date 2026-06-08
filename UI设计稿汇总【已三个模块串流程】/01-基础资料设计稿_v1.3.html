@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第 1 章 基础资料 · 设计稿（平铺评审版）</title>
+<style>
+:root{
+  --indigo:#1E3A5F;--indigo-d:#152A45;--indigo-l:#2C5180;
+  --linen:#F5EDDC;--linen-d:#E8DCC0;--canvas:#FBF8F2;
+  --rust:#D17A40;--rust-d:#B86530;--vermilion:#C04042;
+  --teal:#3E8E7E;--amber:#C8901E;
+  --gray-9:#1F1F22;--gray-7:#37383C;--gray-5:#6F7178;
+  --gray-3:#B5B7BD;--gray-1:#E5E2DA;--gray-0:#F4F1EA;
+  --white:#FFFFFF;
+  --font:"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;
+  --r:4px;--r-lg:6px;
+  --shadow-sm:0 1px 2px rgba(30,58,95,.05);
+  --shadow:0 2px 8px rgba(30,58,95,.10);
+  --shadow-lg:0 8px 24px rgba(30,58,95,.15);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:13px/1.55 var(--font);color:var(--gray-9);background:#EEEAE0}
+a{color:var(--indigo);text-decoration:none}
+
+/* —— 顶部品牌栏 —— */
+.topbar{position:fixed;top:0;left:0;right:0;height:48px;background:var(--indigo);color:#fff;
+  display:flex;align-items:center;padding:0 24px;z-index:100;border-bottom:3px solid var(--rust);
+  box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.topbar .logo{font-size:15px;font-weight:600;letter-spacing:.5px}
+.topbar .logo small{font-size:11px;color:#C9D6E5;margin-left:8px;font-weight:400}
+.topbar .actions{margin-left:auto;display:flex;gap:18px;align-items:center;font-size:12px}
+.topbar .actions a{color:#C9D6E5;cursor:pointer}
+.topbar .actions a:hover{color:#fff}
+
+/* —— 左侧目录 —— */
+.sidenav{position:fixed;top:48px;left:0;bottom:0;width:240px;background:#fff;border-right:1px solid var(--gray-1);
+  overflow-y:auto;padding:14px 0;font-size:13px}
+.sidenav .nav-group{margin-bottom:6px}
+.sidenav .nav-cat{padding:10px 16px 4px;color:var(--gray-5);font-size:11px;font-weight:600;
+  text-transform:uppercase;letter-spacing:1px;border-top:1px solid var(--gray-1);margin-top:6px}
+.sidenav a.nav-dj{display:block;padding:8px 16px;color:var(--indigo);font-weight:600;font-size:13px;border-left:3px solid transparent}
+.sidenav a.nav-dj:hover{background:var(--linen);border-left-color:var(--rust)}
+.sidenav a.nav-sub{display:block;padding:5px 16px 5px 16px;color:var(--gray-7);font-size:12.5px;border-left:3px solid transparent}
+.sidenav a.nav-sub:hover{background:var(--canvas);color:var(--indigo);border-left-color:var(--gray-3)}
+
+/* —— 主体 —— */
+.main{margin-left:240px;padding:64px 32px 80px;max-width:1280px}
+.dj-block{padding:28px 32px;background:linear-gradient(135deg,var(--indigo) 0%,var(--indigo-l) 100%);color:#fff;border-radius:8px;margin:30px 0 16px;
+  box-shadow:var(--shadow)}
+.dj-block:first-child{margin-top:0}
+.dj-block h1{font-size:22px;margin-bottom:6px;font-weight:600}
+.dj-block h1 .dj-table{font-family:"SF Mono",Monaco,monospace;color:#C9D6E5;font-size:14px;font-weight:400;margin-left:8px}
+.dj-block .dj-summary{font-size:13px;color:#D5DDE8;line-height:1.7}
+
+/* —— 单个设计区段 —— */
+.design-section{margin-bottom:32px;background:transparent}
+.sect-head{display:flex;justify-content:space-between;align-items:flex-start;margin:0 8px 12px;padding-bottom:8px;border-bottom:2px solid var(--gray-1)}
+.sect-head h2{font-size:16px;color:var(--gray-9);font-weight:600;margin-bottom:4px}
+.sect-head .sect-no{display:inline-block;background:var(--rust);color:#fff;padding:1px 8px;border-radius:3px;font-size:13px;margin-right:8px}
+.sect-head .sect-desc{font-size:12px;color:var(--gray-5)}
+.sect-head .sect-meta{display:flex;gap:6px;align-items:center;flex-shrink:0;padding-top:4px}
+
+/* —— 业务规则注释卡 —— */
+.biz-notes{background:#FFF7EA;border:1px solid #EDD8A8;border-left:3px solid var(--amber);border-radius:4px;padding:12px 16px;margin:0 8px 14px}
+.biz-notes b{color:#7A5810;font-size:12.5px}
+.biz-notes ul{list-style:none;margin-top:6px}
+.biz-notes li{font-size:12px;color:#5C4307;line-height:1.7;padding:2px 0 2px 18px;position:relative}
+.biz-notes li:before{content:"▸";position:absolute;left:6px;color:var(--amber)}
+
+/* —— 设计稿"画框"——区分页面边界 —— */
+.design-frame{background:#fff;border:1px solid var(--gray-1);border-radius:8px;padding:16px;box-shadow:var(--shadow-sm)}
+.design-dialog-frame{background:linear-gradient(135deg,#E8E4DA 0%,#D8D2C5 100%);padding:24px;display:flex;justify-content:center}
+
+/* —— 页面工具栏 —— */
+.page-toolbar{display:flex;justify-content:space-between;align-items:center;background:#FBF8F2;border:1px solid var(--gray-1);border-radius:var(--r-lg);padding:8px 14px;margin-bottom:14px;flex-wrap:wrap;gap:6px}
+.tb-left{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tb-right{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.page-title{font-size:14px;color:var(--indigo);font-weight:600}
+
+/* —— 按钮 —— */
+.btn{display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:var(--r);font-size:12.5px;cursor:pointer;border:1px solid;line-height:1.5;font-family:inherit}
+.btn-p{background:var(--indigo);color:#fff;border-color:var(--indigo)}
+.btn-c{background:var(--rust);color:#fff;border-color:var(--rust)}
+.btn-s{background:#fff;color:var(--gray-7);border-color:var(--gray-1)}
+.btn-g{background:#fff;color:var(--vermilion);border-color:var(--gray-1)}
+.btn-t{background:transparent;color:var(--indigo);border-color:transparent;padding:3px 8px}
+.btn-sm{padding:3px 9px;font-size:11.5px}
+.req{color:var(--vermilion);margin-right:3px}
+
+/* —— 字段组 —— */
+.fieldset{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);margin-bottom:12px;overflow:hidden}
+.fieldset-head{background:linear-gradient(135deg,var(--linen) 0%,var(--canvas) 100%);padding:8px 16px;border-bottom:1px solid var(--gray-1);font-size:13px;font-weight:600;color:var(--indigo);display:flex;justify-content:space-between;align-items:center}
+.fieldset-head .count{color:var(--gray-5);font-weight:400;font-size:11px}
+.fieldset-body{padding:14px 18px}
+.fieldset-body.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:4px 28px}
+.g-no{color:var(--rust);margin-right:6px}
+
+/* —— 字段输入 —— */
+.field{display:flex;align-items:center;gap:8px;margin-bottom:8px;min-height:30px}
+.field label{width:84px;text-align:right;color:var(--gray-7);font-size:12.5px;flex-shrink:0;line-height:1.3}
+.input,.select,.date,.memo{flex:1;background:#fff;border:1px solid var(--gray-1);border-radius:var(--r);padding:5px 9px;font:12.5px/1.4 var(--font);color:var(--gray-9);min-width:0}
+.input:focus,.select:focus,.date:focus,.memo:focus{outline:none;border-color:var(--indigo);box-shadow:0 0 0 2px rgba(30,58,95,.08)}
+.input[readonly]{background:var(--gray-0);color:var(--gray-5)}
+.memo{min-height:48px;font-family:inherit;resize:vertical}
+.select{padding-right:22px;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--gray-5) 50%),linear-gradient(135deg,var(--gray-5) 50%,transparent 50%);background-position:calc(100% - 12px) center,calc(100% - 7px) center;background-size:5px 5px;background-repeat:no-repeat}
+.btn-edit{display:flex;align-items:center;padding:0;overflow:hidden;border:1px solid var(--gray-1);border-radius:var(--r);background:#fff;cursor:pointer;flex:1;min-width:0}
+.btn-edit .v{flex:1;padding:5px 9px;color:var(--gray-3);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btn-edit .v.has{color:var(--gray-9)}
+.btn-edit button{background:var(--gray-0);border:none;border-left:1px solid var(--gray-1);padding:5px 9px;cursor:pointer;color:var(--gray-5);font-size:13px}
+.checkbox-inline{display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-size:12.5px}
+.checkbox-inline input{width:13px;height:13px;accent-color:var(--indigo)}
+.image-box{width:100%;height:60px;background:var(--gray-0);border:1px dashed var(--gray-1);border-radius:var(--r);display:flex;align-items:center;justify-content:center;color:var(--gray-3);font-size:11px;cursor:pointer}
+
+/* —— 子表 —— */
+.subtable-wrap{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);margin-bottom:12px;overflow:hidden}
+.subtable-head{background:linear-gradient(135deg,#F0E8D2 0%,var(--canvas) 100%);padding:8px 14px;border-bottom:1px solid var(--gray-1);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px}
+.subtable-head .st-title{color:var(--indigo);font-size:13px;font-weight:600}
+.subtable-head .count{color:var(--gray-5);font-weight:400;font-size:11px;margin-left:8px}
+.subtable-head .st-tools{display:flex;gap:5px;flex-wrap:wrap}
+.table{width:100%;border-collapse:collapse;font-size:12px}
+.table th{background:var(--gray-0);text-align:left;padding:6px 10px;font-weight:600;color:var(--gray-7);border-bottom:1px solid var(--gray-1);white-space:nowrap}
+.table td{padding:5px 10px;color:var(--gray-9);border-bottom:1px solid var(--gray-1)}
+.table tbody tr:hover td{background:var(--linen)}
+.table tbody tr.overdue td{background:#FBE8E8;color:var(--vermilion)}
+.table tbody tr.overdue td:first-child{position:relative}
+.table tbody tr.overdue td:first-child::before{content:"⚠";position:absolute;left:-2px;color:var(--vermilion)}
+.table tbody tr.selected td{background:var(--linen);color:var(--indigo);font-weight:500}
+
+.eq-card{border-left:3px solid var(--rust)}
+
+/* —— 字段操作逻辑表 —— */
+.field-logic-wrap{border-top:1px solid var(--gray-1);background:#FCFAF4;padding:0 18px 12px}
+.field-logic-wrap .flw-head{color:var(--indigo);font-size:12px;font-weight:600;padding:10px 0 6px;letter-spacing:.3px}
+.field-logic-table{width:100%;border-collapse:collapse;font-size:11.5px;background:#fff;border:1px solid var(--gray-1);border-radius:var(--r)}
+.field-logic-table th{background:#EDF1F7;text-align:left;padding:5px 8px;font-weight:600;color:var(--indigo);border-bottom:1px solid var(--gray-1);font-size:11px}
+.field-logic-table td{padding:5px 8px;color:var(--gray-9);border-bottom:1px solid var(--gray-1);vertical-align:top;line-height:1.6}
+.field-logic-table tbody tr:last-child td{border-bottom:none}
+.field-logic-table tbody tr:nth-child(even) td{background:#FBF8F2}
+.field-logic-table .dt-cell{color:var(--teal);font-size:11px;white-space:nowrap}
+.field-logic-table .rule-cell{color:var(--gray-7)}
+.req-tag{display:inline-block;background:#FBEAEA;color:var(--vermilion);font-size:10px;padding:1px 6px;border-radius:8px;font-weight:600}
+.opt-tag{display:inline-block;background:var(--gray-0);color:var(--gray-5);font-size:10px;padding:1px 6px;border-radius:8px}
+.field-logic-sub{padding:0 14px 10px;background:#FBF8F2}
+
+/* —— 页面级操作逻辑面板 —— */
+.page-logic-panel{background:#fff;border:1px solid var(--indigo);border-radius:var(--r-lg);margin-top:14px;overflow:hidden;box-shadow:var(--shadow-sm)}
+.plp-head{background:linear-gradient(135deg,var(--indigo) 0%,var(--indigo-l) 100%);color:#fff;padding:10px 16px;font-size:13px;font-weight:600;letter-spacing:.4px}
+.plp-body{padding:16px 18px;display:grid;grid-template-columns:1fr;gap:14px}
+.pl-cat{}
+.pl-cat h4{color:var(--indigo);font-size:12.5px;font-weight:600;margin-bottom:6px;border-bottom:1px solid var(--linen);padding-bottom:4px}
+.pl-table{width:100%;border-collapse:collapse;font-size:12px;background:var(--canvas);border:1px solid var(--gray-1);border-radius:var(--r)}
+.pl-table th{background:#E8EFF6;text-align:left;padding:5px 8px;font-weight:600;color:var(--indigo);font-size:11px}
+.pl-table td{padding:6px 8px;color:var(--gray-9);border-top:1px solid var(--gray-1);vertical-align:top;line-height:1.65}
+.pl-table td:first-child{font-weight:600;color:var(--indigo);white-space:nowrap}
+.pl-ul{list-style:none;padding:0;margin:0}
+.pl-ul li{padding:5px 10px 5px 22px;background:var(--canvas);border-left:3px solid var(--teal);margin-bottom:4px;border-radius:0 var(--r) var(--r) 0;font-size:12px;color:var(--gray-9);line-height:1.7;position:relative}
+.pl-ul li:before{content:"▸";position:absolute;left:8px;color:var(--teal);font-weight:bold}
+
+/* —— 列表页：智能搜索 + 高级筛选（合并自原查询页）—— */
+.smart-search-bar{display:flex;gap:8px;align-items:center;background:linear-gradient(135deg,var(--linen) 0%,var(--canvas) 100%);border:1px solid var(--linen-d);border-radius:var(--r-lg);padding:10px 14px;margin-bottom:10px}
+.smart-search-bar .ss-icon{font-size:16px;color:var(--indigo)}
+.smart-search-bar .ss-input{flex:1;border-color:var(--linen-d);font-size:13px;padding:6px 10px;background:#fff}
+.smart-search-bar .ss-input:focus{border-color:var(--indigo);box-shadow:0 0 0 2px rgba(30,58,95,.1)}
+.adv-filter-panel{background:#FBFBFB;border:1px solid var(--gray-1);border-top:3px solid var(--indigo);border-radius:var(--r);padding:10px 14px 12px;margin-bottom:12px}
+.adv-filter-panel .afp-head{font-size:11.5px;color:var(--indigo);font-weight:600;margin-bottom:8px;letter-spacing:.3px}
+.adv-filter-panel .afp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px 22px}
+
+/* —— 列表筛选 —— */
+.filter-bar{display:flex;gap:8px;align-items:center;background:var(--canvas);border:1px solid var(--gray-1);border-radius:var(--r-lg);padding:8px 12px;margin-bottom:12px;flex-wrap:wrap}
+.fb-label{font-size:12px;color:var(--gray-5);font-weight:600}
+.pagination{margin-top:14px;display:flex;gap:6px;align-items:center;justify-content:flex-end;font-size:12px;color:var(--gray-5);flex-wrap:wrap}
+.hint{margin-top:14px;background:#FBF1DA;border-left:3px solid var(--amber);padding:8px 14px;font-size:12px;color:#7A5810;border-radius:var(--r)}
+
+/* —— 查询面板 —— */
+.query-panel{background:var(--canvas);border:1px solid var(--gray-1);border-radius:var(--r-lg);padding:0;overflow:hidden}
+.qp-section{padding:18px 24px;border-bottom:1px solid var(--gray-1);background:#fff}
+.qp-section:last-child{border-bottom:none;background:var(--canvas)}
+.qp-section h3{color:var(--indigo);font-size:14px;margin-bottom:8px;font-weight:600}
+.qp-hint{font-size:11.5px;color:var(--gray-5);margin-bottom:14px;line-height:1.6}
+.qp-search-row{display:flex;gap:8px;align-items:center}
+.qp-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px 30px}
+
+/* —— 徽章 —— */
+.badge{display:inline-block;padding:1px 7px;border-radius:9px;font-size:10.5px;font-weight:500;line-height:1.55;border:1px solid}
+.badge-i{background:#EDF1F7;color:var(--indigo);border-color:#D5DDE8}
+.badge-s{background:#E8F4F0;color:var(--teal);border-color:#C8E2D9}
+.badge-w{background:#FBF1DA;color:var(--amber);border-color:#EDD8A8}
+.badge-e{background:#FBEAEA;color:var(--vermilion);border-color:#E8C7C7}
+
+/* —— 静态弹窗（不带 mask）—— */
+.dlg-static{background:#fff;border-radius:var(--r-lg);box-shadow:var(--shadow-lg);width:680px;max-width:100%;overflow:hidden}
+.dlg-static.dlg-lg{width:840px}
+.dialog-head{background:var(--indigo);color:#fff;padding:12px 18px;font-size:14px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.dialog-head .x{cursor:pointer;color:#C9D6E5;font-size:18px;line-height:1}
+.dialog-body{padding:18px 20px;background:#fff;max-height:none}
+.dialog-foot{padding:12px 18px;background:var(--canvas);border-top:1px solid var(--gray-1);display:flex;justify-content:flex-end;gap:8px;align-items:center}
+
+/* —— 步骤指示 —— */
+.step-row{display:flex;align-items:center;gap:0;margin-bottom:18px;padding:12px;background:var(--canvas);border-radius:var(--r);border:1px solid var(--gray-1)}
+.step{display:flex;align-items:center;gap:8px;flex:1}
+.step .n{width:24px;height:24px;border-radius:50%;background:var(--gray-3);color:#fff;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center}
+.step.active .n{background:var(--indigo)}
+.step.done .n{background:var(--teal)}
+.step .txt{font-size:12px;color:var(--gray-5)}
+.step.active .txt{color:var(--indigo);font-weight:600}
+.step.done .txt{color:var(--teal)}
+.step-arrow{color:var(--gray-3)}
+</style>
+</head><body>
+<div class="topbar">
+  <div class="logo">🪡 样衣制造管理系统 · 新版 UI 设计稿<small>第 1 章 基础资料 · v1.3 评审版</small></div>
+  <div class="actions">
+    <a>📥 导出 PDF</a>
+    <a>💬 反馈</a>
+    <span style="color:#fff;background:rgba(255,255,255,.15);padding:4px 12px;border-radius:14px;font-size:11.5px">设计师 · Janet</span>
+  </div>
+</div>
+
+<nav class="sidenav">
+  <div class="nav-cat" style="border:none;margin-top:0">基础资料 · 2 单据</div>
+  
+        <div class="nav-group">
+          <a class="nav-dj" href="#dj-1">📄 1. 工厂资料</a>
+          <a class="nav-sub" href="#dj-1-editor">　1.1 编辑页</a>
+          <a class="nav-sub" href="#dj-1-list">　1.2 列表页（浏览+检索）</a>
+        </div>
+        <div class="nav-group">
+          <a class="nav-dj" href="#dj-2">📄 2. 客户资料</a>
+          <a class="nav-sub" href="#dj-2-editor">　2.1 编辑页</a>
+          <a class="nav-sub" href="#dj-2-list">　2.2 列表页（浏览+检索）</a>
+        </div>
+    <div class="nav-group">
+      <div class="nav-cat">弹窗 / 交互</div>
+      <a class="nav-sub" href="#dialog-select">　D.1 选择对话框</a>
+      <a class="nav-sub" href="#dialog-import">　D.2 Excel 导入向导</a>
+      <a class="nav-sub" href="#dialog-auth">　D.3 批量授权</a>
+      <a class="nav-sub" href="#interaction-link">　D.4 联动显隐</a>
+    </div>
+</nav>
+
+<main class="main">
+  <div class="dj-block" style="background:linear-gradient(135deg,var(--rust) 0%,#A85423 100%)">
+    <h1>📐 评审用平铺设计稿 — 第 1 章 基础资料（v1.3）</h1>
+    <p class="dj-summary">
+    <p class="dj-summary">
+    本文档为新版系统第 1 章「基础资料」全部 2 张单据的 UI 设计稿（v1.3 评审版），<b>所有页面、所有视图、所有弹窗一次性平铺呈现</b>，无需点击导航即可全部查看。<br>
+    覆盖范围：<b>工厂资料 / 客户资料</b>，每张单据含「编辑页 / 列表页（浏览+检索一体）」二视图 + 公共弹窗 3 种 + 联动交互 1 种 = <b>共 8 个设计区段</b>。<br>
+    <span style="background:rgba(255,255,255,.22);padding:4px 10px;border-radius:4px;font-size:12.5px;display:inline-block;margin-top:6px">📌 <b>v1.3 改造（串流程业务方答复）</b>：① 工厂编号 / 客户编号 改自动生成（S001 / CN001 系统给号，D2）② 阻止删除被引用的工厂 / 客户（C2/C3）③ 修改实时同步到引用本资料的样衣 / 报价单（C1）④ 不做版本控制（K2 保留删除，永久保留）</span><br>
+    设计语言：服装制造业风（靛蓝 + 亚麻米 + 暖橙），延用已交付的 <a style="color:#FFE0C2;text-decoration:underline" href="设计系统.html" target="_blank">设计系统组件库</a>，所有控件均从其中取用。
+    </p>
+  </div>
+  
+        <div id="dj-1" class="dj-block">
+          <h1>1. 工厂资料 <span class="dj-table">(Suppliers)</span></h1>
+          <p class="dj-summary">工厂资料是供应侧所有外部合作单位的“通讯录＋档案柜”——面料供应商、辅料供应商、委外加工厂、货代、测试公司等都登记在这里。一家厂商在这里建过档，全系统的采购、委外、付款等单据就都能直接选用它。</p>
+        </div>
+    <section id="dj-1-editor" class="design-section">
+      <div class="sect-head">
+        <div>
+          <h2><span class="sect-no">1.1</span> 工厂资料 · 编辑页</h2>
+          <p class="sect-desc">用于新建 / 修改一条 工厂资料 记录的表单页</p>
+        </div>
+        <div class="sect-meta">
+          <span class="badge badge-s">一般 etGeneral</span>
+          <span class="badge badge-i">35 字段</span>
+        </div>
+      </div>
+      <div class="biz-notes"><b>📌 业务规则</b><ul><li>★ v1.3：「厂商编号」改自动生成（S001 / S002 …，D2 决策）；新建时只读、不可手填</li><li>保存时校验：「厂商名称」「工厂类型」两项必填</li><li>「联系人」「联系人电话」两个主表字段保存时自动从「联系人」子表第一行取值回填，无需手填</li><li>「所在城市」下拉随「所在省份」联动过滤，只显示所选省份下的城市</li><li>选「面料供应商」/「辅料供应商」/「委外加工商」会影响下游采购/委外等单据的工厂可选范围</li><li>★ v1.3 删除规则（C2 决策）：本工厂被任何下游单据（样衣 / 报价 / 采购 / 委外）引用时 → &lt;b style=&#x27;color:#C04042&#x27;&gt;阻止删除&lt;/b&gt;，弹错「已被 N 张单据引用，无法删除」</li><li>★ v1.3 修改同步（C1 决策）：本工厂被改后 → 实时同步到所有 草稿/已报价 状态的引用单据；已成单/已对账 状态不同步</li></ul></div>
+      <div class="design-frame">
+        <div class="page-toolbar">
+          <div class="tb-left">
+            <span class="page-title">工厂资料 · 编辑</span>
+            <span class="badge badge-s">一般 etGeneral</span>
+            <span class="badge badge-w">草稿</span>
+          </div>
+          <div class="tb-right"><button class="btn btn-p">💾 保存</button><button class="btn btn-c">导入工厂资料</button><button class="btn btn-s">复制</button><button class="btn btn-s">导出</button><button class="btn btn-s">···</button></div>
+        </div>
+        
+    <div class="fieldset">
+      <div class="fieldset-head"><span class="g-no">1.</span> 主要信息 <span class="count">11 字段</span></div>
+      <div class="fieldset-body grid-3"><div class="field"><label><span class="req">*</span>厂商编号</label><input class="input" value="S001 (自动生成)" placeholder=""></div><div class="field"><label><span class="req">*</span>工厂类型</label><select class="select"><option value="">请选择</option><option selected>面料供应商</option><option>辅料供应商</option><option>委外加工商</option><option>货代</option><option>测试公司</option><option>出口公司</option><option>其他</option></select></div><div class="field"><label>能否开票</label><label class="checkbox-inline"><input type="checkbox" checked> 是</label></div><div class="field"><label><span class="req">*</span>厂商名称</label><input class="input" value="苏州福利纺织有限公司" placeholder=""></div><div class="field"><label>联系人</label><input class="input" value="张建国" placeholder=""></div><div class="field"><label>联系人电话</label><input class="input" value="0512-68771234" placeholder=""></div><div class="field"><label>所在省份</label><select class="select"><option value="">请选择</option><option>选项1</option><option>选项2</option></select></div><div class="field"><label>所在城市</label><select class="select"><option value="">请选择</option><option>选项1</option><option>选项2</option></select></div><div class="field"><label>详细地址</label><input class="input" value="江苏省苏州市吴中区东方大道 188 号" placeholder=""></div><div class="field"><label>业务范围</label><input class="input" value="棉、麻、混纺面料生产销售" placeholder=""></div><div class="field"><label>开发时间</label><input class="date" type="date" value="2026-05-12"></div></div>
+      
+        <div class="field-logic-wrap">
+          <div class="flw-head">📋 字段操作逻辑</div>
+          <table class="field-logic-table">
+            <thead><tr><th style="width:130px">字段</th><th style="width:80px">类型</th><th style="width:60px">必填</th><th style="width:90px">控件</th><th>操作逻辑 / 业务规则</th></tr></thead>
+            <tbody><tr><td><b>厂商编号</b></td><td class="dt-cell">文本</td><td><span class="req-tag">必填</span></td><td>文本输入</td><td class="rule-cell">厂商的唯一编号；系统自动转成大写；不能与已有厂商重复。</td></tr><tr><td><b>工厂类型</b></td><td class="dt-cell">下拉选项</td><td><span class="req-tag">必填</span></td><td>下拉单选</td><td class="rule-cell">下拉选择：面料供应商 / 辅料供应商 / 委外加工商 / 货代 / 测试公司 / 出口公司 / 其他。</td></tr><tr><td><b>能否开票</b></td><td class="dt-cell">是/否</td><td><span class="opt-tag">选填</span></td><td>勾选框</td><td class="rule-cell">勾选项，默认勾选；标记该厂商能否开具发票。</td></tr><tr><td><b>厂商名称</b></td><td class="dt-cell">文本</td><td><span class="req-tag">必填</span></td><td>文本输入</td><td class="rule-cell">厂商全称；不能与已有厂商重复。</td></tr><tr><td><b>联系人</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">系统自动填——保存时取“联系人”明细表第一行的姓名，无需手工录入。</td></tr><tr><td><b>联系人电话</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">系统自动填——取“联系人”明细表第一行的电话。</td></tr><tr><td><b>所在省份</b></td><td class="dt-cell">下拉选项</td><td><span class="opt-tag">选填</span></td><td>下拉单选</td><td class="rule-cell">下拉选择省份。</td></tr><tr><td><b>所在城市</b></td><td class="dt-cell">下拉选项</td><td><span class="opt-tag">选填</span></td><td>下拉单选</td><td class="rule-cell">下拉选择城市；选项随“所在省份”联动，只列出该省的城市。</td></tr><tr><td><b>详细地址</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">—</td></tr><tr><td><b>业务范围</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">—</td></tr><tr><td><b>开发时间</b></td><td class="dt-cell">日期</td><td><span class="opt-tag">选填</span></td><td>日期选择</td><td class="rule-cell">默认填今天，可修改。</td></tr></tbody>
+          </table>
+        </div>
+    </div>
+    <div class="fieldset">
+      <div class="fieldset-head"><span class="g-no">2.</span> 财务信息 <span class="count">5 字段</span></div>
+      <div class="fieldset-body grid-3"><div class="field"><label>开户银行</label><input class="input" value="" placeholder=""></div><div class="field"><label>银行帐号</label><input class="input" value="" placeholder=""></div><div class="field"><label>公司税号</label><input class="input" value="" placeholder=""></div><div class="field"><label>开票电话</label><input class="input" value="" placeholder=""></div><div class="field"><label>开票地址</label><input class="input" value="" placeholder=""></div></div>
+      
+        <div class="field-logic-wrap">
+          <div class="flw-head">📋 字段操作逻辑</div>
+          <table class="field-logic-table">
+            <thead><tr><th style="width:130px">字段</th><th style="width:80px">类型</th><th style="width:60px">必填</th><th style="width:90px">控件</th><th>操作逻辑 / 业务规则</th></tr></thead>
+            <tbody><tr><td><b>开户银行</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">—</td></tr><tr><td><b>银行帐号</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">—</td></tr><tr><td><b>公司税号</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">—</td></tr><tr><td><b>开票电话</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">—</td></tr><tr><td><b>开票地址</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">—</td></tr></tbody>
+          </table>
+        </div>
+    </div>
+    <div class="fieldset">
+      <div class="fieldset-head"><span class="g-no">3.</span> 财务信息(2) <span class="count">5 字段</span></div>
+      <div class="fieldset-body grid-3"><div class="field"><label>开户银行(2)</label><input class="input" value="" placeholder=""></div><div class="field"><label>银行帐号(2)</label><input class="input" value="" placeholder=""></div><div class="field"><label>公司税号(2)</label><input class="input" value="" placeholder=""></div><div class="field"><label>开票电话(2)</label><input class="input" value="" placeholder=""></div><div class="field"><label>开票地址(2)</label><input class="input" value="" placeholder=""></div></div>
+      
+        <div class="field-logic-wrap">
+          <div class="flw-head">📋 字段操作逻辑</div>
+          <table class="field-logic-table">
+            <thead><tr><th style="width:130px">字段</th><th style="width:80px">类型</th><th style="width:60px">必填</th><th style="width:90px">控件</th><th>操作逻辑 / 业务规则</th></tr></thead>
+            <tbody><tr><td><b>开户银行(2)</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">—</td></tr><tr><td><b>银行帐号(2)</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">—</td></tr><tr><td><b>公司税号(2)</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">—</td></tr><tr><td><b>开票电话(2)</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">—</td></tr><tr><td><b>开票地址(2)</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">—</td></tr></tbody>
+          </table>
+        </div>
+    </div>
+    <div class="fieldset">
+      <div class="fieldset-head"><span class="g-no">5.</span> 备注信息 <span class="count">7 字段</span></div>
+      <div class="fieldset-body grid-3"><div class="field"><label>法人代表</label><input class="input" value="" placeholder=""></div><div class="field"><label>注册资金</label><input class="input" type="number" value="" placeholder="0"></div><div class="field"><label>设立时间</label><input class="date" type="date" value="2026-05-12"></div><div class="field"><label>年销售额</label><input class="input" type="number" value="" placeholder="0"></div><div class="field"><label>代表客户</label><input class="input" value="" placeholder=""></div><div class="field"><label>质量证书</label><textarea class="memo" placeholder=""></textarea></div><div class="field"><label>备注</label><textarea class="memo" placeholder=""></textarea></div></div>
+      
+        <div class="field-logic-wrap">
+          <div class="flw-head">📋 字段操作逻辑</div>
+          <table class="field-logic-table">
+            <thead><tr><th style="width:130px">字段</th><th style="width:80px">类型</th><th style="width:60px">必填</th><th style="width:90px">控件</th><th>操作逻辑 / 业务规则</th></tr></thead>
+            <tbody><tr><td><b>法人代表</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">—</td></tr><tr><td><b>注册资金</b></td><td class="dt-cell">整数</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">—</td></tr><tr><td><b>设立时间</b></td><td class="dt-cell">日期</td><td><span class="opt-tag">选填</span></td><td>日期选择</td><td class="rule-cell">—</td></tr><tr><td><b>年销售额</b></td><td class="dt-cell">数字</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">—</td></tr><tr><td><b>代表客户</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">—</td></tr><tr><td><b>质量证书</b></td><td class="dt-cell">多行文本</td><td><span class="opt-tag">选填</span></td><td>多行文本</td><td class="rule-cell">—</td></tr><tr><td><b>备注</b></td><td class="dt-cell">多行文本</td><td><span class="opt-tag">选填</span></td><td>多行文本</td><td class="rule-cell">—</td></tr></tbody>
+          </table>
+        </div>
+    </div>
+        
+    <div class="subtable-wrap">
+      <div class="subtable-head">
+        <span class="st-title">▸ 明细表：联系人　<span class="count">7 字段 · 示例 3 行</span></span>
+        <div class="st-tools">
+          <button class="btn btn-s btn-sm">+ 新增行</button>
+          <button class="btn btn-g btn-sm">— 删除</button>
+          <button class="btn btn-s btn-sm">导入Excel</button>
+          <button class="btn btn-s btn-sm">粘贴</button>
+        </div>
+      </div>
+      <table class="table">
+        <thead><tr><th style="width:30px"><input type="checkbox"></th><th>姓名</th><th>部门</th><th>职务</th><th>电话号码</th><th>手机号码</th><th>电子邮件</th><th>备注</th></tr></thead>
+        <tbody><tr><td><input type="checkbox"></td><td>张建国</td><td>销售部</td><td>销售经理</td><td>0512-68771234</td><td>13901588888</td><td>示例1</td><td>示例1</td></tr><tr><td><input type="checkbox"></td><td>李芬</td><td>业务部</td><td>业务跟单</td><td>0512-68771235</td><td>13901588889</td><td>示例2</td><td>示例2</td></tr><tr><td><input type="checkbox"></td><td>王成</td><td>财务部</td><td>会计</td><td>0512-68771236</td><td>13901588890</td><td>示例3</td><td>示例3</td></tr></tbody>
+      </table>
+      
+        <div class="field-logic-wrap field-logic-sub">
+          <div class="flw-head">📋 字段操作逻辑（7 列）</div>
+          <table class="field-logic-table">
+            <thead><tr><th style="width:130px">列名</th><th style="width:80px">类型</th><th style="width:60px">必填</th><th>操作逻辑 / 业务规则</th></tr></thead>
+            <tbody><tr><td><b>姓名</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">—</td></tr><tr><td><b>部门</b></td><td class="dt-cell">下拉选项</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">下拉选择，可累积录入过的历史值。</td></tr><tr><td><b>职务</b></td><td class="dt-cell">下拉选项</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">下拉选择，可累积录入过的历史值。</td></tr><tr><td><b>电话号码</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">—</td></tr><tr><td><b>手机号码</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">—</td></tr><tr><td><b>电子邮件</b></td><td class="dt-cell">链接</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">可点击发邮件。</td></tr><tr><td><b>备注</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">—</td></tr></tbody>
+          </table>
+        </div>
+    </div>
+        
+      </div>
+      <div class="page-logic-panel"><div class="plp-head">⚙ 页面级操作逻辑（按钮 / 事件 / 校验 / 联动）</div><div class="plp-body"><div class="pl-cat"><h4>🔘 操作按钮</h4><table class="pl-table"><thead><tr><th style="width:140px">按钮</th><th>行为</th></tr></thead><tbody><tr><td>导入工厂资料</td><td>从 Excel 批量导入工厂资料。点击后系统先校验操作人是否拥有“允许导入工厂资料”权限，无权限则不执行；有权限则打开 Excel 导入向导，批量建档。</td></tr></tbody></table></div><div class="pl-cat"><h4>⚡ 页面事件（系统自动执行）</h4><table class="pl-table"><thead><tr><th style="width:160px">时机</th><th>系统做什么</th></tr></thead><tbody><tr><td>保存前 · 联系人非空校验</td><td>保存时先检查“联系人”明细表是否为空。为空则弹出提示“必须输入至少一个联系人！”，并中止本次保存。</td></tr><tr><td>保存前 · 联系人信息回填</td><td>通过上述校验后，系统自动取“联系人”明细表第一行的姓名、电话，分别回填到主表的“联系人 / 联系人电话”两个只读字段，使主表始终展示主联系人。</td></tr><tr><td>列表页 · 超期未交易标红</td><td>在工厂列表中，“最后交易日期”距今超过 30 天的记录，该单元格以红色显示，提醒关注长期没有往来的厂商。</td></tr></tbody></table></div><div class="pl-cat"><h4>✅ 字段校验规则</h4><ul class="pl-ul"><li>必填：厂商编号、工厂类型、厂商名称。</li><li>唯一（不可重复）：厂商编号、厂商名称。</li><li>厂商编号录入时自动转为大写。</li></ul></div><div class="pl-cat"><h4>🔗 字段联动 / 显隐</h4><ul class="pl-ul"><li>“所在城市”的下拉候选随“所在省份”联动过滤，只显示所选省份下的城市。</li></ul></div></div></div>
+    </section>
+    
+    <section id="dj-1-list" class="design-section">
+      <div class="sect-head">
+        <div>
+          <h2><span class="sect-no">1.2</span> 工厂资料 · 列表页（浏览 + 检索一体）</h2>
+          <p class="sect-desc">浏览、检索、筛选、批量操作 工厂资料 记录的统一入口页（合并原「列表页」+「查询页」）</p>
+        </div>
+        <div class="sect-meta">
+          <span class="badge badge-s">列表 + 检索一体</span>
+          <span class="badge badge-i">共 56 条示例</span>
+        </div>
+      </div>
+      <div class="design-frame">
+        <div class="page-toolbar">
+          <div class="tb-left"><span class="page-title">工厂资料 · 列表</span></div>
+          <div class="tb-right">
+            <button class="btn btn-p btn-sm">+ 新建</button>
+            <button class="btn btn-c btn-sm">导入工厂资料</button>
+            <button class="btn btn-s btn-sm">导出</button>
+            <button class="btn btn-s btn-sm">删除</button>
+            <button class="btn btn-s btn-sm">···</button>
+          </div>
+        </div>
+        <div class="smart-search-bar">
+          <span class="ss-icon">🔍</span>
+          <input class="input ss-input" placeholder="智能搜索 — 在 厂商编号、厂商名称、所在省份、所在城市、详细地址、业务范围、法人代表 中模糊匹配…" value="">
+          <button class="btn btn-p btn-sm">搜索</button>
+          <button class="btn btn-t btn-sm">清空</button>
+          <button class="btn btn-s btn-sm">高级筛选 ▾</button>
+        </div>
+        <div class="adv-filter-panel">
+          <div class="afp-head">高级筛选（默认展开示例 · 实际可折叠）</div>
+          <div class="afp-grid">
+              <div class="field"><label>编号</label><input class="input" placeholder="精确匹配"></div>
+              <div class="field"><label>名称</label><input class="input" placeholder="模糊匹配"></div>
+              <div class="field"><label>状态</label><select class="select"><option>全部</option><option>启用</option><option>停用</option></select></div>
+              
+              <div class="field"><label>工厂类型</label><select class="select"><option>全部</option><option>面料供应商</option><option>辅料供应商</option><option>委外加工商</option><option>货代</option><option>测试公司</option></select></div>
+              <div class="field"><label>开发日期</label><div style="display:flex;gap:6px;flex:1"><input class="date" type="date" style="flex:1"><span style="line-height:28px;color:var(--gray-5)">~</span><input class="date" type="date" style="flex:1"></div></div>
+          </div>
+        </div>
+        <table class="table table-list">
+          <thead><tr><th style="width:30px"><input type="checkbox"></th><th>编号</th><th>厂商名称</th><th>工厂类型</th><th>省/市</th><th>最后交易日期</th><th>信用</th><th>开票</th><th>状态</th><th>操作</th></tr></thead>
+          <tbody><tr class=""><td><input type="checkbox"></td><td>S001</td><td>苏州福利纺织有限公司</td><td>面料供应商</td><td>江苏 苏州</td><td>2026-05-12</td><td>A级</td><td>✓</td><td>启用</td><td><button class="btn btn-t btn-sm">编辑</button> <button class="btn btn-t btn-sm">查看</button></td></tr><tr class=""><td><input type="checkbox"></td><td>S002</td><td>常州金顺纺织厂</td><td>面料供应商</td><td>江苏 常州</td><td>2026-01-15</td><td>B级</td><td>✓</td><td>启用</td><td><button class="btn btn-t btn-sm">编辑</button> <button class="btn btn-t btn-sm">查看</button></td></tr><tr class=""><td><input type="checkbox"></td><td>S008</td><td>盛达辅料有限公司</td><td>辅料供应商</td><td>浙江 杭州</td><td>2026-04-22</td><td>A级</td><td>✓</td><td>启用</td><td><button class="btn btn-t btn-sm">编辑</button> <button class="btn btn-t btn-sm">查看</button></td></tr><tr class="overdue"><td><input type="checkbox"></td><td>S015</td><td>Vincent QC Lab</td><td>测试公司</td><td>香港</td><td>2024-11-10</td><td>-</td><td>✗</td><td>启用</td><td><button class="btn btn-t btn-sm">编辑</button> <button class="btn btn-t btn-sm">查看</button></td></tr><tr class=""><td><input type="checkbox"></td><td>S023</td><td>云海加工厂</td><td>委外加工商</td><td>江苏 南通</td><td>2026-03-08</td><td>B级</td><td>✓</td><td>启用</td><td><button class="btn btn-t btn-sm">编辑</button> <button class="btn btn-t btn-sm">查看</button></td></tr><tr class=""><td><input type="checkbox"></td><td>S031</td><td>深圳鸿源纺织</td><td>面料供应商</td><td>广东 深圳</td><td>2026-02-18</td><td>B级</td><td>✓</td><td>启用</td><td><button class="btn btn-t btn-sm">编辑</button> <button class="btn btn-t btn-sm">查看</button></td></tr><tr class=""><td><input type="checkbox"></td><td>S047</td><td>Eastern Logistics</td><td>货代</td><td>上海</td><td>2026-04-30</td><td>A级</td><td>✓</td><td>启用</td><td><button class="btn btn-t btn-sm">编辑</button> <button class="btn btn-t btn-sm">查看</button></td></tr></tbody>
+        </table>
+        <div class="pagination">
+          已选 0 条 · 共 56 条 ·
+          <select class="select" style="display:inline-block;width:80px"><option>10/页</option><option>20/页</option></select> ·
+          <button class="btn btn-s btn-sm">‹</button>
+          <button class="btn btn-p btn-sm">1</button>
+          <button class="btn btn-s btn-sm">2</button>
+          <button class="btn btn-s btn-sm">3</button>
+          <button class="btn btn-s btn-sm">…</button>
+          <button class="btn btn-s btn-sm">7</button>
+          <button class="btn btn-s btn-sm">›</button>
+        </div>
+        <div class="hint">💡 「最后交易日期」超过 90 天未更新的记录会以红色行标记，提示业务关注长期无往来厂商。</div>
+        
+        <div class="field-logic-wrap">
+          <div class="flw-head">📋 元素操作逻辑（工具栏 / 搜索 / 表格 / 行 / 分页）</div>
+          <table class="field-logic-table">
+            <thead><tr><th style="width:200px">元素</th><th>操作逻辑 / 业务规则</th></tr></thead>
+            <tbody>
+              <tr><td colspan="2" style="background:#EDF1F7;font-weight:600;color:var(--indigo);padding:4px 8px">▸ 顶部工具栏按钮</td></tr>
+              <tr><td><b>+ 新建</b>（蓝色主按钮）</td><td>跳转到本单据的「编辑页」空白态，开始录一条新记录。等同于编辑页工具栏的「💾 保存」前置流程</td></tr>
+              <tr><td><b>导入工厂资料</b>（橙色 CTA）</td><td>从 Excel 批量导入工厂。点击后先校验「允许导入工厂资料」权限，有权限则打开 4 步导入向导（上传→列映射→数据校验→入库）</td></tr>
+              <tr><td><b>导出</b></td><td>把当前列表（含筛选 / 搜索结果）按所有列导出为 Excel 文件下载到本地</td></tr>
+              <tr><td><b>删除</b></td><td>批量删除「复选框」已选中的多条记录。删除前弹二次确认；<b style="color:var(--vermilion)">★ v1.3：有任意下游单据（样衣 / 报价 / 合同 / 采购）引用本记录时一律阻止删除（C2/C3 决策），弹错「已被 N 张单据引用，无法删除」</b></td></tr>
+              <tr><td><b>···</b>（更多）</td><td>下拉菜单：打印 / 复制到剪贴板 / 自定义列 / 重置筛选 等</td></tr>
+
+              <tr><td colspan="2" style="background:#EDF1F7;font-weight:600;color:var(--indigo);padding:4px 8px">▸ 智能搜索 + 筛选</td></tr>
+              <tr><td><b>🔍 智能搜索框</b></td><td>关键字在以下字段中模糊匹配：<b>厂商编号、厂商名称、所在省份、所在城市、详细地址、业务范围、法人代表</b>。回车或点「搜索」即生效，结果直接更新到下方表格</td></tr>
+              <tr><td><b>全部状态 / 全部类型</b>（快速筛选下拉）</td><td>一键过滤表格行，选择即时生效，不需要点搜索按钮</td></tr>
+              <tr><td><b>搜索</b>按钮</td><td>触发智能搜索 + 快速筛选 + 高级筛选条件一起生效，结果替换表格内容</td></tr>
+              <tr><td><b>高级筛选 ↓</b>按钮</td><td>展开 / 收起下方「高级筛选」面板。展开后可按字段精确 / 范围 / 多选条件检索：常用检索：厂商编号、厂商名称、详细地址、业务范围、开户银行；下拉 / 范围检索：工厂类型、所在省份、所在城市、开发时间；联系人明细还可按姓名、手机号码、部门、职务等检索。…</td></tr>
+              <tr><td><b>清空</b>按钮</td><td>清除所有搜索关键字、筛选条件、勾选状态，回到默认全部列表</td></tr>
+
+              <tr><td colspan="2" style="background:#EDF1F7;font-weight:600;color:var(--indigo);padding:4px 8px">▸ 表格列</td></tr>
+              <tr><td><b>☐ 复选框（首列）</b></td><td>勾选后启用工具栏的「删除」「导出选中」等批量操作；表头复选框 = 全选当前页</td></tr>
+              <tr><td><b>状态列</b>（启用/停用）</td><td>显示该条记录的启用状态。停用记录在所有单据的下拉选择中不可见；点击状态文字可快速切换（需权限）</td></tr>
+              <tr><td><b>操作列：编辑 / 查看</b></td><td>「编辑」跳转到编辑页（带数据，可改）；「查看」跳转到编辑页只读模式（所有字段灰显）</td></tr>
+              <tr><td><b>各业务字段列</b></td><td>表头点击 = 按该列排序（升/降切换）；列宽可拖拽；列可隐藏（···菜单里设置）</td></tr>
+
+              <tr><td colspan="2" style="background:#EDF1F7;font-weight:600;color:var(--indigo);padding:4px 8px">▸ 行交互</td></tr>
+              <tr><td><b>双击行</b></td><td>等同于点击「编辑」，跳转到编辑页</td></tr>
+              <tr><td><b>单击行</b></td><td>选中该行（高亮）；按住 Shift / Ctrl 可多选</td></tr>
+              <tr><td><b>逾期红色标记</b></td><td>「最后交易日期」距今超过 90 天的记录整行以红色高亮 + 左侧 ⚠ 图标，提示业务关注长期无往来厂商</td></tr>
+              
+
+              <tr><td colspan="2" style="background:#EDF1F7;font-weight:600;color:var(--indigo);padding:4px 8px">▸ 分页</td></tr>
+              <tr><td><b>10 / 页 下拉</b></td><td>切换每页记录数（10 / 20 / 50 / 100）。切换后重新加载首页</td></tr>
+              <tr><td><b>‹ 1 2 3 … ›</b></td><td>翻页按钮。直接点页码跳转；‹ › 上一页/下一页</td></tr>
+              <tr><td><b>已选 N 条 · 共 M 条</b></td><td>当前批量勾选数量 / 当前筛选结果总数实时显示</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+    
+        <div id="dj-2" class="dj-block">
+          <h1>2. 客户资料 <span class="dj-table">(WCustomers)</span></h1>
+          <p class="dj-summary">客户资料是公司所有客户的“档案柜”，区分中间商与最终买家，记录客户的国别区域、价格条款、结汇方式、信用与合作等级、联系人、收货地址、开户银行、快件帐号、唛头等。报价、合同、出货、结汇等环节要选客户，都从这里取。客户资料属机密单据，系统对查看权限有专门控制。</p>
+        </div>
+    <section id="dj-2-editor" class="design-section">
+      <div class="sect-head">
+        <div>
+          <h2><span class="sect-no">2.1</span> 客户资料 · 编辑页</h2>
+          <p class="sect-desc">用于新建 / 修改一条 客户资料 记录的表单页</p>
+        </div>
+        <div class="sect-meta">
+          <span class="badge badge-e">机密 etSecret</span>
+          <span class="badge badge-i">47 字段</span>
+        </div>
+      </div>
+      <div class="biz-notes"><b>📌 业务规则</b><ul><li>★ v1.3：「客户编号」改自动生成（CN001 / CN002 …，D2 决策）；新建时只读、不可手填</li><li>【机密单据】etSecret——非授权用户在「客户列表」「报价」「合同」中均不可见此客户</li><li>「客户类型」=「最终买家」时自动显示「关联中间商」字段；=「中间商」时隐藏</li><li>工具栏「批量授权机密权限」仅管理员可见，弹批量勾选员工对话框</li><li>「联系人」「开户银行」「快件帐号」三张子表必备，对应出货 / 结汇 / 快件单据</li><li>★ v1.3 删除规则（C3 决策）：本客户被任何下游单据（样衣 / 报价 / 合同）引用时 → &lt;b style=&#x27;color:#C04042&#x27;&gt;阻止删除&lt;/b&gt;，弹错「已被 N 张单据引用，无法删除」</li><li>★ v1.3 修改同步（C1 决策）：本客户的名称/编号被改 → 实时同步到所有 草稿/已报价 状态的引用单据；已成单/已对账 不同步</li><li>★ v1.3 永久保留（K2 决策）：客户停用后历史单据中的客户信息永久保留，不做版本管理</li></ul></div>
+      <div class="design-frame">
+        <div class="page-toolbar">
+          <div class="tb-left">
+            <span class="page-title">客户资料 · 编辑</span>
+            <span class="badge badge-e">机密 etSecret</span>
+            <span class="badge badge-w">草稿</span>
+          </div>
+          <div class="tb-right"><button class="btn btn-p">💾 保存</button><button class="btn btn-c">导入客户资料</button><button class="btn btn-c">批量授权机密权限（仅管理员）</button><button class="btn btn-s">复制</button><button class="btn btn-s">导出</button><button class="btn btn-s">···</button></div>
+        </div>
+        
+    <div class="fieldset">
+      <div class="fieldset-head"><span class="g-no">1.</span> 主要信息 <span class="count">21 字段</span></div>
+      <div class="fieldset-body grid-3"><div class="field"><label>客户名称</label><input class="input" value="上海福德贸易有限公司" placeholder=""></div><div class="field"><label><span class="req">*</span>客户类型</label><select class="select"><option value="">请选择</option><option>中间商</option><option>最终买家</option></select></div><div class="field"><label><span class="req">*</span>客户编号</label><input class="input" value="CN001 (自动生成)" placeholder=""></div><div class="field"><label>关联中间商</label><select class="select"><option value="">请选择</option><option>选项1</option><option>选项2</option></select></div><div class="field"><label>贸易国别</label><select class="select"><option value="">请选择</option><option>选项1</option><option>选项2</option></select></div><div class="field"><label>国家区域</label><input class="input" value="美国 加州" placeholder=""></div><div class="field"><label>所在城市</label><input class="input" value="Los Angeles" placeholder=""></div><div class="field"><label>公司主页</label><input class="input" type="url" placeholder="https://" value="https://www.fulinet.com"></div><div class="field"><label>详细地址</label><input class="input" value="江苏省苏州市吴中区东方大道 188 号" placeholder=""></div><div class="field"><label>价格条款</label><div class="btn-edit"><div class="v ">点击选择 …</div><button>…</button></div></div><div class="field"><label>结汇方式</label><div class="btn-edit"><div class="v ">点击选择 …</div><button>…</button></div></div><div class="field"><label>信用等级</label><div class="btn-edit"><div class="v ">点击选择 …</div><button>…</button></div></div><div class="field"><label>合作等级</label><div class="btn-edit"><div class="v ">点击选择 …</div><button>…</button></div></div><div class="field"><label>客户来源</label><div class="btn-edit"><div class="v ">点击选择 …</div><button>…</button></div></div><div class="field"><label>付款期限</label><input class="input" type="number" value="30" placeholder="0"></div><div class="field"><label>业务范围</label><input class="input" value="棉、麻、混纺面料生产销售" placeholder=""></div><div class="field"><label>外销员</label><input class="input" value="" placeholder=""></div><div class="field"><label>开发时间</label><input class="date" type="date" value="2026-05-12"></div><div class="field"><label>备用字段1</label><input class="input" value="" placeholder=""></div><div class="field"><label>备用字段2</label><input class="input" value="" placeholder=""></div><div class="field"><label>备用字段3</label><input class="input" value="" placeholder=""></div></div>
+      
+        <div class="field-logic-wrap">
+          <div class="flw-head">📋 字段操作逻辑</div>
+          <table class="field-logic-table">
+            <thead><tr><th style="width:130px">字段</th><th style="width:80px">类型</th><th style="width:60px">必填</th><th style="width:90px">控件</th><th>操作逻辑 / 业务规则</th></tr></thead>
+            <tbody><tr><td><b>客户名称</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">不能与已有客户重复。</td></tr><tr><td><b>客户类型</b></td><td class="dt-cell">下拉选项</td><td><span class="req-tag">必填</span></td><td>下拉单选</td><td class="rule-cell">下拉选择：中间商 / 最终买家。</td></tr><tr><td><b>客户编号</b></td><td class="dt-cell">文本</td><td><span class="req-tag">必填</span></td><td>文本输入</td><td class="rule-cell">客户的唯一编号；不能与已有客户重复。</td></tr><tr><td><b>关联中间商</b></td><td class="dt-cell">多选</td><td><span class="opt-tag">选填</span></td><td>下拉多选</td><td class="rule-cell">多选客户；仅当“客户类型”为“最终买家”时才显示，可选范围为“中间商”类客户——用来标明该买家归属哪个中间商。</td></tr><tr><td><b>贸易国别</b></td><td class="dt-cell">下拉选项</td><td><span class="opt-tag">选填</span></td><td>下拉单选</td><td class="rule-cell">下拉选择，选项来自【贸易国别】表的英文国名。</td></tr><tr><td><b>国家区域</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">系统自动填——根据“贸易国别”自动带出所属洲 / 区域。</td></tr><tr><td><b>所在城市</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">—</td></tr><tr><td><b>公司主页</b></td><td class="dt-cell">链接</td><td><span class="opt-tag">选填</span></td><td>超链接</td><td class="rule-cell">网址，可点击打开。</td></tr><tr><td><b>详细地址</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">—</td></tr><tr><td><b>价格条款</b></td><td class="dt-cell">选择带出</td><td><span class="opt-tag">选填</span></td><td>点选弹窗</td><td class="rule-cell">点按钮从【价格条款】字典选择。</td></tr><tr><td><b>结汇方式</b></td><td class="dt-cell">选择带出</td><td><span class="opt-tag">选填</span></td><td>点选弹窗</td><td class="rule-cell">点按钮从【结汇方式】字典选择。</td></tr><tr><td><b>信用等级</b></td><td class="dt-cell">选择带出</td><td><span class="opt-tag">选填</span></td><td>点选弹窗</td><td class="rule-cell">点按钮从【信用等级】字典选择。</td></tr><tr><td><b>合作等级</b></td><td class="dt-cell">选择带出</td><td><span class="opt-tag">选填</span></td><td>点选弹窗</td><td class="rule-cell">点按钮从【合作等级】字典选择。</td></tr><tr><td><b>客户来源</b></td><td class="dt-cell">选择带出</td><td><span class="opt-tag">选填</span></td><td>点选弹窗</td><td class="rule-cell">点按钮从【客户来源】字典选择。</td></tr><tr><td><b>付款期限</b></td><td class="dt-cell">整数</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">天数。</td></tr><tr><td><b>业务范围</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">—</td></tr><tr><td><b>外销员</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">默认填当前登录人。</td></tr><tr><td><b>开发时间</b></td><td class="dt-cell">日期</td><td><span class="opt-tag">选填</span></td><td>日期选择</td><td class="rule-cell">默认填今天。</td></tr><tr><td><b>备用字段1</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">可由公司自定义用途的备用字段。</td></tr><tr><td><b>备用字段2</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">可由公司自定义用途的备用字段。</td></tr><tr><td><b>备用字段3</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本输入</td><td class="rule-cell">可由公司自定义用途的备用字段。</td></tr></tbody>
+          </table>
+        </div>
+    </div>
+    <div class="fieldset">
+      <div class="fieldset-head"><span class="g-no">3.</span> 收货地址 <span class="count">1 字段</span></div>
+      <div class="fieldset-body grid-3"><div class="field"><label>收货地址</label><textarea class="memo" placeholder=""></textarea></div></div>
+      
+        <div class="field-logic-wrap">
+          <div class="flw-head">📋 字段操作逻辑</div>
+          <table class="field-logic-table">
+            <thead><tr><th style="width:130px">字段</th><th style="width:80px">类型</th><th style="width:60px">必填</th><th style="width:90px">控件</th><th>操作逻辑 / 业务规则</th></tr></thead>
+            <tbody><tr><td><b>收货地址</b></td><td class="dt-cell">多行文本</td><td><span class="opt-tag">选填</span></td><td>多行文本</td><td class="rule-cell">—</td></tr></tbody>
+          </table>
+        </div>
+    </div>
+    <div class="fieldset">
+      <div class="fieldset-head"><span class="g-no">6.</span> 唛头 <span class="count">4 字段</span></div>
+      <div class="fieldset-body grid-3"><div class="field"><label>正面唛头</label><textarea class="memo" placeholder=""></textarea></div><div class="field"><label>侧面唛头</label><textarea class="memo" placeholder=""></textarea></div><div class="field"><label>内盒文字</label><textarea class="memo" placeholder=""></textarea></div><div class="field"><label>客户备注</label><textarea class="memo" placeholder=""></textarea></div></div>
+      
+        <div class="field-logic-wrap">
+          <div class="flw-head">📋 字段操作逻辑</div>
+          <table class="field-logic-table">
+            <thead><tr><th style="width:130px">字段</th><th style="width:80px">类型</th><th style="width:60px">必填</th><th style="width:90px">控件</th><th>操作逻辑 / 业务规则</th></tr></thead>
+            <tbody><tr><td><b>正面唛头</b></td><td class="dt-cell">多行文本</td><td><span class="opt-tag">选填</span></td><td>唛头文本</td><td class="rule-cell">—</td></tr><tr><td><b>侧面唛头</b></td><td class="dt-cell">多行文本</td><td><span class="opt-tag">选填</span></td><td>唛头文本</td><td class="rule-cell">—</td></tr><tr><td><b>内盒文字</b></td><td class="dt-cell">多行文本</td><td><span class="opt-tag">选填</span></td><td>唛头文本</td><td class="rule-cell">—</td></tr><tr><td><b>客户备注</b></td><td class="dt-cell">多行文本</td><td><span class="opt-tag">选填</span></td><td>多行文本</td><td class="rule-cell">—</td></tr></tbody>
+          </table>
+        </div>
+    </div>
+        
+    <div class="subtable-wrap">
+      <div class="subtable-head">
+        <span class="st-title">▸ 明细表：联系人　<span class="count">10 字段 · 示例 3 行</span></span>
+        <div class="st-tools">
+          <button class="btn btn-s btn-sm">+ 新增行</button>
+          <button class="btn btn-g btn-sm">— 删除</button>
+          <button class="btn btn-s btn-sm">导入Excel</button>
+          <button class="btn btn-s btn-sm">粘贴</button>
+        </div>
+      </div>
+      <table class="table">
+        <thead><tr><th style="width:30px"><input type="checkbox"></th><th>姓名</th><th>部门</th><th>性别</th><th>职务</th><th>电话号码</th><th>手机号码</th><th>手机号码(1)</th><th>手机号码(2)</th><th>电子邮件</th><th>+ 1 列…</th></tr></thead>
+        <tbody><tr><td><input type="checkbox"></td><td>张建国</td><td>销售部</td><td>男</td><td>销售经理</td><td>0512-68771234</td><td>13901588888</td><td>示例1</td><td>示例1</td><td>示例1</td><td>…</td></tr><tr><td><input type="checkbox"></td><td>李芬</td><td>业务部</td><td>女</td><td>业务跟单</td><td>0512-68771235</td><td>13901588889</td><td>示例2</td><td>示例2</td><td>示例2</td><td>…</td></tr><tr><td><input type="checkbox"></td><td>王成</td><td>财务部</td><td>男</td><td>会计</td><td>0512-68771236</td><td>13901588890</td><td>示例3</td><td>示例3</td><td>示例3</td><td>…</td></tr></tbody>
+      </table>
+      
+        <div class="field-logic-wrap field-logic-sub">
+          <div class="flw-head">📋 字段操作逻辑（10 列）</div>
+          <table class="field-logic-table">
+            <thead><tr><th style="width:130px">列名</th><th style="width:80px">类型</th><th style="width:60px">必填</th><th>操作逻辑 / 业务规则</th></tr></thead>
+            <tbody><tr><td><b>姓名</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">—</td></tr><tr><td><b>部门</b></td><td class="dt-cell">下拉选项</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">下拉选择，可累积历史值。</td></tr><tr><td><b>性别</b></td><td class="dt-cell">下拉选项</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">下拉选择：M（男）/ F（女）。</td></tr><tr><td><b>职务</b></td><td class="dt-cell">下拉选项</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">下拉选择，可累积历史值。</td></tr><tr><td><b>电话号码</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">—</td></tr><tr><td><b>手机号码</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">—</td></tr><tr><td><b>手机号码(1)</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">—</td></tr><tr><td><b>手机号码(2)</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">—</td></tr><tr><td><b>电子邮件</b></td><td class="dt-cell">链接</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">可点击发邮件。</td></tr><tr><td><b>备注</b></td><td class="dt-cell">多行文本</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">—</td></tr></tbody>
+          </table>
+        </div>
+    </div>
+    <div class="subtable-wrap">
+      <div class="subtable-head">
+        <span class="st-title">▸ 明细表：开户银行　<span class="count">7 字段 · 示例 3 行</span></span>
+        <div class="st-tools">
+          <button class="btn btn-s btn-sm">+ 新增行</button>
+          <button class="btn btn-g btn-sm">— 删除</button>
+          <button class="btn btn-s btn-sm">导入Excel</button>
+          <button class="btn btn-s btn-sm">粘贴</button>
+        </div>
+      </div>
+      <table class="table">
+        <thead><tr><th style="width:30px"><input type="checkbox"></th><th>开户名称</th><th>开户银行</th><th>银行帐号</th><th>银行地址</th><th>币种</th><th>SWIFT Code</th><th>备注</th></tr></thead>
+        <tbody><tr><td><input type="checkbox"></td><td>苏州福利纺织有限公司</td><td>中国银行苏州分行</td><td>4567 8901 2345 6789</td><td>示例1</td><td>人民币 CNY</td><td>BKCHCNBJ</td><td>示例1</td></tr><tr><td><input type="checkbox"></td><td>苏州福利纺织有限公司</td><td>工商银行苏州分行</td><td>1234 5678 9012 3456</td><td>示例2</td><td>美元 USD</td><td>ICBKCNBJ</td><td>示例2</td></tr><tr><td><input type="checkbox"></td><td>示例3</td><td>示例3</td><td>示例3</td><td>示例3</td><td>示例3</td><td>示例3</td><td>示例3</td></tr></tbody>
+      </table>
+      
+        <div class="field-logic-wrap field-logic-sub">
+          <div class="flw-head">📋 字段操作逻辑（7 列）</div>
+          <table class="field-logic-table">
+            <thead><tr><th style="width:130px">列名</th><th style="width:80px">类型</th><th style="width:60px">必填</th><th>操作逻辑 / 业务规则</th></tr></thead>
+            <tbody><tr><td><b>开户名称</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">系统自动填——自动等于“客户名称”。</td></tr><tr><td><b>开户银行</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">—</td></tr><tr><td><b>银行帐号</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">—</td></tr><tr><td><b>银行地址</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">—</td></tr><tr><td><b>币种</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">—</td></tr><tr><td><b>SWIFT Code</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">—</td></tr><tr><td><b>备注</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">—</td></tr></tbody>
+          </table>
+        </div>
+    </div>
+    <div class="subtable-wrap">
+      <div class="subtable-head">
+        <span class="st-title">▸ 明细表：快件帐号　<span class="count">4 字段 · 示例 3 行</span></span>
+        <div class="st-tools">
+          <button class="btn btn-s btn-sm">+ 新增行</button>
+          <button class="btn btn-g btn-sm">— 删除</button>
+          <button class="btn btn-s btn-sm">导入Excel</button>
+          <button class="btn btn-s btn-sm">粘贴</button>
+        </div>
+      </div>
+      <table class="table">
+        <thead><tr><th style="width:30px"><input type="checkbox"></th><th>快件公司</th><th>帐号</th><th>付款方式</th><th>备注</th></tr></thead>
+        <tbody><tr><td><input type="checkbox"></td><td>示例1</td><td>示例1</td><td>示例1</td><td>示例1</td></tr><tr><td><input type="checkbox"></td><td>示例2</td><td>示例2</td><td>示例2</td><td>示例2</td></tr><tr><td><input type="checkbox"></td><td>示例3</td><td>示例3</td><td>示例3</td><td>示例3</td></tr></tbody>
+      </table>
+      
+        <div class="field-logic-wrap field-logic-sub">
+          <div class="flw-head">📋 字段操作逻辑（4 列）</div>
+          <table class="field-logic-table">
+            <thead><tr><th style="width:130px">列名</th><th style="width:80px">类型</th><th style="width:60px">必填</th><th>操作逻辑 / 业务规则</th></tr></thead>
+            <tbody><tr><td><b>快件公司</b></td><td class="dt-cell">下拉选项</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">下拉选择，选项来自【工厂资料】的厂商名称。</td></tr><tr><td><b>帐号</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">—</td></tr><tr><td><b>付款方式</b></td><td class="dt-cell">下拉选项</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">下拉选择：到付 / 预付。</td></tr><tr><td><b>备注</b></td><td class="dt-cell">多行文本</td><td><span class="opt-tag">选填</span></td><td class="rule-cell">—</td></tr></tbody>
+          </table>
+        </div>
+    </div>
+        
+      </div>
+      <div class="page-logic-panel"><div class="plp-head">⚙ 页面级操作逻辑（按钮 / 事件 / 校验 / 联动）</div><div class="plp-body"><div class="pl-cat"><h4>🔘 操作按钮</h4><table class="pl-table"><thead><tr><th style="width:140px">按钮</th><th>行为</th></tr></thead><tbody><tr><td>导入客户资料</td><td>从 Excel 批量导入客户。点击后系统先校验操作人是否拥有“允许导入客户资料”权限，无权限则不执行；有权限则打开 Excel 导入向导。</td></tr><tr><td>批量授权机密权限（仅管理员）</td><td>在客户列表中选中多条客户，把“查看 / 修改 / 附件新增·删除·查看 / 提醒新增·删除·查看”等权限一次性授予指定的多个用户。点击后系统先校验操作人是否为管理员，非管理员会提示“您没有权限执行此操作！”并中止。</td></tr></tbody></table></div><div class="pl-cat"><h4>⚡ 页面事件（系统自动执行）</h4><table class="pl-table"><thead><tr><th style="width:160px">时机</th><th>系统做什么</th></tr></thead><tbody><tr><td>查找窗口打开时 · 默认搜索范围</td><td>打开查找窗口时，系统自动把搜索范围设为“客户资料”，省去手工选择。</td></tr><tr><td>保存前 · 联系人非空校验</td><td>保存时检查“联系人”明细表是否为空。为空则弹出提示“联系人子表不能为空”，并中止本次保存。</td></tr><tr><td>保存后 · 登记机密权限</td><td>保存成功后，系统自动为这条客户登记字段级机密权限，确定哪些用户可以查看本条客户。</td></tr></tbody></table></div><div class="pl-cat"><h4>✅ 字段校验规则</h4><ul class="pl-ul"><li>必填：客户类型、客户编号。</li><li>唯一（不可重复）：客户名称、客户编号。</li></ul></div><div class="pl-cat"><h4>🔗 字段联动 / 显隐</h4><ul class="pl-ul"><li>“关联中间商”字段：仅当“客户类型 = 最终买家”时才显示；其下拉候选范围限定为“客户类型 = 中间商”的客户。</li><li>选择“贸易国别”后，自动带出“国家区域”。</li></ul></div></div></div>
+    </section>
+    
+    <section id="dj-2-list" class="design-section">
+      <div class="sect-head">
+        <div>
+          <h2><span class="sect-no">2.2</span> 客户资料 · 列表页（浏览 + 检索一体）</h2>
+          <p class="sect-desc">浏览、检索、筛选、批量操作 客户资料 记录的统一入口页（合并原「列表页」+「查询页」）</p>
+        </div>
+        <div class="sect-meta">
+          <span class="badge badge-s">列表 + 检索一体</span>
+          <span class="badge badge-i">共 48 条示例</span>
+        </div>
+      </div>
+      <div class="design-frame">
+        <div class="page-toolbar">
+          <div class="tb-left"><span class="page-title">客户资料 · 列表</span></div>
+          <div class="tb-right">
+            <button class="btn btn-p btn-sm">+ 新建</button>
+            <button class="btn btn-c btn-sm">导入客户资料</button><button class="btn btn-c btn-sm">批量授权机密权限</button>
+            <button class="btn btn-s btn-sm">导出</button>
+            <button class="btn btn-s btn-sm">删除</button>
+            <button class="btn btn-s btn-sm">···</button>
+          </div>
+        </div>
+        <div class="smart-search-bar">
+          <span class="ss-icon">🔍</span>
+          <input class="input ss-input" placeholder="智能搜索 — 在 客户编号、贸易国别、国家区域、所在城市、公司主页、详细地址 中模糊匹配…" value="">
+          <button class="btn btn-p btn-sm">搜索</button>
+          <button class="btn btn-t btn-sm">清空</button>
+          <button class="btn btn-s btn-sm">高级筛选 ▾</button>
+        </div>
+        <div class="adv-filter-panel">
+          <div class="afp-head">高级筛选（默认展开示例 · 实际可折叠）</div>
+          <div class="afp-grid">
+              <div class="field"><label>编号</label><input class="input" placeholder="精确匹配"></div>
+              <div class="field"><label>名称</label><input class="input" placeholder="模糊匹配"></div>
+              <div class="field"><label>状态</label><select class="select"><option>全部</option><option>启用</option><option>停用</option></select></div>
+              
+              <div class="field"><label>客户类型</label><select class="select"><option>全部</option><option>中间商</option><option>最终买家</option></select></div>
+              <div class="field"><label>贸易国别</label><select class="select"><option>全部</option><option>美国</option><option>德国</option><option>日本</option></select></div>
+              <div class="field"><label>信用等级</label><select class="select"><option>全部</option><option>A级</option><option>B级</option><option>C级</option></select></div>
+              <div class="field"><label>合作等级</label><select class="select"><option>全部</option></select></div>
+          </div>
+        </div>
+        <table class="table table-list">
+          <thead><tr><th style="width:30px"><input type="checkbox"></th><th>编号</th><th>客户名称</th><th>类型</th><th>国别</th><th>价格条款</th><th>结汇方式</th><th>信用</th><th>加密</th><th>状态</th><th>操作</th></tr></thead>
+          <tbody><tr class=""><td><input type="checkbox"></td><td>CN001</td><td>上海福德贸易有限公司</td><td>中间商</td><td>美国</td><td>FOB 上海</td><td>T/T 60天</td><td>信用 A</td><td>🔒 机密</td><td>活跃</td><td><button class="btn btn-t btn-sm">编辑</button> <button class="btn btn-t btn-sm">查看</button></td></tr><tr class=""><td><input type="checkbox"></td><td>CN002</td><td>Atlantic Trading Co.</td><td>中间商</td><td>美国</td><td>CIF</td><td>L/C at sight</td><td>信用 A</td><td>🔒 机密</td><td>活跃</td><td><button class="btn btn-t btn-sm">编辑</button> <button class="btn btn-t btn-sm">查看</button></td></tr><tr class=""><td><input type="checkbox"></td><td>CN015</td><td>Euro Fashion GmbH</td><td>中间商</td><td>德国</td><td>CIF</td><td>T/T 30天</td><td>信用 B</td><td>🔒 机密</td><td>活跃</td><td><button class="btn btn-t btn-sm">编辑</button> <button class="btn btn-t btn-sm">查看</button></td></tr><tr class=""><td><input type="checkbox"></td><td>CN023</td><td>Sakura Apparel Inc.</td><td>中间商</td><td>日本</td><td>FOB 上海</td><td>T/T 45天</td><td>信用 A</td><td>🔒 机密</td><td>活跃</td><td><button class="btn btn-t btn-sm">编辑</button> <button class="btn btn-t btn-sm">查看</button></td></tr><tr class=""><td><input type="checkbox"></td><td>CN032</td><td>H&amp;M Asia Sourcing</td><td>最终买家</td><td>瑞典</td><td>FOB 上海</td><td>D/A 90天</td><td>信用 A</td><td>🔒 机密</td><td>活跃</td><td><button class="btn btn-t btn-sm">编辑</button> <button class="btn btn-t btn-sm">查看</button></td></tr><tr class=""><td><input type="checkbox"></td><td>CN045</td><td>UNIQLO Sourcing HK</td><td>最终买家</td><td>日本</td><td>FOB 上海</td><td>T/T 60天</td><td>信用 A</td><td>🔒 机密</td><td>活跃</td><td><button class="btn btn-t btn-sm">编辑</button> <button class="btn btn-t btn-sm">查看</button></td></tr></tbody>
+        </table>
+        <div class="pagination">
+          已选 0 条 · 共 48 条 ·
+          <select class="select" style="display:inline-block;width:80px"><option>10/页</option><option>20/页</option></select> ·
+          <button class="btn btn-s btn-sm">‹</button>
+          <button class="btn btn-p btn-sm">1</button>
+          <button class="btn btn-s btn-sm">2</button>
+          <button class="btn btn-s btn-sm">3</button>
+          <button class="btn btn-s btn-sm">…</button>
+          <button class="btn btn-s btn-sm">6</button>
+          <button class="btn btn-s btn-sm">›</button>
+        </div>
+        <div class="hint">🔒 客户资料属机密单据：未授权用户看不到该客户行，且系统不会在销售合同 / 报价单的客户下拉中列出。</div>
+        
+        <div class="field-logic-wrap">
+          <div class="flw-head">📋 元素操作逻辑（工具栏 / 搜索 / 表格 / 行 / 分页）</div>
+          <table class="field-logic-table">
+            <thead><tr><th style="width:200px">元素</th><th>操作逻辑 / 业务规则</th></tr></thead>
+            <tbody>
+              <tr><td colspan="2" style="background:#EDF1F7;font-weight:600;color:var(--indigo);padding:4px 8px">▸ 顶部工具栏按钮</td></tr>
+              <tr><td><b>+ 新建</b>（蓝色主按钮）</td><td>跳转到本单据的「编辑页」空白态，开始录一条新记录。等同于编辑页工具栏的「💾 保存」前置流程</td></tr>
+              <tr><td><b>导入客户资料</b>（橙色 CTA）</td><td>从 Excel 批量导入客户。点击后先校验权限，有权限则打开导入向导</td></tr><tr><td><b>批量授权机密权限</b>（橙色 CTA，仅管理员）</td><td>把当前选中的 N 个客户授权给指定员工查看 / 编辑。弹「批量授权」对话框</td></tr>
+              <tr><td><b>导出</b></td><td>把当前列表（含筛选 / 搜索结果）按所有列导出为 Excel 文件下载到本地</td></tr>
+              <tr><td><b>删除</b></td><td>批量删除「复选框」已选中的多条记录。删除前弹二次确认；<b style="color:var(--vermilion)">★ v1.3：有任意下游单据（样衣 / 报价 / 合同 / 采购）引用本记录时一律阻止删除（C2/C3 决策），弹错「已被 N 张单据引用，无法删除」</b></td></tr>
+              <tr><td><b>···</b>（更多）</td><td>下拉菜单：打印 / 复制到剪贴板 / 自定义列 / 重置筛选 等</td></tr>
+
+              <tr><td colspan="2" style="background:#EDF1F7;font-weight:600;color:var(--indigo);padding:4px 8px">▸ 智能搜索 + 筛选</td></tr>
+              <tr><td><b>🔍 智能搜索框</b></td><td>关键字在以下字段中模糊匹配：<b>客户编号、贸易国别、国家区域、所在城市、公司主页、详细地址</b>。回车或点「搜索」即生效，结果直接更新到下方表格</td></tr>
+              <tr><td><b>全部状态 / 全部类型</b>（快速筛选下拉）</td><td>一键过滤表格行，选择即时生效，不需要点搜索按钮</td></tr>
+              <tr><td><b>搜索</b>按钮</td><td>触发智能搜索 + 快速筛选 + 高级筛选条件一起生效，结果替换表格内容</td></tr>
+              <tr><td><b>高级筛选 ↓</b>按钮</td><td>展开 / 收起下方「高级筛选」面板。展开后可按字段精确 / 范围 / 多选条件检索：常用检索：客户名称、客户类型、客户编号、关联中间商、详细地址；下拉 / 范围检索：贸易国别、所在城市、信用等级、合作等级、客户来源、业务范围、外销员、开发时间；联系人明细还可按姓名、电话号码检索。…</td></tr>
+              <tr><td><b>清空</b>按钮</td><td>清除所有搜索关键字、筛选条件、勾选状态，回到默认全部列表</td></tr>
+
+              <tr><td colspan="2" style="background:#EDF1F7;font-weight:600;color:var(--indigo);padding:4px 8px">▸ 表格列</td></tr>
+              <tr><td><b>☐ 复选框（首列）</b></td><td>勾选后启用工具栏的「删除」「导出选中」等批量操作；表头复选框 = 全选当前页</td></tr>
+              <tr><td><b>状态列</b>（启用/停用）</td><td>显示该条记录的启用状态。停用记录在所有单据的下拉选择中不可见；点击状态文字可快速切换（需权限）</td></tr>
+              <tr><td><b>操作列：编辑 / 查看</b></td><td>「编辑」跳转到编辑页（带数据，可改）；「查看」跳转到编辑页只读模式（所有字段灰显）</td></tr>
+              <tr><td><b>各业务字段列</b></td><td>表头点击 = 按该列排序（升/降切换）；列宽可拖拽；列可隐藏（···菜单里设置）</td></tr>
+
+              <tr><td colspan="2" style="background:#EDF1F7;font-weight:600;color:var(--indigo);padding:4px 8px">▸ 行交互</td></tr>
+              <tr><td><b>双击行</b></td><td>等同于点击「编辑」，跳转到编辑页</td></tr>
+              <tr><td><b>单击行</b></td><td>选中该行（高亮）；按住 Shift / Ctrl 可多选</td></tr>
+              
+              <tr><td><b>🔒 机密标记</b></td><td>客户资料属机密单据，未授权用户在列表中看不到对应行；管理员可在「批量授权」中为员工开权限</td></tr>
+
+              <tr><td colspan="2" style="background:#EDF1F7;font-weight:600;color:var(--indigo);padding:4px 8px">▸ 分页</td></tr>
+              <tr><td><b>10 / 页 下拉</b></td><td>切换每页记录数（10 / 20 / 50 / 100）。切换后重新加载首页</td></tr>
+              <tr><td><b>‹ 1 2 3 … ›</b></td><td>翻页按钮。直接点页码跳转；‹ › 上一页/下一页</td></tr>
+              <tr><td><b>已选 N 条 · 共 M 条</b></td><td>当前批量勾选数量 / 当前筛选结果总数实时显示</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+    <div id="dialogs" class="dj-block"><h1>弹窗与交互详图</h1><p class="dj-summary">从编辑页、列表页触发的所有弹窗 / 模态视图——本节平铺所有弹窗的最终态，无需点击触发。</p></div>
+    <section id="dialog-select" class="design-section">
+      <div class="sect-head">
+        <div>
+          <h2><span class="sect-no">D.1</span> 弹窗：ButtonEdit 选择对话框</h2>
+          <p class="sect-desc">通用选择器——所有 ButtonEdit 字段（如「厂商名称」「关联中间商」「价格条款」）的点选入口</p>
+        </div>
+        <div class="sect-meta"><span class="badge badge-i">全局通用</span></div>
+      </div>
+      <div class="design-frame design-dialog-frame">
+        <div class="dlg-static">
+          <div class="dialog-head">📌 选择 厂商名称 <span class="x">×</span></div>
+          <div class="dialog-body">
+            <div style="display:flex;gap:8px;margin-bottom:12px">
+              <input class="input" placeholder="按编号 / 名称搜索…" value="苏州" style="flex:1">
+              <select class="select" style="flex:0 0 140px"><option>工厂类型：全部</option><option>面料供应商</option></select>
+              <button class="btn btn-p btn-sm">🔍 查询</button>
+              <button class="btn btn-s btn-sm">清空</button>
+            </div>
+            <table class="table">
+              <thead><tr><th style="width:30px"></th><th>编号</th><th>厂商名称</th><th>类型</th><th>省/市</th><th>信用</th></tr></thead>
+              <tbody>
+                <tr class="selected"><td>●</td><td>S001</td><td>苏州福利纺织有限公司</td><td>面料供应商</td><td>江苏 苏州</td><td>A级</td></tr>
+                <tr><td>○</td><td>S007</td><td>苏州东方织造</td><td>面料供应商</td><td>江苏 苏州</td><td>B级</td></tr>
+                <tr><td>○</td><td>S019</td><td>苏州精工辅料</td><td>辅料供应商</td><td>江苏 苏州</td><td>A级</td></tr>
+                <tr><td>○</td><td>S036</td><td>苏州协兴印染</td><td>面料供应商</td><td>江苏 苏州</td><td>B级</td></tr>
+              </tbody>
+            </table>
+            <p style="font-size:11.5px;color:var(--gray-5);margin-top:10px">共匹配 4 条记录</p>
+          </div>
+          <div class="dialog-foot">
+            <button class="btn btn-s btn-sm">取消</button>
+            <button class="btn btn-p btn-sm">确认选择</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="dialog-import" class="design-section">
+      <div class="sect-head">
+        <div>
+          <h2><span class="sect-no">D.2</span> 弹窗：Excel 批量导入向导（4 步）</h2>
+          <p class="sect-desc">仅在「工厂资料」「客户资料」工具栏提供，4 步流程：上传 → 列映射 → 数据校验 → 入库</p>
+        </div>
+        <div class="sect-meta"><span class="badge badge-w">大批量录入</span></div>
+      </div>
+      <div class="design-frame design-dialog-frame">
+        <div class="dlg-static dlg-lg">
+          <div class="dialog-head">📥 Excel 批量导入向导 — 步骤 3 / 4 数据校验 <span class="x">×</span></div>
+          <div class="dialog-body">
+            <div class="step-row">
+              <div class="step done"><div class="n">✓</div><div class="txt">上传 Excel</div></div><span class="step-arrow">›</span>
+              <div class="step done"><div class="n">✓</div><div class="txt">列映射</div></div><span class="step-arrow">›</span>
+              <div class="step active"><div class="n">3</div><div class="txt">数据校验</div></div><span class="step-arrow">›</span>
+              <div class="step"><div class="n">4</div><div class="txt">入库</div></div>
+            </div>
+            <div style="background:#FBF8F2;border:1px solid var(--gray-1);border-radius:4px;padding:14px;margin-bottom:12px">
+              <p style="font-size:13px;margin-bottom:10px"><b>📋 校验汇总：</b>共 14 行，13 行通过，1 行失败</p>
+              <div style="display:flex;gap:14px;font-size:12px;flex-wrap:wrap">
+                <span style="color:var(--teal)">✓ 通过 11 行</span>
+                <span style="color:var(--amber)">⚠ 重复将更新 2 行</span>
+                <span style="color:var(--vermilion)">✗ 失败 1 行</span>
+              </div>
+            </div>
+            <table class="table">
+              <thead><tr><th>行号</th><th>厂商编号</th><th>厂商名称</th><th>校验结果</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td>S081</td><td>新顺纺织</td><td style="color:var(--teal)">✓ 新建</td></tr>
+                <tr><td>2</td><td>S082</td><td>东盛印染</td><td style="color:var(--teal)">✓ 新建</td></tr>
+                <tr><td>3</td><td>S001</td><td>苏州福利纺织有限公司</td><td style="color:var(--amber)">⚠ 已存在，将覆盖更新</td></tr>
+                <tr><td>7</td><td>S015</td><td>Vincent QC Lab</td><td style="color:var(--amber)">⚠ 已存在，将覆盖更新</td></tr>
+                <tr style="background:#FBEAEA"><td>12</td><td>S088</td><td>未知厂商</td><td style="color:var(--vermilion)">✗ 工厂类型"供货商"不在字典范围</td></tr>
+                <tr><td>13</td><td>S089</td><td>金鼎贸易</td><td style="color:var(--teal)">✓ 新建</td></tr>
+                <tr><td>14</td><td>S090</td><td>恒丰纺织</td><td style="color:var(--teal)">✓ 新建</td></tr>
+              </tbody>
+            </table>
+            <p style="font-size:11.5px;color:var(--gray-5);margin-top:10px">💡 失败行可下载错误报告 Excel 修正后重新导入。系统对"已存在"记录默认行为=覆盖更新。</p>
+          </div>
+          <div class="dialog-foot">
+            <button class="btn btn-t btn-sm">↓ 下载错误报告</button>
+            <span style="flex:1"></span>
+            <button class="btn btn-s btn-sm">‹ 上一步</button>
+            <button class="btn btn-s btn-sm">取消</button>
+            <button class="btn btn-p btn-sm">下一步：执行入库 ›</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="dialog-auth" class="design-section">
+      <div class="sect-head">
+        <div>
+          <h2><span class="sect-no">D.3</span> 弹窗：批量授权机密权限</h2>
+          <p class="sect-desc">仅「客户资料」工具栏 + 仅管理员可见——把当前选中的客户授权给一批员工查看 / 编辑</p>
+        </div>
+        <div class="sect-meta"><span class="badge badge-e">仅管理员</span></div>
+      </div>
+      <div class="design-frame design-dialog-frame">
+        <div class="dlg-static dlg-lg">
+          <div class="dialog-head">🔐 批量授权 — 当前选中 3 个客户 <span class="x">×</span></div>
+          <div class="dialog-body">
+            <div style="margin-bottom:14px">
+              <div class="fieldset-head" style="border-radius:4px 4px 0 0">被授权客户</div>
+              <div style="border:1px solid var(--gray-1);border-top:none;padding:8px 12px;border-radius:0 0 4px 4px;background:#fff">
+                <span class="badge badge-i">CN001 上海福德贸易</span>
+                <span class="badge badge-i">CN002 Atlantic Trading Co.</span>
+                <span class="badge badge-i">CN032 H&amp;M Asia Sourcing</span>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+              <div>
+                <div class="fieldset-head" style="border-radius:4px 4px 0 0">选择员工 (3 选)</div>
+                <div style="border:1px solid var(--gray-1);border-top:none;padding:6px 12px;height:200px;overflow-y:auto;background:#fff;font-size:12.5px">
+                  <label class="checkbox-inline" style="display:block;padding:4px 0"><input type="checkbox" checked> 张三 · 销售部</label>
+                  <label class="checkbox-inline" style="display:block;padding:4px 0"><input type="checkbox" checked> 李四 · 跟单部</label>
+                  <label class="checkbox-inline" style="display:block;padding:4px 0"><input type="checkbox"> 王五 · 财务部</label>
+                  <label class="checkbox-inline" style="display:block;padding:4px 0"><input type="checkbox" checked> 赵六 · 业务部</label>
+                  <label class="checkbox-inline" style="display:block;padding:4px 0"><input type="checkbox"> 钱七 · 跟单部</label>
+                  <label class="checkbox-inline" style="display:block;padding:4px 0"><input type="checkbox"> 孙八 · 仓库</label>
+                  <p style="font-size:11px;color:var(--gray-5);margin-top:8px">在职员工 12 人 / 已勾选 3 人</p>
+                </div>
+              </div>
+              <div>
+                <div class="fieldset-head" style="border-radius:4px 4px 0 0">授权范围</div>
+                <div style="border:1px solid var(--gray-1);border-top:none;padding:12px;background:#fff;font-size:12.5px">
+                  <label class="checkbox-inline" style="display:block;padding:5px 0"><input type="checkbox" checked> 查看客户资料</label>
+                  <label class="checkbox-inline" style="display:block;padding:5px 0"><input type="checkbox" checked> 在报价 / 合同中可选此客户</label>
+                  <label class="checkbox-inline" style="display:block;padding:5px 0"><input type="checkbox"> 编辑客户资料</label>
+                  <label class="checkbox-inline" style="display:block;padding:5px 0"><input type="checkbox"> 删除客户资料</label>
+                  <div class="field" style="margin-top:14px"><label>有效期至</label><input class="date" type="date" value="2027-05-17"></div>
+                  <div class="field"><label>授权备注</label><textarea class="memo" style="min-height:50px">2026 年 Q2 H&amp;M 项目，张三/李四/赵六 联合负责</textarea></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="dialog-foot">
+            <button class="btn btn-s btn-sm">取消</button>
+            <button class="btn btn-p btn-sm">提交授权（将写入授权流水）</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="interaction-link" class="design-section">
+      <div class="sect-head">
+        <div>
+          <h2><span class="sect-no">D.4</span> 联动展示：「客户类型」=「最终买家」时显示「关联中间商」</h2>
+          <p class="sect-desc">.iexe 里 Editor 节点的 Visible 条件——常见的「联动显隐」交互模式</p>
+        </div>
+        <div class="sect-meta"><span class="badge badge-w">联动控制</span></div>
+      </div>
+      <div class="design-frame">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div style="border:1px solid var(--gray-1);border-radius:6px;padding:14px;background:#fff">
+            <div style="font-size:12px;color:var(--gray-5);margin-bottom:10px;border-bottom:1px solid var(--gray-1);padding-bottom:6px">📷 状态 A：客户类型 = 中间商</div>
+            <div class="fieldset-body grid-3" style="padding:0;display:grid;grid-template-columns:1fr 1fr;gap:6px 20px">
+              <div class="field"><label>客户名称</label><input class="input" value="上海福德贸易"></div>
+              <div class="field"><label><span class="req">*</span>客户类型</label><select class="select"><option selected>中间商</option><option>最终买家</option></select></div>
+              <div class="field" style="opacity:.35"><label>关联中间商</label><input class="input" disabled placeholder="—（隐藏）"></div>
+              <div class="field"><label>客户编号</label><input class="input" value="CN001"></div>
+            </div>
+            <p style="font-size:11.5px;color:var(--gray-5);margin-top:10px;line-height:1.6">⤷ 「关联中间商」字段<b>整行隐藏</b>（视觉上空格收紧）</p>
+          </div>
+          <div style="border:1px solid var(--rust);border-radius:6px;padding:14px;background:linear-gradient(135deg,#FFF7EE 0%,#fff 100%)">
+            <div style="font-size:12px;color:var(--gray-5);margin-bottom:10px;border-bottom:1px solid var(--gray-1);padding-bottom:6px">📷 状态 B：客户类型 = 最终买家</div>
+            <div class="fieldset-body grid-3" style="padding:0;display:grid;grid-template-columns:1fr 1fr;gap:6px 20px">
+              <div class="field"><label>客户名称</label><input class="input" value="H&amp;M Asia"></div>
+              <div class="field"><label><span class="req">*</span>客户类型</label><select class="select"><option>中间商</option><option selected>最终买家</option></select></div>
+              <div class="field" style="background:#FFF1DE;border-radius:4px;padding:3px 6px"><label><span class="req">*</span>关联中间商</label><div class="btn-edit"><div class="v has">CN001 · 上海福德贸易</div><button>…</button></div></div>
+              <div class="field"><label>客户编号</label><input class="input" value="CN032"></div>
+            </div>
+            <p style="font-size:11.5px;color:#7A5810;margin-top:10px;line-height:1.6">⤷ 「关联中间商」字段<b>显现并必填</b>（橙色高亮 1 秒提示用户）</p>
+          </div>
+        </div>
+      </div>
+    </section>
+    
+</main>
+</body></html>

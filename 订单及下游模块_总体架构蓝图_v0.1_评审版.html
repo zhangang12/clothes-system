@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>订单及下游模块·总体架构蓝图 v0.1 · 评审版</title>
+<style>
+:root{
+  --indigo:#1E3A5F;--indigo-d:#152A45;--indigo-l:#2C5180;
+  --linen:#F5EDDC;--linen-d:#E8DCC0;--canvas:#FBF8F2;
+  --rust:#D17A40;--rust-d:#B86530;--vermilion:#C04042;--teal:#3E8E7E;--amber:#C8901E;
+  --gray-9:#1c1c1c;--gray-7:#3a3a3a;--gray-6:#555;--gray-5:#777;--gray-4:#999;--gray-3:#bbb;--gray-2:#d8d4cc;--gray-1:#E5E2DA;--gray-0:#f3f0e9;
+  --font:"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;
+  --font-mono:Consolas,"Courier New",monospace;
+  --r:4px;--r-lg:6px;--shadow-sm:0 1px 2px rgba(0,0,0,.08);--shadow:0 4px 16px rgba(0,0,0,.14);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:var(--font);color:var(--gray-9);background:var(--canvas);line-height:1.7;font-size:14px}
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px 120px}
+h1,h2,h3,h4{font-weight:700;line-height:1.35;color:var(--indigo-d)}
+h2{font-size:20px;margin:34px 0 14px;padding-bottom:8px;border-bottom:2px solid var(--linen-d)}
+h3{font-size:16px;margin:22px 0 10px}
+h4{font-size:14px;margin:14px 0 8px;color:var(--indigo)}
+p{margin:8px 0}
+a{color:var(--rust-d)}
+code{font-family:var(--font-mono);background:var(--gray-0);padding:1px 5px;border-radius:3px;font-size:13px;color:var(--rust-d)}
+small{color:var(--gray-5)}
+
+/* topbar */
+.topbar{position:sticky;top:0;z-index:30;background:var(--indigo);color:#fff;border-bottom:3px solid var(--rust);box-shadow:var(--shadow-sm)}
+.topbar-in{max-width:1080px;margin:0 auto;padding:9px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.topbar .ttl{font-weight:700;font-size:15px;margin-right:auto;display:flex;align-items:center;gap:8px}
+.topbar .ttl small{color:#cdd8e6;font-weight:400}
+.tb-stat{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:#dde6f0}
+.tb-stat b{color:#fff}
+.tb-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.mode-tag{font-size:11px;padding:2px 8px;border-radius:20px;background:rgba(255,255,255,.14);color:#eaf0f7;white-space:nowrap}
+
+/* buttons */
+.btn{font-family:inherit;font-size:13px;border:1px solid transparent;border-radius:var(--r);padding:6px 12px;cursor:pointer;background:var(--gray-0);color:var(--gray-9);display:inline-flex;align-items:center;gap:5px;line-height:1.4;transition:.12s}
+.btn:hover{filter:brightness(.97)}
+.btn:active{transform:translateY(1px)}
+.btn-p{background:var(--indigo-l);color:#fff;border-color:var(--indigo-l)}
+.btn-c{background:var(--rust);color:#fff;border-color:var(--rust)}
+.btn-c:hover{background:var(--rust-d)}
+.btn-g{background:#fff;color:var(--vermilion);border-color:var(--vermilion)}
+.btn-s{background:#fff;color:var(--indigo);border-color:var(--gray-2)}
+.btn-ghost{background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.3)}
+.btn-ghost:hover{background:rgba(255,255,255,.22)}
+.btn-sm{padding:3px 9px;font-size:12px}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.btn-save{position:relative}
+.btn-save .dot{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--teal)}
+.btn-save.dirty .dot{background:var(--amber)}
+.btn-save.fail .dot{background:var(--vermilion)}
+.btn-save.busy .dot{background:#fff;animation:spin 1s linear infinite;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;background:transparent}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* alerts */
+.alert{border-radius:var(--r-lg);padding:12px 16px;margin:16px 0;border-left:4px solid;font-size:13px}
+.alert-i{background:#eef3fa;border-color:var(--indigo-l);color:var(--indigo-d)}
+.alert-w{background:#fbf3e3;border-color:var(--amber);color:#7a5a14}
+.alert-e{background:#fbecec;border-color:var(--vermilion);color:#8a2b2d}
+.alert h4{margin:0 0 6px}
+.alert ol{margin:6px 0 0;padding-left:20px}
+.alert .a-close{float:right;cursor:pointer;color:var(--gray-5);font-size:18px;line-height:1;margin-left:10px}
+
+/* tables */
+.table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px;background:#fff;box-shadow:var(--shadow-sm);border-radius:var(--r);overflow:hidden}
+.table th,.table td{border:1px solid var(--gray-1);padding:8px 10px;text-align:left;vertical-align:top}
+.table th{background:var(--indigo);color:#fff;font-weight:600}
+.table tbody tr:nth-child(even){background:var(--gray-0)}
+.table tbody tr:hover{background:var(--linen)}
+
+/* cards */
+.card{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);padding:14px 16px;margin:12px 0;box-shadow:var(--shadow-sm)}
+.module-card{position:relative;border-left:4px solid var(--indigo-l)}
+.module-card.tbd{border-left-color:var(--amber)}
+.module-card h3{margin-top:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.module-meta{font-size:12px;color:var(--gray-5);margin:2px 0 8px}
+.module-card ul{margin:6px 0;padding-left:18px}
+.module-card li{margin:3px 0}
+.pin-badge{font-size:11px;background:var(--rust);color:#fff;border-radius:20px;padding:1px 8px;cursor:pointer}
+.btn-addreq{margin-left:auto}
+
+/* flow box */
+.flow-box{font-family:var(--font-mono);white-space:pre;overflow-x:auto;background:var(--indigo-d);color:#e8eef5;padding:14px 16px;border-radius:var(--r-lg);font-size:12.5px;line-height:1.55;margin:10px 0;box-shadow:var(--shadow-sm)}
+
+/* badges */
+.badge{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:20px;line-height:1.6;white-space:nowrap}
+.badge-i{background:#e3ecf7;color:var(--indigo)}
+.badge-e{background:#fbe3e3;color:var(--vermilion)}
+.badge-w{background:#fbeccd;color:var(--amber)}
+.badge-s{background:#e0efe9;color:var(--teal)}
+.badge-g{background:var(--gray-1);color:var(--gray-6)}
+
+/* anchors / annotation */
+[data-anchor]{position:relative}
+body.anno-on [data-anchor]{outline:1px dashed rgba(209,122,64,.45);outline-offset:3px;border-radius:3px}
+body.anno-on [data-anchor]:hover{outline:1px solid var(--rust)}
+.anno-icon{position:absolute;top:-10px;right:-10px;width:24px;height:24px;border-radius:50%;background:var(--rust);color:#fff;border:none;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-sm);z-index:5}
+.anno-icon.has{background:var(--vermilion)}
+.has-note-badge{display:inline-flex;align-items:center;gap:3px;font-size:11px;color:var(--vermilion);font-weight:600;margin-left:6px}
+.flash{animation:flash 1.3s ease}
+@keyframes flash{0%,100%{background:transparent}25%{background:var(--linen)}}
+
+/* decisions */
+.dz-row{display:grid;grid-template-columns:1fr 220px;gap:0;background:#fff;border:1px solid var(--gray-1);border-left:4px solid var(--gray-3);border-radius:var(--r);margin:10px 0;box-shadow:var(--shadow-sm);overflow:hidden}
+.dz-row.agree{border-left-color:var(--teal)}
+.dz-row.modify{border-left-color:var(--rust)}
+.dz-main{padding:12px 14px}
+.dz-main .dz-id{font-weight:700;color:var(--indigo);margin-right:6px}
+.dz-main .dz-topic{font-weight:600}
+.dz-main .dz-prop{margin:6px 0;color:var(--gray-7)}
+.dz-main .dz-basis{font-size:12px;color:var(--gray-5)}
+.dz-act{border-left:1px solid var(--gray-1);padding:12px;background:var(--gray-0);display:flex;flex-direction:column;gap:8px}
+.chips{display:flex;gap:6px}
+.chip{flex:1;font-family:inherit;font-size:12.5px;border:1px solid var(--gray-2);background:#fff;border-radius:20px;padding:5px 0;cursor:pointer;text-align:center;transition:.12s}
+.chip[aria-checked="true"][data-choice="agree"]{background:var(--teal);color:#fff;border-color:var(--teal)}
+.chip[aria-checked="true"][data-choice="modify"]{background:var(--rust);color:#fff;border-color:var(--rust)}
+.dz-comment textarea{width:100%}
+.dz-comment.invalid textarea{border-color:var(--vermilion);box-shadow:0 0 0 2px rgba(192,64,66,.18)}
+.dz-state{font-size:11px;color:var(--gray-5)}
+
+textarea,input[type=text],select{font-family:inherit;font-size:13px;border:1px solid var(--gray-2);border-radius:var(--r);padding:6px 8px;background:#fff;color:var(--gray-9);width:100%}
+textarea{resize:vertical;min-height:42px;line-height:1.6}
+textarea:focus,input:focus,select:focus{outline:none;border-color:var(--indigo-l);box-shadow:0 0 0 2px rgba(44,81,128,.16)}
+label{font-size:12px;color:var(--gray-6);display:block;margin:8px 0 3px}
+
+/* questions */
+.q-group{margin:14px 0}
+.q-group h4{display:flex;align-items:center;gap:8px}
+.q-row{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r);padding:10px 12px;margin:8px 0;box-shadow:var(--shadow-sm)}
+.q-row.p0{border-left:4px solid var(--vermilion)}
+.q-row.p0.unanswered{background:#fdf4f4}
+.q-head{display:flex;align-items:flex-start;gap:8px;margin-bottom:6px}
+.q-text{font-weight:600;flex:1}
+.q-flag{font-size:11px;color:var(--gray-4);white-space:nowrap}
+.q-flag.done{color:var(--teal)}
+
+/* requirements */
+.req-zone{margin-top:16px}
+.req-group{margin:10px 0}
+.req-group .rg-h{font-weight:600;color:var(--indigo);font-size:13px;margin:10px 0 4px;border-bottom:1px dashed var(--gray-2);padding-bottom:3px}
+.req-item{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r);padding:10px 12px;margin:6px 0;box-shadow:var(--shadow-sm);position:relative}
+.req-item .ri-title{font-weight:600}
+.req-item .ri-detail{font-size:13px;color:var(--gray-7);margin:4px 0;white-space:pre-wrap}
+.req-item .ri-meta{font-size:11px;color:var(--gray-5);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.req-item .ri-act{position:absolute;top:8px;right:8px;display:flex;gap:6px}
+.req-empty{color:var(--gray-4);font-size:13px;padding:8px}
+
+/* modal & drawer */
+.mask{position:fixed;inset:0;background:rgba(21,42,69,.45);display:none;z-index:60;align-items:center;justify-content:center;padding:20px}
+.mask.open{display:flex}
+.modal{background:#fff;border-radius:var(--r-lg);width:520px;max-width:100%;max-height:88vh;overflow:auto;box-shadow:var(--shadow);animation:pop .15s}
+@keyframes pop{from{transform:translateY(8px);opacity:.6}to{transform:none;opacity:1}}
+.modal-h{padding:13px 18px;border-bottom:1px solid var(--gray-1);font-weight:700;color:var(--indigo-d);display:flex;align-items:center;justify-content:space-between}
+.modal-h .x{cursor:pointer;color:var(--gray-5);font-size:20px;line-height:1}
+.modal-b{padding:16px 18px}
+.modal-f{padding:12px 18px;border-top:1px solid var(--gray-1);display:flex;gap:8px;justify-content:flex-end;background:var(--gray-0)}
+.target-label{font-size:12px;color:var(--gray-6);background:var(--gray-0);border-radius:var(--r);padding:6px 10px;margin-bottom:6px}
+.target-quote{font-size:12px;color:var(--gray-5);font-style:italic;margin-bottom:10px;border-left:2px solid var(--gray-2);padding-left:8px}
+.anno-list{margin-bottom:12px}
+.anno-li{border:1px solid var(--gray-1);border-radius:var(--r);padding:8px 10px;margin:6px 0;background:var(--gray-0)}
+.anno-li .al-text{white-space:pre-wrap;font-size:13px}
+.anno-li .al-meta{font-size:11px;color:var(--gray-5);margin-top:4px;display:flex;gap:8px;align-items:center}
+
+.drawer{position:fixed;top:0;right:0;bottom:0;width:400px;max-width:92vw;background:var(--canvas);box-shadow:var(--shadow);transform:translateX(100%);transition:transform .22s;z-index:70;display:flex;flex-direction:column}
+.drawer.open{transform:none}
+.drawer-h{padding:13px 16px;background:var(--indigo);color:#fff;font-weight:700;display:flex;align-items:center;justify-content:space-between}
+.drawer-h .x{cursor:pointer;font-size:20px;line-height:1}
+.drawer-tabs{display:flex;border-bottom:1px solid var(--gray-1);background:#fff}
+.drawer-tabs button{flex:1;border:none;background:none;padding:9px 4px;cursor:pointer;font-family:inherit;font-size:12.5px;color:var(--gray-6);border-bottom:2px solid transparent}
+.drawer-tabs button.on{color:var(--indigo);border-bottom-color:var(--rust);font-weight:600}
+.drawer-b{flex:1;overflow:auto;padding:12px 14px}
+.sum-item{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r);padding:9px 11px;margin:7px 0;cursor:pointer;box-shadow:var(--shadow-sm)}
+.sum-item:hover{border-color:var(--rust)}
+.sum-item .si-anchor{font-size:11px;color:var(--indigo-l);font-weight:600;margin-bottom:3px}
+.sum-item .si-body{font-size:13px;white-space:pre-wrap}
+.sum-item .si-meta{font-size:11px;color:var(--gray-5);margin-top:3px}
+.sum-orphan{border-color:var(--vermilion)!important}
+.sum-h{font-size:12px;font-weight:700;color:var(--gray-6);margin:12px 0 4px;text-transform:uppercase;letter-spacing:.5px}
+.sum-empty{color:var(--gray-4);font-size:13px;padding:10px}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--indigo-d);color:#fff;padding:10px 18px;border-radius:24px;font-size:13px;box-shadow:var(--shadow);z-index:90;max-width:80vw}
+
+.foot{margin-top:40px;padding-top:16px;border-top:1px solid var(--gray-1);color:var(--gray-5);font-size:12px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--gray-6);margin:8px 0}
+.legend span{display:inline-flex;align-items:center;gap:4px}
+.swatch{width:12px;height:12px;border-radius:3px;display:inline-block}
+
+@media (max-width:720px){
+  .dz-row{grid-template-columns:1fr}
+  .dz-act{border-left:none;border-top:1px solid var(--gray-1)}
+  .drawer{width:100%}
+}
+@media print{
+  .topbar,.anno-icon,.drawer,.mask,.toast,.btn,.btn-addreq,.pin-badge,.a-close,.print-hide{display:none!important}
+  body{background:#fff}
+  .wrap{padding:0}
+  .flow-box{background:#fff;color:#000;border:1px solid #999;font-size:10px}
+  .table,.card,.dz-row,.q-row,.req-item{break-inside:avoid;box-shadow:none}
+  .dz-act{background:#fff}
+  #print-summary{display:block!important}
+}
+#print-summary{display:none}
+</style>
+</head>
+<body class="">
+
+<div class="topbar">
+  <div class="topbar-in">
+    <div class="ttl">🧵 订单及下游模块·总体架构蓝图 <small>v0.1 · 评审版</small></div>
+    <div class="tb-stat" id="tbStat">
+      <span>批注 <b id="stAnno">2</b></span>
+      <span>决策 <b id="stDz">7</b>/7</span>
+      <span>问题 <b id="stQ">0</b>/11</span>
+      <span>补充 <b id="stReq">0</b></span>
+    </div>
+    <div class="tb-actions">
+      <span class="mode-tag" id="modeTag">就地保存可用</span>
+      <button class="btn btn-ghost btn-sm" id="btnAnno" onclick="toggleAnnoMode()">💬 批注模式：开</button>
+      <button class="btn btn-ghost btn-sm" id="btnLink" onclick="associateFile()" style="">🔗 关联此文件</button>
+      <button class="btn btn-ghost btn-sm" onclick="openSummary()">📋 评审汇总</button>
+      <button class="btn btn-ghost btn-sm" onclick="exportMd()">📥 导出</button>
+      <button class="btn btn-ghost btn-sm" onclick="window.print()">🖨 打印</button>
+      <button class="btn btn-c btn-save" id="btnSave" onclick="save()"><span class="dot"></span><span id="saveLabel">保存</span></button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="alert alert-i" id="guideCard">
+    <span class="a-close" onclick="dismissGuide()" title="关闭">×</span>
+    <h4>📖 使用说明（评审型蓝图）</h4>
+    <ol>
+      <li><b>加批注</b>：点右上「💬 批注模式」开启 → 任意区块右上角出现 💬，点它写批注（可改可删）。</li>
+      <li><b>回答问题</b>：第 5 节「决策表 D1–D7」逐条选「同意/修改」；第 6 节「待确认问题」逐条填回答；也可给任意模块「补充需求」。</li>
+      <li><b>保存</b>：点右上「💾 保存」。<span id="guideSaveTip">当前可直接写回原文件(首次保存会让你选中原文件覆盖)。</span>所有内容都嵌在 HTML 里，把文件发给别人也带着数据。</li>
+    </ol>
+    <label style="display:inline-flex;align-items:center;gap:5px;margin-top:6px;color:inherit"><input type="checkbox" id="guideNever" style="width:auto"> 不再显示</label>
+  </div>
+
+  <p style="color:var(--gray-6)">本页是 <code>订单及下游模块_总体架构蓝图_v0.1.md</code> 的可评审版本，供业务方<b>逐条确认决策、回答待定问题、补充需求并批注</b>。标记约定：<span class="badge badge-i">建议</span> 我方默认方案 · <span class="badge badge-w">待确认</span> 需业务拍板 · <span class="badge badge-g">待细化</span> 信息不足后补。</p>
+
+  <!-- 0 -->
+  <h2 id="s0">0. 范围与约定</h2>
+  <div class="card" data-anchor="sec0-scope" data-anno-label="第0节 · 范围与约定">
+    <ul>
+      <li><b>新增模块</b>：④订单、⑤材料合同、⑤′生产加工合同、⑥供应商协同门户、⑦对账-开票-付款、⑧大货资料/生产、⑨船务资料。</li>
+      <li><b>复用既有规则</b>：编号前缀风格(S-/Q-)、串流程三约束(实时同步 / 快照锁定 / 引用禁删)、机密与金额权限分层。</li>
+      <li><b>标记</b>：<span class="badge badge-i">建议</span> = 基于现有系统惯例的默认方案；<span class="badge badge-w">待确认</span> = 需业务方拍板；<span class="badge badge-g">待细化</span> = 本轮信息不足、后续补需求。</li>
+    </ul>
+  </div>
+
+  <!-- 1 -->
+  <h2 id="s1">1. 系统全景</h2>
+  <h3>1.1 模块地图与主流程</h3>
+  <pre class="flow-box" data-anchor="sec1-flowmap" data-anno-label="第1.1节 · 模块地图与主流程图">已完成   ①基础资料(工厂/客户/字典)   ②样衣管理   ③客户报价
+                                                    │ 一键导入(报价已生效)
+                                                    ▼
+                                          ④ 订单(大货下单)  [O-YYYYMMDD-序号]
+   报价带入:款号/单品单价/约定交期/报价件数/正反面图(可改) · 自动带材料明细
+   补录:客户PO号 · 各尺码订货数量(优先 Excel 导入)· 大货总数量
+   附件:彩稿 / 大货尺寸表 / 大货纸板 / 包装资料
+   用料核算:大货总数 × 单件耗用 × (1+损耗 3%↕),结果可微调;可按【分色/分码】拆分
+                                                    │
+                    ┌───────────────────────────────┴───────────────────────────────┐
+                    ▼  分支A · 材料采购线                                              ▼  分支B · 生产加工线
+              ⑤ 材料合同  [HT-…]                                            ⑤′ 生产加工合同  [HT-…]
+              选材料供应商 + 多选款号                                          选加工厂 + 多选款号
+              带入材料明细(按分色/分码出表)                                    带入款式/数量/交期 + 填单价 → 总价
+              数量取④用料核算结果                                              + 价格包含项(线/税/胶袋/纸箱/运费/其他)
+                    │ 推送供应商                                                    │ 推送工厂
+                    │                                                              ├─▶ ⑧大货资料 → 生产进度 → ⑨船务资料(内部生产跟踪)
+                    └──────────────────────────┬───────────────────────────────────┘
+                                               ▼
+                            ⑥ 供应商协同门户(账号 / 微信小程序登录,只见自己的合同)
+                               🔖我要盖章 → 📦我要发货 → 🧾我要对账 → 💵我要开票
+                               (前一步未完成,后续按钮锁定不可点)
+                               · 盖章:一键带电子章 / 上传纸质盖章合同照片
+                               · 发货:数量明细 + 物流信息 + 附件(包装/清单)
+                               · 对账:合同单价 × 发货数量 → 对账单 → 勾选确认 → 推业务审批
+                               · 开票:上传 PDF 发票 + 配对账明细 → 推财务
+                                               │
+                                               ▼
+                            ⑦ 业务审批 → 财务付款申请 → 付款</pre>
+
+  <h3>1.2 角色</h3>
+  <table class="table" data-anchor="sec1-roles" data-anno-label="第1.2节 · 角色表">
+    <thead><tr><th>角色</th><th>所在端</th><th>职责</th></tr></thead>
+    <tbody>
+      <tr><td>业务员</td><td>内部</td><td>建订单、建合同、推送供应商、审批对账</td></tr>
+      <tr><td>业务主管</td><td>内部</td><td>合同 / 对账审批(若启用)</td></tr>
+      <tr><td>财务</td><td>内部</td><td>接收付款申请、付款;只读金额</td></tr>
+      <tr><td>供应商 / 加工厂</td><td>外部门户</td><td>盖章 → 发货 → 对账 → 开票;只见自己合同</td></tr>
+    </tbody>
+  </table>
+
+  <!-- 2 -->
+  <h2 id="s2">2. 模块清单</h2>
+
+  <div class="card module-card" data-anchor="mod-4-order" data-anno-label="模块 ④ 订单">
+    <h3>④ 订单(主线核心) <button class="btn btn-s btn-sm btn-addreq" onclick="openReqModal(null,'M4')">＋ 补充需求</button> <span class="pin-badge" data-pin="M4" style="display:none"></span></h3>
+    <div class="module-meta">编号【建议】<code>O-YYYYMMDD-序号</code> · 数据来源:从③客户报价【一键导入】</div>
+    <p><b>定位</b>:报价生效后正式下大货订单,是材料采购与生产加工的共同源头。</p>
+    <p><b>字段分组</b>:</p>
+    <ul>
+      <li><b>基础信息</b>:款号、单品单价、约定交期、报价件数、正反面图片(报价带入、可改);客户 PO 号(手录);大货总数量(【建议】=各尺码订货数之和)。</li>
+      <li><b>尺码数量搭配</b>:尺码 × 数量;启用分色则为 尺码 × 颜色 配比矩阵。<b>优先 Excel 批量导入</b>(固定模板、校验、异常弹窗)。</li>
+      <li><b>附件档案</b>:彩稿 / 大货尺寸表 / 大货纸板 / 包装资料,多文件上传/预览/下载/替换。</li>
+      <li><b>材料明细</b>:从报价自动带入(部位/品名/门幅/颜色/供应商/单位/单件耗用),无需手工新增。</li>
+      <li><b>用料核算</b>:<code>单料订货量 = 大货总数 × 单件耗用 × (1+损耗率)</code>;损耗默认 3%、单料/整单可调;结果可手动微调;支持【分色/分码】拆分(整单统一或个别物料单独设置)。</li>
+    </ul>
+    <p style="margin:6px 0 0;color:var(--gray-6)"><b>下游</b>:材料明细 + 用料 → ⑤材料合同;款式/数量/交期 → ⑤′生产加工合同。</p>
+  </div>
+
+  <div class="card module-card" data-anchor="mod-5-material" data-anno-label="模块 ⑤ 材料合同">
+    <h3>⑤ 材料合同(分支A) <button class="btn btn-s btn-sm btn-addreq" onclick="openReqModal(null,'M5')">＋ 补充需求</button> <span class="pin-badge" data-pin="M5" style="display:none"></span></h3>
+    <div class="module-meta">编号【建议】<code>HT-YYYYMMDD-序号</code> + 类型字段 · 下游:推送供应商 → ⑥门户</div>
+    <p><b>定位</b>:向材料供应商采购面辅料的采购合同。</p>
+    <ul>
+      <li><b>构成</b>:基础合同模板(甲乙方/通用条款,大部分固定)+ 材料明细表 + 合计。</li>
+      <li><b>操作</b>:新建 → 选材料供应商 → 多选款号 → 自动带入对应材料明细(按④设定的分色/分码出表)→ 录单价生成金额。</li>
+    </ul>
+  </div>
+
+  <div class="card module-card" data-anchor="mod-5p-process" data-anno-label="模块 ⑤′ 生产加工合同">
+    <h3>⑤′ 生产加工合同(分支B) <button class="btn btn-s btn-sm btn-addreq" onclick="openReqModal(null,'M5p')">＋ 补充需求</button> <span class="pin-badge" data-pin="M5p" style="display:none"></span></h3>
+    <div class="module-meta">下游:推送工厂 → ⑥门户;并触发 ⑧大货资料/生产/⑨船务 内部跟踪</div>
+    <p><b>定位</b>:向加工厂下大货生产的加工合同。</p>
+    <ul>
+      <li><b>操作</b>:新建 → 选加工厂 → 多选款号 → 自动带入款式/数量/交期 → 填单价生成总价 → 勾选价格包含项(线/税/胶袋/纸箱/运费/其他「其他手动录入」)。</li>
+    </ul>
+  </div>
+
+  <div class="card module-card" data-anchor="mod-6-portal" data-anno-label="模块 ⑥ 供应商协同门户">
+    <h3>⑥ 供应商协同门户(对外端) <button class="btn btn-s btn-sm btn-addreq" onclick="openReqModal(null,'M6')">＋ 补充需求</button> <span class="pin-badge" data-pin="M6" style="display:none"></span></h3>
+    <div class="module-meta">登录【建议】微信小程序 + H5 · 账号与①工厂资料绑定 ·「推送供应商」= 生成专属链接/通知</div>
+    <p><b>定位</b>:面向外部供应商/加工厂的协同端,登录后只见与自己相关的全部合同。</p>
+    <p><b>按钮流(顺序锁定,前序未完成则后续禁用)</b>:</p>
+    <ul>
+      <li><b>🔖 我要盖章</b>:一键带入自己上传的电子章 / 上传纸质盖章合同照片。(所有合同第一步)</li>
+      <li><b>📦 我要发货</b>:填发货明细(数量明细 + 物流信息)+ 上传附件(包装/清单)。</li>
+      <li><b>🧾 我要对账</b>:系统按 <code>合同单价 × 已发货数量</code> 生成对账单 → 勾选确认 → 推送业务审批。</li>
+      <li><b>💵 我要开票</b>:上传 PDF 发票 + 配套对应对账明细 → 推送财务。</li>
+    </ul>
+  </div>
+
+  <div class="card module-card" data-anchor="mod-7-finance" data-anno-label="模块 ⑦ 对账-开票-付款">
+    <h3>⑦ 对账 - 开票 - 付款(内部财务闭环) <button class="btn btn-s btn-sm btn-addreq" onclick="openReqModal(null,'M7')">＋ 补充需求</button> <span class="pin-badge" data-pin="M7" style="display:none"></span></h3>
+    <ul>
+      <li>业务审批对账单 → 通过后供应商方可开票 → 财务接收开票 → 生成付款申请 → 付款。</li>
+      <li><b>发票校验</b>【建议】:发票金额 = 对账金额(沿用②样衣「发票=对账金额」规则)。</li>
+    </ul>
+  </div>
+
+  <div class="card module-card tbd" data-anchor="mod-8-bulk" data-anno-label="模块 ⑧ 大货资料/生产">
+    <h3>⑧ 大货资料 / 生产 <span class="badge badge-w">待细化</span> <button class="btn btn-s btn-sm btn-addreq" onclick="openReqModal(null,'M8')">＋ 补充需求</button> <span class="pin-badge" data-pin="M8" style="display:none"></span></h3>
+    <p>生产加工线特有:推送工厂后生成大货生产资料包,跟踪生产进度。本轮信息不足,后续补需求。</p>
+  </div>
+
+  <div class="card module-card tbd" data-anchor="mod-9-shipping" data-anno-label="模块 ⑨ 船务资料">
+    <h3>⑨ 船务资料 <span class="badge badge-w">待细化</span> <button class="btn btn-s btn-sm btn-addreq" onclick="openReqModal(null,'M9')">＋ 补充需求</button> <span class="pin-badge" data-pin="M9" style="display:none"></span></h3>
+    <p>出货 / 物流 / 报关等,生产完成后接财务。本轮信息不足,后续补需求。</p>
+  </div>
+
+  <!-- 3 -->
+  <h2 id="s3">3. 端到端数据流</h2>
+  <h3>3.1 字段流转</h3>
+  <pre class="flow-box" data-anchor="sec3-fieldflow" data-anno-label="第3.1节 · 字段流转图">③报价单 ──导入──▶ ④订单 ──────┬──▶ ⑤材料合同  ─推送─▶ ⑥门户 ─对账─▶ ⑦付款
+  款号/单价              款号/单价/交期    └──▶ ⑤′加工合同 ─推送─▶ ⑥门户 ─对账─▶ ⑦付款
+  件数                  PO号/尺码数量
+  正反面图              附件(彩稿等)
+  材料明细 ───────────▶ 材料明细 ─用料核算─▶ 材料订货量 ─▶ 材料合同明细数量
+  (报价耗用=单件耗用)</pre>
+
+  <h3>3.2 用料核算公式链</h3>
+  <div class="card" data-anchor="sec3-formula" data-anno-label="第3.2节 · 用料核算公式链">
+    <ul>
+      <li><b>不拆分</b>:<code>某料订货量 = 大货总数 × 单件耗用 × (1 + 损耗率)</code></li>
+      <li><b>按分码(模式1)</b>:<code>某尺码该料量 = 该尺码订货数 × 单件耗用 × (1 + 损耗率)</code>,各尺码分别出行。</li>
+      <li><b>按分色(模式2)</b>:<code>某颜色该料量 = 该色配比数 × 单件耗用 × (1 + 损耗率)</code>,各颜色分别出行。</li>
+      <li>损耗默认 3%(单料/整单可调);各料合计 → 可手动微调最终采购数量;明细可导出用料汇总表。</li>
+    </ul>
+  </div>
+
+  <h3>3.3 对账金额链</h3>
+  <div class="card" data-anchor="sec3-reconcile" data-anno-label="第3.3节 · 对账金额链">
+    <code>对账单金额 = Σ(合同单价 × 该次发货数量)</code>;多次发货累计对账;审批通过后允许开票;<code>付款申请金额 = 对账/发票金额</code>。
+  </div>
+
+  <!-- 4 -->
+  <h2 id="s4">4. 贯穿性规则</h2>
+  <table class="table">
+    <thead><tr><th style="width:140px">规则</th><th>内容【建议】</th></tr></thead>
+    <tbody>
+      <tr data-anchor="sec4-rule-numbering" data-anno-label="第4.1节 · 编号体系"><td>4.1 编号体系</td><td>订单 <code>O-YYYYMMDD-序号</code> · 材料/加工合同 <code>HT-YYYYMMDD-序号</code>+类型字段 · 对账单/付款申请/发货单【待定】。延续 样衣 S- / 报价 Q- 前缀风格。</td></tr>
+      <tr data-anchor="sec4-rule-3constraint" data-anno-label="第4.2节 · 串流程三约束"><td>4.2 串流程三约束</td><td><b>实时同步</b>:上游「草稿/未推送」时改动同步到下游;<b>快照锁定</b>:报价改不反向同步已生成订单、订单改不同步已推送合同;<b>引用禁删</b>:已生成下游单据的订单/合同禁删(延续 C2/C3/A6)。</td></tr>
+      <tr data-anchor="sec4-rule-perm" data-anno-label="第4.3节 · 权限分层"><td>4.3 权限分层</td><td>供应商门户:只见自己合同、自己的单价/金额(隔离对外端);财务:可见金额、只读;仓库/生产侧不可见单价。</td></tr>
+      <tr data-anchor="sec4-rule-lock" data-anno-label="第4.4节 · 按钮顺序锁定"><td>4.4 按钮顺序锁定</td><td>门户 <code>🔖盖章 → 📦发货 → 🧾对账 → 💵开票</code>,前一步未完成则后续按钮 disabled。</td></tr>
+    </tbody>
+  </table>
+
+  <!-- 5 -->
+  <h2 id="s5">5. 关键设计决策表 D1–D7　<span class="badge badge-e">请逐条表态</span></h2>
+  <p style="color:var(--gray-6)">每条左列是我方<b>建议方案</b>,右列请选「<b>同意</b>」或「<b>修改</b>」(选修改请填具体意见)。已表态 <b id="dzProg">7</b>/7。</p>
+  <div id="dzList"><div class="dz-row agree" data-anchor="sec5-row-D1" data-did="D1" data-anno-label="决策 D1 · 两类合同 ↔ 门户"><div class="dz-main"><div><span class="dz-id">D1</span><span class="dz-topic">两类合同 ↔ 门户</span></div><div class="dz-prop">生产加工合同 + 材料合同共用同一套门户(盖章→发货→对账→开票);大货资料/船务是生产线平行的内部跟踪</div><div class="dz-basis">依据:你说「所有合同第一步都要盖章」</div></div><div class="dz-act"><div class="chips" role="radiogroup" aria-label="D1 决策"><button class="chip" role="radio" aria-checked="true" data-choice="agree" onclick="setDecision('D1','agree')">☑ 同意</button><button class="chip" role="radio" aria-checked="false" data-choice="modify" onclick="setDecision('D1','modify')">✎ 修改</button></div><div class="dz-comment" hidden=""><textarea placeholder="请填写修改意见…" oninput="onDzComment('D1',this.value)"></textarea></div><div class="dz-state" id="dzst-D1" style="color: var(--teal);">✓ 同意</div></div></div><div class="dz-row agree" data-anchor="sec5-row-D2" data-did="D2" data-anno-label="决策 D2 · 订单 ↔ 合同 关系"><div class="dz-main"><div><span class="dz-id">D2</span><span class="dz-topic">订单 ↔ 合同 关系</span></div><div class="dz-prop">多对多:订单材料按供应商拆成多张材料合同,一张合同可多选款号;材料合同数量直接取④用料核算结果</div><div class="dz-basis">依据:你说合同「款号需可多选」</div></div><div class="dz-act"><div class="chips" role="radiogroup" aria-label="D2 决策"><button class="chip" role="radio" aria-checked="true" data-choice="agree" onclick="setDecision('D2','agree')">☑ 同意</button><button class="chip" role="radio" aria-checked="false" data-choice="modify" onclick="setDecision('D2','modify')">✎ 修改</button></div><div class="dz-comment" hidden=""><textarea placeholder="请填写修改意见…" oninput="onDzComment('D2',this.value)"></textarea></div><div class="dz-state" id="dzst-D2" style="color: var(--teal);">✓ 同意</div></div></div><div class="dz-row agree" data-anchor="sec5-row-D3" data-did="D3" data-anno-label="决策 D3 · 门户形态"><div class="dz-main"><div><span class="dz-id">D3</span><span class="dz-topic">门户形态</span></div><div class="dz-prop">面向外部的微信小程序 + H5 独立端,账号绑①工厂资料,「推送」= 生成专属链接/通知</div><div class="dz-basis">依据:你说「最好微信小程序登录」</div></div><div class="dz-act"><div class="chips" role="radiogroup" aria-label="D3 决策"><button class="chip" role="radio" aria-checked="true" data-choice="agree" onclick="setDecision('D3','agree')">☑ 同意</button><button class="chip" role="radio" aria-checked="false" data-choice="modify" onclick="setDecision('D3','modify')">✎ 修改</button></div><div class="dz-comment" hidden=""><textarea placeholder="请填写修改意见…" oninput="onDzComment('D3',this.value)"></textarea></div><div class="dz-state" id="dzst-D3" style="color: var(--teal);">✓ 同意</div></div></div><div class="dz-row agree" data-anchor="sec5-row-D4" data-did="D4" data-anno-label="决策 D4 · 快照 / 禁删沿用"><div class="dz-main"><div><span class="dz-id">D4</span><span class="dz-topic">快照 / 禁删沿用</span></div><div class="dz-prop">订单改不同步已推送合同;被引用的订单/合同禁删</div><div class="dz-basis">依据:沿用现有串流程约束</div></div><div class="dz-act"><div class="chips" role="radiogroup" aria-label="D4 决策"><button class="chip" role="radio" aria-checked="true" data-choice="agree" onclick="setDecision('D4','agree')">☑ 同意</button><button class="chip" role="radio" aria-checked="false" data-choice="modify" onclick="setDecision('D4','modify')">✎ 修改</button></div><div class="dz-comment" hidden=""><textarea placeholder="请填写修改意见…" oninput="onDzComment('D4',this.value)"></textarea></div><div class="dz-state" id="dzst-D4" style="color: var(--teal);">✓ 同意</div></div></div><div class="dz-row modify" data-anchor="sec5-row-D5" data-did="D5" data-anno-label="决策 D5 · 物料编码 vs 品名"><div class="dz-main"><div><span class="dz-id">D5</span><span class="dz-topic">物料编码 vs 品名</span></div><div class="dz-prop">沿用品名文本,不重建料库(③报价材料无编码)</div><div class="dz-basis">依据:v1.0 已取消面料库</div></div><div class="dz-act"><div class="chips" role="radiogroup" aria-label="D5 决策"><button class="chip" role="radio" aria-checked="false" data-choice="agree" onclick="setDecision('D5','agree')">☑ 同意</button><button class="chip" role="radio" aria-checked="true" data-choice="modify" onclick="setDecision('D5','modify')">✎ 修改</button></div><div class="dz-comment"><textarea placeholder="请填写修改意见…" oninput="onDzComment('D5',this.value)"></textarea></div><div class="dz-state" id="dzst-D5" style="color: var(--rust);">✎ 要求修改</div></div></div><div class="dz-row agree" data-anchor="sec5-row-D6" data-did="D6" data-anno-label="决策 D6 · 大货总数来源"><div class="dz-main"><div><span class="dz-id">D6</span><span class="dz-topic">大货总数来源</span></div><div class="dz-prop">= 各尺码订货数之和(可能 ≠ 报价件数)</div><div class="dz-basis">依据:用料核算需要实际下单数</div></div><div class="dz-act"><div class="chips" role="radiogroup" aria-label="D6 决策"><button class="chip" role="radio" aria-checked="true" data-choice="agree" onclick="setDecision('D6','agree')">☑ 同意</button><button class="chip" role="radio" aria-checked="false" data-choice="modify" onclick="setDecision('D6','modify')">✎ 修改</button></div><div class="dz-comment" hidden=""><textarea placeholder="请填写修改意见…" oninput="onDzComment('D6',this.value)"></textarea></div><div class="dz-state" id="dzst-D6" style="color: var(--teal);">✓ 同意</div></div></div><div class="dz-row agree" data-anchor="sec5-row-D7" data-did="D7" data-anno-label="决策 D7 · 分色/分码的数据基础"><div class="dz-main"><div><span class="dz-id">D7</span><span class="dz-topic">分色/分码的数据基础</span></div><div class="dz-prop">需先录入「尺码 × 颜色」配比矩阵;Excel 导入的就是这张矩阵</div><div class="dz-basis">依据:拆分核算依赖配比</div></div><div class="dz-act"><div class="chips" role="radiogroup" aria-label="D7 决策"><button class="chip" role="radio" aria-checked="true" data-choice="agree" onclick="setDecision('D7','agree')">☑ 同意</button><button class="chip" role="radio" aria-checked="false" data-choice="modify" onclick="setDecision('D7','modify')">✎ 修改</button></div><div class="dz-comment" hidden=""><textarea placeholder="请填写修改意见…" oninput="onDzComment('D7',this.value)"></textarea></div><div class="dz-state" id="dzst-D7" style="color: var(--teal);">✓ 同意</div></div></div></div>
+
+  <!-- 6 -->
+  <h2 id="s6">6. 待确认问题清单　<span class="badge badge-e">请逐条回答</span></h2>
+  <p style="color:var(--gray-6)">P0 直接阻塞阶段一(订单),建议优先回答。已回答 <b id="qProg">0</b>/11。</p>
+  <div id="qList"><div class="q-group"><h4><span class="badge badge-e">P0</span> P0 · 阻塞订单模块</h4><div class="q-row p0" data-anchor="sec6-q_p0_d5_bianma" data-qid="q_p0_d5_bianma" data-anno-label="问题 P0 · D5 物料口径:沿用「品名文本」、不重建料库(③…"><div class="q-head"><span class="badge badge-e">P0</span><span class="q-text">D5 物料口径:沿用「品名文本」、不重建料库(③报价材料无编码),请确认;并明确 Excel 模板的物料字段口径。</span><span class="q-flag done" id="qf-q_p0_d5_bianma">已答</span></div><textarea class="q-ans" placeholder="请输入回答…" oninput="onQAns('q_p0_d5_bianma',this.value)"></textarea></div><div class="q-row p0" data-anchor="sec6-q_p0_d6_zongshu" data-qid="q_p0_d6_zongshu" data-anno-label="问题 P0 · D6 大货总数定义 = 各尺码订货数之和(可能 …"><div class="q-head"><span class="badge badge-e">P0</span><span class="q-text">D6 大货总数定义 = 各尺码订货数之和(可能 ≠ 报价件数),确认?</span><span class="q-flag done" id="qf-q_p0_d6_zongshu">已答</span></div><textarea class="q-ans" placeholder="请输入回答…" oninput="onQAns('q_p0_d6_zongshu',this.value)"></textarea></div><div class="q-row p0" data-anchor="sec6-q_p0_d7_peibi" data-qid="q_p0_d7_peibi" data-anno-label="问题 P0 · D7 分色/分码的配比来源 + Excel 模板…"><div class="q-head"><span class="badge badge-e">P0</span><span class="q-text">D7 分色/分码的配比来源 + Excel 模板字段(尺码编码/颜色/数量 列定义)?</span><span class="q-flag done" id="qf-q_p0_d7_peibi">已答</span></div><textarea class="q-ans" placeholder="请输入回答…" oninput="onQAns('q_p0_d7_peibi',this.value)"></textarea></div><div class="q-row p0" data-anchor="sec6-q_p0_yongliao" data-qid="q_p0_yongliao" data-anno-label="问题 P0 · 单件耗用语义:报价耗用到底是「单件用量」还是「总…"><div class="q-head"><span class="badge badge-e">P0</span><span class="q-text">单件耗用语义:报价耗用到底是「单件用量」还是「总量」?(直接决定用料公式)</span><span class="q-flag done" id="qf-q_p0_yongliao">已答</span></div><textarea class="q-ans" placeholder="请输入回答…" oninput="onQAns('q_p0_yongliao',this.value)"></textarea></div></div><div class="q-group"><h4><span class="badge badge-w">P1</span> P1 · 阻塞合同与门户</h4><div class="q-row " data-anchor="sec6-q_p1_d1d2d3d4" data-qid="q_p1_d1d2d3d4" data-anno-label="问题 P1 · D1/D2/D3/D4 的最终确认(合同↔门户、…"><div class="q-head"><span class="badge badge-w">P1</span><span class="q-text">D1/D2/D3/D4 的最终确认(合同↔门户、订单↔合同多对多、门户形态、快照禁删)。</span><span class="q-flag" id="qf-q_p1_d1d2d3d4">未答</span></div><textarea class="q-ans" placeholder="请输入回答…" oninput="onQAns('q_p1_d1d2d3d4',this.value)"></textarea></div><div class="q-row" data-anchor="sec6-q_p1_moban" data-qid="q_p1_moban" data-anno-label="问题 P1 · 合同基础模板(甲乙方、通用条款)从哪来、是否可配…"><div class="q-head"><span class="badge badge-w">P1</span><span class="q-text">合同基础模板(甲乙方、通用条款)从哪来、是否可配置?</span><span class="q-flag done" id="qf-q_p1_moban">已答</span></div><textarea class="q-ans" placeholder="请输入回答…" oninput="onQAns('q_p1_moban',this.value)"></textarea></div><div class="q-row" data-anchor="sec6-q_p1_duanci" data-qid="q_p1_duanci" data-anno-label="问题 P1 · 多次/部分发货的对账累计规则;审批角色与层级?…"><div class="q-head"><span class="badge badge-w">P1</span><span class="q-text">多次/部分发货的对账累计规则;审批角色与层级?</span><span class="q-flag done" id="qf-q_p1_duanci">已答</span></div><textarea class="q-ans" placeholder="请输入回答…" oninput="onQAns('q_p1_duanci',this.value)"></textarea></div><div class="q-row" data-anchor="sec6-q_p1_dianzizhang" data-qid="q_p1_dianzizhang" data-anno-label="问题 P1 · 电子章的形式与法律效力诉求?…"><div class="q-head"><span class="badge badge-w">P1</span><span class="q-text">电子章的形式与法律效力诉求?</span><span class="q-flag done" id="qf-q_p1_dianzizhang">已答</span></div><textarea class="q-ans" placeholder="请输入回答…" oninput="onQAns('q_p1_dianzizhang',this.value)"></textarea></div></div><div class="q-group"><h4><span class="badge badge-i">P2</span> P2 · 后续阶段</h4><div class="q-row" data-anchor="sec6-q_p2_dahuo" data-qid="q_p2_dahuo" data-anno-label="问题 P2 · ⑧大货资料、生产进度跟踪需要哪些字段?…"><div class="q-head"><span class="badge badge-i">P2</span><span class="q-text">⑧大货资料、生产进度跟踪需要哪些字段?</span><span class="q-flag done" id="qf-q_p2_dahuo">已答</span></div><textarea class="q-ans" placeholder="请输入回答…" oninput="onQAns('q_p2_dahuo',this.value)"></textarea></div><div class="q-row" data-anchor="sec6-q_p2_chuanwu" data-qid="q_p2_chuanwu" data-anno-label="问题 P2 · ⑨船务资料字段(报关/出货/物流)?…"><div class="q-head"><span class="badge badge-i">P2</span><span class="q-text">⑨船务资料字段(报关/出货/物流)?</span><span class="q-flag done" id="qf-q_p2_chuanwu">已答</span></div><textarea class="q-ans" placeholder="请输入回答…" oninput="onQAns('q_p2_chuanwu',this.value)"></textarea></div><div class="q-row" data-anchor="sec6-q_p2_caiwu" data-qid="q_p2_caiwu" data-anno-label="问题 P2 · 各财务单据(对账单/付款申请)编号与字段?…"><div class="q-head"><span class="badge badge-i">P2</span><span class="q-text">各财务单据(对账单/付款申请)编号与字段?</span><span class="q-flag done" id="qf-q_p2_caiwu">已答</span></div><textarea class="q-ans" placeholder="请输入回答…" oninput="onQAns('q_p2_caiwu',this.value)"></textarea></div></div></div>
+
+  <!-- 7 -->
+  <h2 id="s7">7. 建议推进路线</h2>
+  <table class="table" data-anchor="sec7-roadmap" data-anno-label="第7节 · 建议推进路线">
+    <thead><tr><th>阶段</th><th>范围</th><th>成熟度</th><th>产出</th></tr></thead>
+    <tbody>
+      <tr><td>一</td><td>④订单(报价导入/附件/尺码Excel/用料核算/分色分码)</td><td>高</td><td>订单需求书 + 设计稿</td></tr>
+      <tr><td>二</td><td>⑤材料合同 + ⑤′生产加工合同</td><td>中</td><td>合同需求书 + 设计稿</td></tr>
+      <tr><td>三</td><td>⑥供应商协同门户(对外端)</td><td>中</td><td>门户需求书 + 设计稿/交互</td></tr>
+      <tr><td>四</td><td>⑦对账-开票-付款 财务闭环</td><td>中</td><td>需求书 + 设计稿</td></tr>
+      <tr><td>五</td><td>⑧大货资料/生产 · ⑨船务资料</td><td>低</td><td>先补需求,再设计</td></tr>
+    </tbody>
+  </table>
+
+  <!-- 补充需求专区 -->
+  <h2 id="sreq">📌 补充需求汇总 <button class="btn btn-c btn-sm" onclick="openReqModal(null,'')" style="font-size:12px">＋ 新增补充需求</button></h2>
+  <p style="color:var(--gray-6)">业务方在评审中想到的新需求,可挂到具体模块或标为全局。</p>
+  <div class="req-zone" id="reqZone"><div class="req-empty">暂无补充需求。点上方「＋ 新增补充需求」或各模块的「＋ 补充需求」添加。</div></div>
+
+  <div class="foot">
+    <div class="legend">
+      <span><span class="swatch" style="background:var(--teal)"></span>同意/成功</span>
+      <span><span class="swatch" style="background:var(--rust)"></span>修改/强调</span>
+      <span><span class="swatch" style="background:var(--vermilion)"></span>P0/已批注</span>
+      <span><span class="swatch" style="background:var(--amber)"></span>待细化/未保存</span>
+    </div>
+    <p>本评审版基于蓝图 <code>v0.1</code> 生成。所有批注与回答以 HTML 内嵌数据为准,随文件流转。<span id="lastSavedFoot">最近保存:2026-06-08 11:56</span></p>
+  </div>
+
+  <!-- 打印用:评审意见汇总(屏幕隐藏) -->
+  <div id="print-summary"></div>
+
+</div>
+
+<!-- 批注 Modal -->
+<div class="mask" id="annoMask">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="annoTitle">
+    <div class="modal-h"><span id="annoTitle">批注 · 模块 ④ 订单</span><span class="x" onclick="closeMask('annoMask')">×</span></div>
+    <div class="modal-b">
+      <div class="target-label" id="annoTarget"><b>定位</b>:模块 ④ 订单</div>
+      <div class="anno-list" id="annoList"><div class="anno-li"><div class="al-text">附件档案增加填充量附件</div><div class="al-meta"><span>匿名</span><span>2026-06-08 11:45</span><a href="javascript:void(0)" onclick="editAnno('an_mq4o4q4r_kuru')">编辑</a> <a href="javascript:void(0)" style="color:var(--vermilion)" onclick="delAnno('an_mq4o4q4r_kuru')">删除</a></div></div></div>
+      <label>新增批注</label>
+      <textarea id="annoText" placeholder="写下你的批注/意见…"></textarea>
+      <label>批注人(可选)</label>
+      <input type="text" id="annoAuthor" placeholder="姓名">
+    </div>
+    <div class="modal-f">
+      <button class="btn btn-s" onclick="closeMask('annoMask')">取消</button>
+      <button class="btn btn-c" onclick="addAnno()">＋ 添加批注</button>
+    </div>
+  </div>
+</div>
+
+<!-- 需求 Modal -->
+<div class="mask" id="reqMask">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="reqTitle">
+    <div class="modal-h"><span id="reqTitle">新增补充需求</span><span class="x" onclick="closeMask('reqMask')">×</span></div>
+    <div class="modal-b">
+      <label>归属</label>
+      <select id="reqScope">
+        <option value="">全局</option>
+        <option value="M4">④ 订单</option>
+        <option value="M5">⑤ 材料合同</option>
+        <option value="M5p">⑤′ 生产加工合同</option>
+        <option value="M6">⑥ 供应商协同门户</option>
+        <option value="M7">⑦ 对账-开票-付款</option>
+        <option value="M8">⑧ 大货资料/生产</option>
+        <option value="M9">⑨ 船务资料</option>
+      </select>
+      <label>标题</label>
+      <input type="text" id="reqTitleIn" placeholder="一句话概括需求">
+      <label>详述</label>
+      <textarea id="reqDetail" placeholder="详细说明…"></textarea>
+      <label>优先级</label>
+      <select id="reqPriority"><option value="">未定</option><option value="P0">P0</option><option value="P1">P1</option><option value="P2">P2</option></select>
+      <label>提出人(可选)</label>
+      <input type="text" id="reqAuthor" placeholder="姓名">
+    </div>
+    <div class="modal-f">
+      <button class="btn btn-g" id="reqDelBtn" onclick="deleteReqFromModal()" style="display:none">删除</button>
+      <button class="btn btn-s" onclick="closeMask('reqMask')">取消</button>
+      <button class="btn btn-c" onclick="saveReq()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 汇总抽屉 -->
+<div class="mask" id="drawerMask" onclick="closeSummary()"></div>
+<div class="drawer" id="summaryDrawer">
+  <div class="drawer-h"><span>📋 评审汇总</span><span class="x" onclick="closeSummary()">×</span></div>
+  <div class="drawer-tabs">
+    <button class="on" data-tab="anno" onclick="switchTab('anno')">批注</button>
+    <button data-tab="dz" onclick="switchTab('dz')">决策</button>
+    <button data-tab="q" onclick="switchTab('q')">问题</button>
+    <button data-tab="req" onclick="switchTab('req')">补充</button>
+  </div>
+  <div class="drawer-b" id="drawerBody"></div>
+</div>
+
+<script id="review-data" type="application/json">{"schemaVersion":1,"meta":{"docId":"订单及下游模块_总体架构蓝图_v0.1","blueprintVersion":"v0.1","reviewer":"","lastSaved":"2026-06-08T03:56:21.128Z"},"decisions":{"D1":{"choice":"agree","comment":"","updatedAt":"2026-06-08T03:48:57.036Z"},"D2":{"choice":"agree","comment":"","updatedAt":"2026-06-08T03:49:07.719Z"},"D3":{"choice":"agree","comment":"","updatedAt":"2026-06-08T03:49:16.219Z"},"D4":{"choice":"agree","comment":"","updatedAt":"2026-06-08T03:49:32.649Z"},"D5":{"choice":"modify","comment":"品名需要可调整","updatedAt":"2026-06-08T03:50:06.333Z"},"D6":{"choice":"agree","comment":"","updatedAt":"2026-06-08T03:50:14.321Z"},"D7":{"choice":"agree","comment":"","updatedAt":"2026-06-08T03:50:32.436Z"}},"questions":{"q_p0_d5_bianma":{"answer":"需要手动可调整","updatedAt":"2026-06-08T03:50:55.974Z"},"q_p0_d6_zongshu":{"answer":"确定，各尺码颜色总和","updatedAt":"2026-06-08T03:51:18.569Z"},"q_p0_d7_peibi":{"answer":"发文件","updatedAt":"2026-06-08T03:51:36.009Z"},"q_p0_yongliao":{"answer":"单件耗用=每一件衣服用料多少。","updatedAt":"2026-06-08T03:51:59.236Z"},"q_p1_d1d2d3d4":{"answer":"","updatedAt":""},"q_p1_moban":{"answer":"基础模板见附件","updatedAt":"2026-06-08T03:52:30.126Z"},"q_p1_duanci":{"answer":"多次发货需要在“我要发货”中，增加一条，业务审批","updatedAt":"2026-06-08T03:53:29.399Z"},"q_p1_dianzizhang":{"answer":"合同电子章 在PDF里 自动贴在落款部位是否可以？","updatedAt":"2026-06-08T03:54:46.791Z"},"q_p2_dahuo":{"answer":"大货资料部分要单独讨论","updatedAt":"2026-06-08T03:55:08.611Z"},"q_p2_chuanwu":{"answer":"船务单独@Jo确认","updatedAt":"2026-06-08T03:55:31.905Z"},"q_p2_caiwu":{"answer":"按照供应商+日期编号即可","updatedAt":"2026-06-08T03:56:02.265Z"}},"annotations":[{"id":"an_mq4nxkvr_z25i","anchorId":"sec1-flowmap","anchorLabel":"第1.1节 · 模块地图与主流程图","quote":"已完成 ①基础资料(工厂/客户/字典) ②样衣管理 ③客户报价 │ 一键导入(报价已生效) ▼ ④ 订单(大货下单) [","text":"合同数量可微调，超过10%以上需要弹窗确认","author":"","status":"open","createdAt":"2026-06-08T03:40:13.432Z","updatedAt":"2026-06-08T03:40:13.432Z"},{"id":"an_mq4o4q4r_kuru","anchorId":"mod-4-order","anchorLabel":"模块 ④ 订单","quote":"④ 订单(主线核心) ＋ 补充需求 编号【建议】O-YYYYMMDD-序号 · 数据来源:从③客户报价【一键导入】 定位","text":"附件档案增加填充量附件","author":"","status":"open","createdAt":"2026-06-08T03:45:46.827Z","updatedAt":"2026-06-08T03:45:46.827Z"}],"requirements":[]}</script>
+
+<script>
+/* ============ 静态定义 ============ */
+var DECISION_IDS=['D1','D2','D3','D4','D5','D6','D7'];
+var DECISIONS_DEF={
+ D1:{topic:'两类合同 ↔ 门户',prop:'生产加工合同 + 材料合同共用同一套门户(盖章→发货→对账→开票);大货资料/船务是生产线平行的内部跟踪',basis:'你说「所有合同第一步都要盖章」'},
+ D2:{topic:'订单 ↔ 合同 关系',prop:'多对多:订单材料按供应商拆成多张材料合同,一张合同可多选款号;材料合同数量直接取④用料核算结果',basis:'你说合同「款号需可多选」'},
+ D3:{topic:'门户形态',prop:'面向外部的微信小程序 + H5 独立端,账号绑①工厂资料,「推送」= 生成专属链接/通知',basis:'你说「最好微信小程序登录」'},
+ D4:{topic:'快照 / 禁删沿用',prop:'订单改不同步已推送合同;被引用的订单/合同禁删',basis:'沿用现有串流程约束'},
+ D5:{topic:'物料编码 vs 品名',prop:'沿用品名文本,不重建料库(③报价材料无编码)',basis:'v1.0 已取消面料库'},
+ D6:{topic:'大货总数来源',prop:'= 各尺码订货数之和(可能 ≠ 报价件数)',basis:'用料核算需要实际下单数'},
+ D7:{topic:'分色/分码的数据基础',prop:'需先录入「尺码 × 颜色」配比矩阵;Excel 导入的就是这张矩阵',basis:'拆分核算依赖配比'}
+};
+var QUESTIONS_DEF=[
+ {id:'q_p0_d5_bianma',pri:'P0',text:'D5 物料口径:沿用「品名文本」、不重建料库(③报价材料无编码),请确认;并明确 Excel 模板的物料字段口径。'},
+ {id:'q_p0_d6_zongshu',pri:'P0',text:'D6 大货总数定义 = 各尺码订货数之和(可能 ≠ 报价件数),确认?'},
+ {id:'q_p0_d7_peibi',pri:'P0',text:'D7 分色/分码的配比来源 + Excel 模板字段(尺码编码/颜色/数量 列定义)?'},
+ {id:'q_p0_yongliao',pri:'P0',text:'单件耗用语义:报价耗用到底是「单件用量」还是「总量」?(直接决定用料公式)'},
+ {id:'q_p1_d1d2d3d4',pri:'P1',text:'D1/D2/D3/D4 的最终确认(合同↔门户、订单↔合同多对多、门户形态、快照禁删)。'},
+ {id:'q_p1_moban',pri:'P1',text:'合同基础模板(甲乙方、通用条款)从哪来、是否可配置?'},
+ {id:'q_p1_duanci',pri:'P1',text:'多次/部分发货的对账累计规则;审批角色与层级?'},
+ {id:'q_p1_dianzizhang',pri:'P1',text:'电子章的形式与法律效力诉求?'},
+ {id:'q_p2_dahuo',pri:'P2',text:'⑧大货资料、生产进度跟踪需要哪些字段?'},
+ {id:'q_p2_chuanwu',pri:'P2',text:'⑨船务资料字段(报关/出货/物流)?'},
+ {id:'q_p2_caiwu',pri:'P2',text:'各财务单据(对账单/付款申请)编号与字段?'}
+];
+var QUESTION_IDS=QUESTIONS_DEF.map(function(q){return q.id});
+var MODULES=[
+ {key:'M4',label:'④ 订单'},{key:'M5',label:'⑤ 材料合同'},{key:'M5p',label:'⑤′ 生产加工合同'},
+ {key:'M6',label:'⑥ 供应商协同门户'},{key:'M7',label:'⑦ 对账-开票-付款'},{key:'M8',label:'⑧ 大货资料/生产'},{key:'M9',label:'⑨ 船务资料'}
+];
+function moduleLabel(k){for(var i=0;i<MODULES.length;i++){if(MODULES[i].key===k)return MODULES[i].label;}return '全局';}
+
+/* ============ 运行态 ============ */
+var reviewState=freshState();
+var dirty=false;
+var fileHandle=null;
+var capabilities={fsAccess:(typeof window!=='undefined') && ('showSaveFilePicker' in window) && window.isSecureContext};
+var DRAFT_KEY='review-draft::'+(location.pathname||'blueprint');
+
+function freshState(){
+ var d={};DECISION_IDS.forEach(function(id){d[id]={choice:null,comment:'',updatedAt:''}});
+ var q={};QUESTION_IDS.forEach(function(id){q[id]={answer:'',updatedAt:''}});
+ return {schemaVersion:1,meta:{docId:'订单及下游模块_总体架构蓝图_v0.1',blueprintVersion:'v0.1',reviewer:'',lastSaved:''},decisions:d,questions:q,annotations:[],requirements:[]};
+}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function uid(p){return p+'_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,6);}
+function nowIso(){return new Date().toISOString();}
+function fmtTime(iso){if(!iso)return '';try{var d=new Date(iso);var p=function(n){return(n<10?'0':'')+n;};return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());}catch(e){return '';}}
+
+/* ============ 状态读写 ============ */
+function loadState(){
+ var node=document.getElementById('review-data');
+ var raw=node?node.textContent:'';
+ if(!raw||!raw.trim()){return freshState();}
+ try{return normalizeState(JSON.parse(raw));}
+ catch(e){
+   window.__rawCorruptData=raw;
+   try{console.error('review-data 解析失败,已用空白评审表打开',e);}catch(_){}
+   showToast('⚠ 已保存数据损坏,已用空白表打开(原始数据见控制台 window.__rawCorruptData)');
+   return freshState();
+ }
+}
+function normalizeState(obj){
+ var base=freshState();
+ if(!obj||typeof obj!=='object')return base;
+ if(obj.meta&&typeof obj.meta==='object'){for(var k in obj.meta){if(obj.meta.hasOwnProperty(k))base.meta[k]=obj.meta[k];}}
+ if(obj.decisions){DECISION_IDS.forEach(function(id){var s=obj.decisions[id];if(s&&typeof s==='object'){base.decisions[id]={choice:(s.choice==='agree'||s.choice==='modify')?s.choice:null,comment:typeof s.comment==='string'?s.comment:'',updatedAt:s.updatedAt||''};}});}
+ if(obj.questions){QUESTION_IDS.forEach(function(id){var s=obj.questions[id];if(s&&typeof s==='object'){base.questions[id]={answer:typeof s.answer==='string'?s.answer:'',updatedAt:s.updatedAt||''};}});}
+ var idOk=function(s){return typeof s==='string'&&/^[A-Za-z0-9_-]+$/.test(s);};
+ if(Array.isArray(obj.annotations)){base.annotations=obj.annotations.filter(function(a){return a&&idOk(a.id)&&idOk(a.anchorId)&&typeof a.text==='string';});}
+ if(Array.isArray(obj.requirements)){base.requirements=obj.requirements.filter(function(r){return r&&idOk(r.id)&&(r.moduleKey==null||idOk(r.moduleKey));});}
+ return base;
+}
+function flushStateToAnchor(){
+ var node=document.getElementById('review-data');
+ var s=JSON.stringify(reviewState);
+ s=s.replace(/<\//g,'<\\/').replace(/<!--/g,'<\\u0021--'); /* 转义脚本闭合标签与注释起始符,避免内联JSON把数据块提前截断;JSON.parse 自动还原 */
+ node.textContent=s;
+}
+
+/* ============ 序列化与保存 ============ */
+function serializeFullHTML(){
+ flushStateToAnchor();
+ var clone=document.documentElement.cloneNode(true);
+ var rm=clone.querySelectorAll('.anno-icon,[data-runtime],.toast');
+ for(var i=0;i<rm.length;i++){rm[i].parentNode&&rm[i].parentNode.removeChild(rm[i]);}
+ var on=clone.querySelectorAll('.anno-on');for(var j=0;j<on.length;j++){on[j].classList.remove('anno-on');}
+ var op=clone.querySelectorAll('.mask.open,.drawer.open');for(var m=0;m<op.length;m++){op[m].classList.remove('open');}
+ return '<!DOCTYPE html>\n'+clone.outerHTML;
+}
+function guessName(){
+ try{var n=decodeURIComponent((location.pathname||'').split('/').pop()||'');if(n&&/\.html?$/i.test(n))return n;}catch(e){}
+ return '订单及下游模块_总体架构蓝图_v0.1_评审版.html';
+}
+function save(){
+ var bad=validateDecisions();
+ if(bad.length){showToast('请为"修改"的决策填写意见:'+bad.join('、'));var f=document.querySelector('.dz-row[data-did="'+bad[0]+'"]');if(f)f.scrollIntoView({behavior:'smooth',block:'center'});return;}
+ var prev=reviewState.meta.lastSaved;
+ reviewState.meta.lastSaved=nowIso();
+ var html;
+ try{html=serializeFullHTML();}catch(e){reviewState.meta.lastSaved=prev;showToast('⚠ 序列化失败:'+e.message);setSaveState('fail');return;}
+ setSaveState('busy');
+ if(capabilities.fsAccess){
+   saveViaFSA(html).then(function(ok){
+     if(ok==='abort'){reviewState.meta.lastSaved=prev;flushStateToAnchor();setSaveState(dirty?'dirty':'clean');return;}
+     if(ok===true){markSaved('inplace', fileHandle&&fileHandle.name);}
+     else{fallbackBlob(html);}
+   }).catch(function(e){reviewState.meta.lastSaved=prev;showToast('⚠ 保存失败:'+(e&&e.message||e));setSaveState('fail');});
+ }else{
+   fallbackBlob(html);
+ }
+}
+function saveViaFSA(html){
+ return (async function(){
+   try{
+     if(!fileHandle){
+       fileHandle=await window.showSaveFilePicker({suggestedName:guessName(),types:[{description:'评审HTML',accept:{'text/html':['.html']}}]});
+     }else{
+       var p=await fileHandle.queryPermission({mode:'readwrite'});
+       if(p!=='granted'){p=await fileHandle.requestPermission({mode:'readwrite'});}
+       if(p!=='granted')throw new Error('no-perm');
+     }
+     var w=await fileHandle.createWritable();
+     await w.write(html);
+     await w.close();
+     return true;
+   }catch(e){
+     if(e&&e.name==='AbortError')return 'abort';
+     return false;
+   }
+ })();
+}
+function fallbackBlob(html){
+ try{
+   var blob=new Blob([html],{type:'text/html;charset=utf-8'});
+   var url=URL.createObjectURL(blob);
+   var a=document.createElement('a');a.href=url;a.download=guessName();
+   document.body.appendChild(a);a.click();document.body.removeChild(a);
+   setTimeout(function(){URL.revokeObjectURL(url);},1500);
+   markSaved('download');
+ }catch(e){
+   clipboardFallback(html);
+ }
+}
+function clipboardFallback(html){
+ if(navigator.clipboard&&navigator.clipboard.writeText){
+   navigator.clipboard.writeText(html).then(function(){markSaved('clip');},function(){manualCopy(html);});
+ }else{manualCopy(html);}
+}
+function manualCopy(html){
+ var ta=document.createElement('textarea');ta.value=html;ta.style.position='fixed';ta.style.top='10%';ta.style.left='5%';ta.style.width='90%';ta.style.height='70%';ta.style.zIndex=999;document.body.appendChild(ta);ta.focus();ta.select();
+ showToast('请按 Ctrl+A 全选、Ctrl+C 复制,粘到文本编辑器另存为 .html(完成后点页面任意处关闭)');
+ ta.addEventListener('blur',function(){if(ta.parentNode)ta.parentNode.removeChild(ta);});
+ setSaveState('clean');
+}
+
+/* ============ dirty / saved 视觉 ============ */
+function setSaveState(mode){
+ var b=document.getElementById('btnSave'),lab=document.getElementById('saveLabel');
+ b.classList.remove('dirty','fail','busy');
+ if(mode==='busy'){b.classList.add('busy');lab.textContent='保存中…';return;}
+ if(mode==='fail'){b.classList.add('fail');lab.textContent='保存失败,重试';return;}
+ if(mode==='dirty'){b.classList.add('dirty');lab.textContent='保存*';return;}
+ lab.textContent='保存';
+}
+function markDirty(){dirty=true;setSaveState('dirty');scheduleDraft();}
+var _draftT=null;
+function scheduleDraft(){if(_draftT)clearTimeout(_draftT);_draftT=setTimeout(writeDraft,800);}
+function writeDraft(){try{flushStateToAnchor();localStorage.setItem(DRAFT_KEY,JSON.stringify({savedAt:nowIso(),state:reviewState}));}catch(e){}}
+function markSaved(mode,fileName){
+ dirty=false;setSaveState('clean');
+ if(mode==='inplace'){try{localStorage.removeItem(DRAFT_KEY);}catch(e){}} /* 仅确证写盘成功才清草稿;下载/复制模式保留草稿兜底 */
+ var msg=mode==='inplace'?'✓ 已保存到文件「'+(fileName||guessName())+'」 '+fmtTime(reviewState.meta.lastSaved)
+        :mode==='download'?'⚠ 已下载新版本,请用它覆盖替换原文件(同名、同目录);未覆盖前本机草稿已保留'
+        :mode==='clip'?'✓ 源码已复制到剪贴板,请粘贴另存为 .html 覆盖原文件;未覆盖前草稿已保留'
+        :'已保存';
+ showToast(msg);
+ document.getElementById('lastSavedFoot').textContent='最近保存:'+fmtTime(reviewState.meta.lastSaved)+(mode!=='inplace'?'(待覆盖原文件)':'');
+}
+
+/* ============ 能力/模式提示 ============ */
+function applyCapabilityUI(){
+ var tag=document.getElementById('modeTag'),link=document.getElementById('btnLink'),tip=document.getElementById('guideSaveTip');
+ if(capabilities.fsAccess){
+   tag.textContent='就地保存可用';link.style.display='';
+   if(tip)tip.textContent='当前可直接写回原文件(首次保存会让你选中原文件覆盖)。';
+ }else{
+   tag.textContent='下载模式(保存=下载同名文件覆盖原文件)';
+   if(tip)tip.textContent='当前为下载模式:保存会下载一份同名 HTML,请用它覆盖原文件(同目录同名)即可,内容一样。';
+ }
+}
+function associateFile(){save();}
+
+/* ============ 渲染:决策表 ============ */
+function buildDecisions(){
+ var host=document.getElementById('dzList'),h='';
+ DECISION_IDS.forEach(function(id){
+   var d=DECISIONS_DEF[id];
+   h+='<div class="dz-row" data-anchor="sec5-row-'+id+'" data-did="'+id+'" data-anno-label="决策 '+id+' · '+esc(d.topic)+'">'
+    +'<div class="dz-main"><div><span class="dz-id">'+id+'</span><span class="dz-topic">'+esc(d.topic)+'</span></div>'
+    +'<div class="dz-prop">'+esc(d.prop)+'</div><div class="dz-basis">依据:'+esc(d.basis)+'</div></div>'
+    +'<div class="dz-act"><div class="chips" role="radiogroup" aria-label="'+id+' 决策">'
+    +'<button class="chip" role="radio" aria-checked="false" data-choice="agree" onclick="setDecision(\''+id+'\',\'agree\')">☑ 同意</button>'
+    +'<button class="chip" role="radio" aria-checked="false" data-choice="modify" onclick="setDecision(\''+id+'\',\'modify\')">✎ 修改</button>'
+    +'</div><div class="dz-comment" hidden><textarea placeholder="请填写修改意见…" oninput="onDzComment(\''+id+'\',this.value)"></textarea></div>'
+    +'<div class="dz-state" id="dzst-'+id+'">☐ 待确认</div></div></div>';
+ });
+ host.innerHTML=h;
+}
+function setDecision(id,choice){
+ var d=reviewState.decisions[id];
+ d.choice=choice;d.updatedAt=nowIso();
+ if(choice==='agree')d.comment='';
+ renderDecision(id);markDirty();updateStats();
+}
+function onDzComment(id,v){reviewState.decisions[id].comment=v;reviewState.decisions[id].updatedAt=nowIso();markDirty();
+ var row=document.querySelector('.dz-row[data-did="'+id+'"] .dz-comment');if(row)row.classList.remove('invalid');}
+function renderDecision(id){
+ var d=reviewState.decisions[id];
+ var row=document.querySelector('.dz-row[data-did="'+id+'"]');if(!row)return;
+ row.classList.remove('agree','modify');
+ var chips=row.querySelectorAll('.chip');
+ chips.forEach(function(c){c.setAttribute('aria-checked',c.getAttribute('data-choice')===d.choice?'true':'false');});
+ var cm=row.querySelector('.dz-comment'),ta=cm.querySelector('textarea'),st=row.querySelector('.dz-state');
+ if(d.choice==='agree'){row.classList.add('agree');cm.hidden=true;ta.value='';st.textContent='✓ 同意';st.style.color='var(--teal)';}
+ else if(d.choice==='modify'){row.classList.add('modify');cm.hidden=false;ta.value=d.comment||'';st.textContent='✎ 要求修改';st.style.color='var(--rust)';}
+ else{cm.hidden=true;st.textContent='☐ 待确认';st.style.color='';}
+}
+function applyDecisions(){DECISION_IDS.forEach(renderDecision);}
+function validateDecisions(){
+ var bad=[];
+ DECISION_IDS.forEach(function(id){
+   var d=reviewState.decisions[id];
+   if(d.choice==='modify'&&!(d.comment&&d.comment.trim())){bad.push(id);
+     var cm=document.querySelector('.dz-row[data-did="'+id+'"] .dz-comment');if(cm)cm.classList.add('invalid');}
+ });
+ return bad;
+}
+
+/* ============ 渲染:问题 ============ */
+function buildQuestions(){
+ var host=document.getElementById('qList'),groups={P0:[],P1:[],P2:[]};
+ QUESTIONS_DEF.forEach(function(q){groups[q.pri].push(q);});
+ var names={P0:'P0 · 阻塞订单模块',P1:'P1 · 阻塞合同与门户',P2:'P2 · 后续阶段'};
+ var badge={P0:'badge-e',P1:'badge-w',P2:'badge-i'};
+ var h='';
+ ['P0','P1','P2'].forEach(function(p){
+   h+='<div class="q-group"><h4><span class="badge '+badge[p]+'">'+p+'</span> '+names[p]+'</h4>';
+   groups[p].forEach(function(q){
+     h+='<div class="q-row '+(p==='P0'?'p0':'')+'" data-anchor="sec6-'+q.id+'" data-qid="'+q.id+'" data-anno-label="问题 '+p+' · '+esc(q.text.slice(0,24))+'…">'
+      +'<div class="q-head"><span class="badge '+badge[p]+'">'+p+'</span><span class="q-text">'+esc(q.text)+'</span><span class="q-flag" id="qf-'+q.id+'">未答</span></div>'
+      +'<textarea class="q-ans" placeholder="请输入回答…" oninput="onQAns(\''+q.id+'\',this.value)"></textarea></div>';
+   });
+   h+='</div>';
+ });
+ host.innerHTML=h;
+}
+function onQAns(id,v){var q=reviewState.questions[id];q.answer=v;q.updatedAt=nowIso();markDirty();refreshQFlag(id);}
+function refreshQFlag(id){
+ var q=reviewState.questions[id],f=document.getElementById('qf-'+id),row=document.querySelector('.q-row[data-qid="'+id+'"]');
+ var done=!!(q.answer&&q.answer.trim());
+ if(f){f.textContent=done?'已答':'未答';f.className='q-flag'+(done?' done':'');}
+ if(row){if(done)row.classList.remove('unanswered');else if(row.classList.contains('p0'))row.classList.add('unanswered');}
+}
+function applyQuestions(){
+ QUESTION_IDS.forEach(function(id){
+   var ta=document.querySelector('.q-row[data-qid="'+id+'"] textarea');
+   if(ta)ta.value=reviewState.questions[id].answer||'';
+   refreshQFlag(id);
+ });
+}
+
+/* ============ 批注 ============ */
+var annoOn=false,curAnchor=null;
+function toggleAnnoMode(){
+ annoOn=!annoOn;
+ document.body.classList.toggle('anno-on',annoOn);
+ document.getElementById('btnAnno').textContent=annoOn?'💬 批注模式：开':'💬 批注模式：关';
+ refreshAnnoIcons();
+}
+function refreshAnnoIcons(){
+ var old=document.querySelectorAll('.anno-icon');old.forEach(function(n){n.parentNode&&n.parentNode.removeChild(n);});
+ if(!annoOn)return;
+ var els=document.querySelectorAll('[data-anchor]');
+ els.forEach(function(el){
+   var aid=el.getAttribute('data-anchor');
+   var cnt=reviewState.annotations.filter(function(a){return a.anchorId===aid;}).length;
+   var btn=document.createElement('button');btn.className='anno-icon'+(cnt?' has':'');btn.setAttribute('data-runtime','1');
+   btn.textContent=cnt?('✓'+cnt):'💬';btn.title=cnt?(cnt+' 条批注'):'添加批注';
+   btn.onclick=function(ev){ev.stopPropagation();openAnno(aid);};
+   el.appendChild(btn);
+ });
+}
+function anchorLabel(aid){var el=document.querySelector('[data-anchor="'+aid+'"]');return el?(el.getAttribute('data-anno-label')||aid):aid;}
+function anchorQuote(aid){var el=document.querySelector('[data-anchor="'+aid+'"]');if(!el)return '';var t=(el.innerText||el.textContent||'').replace(/\s+/g,' ').trim();return t.slice(0,60);}
+function openAnno(aid){
+ curAnchor=aid;
+ document.getElementById('annoTitle').textContent='批注 · '+anchorLabel(aid);
+ document.getElementById('annoTarget').innerHTML='<b>定位</b>:'+esc(anchorLabel(aid));
+ document.getElementById('annoText').value='';
+ document.getElementById('annoAuthor').value='';
+ renderAnnoList(aid);
+ openMask('annoMask');
+ setTimeout(function(){document.getElementById('annoText').focus();},50);
+}
+function renderAnnoList(aid){
+ var list=reviewState.annotations.filter(function(a){return a.anchorId===aid;});
+ var host=document.getElementById('annoList');
+ if(!list.length){host.innerHTML='<div class="req-empty">该处暂无批注</div>';return;}
+ host.innerHTML=list.map(function(a){
+   return '<div class="anno-li"><div class="al-text">'+esc(a.text)+'</div>'
+    +'<div class="al-meta"><span>'+esc(a.author||'匿名')+'</span><span>'+fmtTime(a.updatedAt||a.createdAt)+'</span>'
+    +'<a href="javascript:void(0)" onclick="editAnno(\''+a.id+'\')">编辑</a> '
+    +'<a href="javascript:void(0)" style="color:var(--vermilion)" onclick="delAnno(\''+a.id+'\')">删除</a></div></div>';
+ }).join('');
+}
+function addAnno(){
+ var txt=document.getElementById('annoText').value.trim();
+ if(!txt){showToast('请先输入批注内容');return;}
+ var a={id:uid('an'),anchorId:curAnchor,anchorLabel:anchorLabel(curAnchor),quote:anchorQuote(curAnchor),text:txt,author:document.getElementById('annoAuthor').value.trim(),status:'open',createdAt:nowIso(),updatedAt:nowIso()};
+ reviewState.annotations.push(a);
+ document.getElementById('annoText').value='';
+ renderAnnoList(curAnchor);refreshAnnoIcons();markDirty();updateStats();
+}
+function editAnno(id){
+ var a=reviewState.annotations.filter(function(x){return x.id===id;})[0];if(!a)return;
+ var nv=prompt('编辑批注:',a.text);if(nv==null)return;
+ var t=nv.trim();if(!t){showToast('批注内容不能为空,如需移除请用删除');return;}
+ a.text=t;a.updatedAt=nowIso();
+ renderAnnoList(a.anchorId);refreshAnnoIcons();markDirty();updateStats();
+}
+function delAnno(id){
+ if(!confirm('确认删除这条批注?'))return;
+ var a=reviewState.annotations.filter(function(x){return x.id===id;})[0];
+ reviewState.annotations=reviewState.annotations.filter(function(x){return x.id!==id;});
+ if(a)renderAnnoList(a.anchorId);refreshAnnoIcons();markDirty();updateStats();
+}
+
+/* ============ 补充需求 ============ */
+var editingReqId=null;
+function openReqModal(id,scope){
+ editingReqId=id;
+ document.getElementById('reqTitle').textContent=id?'编辑补充需求':'新增补充需求';
+ document.getElementById('reqDelBtn').style.display=id?'':'none';
+ if(id){
+   var r=reviewState.requirements.filter(function(x){return x.id===id;})[0];if(!r)return;
+   document.getElementById('reqScope').value=r.scope==='module'?r.moduleKey:'';
+   document.getElementById('reqTitleIn').value=r.title||'';
+   document.getElementById('reqDetail').value=r.detail||'';
+   document.getElementById('reqPriority').value=r.priority||'';
+   document.getElementById('reqAuthor').value=r.author||'';
+ }else{
+   document.getElementById('reqScope').value=scope||'';
+   document.getElementById('reqTitleIn').value='';
+   document.getElementById('reqDetail').value='';
+   document.getElementById('reqPriority').value='';
+   document.getElementById('reqAuthor').value='';
+ }
+ openMask('reqMask');
+}
+function saveReq(){
+ var scopeVal=document.getElementById('reqScope').value;
+ var title=document.getElementById('reqTitleIn').value.trim();
+ var detail=document.getElementById('reqDetail').value.trim();
+ if(!title&&!detail){showToast('请至少填写标题或详述');return;}
+ var rec={
+   scope:scopeVal?'module':'global',moduleKey:scopeVal||null,moduleLabel:scopeVal?moduleLabel(scopeVal):'全局',
+   title:title,detail:detail,priority:document.getElementById('reqPriority').value,author:document.getElementById('reqAuthor').value.trim(),updatedAt:nowIso()
+ };
+ if(editingReqId){
+   var r=reviewState.requirements.filter(function(x){return x.id===editingReqId;})[0];
+   if(r){for(var k in rec){r[k]=rec[k];}}
+ }else{
+   rec.id=uid('req');rec.createdAt=nowIso();reviewState.requirements.push(rec);
+ }
+ closeMask('reqMask');renderRequirements();markDirty();updateStats();
+}
+function deleteReqFromModal(){
+ if(!editingReqId)return;
+ if(!confirm('确认删除这条补充需求?'))return;
+ reviewState.requirements=reviewState.requirements.filter(function(x){return x.id!==editingReqId;});
+ closeMask('reqMask');renderRequirements();markDirty();updateStats();
+}
+function renderRequirements(){
+ var host=document.getElementById('reqZone');
+ if(!reviewState.requirements.length){host.innerHTML='<div class="req-empty">暂无补充需求。点上方「＋ 新增补充需求」或各模块的「＋ 补充需求」添加。</div>';refreshPins();return;}
+ var groups={};reviewState.requirements.forEach(function(r){var k=r.scope==='module'?r.moduleKey:'__global';(groups[k]=groups[k]||[]).push(r);});
+ var order=['__global'].concat(MODULES.map(function(m){return m.key;}));
+ var h='';
+ order.forEach(function(k){
+   var arr=groups[k];if(!arr||!arr.length)return;
+   var name=k==='__global'?'全局':moduleLabel(k);
+   h+='<div class="req-group"><div class="rg-h">'+esc(name)+' ('+arr.length+')</div>';
+   arr.forEach(function(r){
+     h+='<div class="req-item"><div class="ri-act">'
+      +'<button class="btn btn-s btn-sm" onclick="openReqModal(\''+r.id+'\',\'\')">编辑</button>'
+      +'<button class="btn btn-g btn-sm" onclick="quickDelReq(\''+r.id+'\')">删</button></div>'
+      +'<div class="ri-title">'+(r.priority?'<span class="badge badge-w">'+esc(r.priority)+'</span> ':'')+esc(r.title||'(无标题)')+'</div>'
+      +(r.detail?'<div class="ri-detail">'+esc(r.detail)+'</div>':'')
+      +'<div class="ri-meta"><span>'+esc(r.moduleLabel)+'</span><span>'+esc(r.author||'匿名')+'</span><span>'+fmtTime(r.updatedAt||r.createdAt)+'</span></div></div>';
+   });
+   h+='</div>';
+ });
+ host.innerHTML=h;refreshPins();
+}
+function quickDelReq(id){if(!confirm('确认删除这条补充需求?'))return;reviewState.requirements=reviewState.requirements.filter(function(x){return x.id!==id;});renderRequirements();markDirty();updateStats();}
+function refreshPins(){
+ var pins=document.querySelectorAll('.pin-badge[data-pin]');
+ pins.forEach(function(p){
+   var k=p.getAttribute('data-pin');
+   var c=reviewState.requirements.filter(function(r){return r.scope==='module'&&r.moduleKey===k;}).length;
+   if(c){p.style.display='';p.textContent='📌'+c;p.onclick=function(){openSummary();switchTab('req');};}else{p.style.display='none';}
+ });
+}
+function applyRequirements(){renderRequirements();}
+
+/* ============ 统计 ============ */
+function updateStats(){
+ var an=reviewState.annotations.length;
+ var dz=DECISION_IDS.filter(function(id){return reviewState.decisions[id].choice;}).length;
+ var q=QUESTION_IDS.filter(function(id){var a=reviewState.questions[id].answer;return a&&a.trim();}).length;
+ var rq=reviewState.requirements.length;
+ document.getElementById('stAnno').textContent=an;
+ document.getElementById('stDz').textContent=dz;
+ document.getElementById('stQ').textContent=q;
+ document.getElementById('stReq').textContent=rq;
+ document.getElementById('dzProg').textContent=dz;
+ document.getElementById('qProg').textContent=q;
+}
+
+/* ============ 汇总抽屉 ============ */
+var curTab='anno';
+function openSummary(){openMask('drawerMask');document.getElementById('summaryDrawer').classList.add('open');renderSummary();}
+function closeSummary(){document.getElementById('summaryDrawer').classList.remove('open');closeMask('drawerMask');}
+function switchTab(t){curTab=t;document.querySelectorAll('.drawer-tabs button').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-tab')===t);});renderSummary();}
+function renderSummary(){
+ var host=document.getElementById('drawerBody'),h='';
+ if(curTab==='anno'){
+   var orphans=reviewState.annotations.filter(function(a){return !document.querySelector('[data-anchor="'+a.anchorId+'"]');});
+   var normal=reviewState.annotations.filter(function(a){return document.querySelector('[data-anchor="'+a.anchorId+'"]');});
+   if(!reviewState.annotations.length)h='<div class="sum-empty">暂无批注</div>';
+   if(orphans.length){h+='<div class="sum-h" style="color:var(--vermilion)">⚠ 无法定位的批注('+orphans.length+')</div>';orphans.forEach(function(a){h+=sumAnno(a,true);});}
+   if(normal.length){h+='<div class="sum-h">全部批注('+normal.length+')</div>';normal.forEach(function(a){h+=sumAnno(a,false);});}
+ }else if(curTab==='dz'){
+   DECISION_IDS.forEach(function(id){
+     var d=reviewState.decisions[id],s=d.choice==='agree'?'<span class="badge badge-s">同意</span>':d.choice==='modify'?'<span class="badge badge-w">修改</span>':'<span class="badge badge-g">待定</span>';
+     h+='<div class="sum-item" onclick="focusAnchor(\'sec5-row-'+id+'\')"><div class="si-anchor">'+id+' · '+esc(DECISIONS_DEF[id].topic)+'</div><div class="si-body">'+s+(d.comment?' '+esc(d.comment):'')+'</div></div>';
+   });
+ }else if(curTab==='q'){
+   QUESTIONS_DEF.forEach(function(q){
+     var a=reviewState.questions[q.id].answer;
+     h+='<div class="sum-item" onclick="focusAnchor(\'sec6-'+q.id+'\')"><div class="si-anchor"><span class="badge '+(q.pri==='P0'?'badge-e':q.pri==='P1'?'badge-w':'badge-i')+'">'+q.pri+'</span> '+esc(q.text.slice(0,30))+'…</div><div class="si-body">'+(a&&a.trim()?esc(a):'<span style="color:var(--gray-4)">未回答</span>')+'</div></div>';
+   });
+ }else if(curTab==='req'){
+   if(!reviewState.requirements.length)h='<div class="sum-empty">暂无补充需求</div>';
+   reviewState.requirements.forEach(function(r){
+     h+='<div class="sum-item" onclick="openReqModal(\''+r.id+'\',\'\')"><div class="si-anchor">'+esc(r.moduleLabel)+(r.priority?' · '+esc(r.priority):'')+'</div><div class="si-body"><b>'+esc(r.title||'(无标题)')+'</b>'+(r.detail?'\n'+esc(r.detail):'')+'</div></div>';
+   });
+ }
+ host.innerHTML=h||'<div class="sum-empty">暂无内容</div>';
+}
+function sumAnno(a,orphan){
+ return '<div class="sum-item'+(orphan?' sum-orphan':'')+'" onclick="'+(orphan?'':'focusAnchor(\''+a.anchorId+'\')')+'"><div class="si-anchor">'+esc(a.anchorLabel||a.anchorId)+(orphan?' <span style="color:var(--vermilion)">(原锚点已失效)</span>':'')+'</div><div class="si-body">'+esc(a.text)+'</div><div class="si-meta">'+esc(a.author||'匿名')+' · '+fmtTime(a.updatedAt||a.createdAt)+(orphan?' · 引用原文:“'+esc(a.quote||'')+'”':'')+'</div></div>';
+}
+function focusAnchor(aid){
+ closeSummary();
+ var el=document.querySelector('[data-anchor="'+aid+'"]');if(!el)return;
+ el.scrollIntoView({behavior:'smooth',block:'center'});
+ el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash');
+ setTimeout(function(){el.classList.remove('flash');},1400);
+}
+
+/* ============ 导出 md ============ */
+function exportMd(){
+ var L=[];
+ L.push('# 订单及下游模块·总体架构蓝图 v0.1 — 评审意见汇总');
+ L.push('');L.push('导出时间:'+fmtTime(nowIso())+(reviewState.meta.reviewer?(' · 评审人:'+reviewState.meta.reviewer):''));L.push('');
+ L.push('## 一、决策表 D1–D7');L.push('');L.push('| # | 议题 | 表态 | 修改意见 |');L.push('|---|---|---|---|');
+ DECISION_IDS.forEach(function(id){var d=reviewState.decisions[id];var c=d.choice==='agree'?'同意':d.choice==='modify'?'要求修改':'待定';L.push('| '+id+' | '+DECISIONS_DEF[id].topic+' | '+c+' | '+((d.comment||'').replace(/\n/g,' ')||'-')+' |');});
+ L.push('');L.push('## 二、待确认问题回答');L.push('');
+ QUESTIONS_DEF.forEach(function(q){var a=reviewState.questions[q.id].answer;L.push('### ['+q.pri+'] '+q.text);L.push('');L.push(a&&a.trim()?a:'_(未回答)_');L.push('');});
+ L.push('## 三、批注('+reviewState.annotations.length+')');L.push('');
+ reviewState.annotations.forEach(function(a){L.push('- **'+(a.anchorLabel||a.anchorId)+'**:'+a.text+'  _( '+(a.author||'匿名')+' )_');});
+ L.push('');L.push('## 四、补充需求('+reviewState.requirements.length+')');L.push('');
+ reviewState.requirements.forEach(function(r){L.push('- **['+(r.priority||'-')+'] '+r.moduleLabel+' · '+(r.title||'(无标题)')+'**'+(r.detail?':'+r.detail.replace(/\n/g,' '):'')+'  _( '+(r.author||'匿名')+' )_');});
+ var md=L.join('\n');
+ var blob=new Blob([md],{type:'text/markdown;charset=utf-8'});var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='评审意见汇总_'+Date.now().toString(36)+'.md';document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(url);},1500);
+ showToast('已导出评审意见汇总(.md)');
+}
+function buildPrintSummary(){
+ var host=document.getElementById('print-summary');var h='<h2>评审意见汇总(打印)</h2>';
+ h+='<h3>决策表 D1–D7</h3><table class="table"><thead><tr><th>#</th><th>议题</th><th>表态</th><th>意见</th></tr></thead><tbody>';
+ DECISION_IDS.forEach(function(id){var d=reviewState.decisions[id];h+='<tr><td>'+id+'</td><td>'+esc(DECISIONS_DEF[id].topic)+'</td><td>'+(d.choice==='agree'?'同意':d.choice==='modify'?'修改':'待定')+'</td><td>'+esc(d.comment||'')+'</td></tr>';});
+ h+='</tbody></table><h3>问题回答</h3>';
+ QUESTIONS_DEF.forEach(function(q){h+='<p><b>['+q.pri+'] '+esc(q.text)+'</b><br>'+esc(reviewState.questions[q.id].answer||'(未回答)')+'</p>';});
+ h+='<h3>批注 / 补充需求</h3>';
+ reviewState.annotations.forEach(function(a){h+='<p>• <b>'+esc(a.anchorLabel||'')+'</b>:'+esc(a.text)+'</p>';});
+ reviewState.requirements.forEach(function(r){h+='<p>📌 <b>'+esc(r.moduleLabel)+' · '+esc(r.title||'')+'</b> '+esc(r.detail||'')+'</p>';});
+ host.innerHTML=h;
+}
+
+/* ============ Mask / Drawer 通用 ============ */
+function openMask(id){document.getElementById(id).classList.add('open');}
+function closeMask(id){document.getElementById(id).classList.remove('open');}
+document.addEventListener('keydown',function(e){
+ if(e.key==='Escape'){['annoMask','reqMask'].forEach(function(i){closeMask(i);});closeSummary();}
+ if((e.ctrlKey||e.metaKey)&&(e.key==='s'||e.key==='S')){e.preventDefault();save();}
+});
+
+/* ============ 引导卡 ============ */
+function dismissGuide(){
+ var n=document.getElementById('guideNever');
+ if(n&&n.checked){try{localStorage.setItem('review-guide-hide','1');}catch(e){}}
+ var c=document.getElementById('guideCard');if(c)c.style.display='none';
+}
+
+/* ============ Toast ============ */
+var _toastT=null;
+function showToast(msg){
+ var t=document.createElement('div');t.className='toast';t.setAttribute('data-runtime','1');t.textContent=msg;document.body.appendChild(t);
+ if(_toastT)clearTimeout(_toastT);
+ _toastT=setTimeout(function(){if(t.parentNode)t.parentNode.removeChild(t);},3600);
+}
+
+/* ============ 锚点唯一性自检 ============ */
+function checkAnchors(){
+ var seen={},els=document.querySelectorAll('[data-anchor]');
+ els.forEach(function(el){var a=el.getAttribute('data-anchor');if(seen[a]){try{console.warn('重复 data-anchor:',a);}catch(e){}}seen[a]=1;});
+}
+
+/* ============ 草稿恢复 ============ */
+function maybeOfferDraft(){
+ var raw;try{raw=localStorage.getItem(DRAFT_KEY);}catch(e){return;}
+ if(!raw)return;
+ try{
+   var d=JSON.parse(raw);
+   if(d&&d.savedAt&&(!reviewState.meta.lastSaved||d.savedAt>reviewState.meta.lastSaved)){
+     if(confirm('检测到本机未保存草稿(暂存于 '+fmtTime(d.savedAt)+'),是否恢复?\n「确定」用草稿,「取消」用文件内已保存内容。')){
+       reviewState=normalizeState(d.state);
+       reviewState.meta.lastSaved='';
+       applyDecisions();applyQuestions();applyAnnotations();renderRequirements();updateStats();
+       document.getElementById('lastSavedFoot').textContent='恢复自本机草稿(暂存于 '+fmtTime(d.savedAt)+'),尚未保存';
+       markDirty();showToast('已恢复本机草稿,请记得点保存写回文件');
+     }
+   }
+ }catch(e){}
+}
+function applyAnnotations(){refreshAnnoIcons();}
+
+/* ============ 初始化 ============ */
+function init(){
+ buildDecisions();buildQuestions();
+ reviewState=loadState();
+ checkAnchors();
+ applyCapabilityUI();
+ applyDecisions();applyQuestions();applyRequirements();updateStats();
+ refreshAnnoIcons();
+ dirty=false;setSaveState('clean');
+ if(reviewState.meta.lastSaved)document.getElementById('lastSavedFoot').textContent='最近保存:'+fmtTime(reviewState.meta.lastSaved);
+ try{if(localStorage.getItem('review-guide-hide')==='1'){var c=document.getElementById('guideCard');if(c)c.style.display='none';}}catch(e){}
+ maybeOfferDraft();
+ window.addEventListener('beforeunload',function(e){if(dirty){e.preventDefault();e.returnValue='';return '';}});
+ window.addEventListener('beforeprint',buildPrintSummary);
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+</script>
+
+
+</body></html>

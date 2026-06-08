@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>样衣管理 · UI 设计稿 v1.3（评审版）</title>
+<style>
+:root{
+  --indigo:#1E3A5F;--indigo-d:#152A45;--indigo-l:#2C5180;
+  --linen:#F5EDDC;--linen-d:#E8DCC0;--canvas:#FBF8F2;
+  --rust:#D17A40;--rust-d:#B86530;--vermilion:#C04042;
+  --teal:#3E8E7E;--amber:#C8901E;
+  --gray-9:#1F1F22;--gray-7:#37383C;--gray-5:#6F7178;
+  --gray-3:#B5B7BD;--gray-1:#E5E2DA;--gray-0:#F4F1EA;
+  --font:"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;
+  --r:4px;--r-lg:6px;
+  --shadow-sm:0 1px 2px rgba(30,58,95,.05);--shadow:0 2px 8px rgba(30,58,95,.10);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:13px/1.55 var(--font);color:var(--gray-9);background:#EEEAE0}
+a{color:var(--indigo);text-decoration:none}
+
+.topbar{position:fixed;top:0;left:0;right:0;height:48px;background:var(--indigo);color:#fff;display:flex;align-items:center;padding:0 24px;z-index:100;border-bottom:3px solid var(--rust);box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.topbar .logo{font-size:15px;font-weight:600}
+.topbar .logo small{font-size:11px;color:#C9D6E5;margin-left:8px;font-weight:400}
+.topbar .actions{margin-left:auto;display:flex;gap:8px;align-items:center;font-size:12px}
+
+.sidenav{position:fixed;top:48px;left:0;bottom:0;width:240px;background:#fff;border-right:1px solid var(--gray-1);overflow-y:auto;padding:14px 0;font-size:13px}
+.sidenav .nav-cat{padding:10px 16px 4px;color:var(--gray-5);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;border-top:1px solid var(--gray-1);margin-top:6px}
+.sidenav a.nav-dj{display:block;padding:8px 16px;color:var(--indigo);font-weight:600;font-size:13px;border-left:3px solid transparent}
+.sidenav a.nav-dj:hover{background:var(--linen);border-left-color:var(--rust)}
+.sidenav a.nav-sub{display:block;padding:5px 16px;color:var(--gray-7);font-size:12.5px;border-left:3px solid transparent}
+.sidenav a.nav-sub:hover{background:var(--canvas);color:var(--indigo);border-left-color:var(--gray-3)}
+
+.main{margin-left:240px;padding:64px 32px 80px;max-width:1280px}
+.dj-block{padding:28px 32px;background:linear-gradient(135deg,var(--indigo) 0%,var(--indigo-l) 100%);color:#fff;border-radius:8px;margin:30px 0 16px}
+.dj-block h1{font-size:22px;margin-bottom:6px;font-weight:600}
+.dj-block h1 small{font-family:"SF Mono",Monaco,monospace;color:#C9D6E5;font-size:14px;font-weight:400;margin-left:8px}
+.dj-block .dj-summary{font-size:13px;color:#D5DDE8;line-height:1.7}
+
+.design-section{margin-bottom:32px}
+.sect-head{display:flex;justify-content:space-between;align-items:flex-start;margin:0 8px 12px;padding-bottom:8px;border-bottom:2px solid var(--gray-1)}
+.sect-head h2{font-size:16px;color:var(--gray-9);font-weight:600;margin-bottom:4px}
+.sect-head .sect-no{display:inline-block;background:var(--rust);color:#fff;padding:1px 8px;border-radius:3px;font-size:13px;margin-right:8px}
+.sect-head .sect-desc{font-size:12px;color:var(--gray-5)}
+
+.biz-notes{background:#FFF7EA;border:1px solid #EDD8A8;border-left:3px solid var(--amber);border-radius:4px;padding:12px 16px;margin:0 8px 14px}
+.biz-notes b{color:#7A5810;font-size:12.5px}
+.biz-notes ul{list-style:none;margin-top:6px}
+.biz-notes li{font-size:12px;color:#5C4307;line-height:1.7;padding:2px 0 2px 18px;position:relative}
+.biz-notes li:before{content:"▸";position:absolute;left:6px;color:var(--amber)}
+
+.design-frame{background:#fff;border:1px solid var(--gray-1);border-radius:8px;padding:16px;box-shadow:var(--shadow-sm)}
+
+.page-toolbar{display:flex;justify-content:space-between;align-items:center;background:#FBF8F2;border:1px solid var(--gray-1);border-radius:6px;padding:8px 14px;margin-bottom:14px;flex-wrap:wrap;gap:6px}
+.tb-left{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tb-right{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.page-title{font-size:14px;color:var(--indigo);font-weight:600}
+
+.btn{display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:4px;font-size:12.5px;cursor:pointer;border:1px solid;line-height:1.5;font-family:inherit}
+.btn-p{background:var(--indigo);color:#fff;border-color:var(--indigo)}
+.btn-c{background:var(--rust);color:#fff;border-color:var(--rust)}
+.btn-s{background:#fff;color:var(--gray-7);border-color:var(--gray-1)}
+.btn-g{background:#fff;color:var(--vermilion);border-color:var(--gray-1)}
+.btn-t{background:transparent;color:var(--indigo);border-color:transparent;padding:3px 8px}
+.btn-sm{padding:3px 9px;font-size:11.5px}
+.req{color:var(--vermilion);margin-right:3px}
+
+.section-divider{font-size:14px;color:var(--indigo);font-weight:600;padding:14px 12px 8px;margin-top:8px;border-bottom:2px solid var(--linen);background:linear-gradient(90deg,var(--linen) 0%,transparent 60%);border-radius:4px 4px 0 0}
+
+.fieldset{background:#fff;border:1px solid var(--gray-1);border-radius:6px;margin-bottom:12px;overflow:hidden}
+.fieldset-head{background:linear-gradient(135deg,var(--linen) 0%,var(--canvas) 100%);padding:8px 16px;border-bottom:1px solid var(--gray-1);font-size:13px;font-weight:600;color:var(--indigo);display:flex;justify-content:space-between;align-items:center}
+.fieldset-head .count{color:var(--gray-5);font-weight:400;font-size:11px}
+.fieldset-body{padding:14px 18px}
+.fieldset-body.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:4px 28px}
+
+.field{display:flex;align-items:center;gap:8px;margin-bottom:8px;min-height:30px}
+.field label{width:120px;text-align:right;color:var(--gray-7);font-size:12.5px;flex-shrink:0;line-height:1.3;display:flex;align-items:center;justify-content:flex-end;gap:4px}
+.input,.select,.date,.memo{flex:1;background:#fff;border:1px solid var(--gray-1);border-radius:4px;padding:5px 9px;font:12.5px/1.4 var(--font);color:var(--gray-9);min-width:0}
+.input.readonly{background:var(--gray-0);color:var(--gray-5)}
+.input.mini{width:70px;max-width:70px}
+.memo{min-height:48px;font-family:inherit;resize:vertical}
+.btn-edit{display:flex;align-items:center;padding:0;overflow:hidden;border:1px solid var(--gray-1);border-radius:4px;background:#fff;cursor:pointer;flex:1}
+.btn-edit .v{flex:1;padding:5px 9px;color:var(--gray-3);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btn-edit .v.has{color:var(--gray-9)}
+.btn-edit button{background:var(--gray-0);border:none;border-left:1px solid var(--gray-1);padding:5px 9px;cursor:pointer;color:var(--gray-5)}
+.multiselect{flex:1;border:1px solid var(--gray-1);background:#fff;padding:5px 9px;border-radius:4px;font-size:12.5px}
+.image-box{width:100%;height:50px;background:var(--gray-0);border:1px dashed var(--gray-3);border-radius:4px;display:flex;align-items:center;justify-content:center;color:var(--gray-3);font-size:11px;cursor:pointer}
+.file-upload{flex:1;background:var(--gray-0);border:1px dashed var(--gray-3);border-radius:4px;padding:8px 12px;color:var(--gray-5);font-size:12px;text-align:center}
+
+.by-sys{display:inline-block;font-size:9.5px;padding:0 4px;border-radius:3px;background:#E8F4F0;color:var(--teal);margin-left:4px}
+.by-pat{display:inline-block;font-size:9.5px;padding:0 4px;border-radius:3px;background:#FBF1DA;color:#7A5810;margin-left:4px}
+.by-mix{display:inline-block;font-size:9.5px;padding:0 4px;border-radius:3px;background:#F5E5F5;color:#7A2D7A;margin-left:4px}
+
+.subtable-wrap{background:#fff;border:1px solid var(--gray-1);border-radius:6px;margin-bottom:12px;overflow:hidden}
+.subtable-head{background:linear-gradient(135deg,#F0E8D2 0%,var(--canvas) 100%);padding:8px 14px;border-bottom:1px solid var(--gray-1);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px}
+.subtable-head .st-title{color:var(--indigo);font-size:13px;font-weight:600}
+.subtable-head .count{color:var(--gray-5);font-weight:400;font-size:11px}
+.subtable-head .st-tools{display:flex;gap:5px;flex-wrap:wrap}
+.table{width:100%;border-collapse:collapse;font-size:12px}
+.table th{background:var(--gray-0);text-align:left;padding:6px 10px;font-weight:600;color:var(--gray-7);border-bottom:1px solid var(--gray-1);white-space:nowrap}
+.table th.color-col{background:#FFF7EA;color:#7A5810}
+.table th.color-col .del-col{background:none;border:none;color:var(--vermilion);cursor:pointer;font-size:14px;margin-left:4px}
+.table th.editable{background:#FBF1DA;color:#7A5810}
+.table td{padding:5px 10px;color:var(--gray-9);border-bottom:1px solid var(--gray-1)}
+.table tbody tr:hover td{background:var(--linen)}
+.table td.row-act{white-space:nowrap;color:var(--rust);font-size:11px;cursor:pointer}
+.table td.color-col{background:#FFFCEF}
+
+/* —— 已删除字段提示 —— */
+.deleted-fields{background:#FBEAEA;border-top:1px solid var(--gray-1);padding:8px 18px}
+.deleted-fields .df-head{color:var(--vermilion);font-size:11.5px;font-weight:600;margin-bottom:4px}
+.deleted-fields ul{list-style:none;display:grid;grid-template-columns:repeat(3,1fr);gap:2px 18px;font-size:11px}
+.deleted-fields li{padding:1px 0;color:var(--gray-7);text-decoration:line-through}
+.deleted-fields li b{color:var(--vermilion)}
+
+.status{display:inline-block;padding:1px 7px;border-radius:9px;font-size:10.5px;font-weight:500}
+.status-pending{background:#E5E7EB;color:#374151}
+.status-doing{background:#FBF1DA;color:#7A5810}
+.status-sent{background:#DBEAFE;color:#1E3A5F}
+.status-returned{background:#E8F4F0;color:var(--teal)}
+.status-done{background:#D1FAE5;color:#065F46}
+.status-success{background:#10B981;color:#fff;font-weight:600;box-shadow:0 0 0 1px #059669}
+
+.smart-search-bar{display:flex;gap:8px;align-items:center;background:linear-gradient(135deg,var(--linen) 0%,var(--canvas) 100%);border:1px solid var(--linen-d);border-radius:6px;padding:10px 14px;margin-bottom:10px}
+.smart-search-bar .ss-icon{font-size:16px;color:var(--indigo)}
+.smart-search-bar .ss-input{flex:1;border-color:var(--linen-d);font-size:13px;padding:6px 10px;background:#fff}
+.adv-filter-panel{background:#FBFBFB;border:1px solid var(--gray-1);border-top:3px solid var(--indigo);border-radius:4px;padding:10px 14px 12px;margin-bottom:12px}
+.adv-filter-panel .afp-head{font-size:11.5px;color:var(--indigo);font-weight:600;margin-bottom:8px}
+.adv-filter-panel .afp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px 22px}
+.pagination{margin-top:14px;display:flex;gap:6px;align-items:center;justify-content:flex-end;font-size:12px;color:var(--gray-5);flex-wrap:wrap}
+
+.badge{display:inline-block;padding:1px 7px;border-radius:9px;font-size:10.5px;font-weight:500;border:1px solid}
+.badge-i{background:#EDF1F7;color:var(--indigo);border-color:#D5DDE8}
+.badge-s{background:#E8F4F0;color:var(--teal);border-color:#C8E2D9}
+.badge-w{background:#FBF1DA;color:var(--amber);border-color:#EDD8A8}
+
+.field-logic-wrap{border-top:1px solid var(--gray-1);background:#FCFAF4;padding:0 18px 12px;margin-bottom:14px}
+.field-logic-wrap .flw-head{color:var(--indigo);font-size:12px;font-weight:600;padding:10px 0 6px}
+.field-logic-table{width:100%;border-collapse:collapse;font-size:11.5px;background:#fff;border:1px solid var(--gray-1);border-radius:4px}
+.field-logic-table th{background:#EDF1F7;text-align:left;padding:5px 8px;font-weight:600;color:var(--indigo);border-bottom:1px solid var(--gray-1);font-size:11px}
+.field-logic-table td{padding:5px 8px;color:var(--gray-9);border-bottom:1px solid var(--gray-1);vertical-align:top;line-height:1.6}
+.field-logic-table tbody tr:nth-child(even) td{background:#FBF8F2}
+.field-logic-table .dt-cell{color:var(--teal);font-size:11px;white-space:nowrap}
+.field-logic-table .rule-cell{color:var(--gray-7)}
+.req-tag{display:inline-block;background:#FBEAEA;color:var(--vermilion);font-size:10px;padding:1px 6px;border-radius:8px;font-weight:600}
+.opt-tag{display:inline-block;background:var(--gray-0);color:var(--gray-5);font-size:10px;padding:1px 6px;border-radius:8px}
+.by-tag{display:inline-block;font-size:10px;padding:1px 5px;border-radius:3px}
+.by-tag.by-sys{background:#E8F4F0;color:var(--teal)}
+.by-tag.by-pat{background:#FBF1DA;color:#7A5810}
+.by-tag.by-biz{background:#EDF1F7;color:var(--indigo)}
+.by-tag.by-mix{background:#F5E5F5;color:#7A2D7A}
+.anno-mark{display:inline-block;background:var(--rust);color:#fff;font-size:9.5px;padding:1px 5px;border-radius:3px;margin-left:6px;font-weight:600}
+
+.page-logic-panel{background:#fff;border:1px solid var(--indigo);border-radius:6px;margin-top:14px;overflow:hidden}
+.plp-head{background:linear-gradient(135deg,var(--indigo) 0%,var(--indigo-l) 100%);color:#fff;padding:10px 16px;font-size:13px;font-weight:600}
+.plp-body{padding:16px 18px;display:grid;grid-template-columns:1fr;gap:14px}
+.pl-cat h4{color:var(--indigo);font-size:12.5px;font-weight:600;margin-bottom:6px;border-bottom:1px solid var(--linen);padding-bottom:4px}
+.pl-table{width:100%;border-collapse:collapse;font-size:12px;background:var(--canvas);border:1px solid var(--gray-1);border-radius:4px}
+.pl-table th{background:#E8EFF6;text-align:left;padding:5px 8px;font-weight:600;color:var(--indigo);font-size:11px}
+.pl-table td{padding:6px 8px;color:var(--gray-9);border-top:1px solid var(--gray-1);vertical-align:top;line-height:1.65}
+.pl-table td:first-child{font-weight:600;color:var(--indigo);white-space:nowrap}
+.pl-ul{list-style:none;padding:0;margin:0}
+.pl-ul li{padding:5px 10px 5px 22px;background:var(--canvas);border-left:3px solid var(--teal);margin-bottom:4px;border-radius:0 4px 4px 0;font-size:12px;line-height:1.7;position:relative}
+.pl-ul li:before{content:"▸";position:absolute;left:8px;color:var(--teal);font-weight:bold}
+
+/* —— 批注功能 —— */
+.anno-toggle,.anno-export{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);padding:5px 12px;border-radius:14px;font-size:12px;cursor:pointer;font-family:inherit}
+.anno-toggle:hover,.anno-export:hover{background:rgba(255,255,255,.25)}
+.anno-toggle.on{background:var(--rust);border-color:var(--rust)}
+.anno-count{display:inline-block;background:#fff;color:var(--rust);padding:1px 7px;border-radius:10px;font-weight:600;margin-left:4px;font-size:11px}
+.anno-icon{display:none;position:absolute;background:var(--rust);color:#fff;width:18px;height:18px;border-radius:50%;font-size:11px;line-height:18px;text-align:center;cursor:pointer;z-index:50;box-shadow:0 2px 4px rgba(0,0,0,.2);border:none;font-family:inherit;padding:0}
+.anno-icon:hover{transform:scale(1.2)}
+.anno-icon.has-note{background:var(--vermilion)}
+body.anno-on .anno-icon{display:inline-block}
+body.anno-on [data-anno-target]{position:relative;outline:1px dashed rgba(209,122,64,.3);outline-offset:2px}
+body.anno-on [data-anno-target]:hover{outline:1px solid var(--rust);background:rgba(255,247,234,.5)}
+.anno-modal-mask{position:fixed;inset:0;background:rgba(30,58,95,.5);display:none;z-index:1000;align-items:center;justify-content:center}
+.anno-modal-mask.open{display:flex}
+.anno-modal{background:#fff;border-radius:8px;width:520px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.anno-modal-head{background:var(--rust);color:#fff;padding:12px 18px;border-radius:8px 8px 0 0;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.anno-modal-head .x{cursor:pointer;font-size:18px;line-height:1}
+.anno-modal-body{padding:18px}
+.anno-modal-body label{display:block;font-size:11px;color:var(--gray-5);margin-bottom:4px}
+.anno-modal-body .target-info{font-size:13px;color:var(--gray-9);margin-bottom:10px;padding:6px 10px;background:var(--canvas);border-radius:4px}
+.anno-modal-body textarea{width:100%;min-height:140px;border:1px solid var(--gray-1);border-radius:4px;padding:8px 10px;font:13px/1.6 var(--font);resize:vertical}
+.anno-modal-foot{padding:12px 18px;background:var(--canvas);border-top:1px solid var(--gray-1);display:flex;justify-content:flex-end;gap:8px;border-radius:0 0 8px 8px}
+.anno-tip{background:#FFF7EA;border:1px solid #EDD8A8;border-radius:4px;padding:10px 14px;font-size:12px;color:#5C4307;margin:0 8px 14px;display:none}
+body.anno-on .anno-tip{display:block}
+</style>
+</head><body>
+
+<div class="topbar">
+  <div class="logo">🪡 样衣制造管理系统 · 新版 UI 设计稿<small>02.1 样衣管理 · v1.3 评审版</small></div>
+  <div class="actions">
+    <button id="annoToggle" class="anno-toggle" onclick="toggleAnno()">💬 批注模式：OFF</button>
+    <button id="annoExport" class="anno-export" onclick="exportAnno()" style="display:none">📥 导出批注 <span id="annoCount" class="anno-count">0</span></button>
+    <button id="annoClear" class="anno-export" onclick="clearAnno()" style="display:none">🗑 清空</button>
+  </div>
+</div>
+
+
+<nav class="sidenav">
+  <div class="nav-cat" style="border:none;margin-top:0">样衣管理 · 1 单据</div>
+  <div class="nav-group">
+    <a class="nav-dj" href="#overview">📐 业务流闭环图</a>
+    <a class="nav-sub" href="#editor-biz">　业务视图 · 编辑页</a>
+    <a class="nav-sub" href="#editor-pat">　版师视图 · 编辑页</a>
+    <a class="nav-sub" href="#list">　列表页</a>
+  </div>
+</nav>
+
+
+<main class="main">
+  <div class="anno-tip">
+    <b>💬 批注模式已开启</b>　将鼠标移到任一字段 / 分组 / 按钮上，点击 <b style="background:#D17A40;color:#fff;padding:1px 7px;border-radius:50%;font-size:11px">💬</b> 即可写下想改的内容。批注保存到浏览器，完成后点 <b>📥 导出批注</b> 下载发给设计师。
+  </div>
+
+  <div class="dj-block" style="background:linear-gradient(135deg,var(--rust) 0%,#A85423 100%)">
+    <h1>📐 样衣管理 · UI 设计稿 v1.3<small>02.1 · 数据表 XYGL</small></h1>
+    <p class="dj-summary">
+    样衣管理（原销样管理）是业务流的<b>第一道单据</b>——客户下试样意向时建档，跟踪到样衣寄出、客户反馈、对账完成整个闭环。本单据承担两个角色：① 款式工艺资料的源头（材料+尺寸等）；② 打样过程的载体（寄样→反馈→对账）。<br>
+    <b>编号规则</b>：S-YYYYMMDD-序号（v1.3：加 S 前缀，如 S-20260527-01；当天顺序，D1 决策）　·　<b>覆盖视图</b>：业务视图编辑页 + 版师视图编辑页 + 列表页（浏览+检索一体）<br>
+    <span style="background:rgba(255,255,255,.18);padding:2px 8px;border-radius:4px;font-size:12px">📌 v1.3 改造（串流程业务方答复）：① 样衣编号加 S 前缀（S-YYYYMMDD-序号）② 板房样衣单价固定 CNY ③ 列表页"已成单"绿色加粗 ④ 阻止删除被引用样衣 ⑤ 复制功能加强 ⑥ 修改实时同步到引用本样衣的报价单 ⑦ 重要事件触发自动更新下游</span>
+    </p>
+  </div>
+
+  <div id="overview" class="dj-block">
+    <h1>📐 业务流闭环图</h1>
+    <p class="dj-summary">本设计稿仅设计 ⭐ 样衣管理 一张单据，下游单据 ②-⑧ 是触发关系示意。</p>
+  </div>
+  
+<svg viewBox="0 0 1200 540" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;background:#FBF8F2;border:1px solid var(--gray-1);border-radius:8px">
+  <defs>
+    <marker id="arr" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#1E3A5F"/>
+    </marker>
+    <marker id="arr-rust" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#D17A40"/>
+    </marker>
+  </defs>
+
+  <text x="20" y="35" font-size="12" fill="#6F7178" font-weight="600">业务员</text>
+  <line x1="80" y1="40" x2="1180" y2="40" stroke="#E5E2DA" stroke-dasharray="3,3"/>
+  <text x="20" y="225" font-size="12" fill="#6F7178" font-weight="600">版　师</text>
+  <line x1="80" y1="230" x2="1180" y2="230" stroke="#E5E2DA" stroke-dasharray="3,3"/>
+  <text x="20" y="415" font-size="12" fill="#6F7178" font-weight="600">财　务</text>
+  <line x1="80" y1="420" x2="1180" y2="420" stroke="#E5E2DA" stroke-dasharray="3,3"/>
+
+  <rect x="90" y="60" width="200" height="120" rx="8" fill="#1E3A5F" stroke="#D17A40" stroke-width="3"/>
+  <text x="190" y="90" font-size="13" fill="#fff" font-weight="700" text-anchor="middle">⭐ 样衣管理</text>
+  <text x="190" y="108" font-size="11" fill="#FFE0C2" text-anchor="middle">（业务流第一环）</text>
+  <text x="190" y="130" font-size="10" fill="#fff" text-anchor="middle">基本信息 + 材料明细</text>
+  <text x="190" y="146" font-size="10" fill="#fff" text-anchor="middle">+ 图片 + 寄样跟踪</text>
+  <text x="190" y="166" font-size="10" fill="#FFE0C2" text-anchor="middle">本设计稿主体</text>
+
+  <rect x="380" y="70" width="170" height="80" rx="6" fill="#fff" stroke="#1E3A5F" stroke-width="2"/>
+  <text x="465" y="100" font-size="12" fill="#1E3A5F" font-weight="600" text-anchor="middle">② 客户报价</text>
+  <text x="465" y="118" font-size="10" fill="#6F7178" text-anchor="middle">材料/单耗自动导入</text>
+  <text x="465" y="134" font-size="10" fill="#6F7178" text-anchor="middle">业务只填单价</text>
+
+  <rect x="600" y="70" width="170" height="80" rx="6" fill="#fff" stroke="#D17A40" stroke-width="2"/>
+  <text x="685" y="100" font-size="12" fill="#D17A40" font-weight="600" text-anchor="middle">③ 材料采购单</text>
+  <text x="685" y="118" font-size="10" fill="#6F7178" text-anchor="middle">每行材料 → 一张订单</text>
+  <text x="685" y="134" font-size="10" fill="#6F7178" text-anchor="middle">行级 [生成订单] 按钮</text>
+
+  <line x1="290" y1="100" x2="380" y2="100" stroke="#1E3A5F" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="335" y="92" font-size="10" fill="#1E3A5F" text-anchor="middle">[🔵生成报价]</text>
+  <line x1="290" y1="130" x2="600" y2="100" stroke="#D17A40" stroke-width="1.5" marker-end="url(#arr-rust)"/>
+  <text x="450" y="120" font-size="10" fill="#D17A40">[🟠生成材料订单] 行级</text>
+
+  <rect x="380" y="250" width="170" height="80" rx="6" fill="#FBF1DA" stroke="#C8901E" stroke-width="2"/>
+  <text x="465" y="280" font-size="12" fill="#7A5810" font-weight="600" text-anchor="middle">④ 版师工作台</text>
+  <text x="465" y="298" font-size="10" fill="#7A5810" text-anchor="middle">待办列表</text>
+  <text x="465" y="314" font-size="10" fill="#7A5810" text-anchor="middle">显示推送的样衣单</text>
+
+  <line x1="190" y1="180" x2="190" y2="290" stroke="#3E8E7E" stroke-width="1.5"/>
+  <line x1="190" y1="290" x2="380" y2="290" stroke="#3E8E7E" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="200" y="225" font-size="10" fill="#3E8E7E">填材料寄出单号</text>
+  <text x="200" y="240" font-size="10" fill="#3E8E7E">→ 自动推送</text>
+
+  <rect x="600" y="250" width="170" height="80" rx="6" fill="#FBF1DA" stroke="#C8901E" stroke-width="2"/>
+  <text x="685" y="280" font-size="12" fill="#7A5810" font-weight="600" text-anchor="middle">⑤ 版师填技术参数</text>
+  <text x="685" y="298" font-size="10" fill="#7A5810" text-anchor="middle">单耗 / 拉链长度</text>
+  <text x="685" y="314" font-size="10" fill="#7A5810" text-anchor="middle">+ 件数 / 单价</text>
+  <line x1="550" y1="290" x2="600" y2="290" stroke="#3E8E7E" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <rect x="830" y="250" width="170" height="80" rx="6" fill="#fff" stroke="#1E3A5F" stroke-width="2"/>
+  <text x="915" y="280" font-size="12" fill="#1E3A5F" font-weight="600" text-anchor="middle">⑥ 对账单</text>
+  <text x="915" y="298" font-size="10" fill="#6F7178" text-anchor="middle">件数 × 单价</text>
+  <text x="915" y="314" font-size="10" fill="#6F7178" text-anchor="middle">自动生成</text>
+  <line x1="770" y1="290" x2="830" y2="290" stroke="#1E3A5F" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <text x="915" y="350" font-size="10" fill="#6F7178" text-anchor="middle">业务确认对账</text>
+  <text x="915" y="365" font-size="10" fill="#6F7178" text-anchor="middle">+ 版师传发票</text>
+  <text x="915" y="380" font-size="10" fill="#C04042" text-anchor="middle">校验：发票=对账金额</text>
+
+  <rect x="830" y="430" width="170" height="80" rx="6" fill="#fff" stroke="#1E3A5F" stroke-width="2"/>
+  <text x="915" y="460" font-size="12" fill="#1E3A5F" font-weight="600" text-anchor="middle">⑦ 付款申请</text>
+  <text x="915" y="478" font-size="10" fill="#6F7178" text-anchor="middle">校验通过后</text>
+  <text x="915" y="494" font-size="10" fill="#6F7178" text-anchor="middle">自动同步生成</text>
+  <line x1="915" y1="330" x2="915" y2="430" stroke="#1E3A5F" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <rect x="600" y="430" width="170" height="80" rx="6" fill="#E8F4F0" stroke="#3E8E7E" stroke-width="2"/>
+  <text x="685" y="460" font-size="12" fill="#3E8E7E" font-weight="600" text-anchor="middle">⑧ 财务付款</text>
+  <text x="685" y="478" font-size="10" fill="#3E8E7E" text-anchor="middle">业务流终点</text>
+  <line x1="830" y1="470" x2="770" y2="470" stroke="#1E3A5F" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <rect x="90" y="395" width="450" height="125" rx="6" fill="#FFF7EA" stroke="#EDD8A8"/>
+  <text x="105" y="420" font-size="13" fill="#7A5810" font-weight="600">📌 本设计稿覆盖范围</text>
+  <text x="105" y="438" font-size="11" fill="#5C4307">⭐ 仅样衣管理（深蓝色框）本张单据的完整设计</text>
+  <text x="105" y="454" font-size="11" fill="#5C4307">下游单据 ②③⑤⑥⑦⑧ 是触发关系示意，独立设计稿待后续产出</text>
+  <text x="105" y="476" font-size="11" fill="#7A5810" font-weight="600">字段精准溯源：</text>
+  <text x="105" y="492" font-size="10" fill="#5C4307">• 字段清单 100% 取自 02-销售管理.docx 销样管理章节</text>
+  <text x="105" y="507" font-size="10" fill="#5C4307">• 22 条业务批注全部应用：删 15 字段，留 32 字段，新增 7 字段</text>
+</svg>
+
+
+  <div class="biz-notes"><b>📌 样衣管理 · 业务规则</b><ul><li>🔑 样衣管理是业务流第一环——下游单据（客户报价、材料采购、对账单、付款申请）全部由本单据派生</li><li>📋 ★ v1.3 编号规则（D1）：样衣编号 S-YYYYMMDD-序号（如 S-20260527-01），自动生成；下游报价单 Q-YYYYMMDD-序号</li><li>📋 主表【主要信息】原 23 字段：删除 10 个，保留 13 个 + 新增「样衣类别」(7 类多选)</li><li>📋 子表【材料明细】原 21 列：删除 5 列，保留 16 列；「颜色」字段可动态加列；「品名」每款单独录入不从面料库选</li><li>🔄 寄样跟踪是新增分组：材料寄出单号触发版师工作台推送；件数+单价填完触发对账单生成</li><li>💰 ★ v1.3 板房样衣单价 固定 CNY（E1 决策）：版师工时单价 + 工时金额 都是人民币</li><li>👥 角色分工：业务填基本信息+材料价格+寄出单号；版师填单耗+拉链长度+附件+寄回单号+件数+单价</li><li>🟢 ★ v1.3 已成单状态（B1 决策）：被客户报价转销售合同后自动置 已成单，列表绿色加粗显示</li><li>🚫 ★ v1.3 阻止删除被引用样衣（A6 决策）：有客户报价单引用本样衣时，删除操作弹错并禁止</li><li>🔄 ★ v1.3 修改实时同步（C1 决策）：业务改样衣的客户/材料 → 实时同步到所有引用本样衣的 草稿/已报价 客户报价单；已成单状态不同步</li><li>🔒 单价 / 工时金额 等敏感字段对部分员工不可见</li></ul></div>
+
+  <section id="editor-biz" class="design-section">
+    <div class="sect-head">
+      <div>
+        <h2><span class="sect-no">A</span> 业务视图 · 编辑页（默认）</h2>
+        <p class="sect-desc">业务员主用——录入基本信息 + 图片 + 材料明细 + 寄样跟踪 + 变更记录</p>
+      </div>
+      <div class="sect-head .sect-meta" style="padding-top:4px">
+        <span class="badge badge-i">业务员主用</span>
+        <span class="badge badge-s">43 字段 / 5 分组</span>
+      </div>
+    </div>
+    <div class="design-frame">
+      
+    <div class="page-toolbar">
+      <div class="tb-left">
+        <span class="page-title">样衣管理 · 编辑（业务视图）</span>
+        <span class="badge badge-s">一般 etGeneral</span>
+        <span class="badge badge-w">草稿</span>
+      </div>
+      <div class="tb-right">
+        <button class="btn btn-p">💾 保存</button>
+        <button class="btn btn-p">🔵 自动生成报价单</button>
+        <button class="btn btn-c">🟢 推送版师</button>
+        <button class="btn btn-s">复制</button>
+        <button class="btn btn-s">导出</button>
+        <button class="btn btn-s">···</button>
+      </div>
+    </div>
+    <h3 class="section-divider">▣ 基本信息</h3>
+    <div class="fieldset">
+      <div class="fieldset-head">主要信息 <span class="count">14 字段（原 24，删 10）</span></div>
+      <div class="fieldset-body grid-3"><div class="field"><label><span class="req">*</span>样衣编号<span class="by-sys">系统</span></label><input class="input readonly" value="S-20260527-01" readonly></div><div class="field"><label><span class="req">*</span>样衣类别</label><div class="multiselect">☑ 销样　☐ 头样　☐ 二样　☐ 三样　☐ 产前样　☐ 船样　☐ 拍照样</div></div><div class="field"><label>中间商编号</label><div class="btn-edit"><div class="v has">CN001</div><button>…</button></div></div><div class="field"><label>中间商名称<span class="by-sys">系统</span></label><input class="input readonly" value="上海福德贸易" readonly></div><div class="field"><label><span class="req">*</span>客户款号</label><input class="input" value="H-2026-S001"></div><div class="field"><label>关联最终买家</label><div class="btn-edit"><div class="v has">H&amp;M Asia</div><button>…</button></div></div><div class="field"><label>关联最终买家编号<span class="by-sys">系统</span></label><input class="input readonly" value="CN032" readonly></div><div class="field"><label>制版师</label><div class="btn-edit"><div class="v has">点击选择 …</div><button>…</button></div></div><div class="field"><label>制单人员</label><input class="input" value="张三"></div><div class="field"><label>制单日期<span class="by-sys">系统</span></label><input class="input readonly" value="2026-05-27" readonly></div><div class="field"><label>寄样日期</label><input class="input" type="date" value="2026-05-27"></div><div class="field"><label>收件人</label><select class="select"><option>请选择</option></select></div><div class="field"><label>文件位置</label><input class="input" value=""></div><div class="field"><label>成衣备注</label><textarea class="memo"></textarea></div></div>
+      
+        <div class="deleted-fields">
+          <div class="df-head">❌ 业务方明确删除 10 字段（仅供评审对照原 docx）</div>
+          <ul><li><b>是否完成</b> <span style="color:var(--gray-5)">— #10 不要了</span></li><li><b>完成日期</b> <span style="color:var(--gray-5)">— #11 不要了</span></li><li><b>未成单</b> <span style="color:var(--gray-5)">— #12 不要了</span></li><li><b>未成单原因</b> <span style="color:var(--gray-5)">— #13 不要了</span></li><li><b>情况说明</b> <span style="color:var(--gray-5)">— #14 不要了</span></li><li><b>销样业务费用</b> <span style="color:var(--gray-5)">— #15 改为材料行级生成订单</span></li><li><b>销样工厂费用</b> <span style="color:var(--gray-5)">— #16 改为对账单自动生成</span></li><li><b>损失费用合计</b> <span style="color:var(--gray-5)">— #17 不要了</span></li><li><b>撤单日期</b> <span style="color:var(--gray-5)">— #18 不要了</span></li><li><b>材料是否送达</b> <span style="color:var(--gray-5)">— #19 不要了</span></li></ul>
+        </div>
+    </div>
+        <div class="field-logic-wrap">
+          <div class="flw-head">📋 字段操作逻辑（14 个）</div>
+          <table class="field-logic-table">
+            <thead><tr>
+              <th style="width:170px">字段</th>
+              <th style="width:75px">类型</th>
+              <th style="width:55px">必填</th>
+              <th style="width:80px">控件</th>
+              <th style="width:60px">填写人</th>
+              <th>操作逻辑 / 业务规则</th>
+            </tr></thead>
+            <tbody><tr><td><b>样衣编号</b><span class="anno-mark">改前缀 [D1]</span></td><td class="dt-cell">文本</td><td><span class="req-tag">必填</span></td><td>只读文本</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">本张样衣单的唯一编号；不能与已有重复；★ v1.3 自动生成 S-YYYYMMDD-序号（加 S 前缀，D1）</td></tr><tr><td><b>样衣类别</b><span class="anno-mark">新增 [#6]</span></td><td class="dt-cell">多选</td><td><span class="req-tag">必填</span></td><td>下拉多选</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">勾选：销样 / 头样 / 二样 / 三样 / 产前样 / 船样 / 拍照样（可多选）</td></tr><tr><td><b>中间商编号</b></td><td class="dt-cell">选择带出</td><td><span class="opt-tag">选填</span></td><td>点选弹窗</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">点按钮从【客户资料】选中间商，选定后自动带出名称</td></tr><tr><td><b>中间商名称</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>只读文本</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">系统自动填，只读</td></tr><tr><td><b>客户款号</b><span class="anno-mark">改逻辑 [#8]</span></td><td class="dt-cell">文本</td><td><span class="req-tag">必填</span></td><td>文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">由登录人直接填入（原从面辅料开发挑款号；面辅料开发已取消）</td></tr><tr><td><b>关联最终买家</b></td><td class="dt-cell">选择带出</td><td><span class="opt-tag">选填</span></td><td>点选弹窗</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">点按钮从【客户资料】挑最终买家，选定后自动带出买家编号</td></tr><tr><td><b>关联最终买家编号</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>只读文本</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">系统自动填</td></tr><tr><td><b>制版师</b><span class="anno-mark">[#9]</span></td><td class="dt-cell">选择带出</td><td><span class="opt-tag">选填</span></td><td>点选弹窗</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">从【制版师】字典选择；选定后本单进入该版师的工作台</td></tr><tr><td><b>制单人员</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">默认填当前登录人，可修改</td></tr><tr><td><b>制单日期</b></td><td class="dt-cell">日期</td><td><span class="opt-tag">选填</span></td><td>只读日期</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">默认填今天，只读</td></tr><tr><td><b>寄样日期</b></td><td class="dt-cell">日期</td><td><span class="opt-tag">选填</span></td><td>日期</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">样衣寄给客户的日期</td></tr><tr><td><b>收件人</b></td><td class="dt-cell">下拉选项</td><td><span class="opt-tag">选填</span></td><td>下拉单选</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">客户侧的对接人（下拉，可累积历史值）</td></tr><tr><td><b>文件位置</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">纸样 / 工艺单的存放位置</td></tr><tr><td><b>成衣备注</b></td><td class="dt-cell">多行文本</td><td><span class="opt-tag">选填</span></td><td>多行文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">—</td></tr></tbody>
+          </table>
+        </div><h3 class="section-divider">▣ 图片信息</h3>
+    <div class="fieldset">
+      <div class="fieldset-head">图片信息 <span class="count">3 字段</span></div>
+      <div class="fieldset-body grid-3"><div class="field"><label>图片 1</label><div class="image-box">📷 上传图片</div></div><div class="field"><label>图片 2</label><div class="image-box">📷 上传图片</div></div><div class="field"><label>图片 3</label><div class="image-box">📷 上传图片</div></div></div>
+      
+    </div><h3 class="section-divider">▣ 材料明细</h3>
+    <div class="subtable-wrap">
+      <div class="subtable-head">
+        <span class="st-title">▸ 材料明细<span class="count"> · 17 字段（+ 2 颜色加列；原 21，删 4） · 示例 3 行</span></span>
+        <div class="st-tools"><button class="btn btn-s btn-sm">[+ 添加行]</button><button class="btn btn-s btn-sm">[— 删除]</button><button class="btn btn-s btn-sm">[+ 加颜色列]</button><button class="btn btn-s btn-sm">[📋 Excel 粘贴]</button></div>
+      </div>
+      <div style="overflow-x:auto">
+      <table class="table">
+        <thead><tr><th style="width:30px"><input type="checkbox"></th><th>安排日期</th><th>品名</th><th>门幅</th><th>颜色 1</th><th class="color-col">颜色 2 <button class="del-col">×</button></th><th class="color-col">颜色 3 <button class="del-col">×</button></th><th>部位</th><th>成份</th><th>码带</th><th>拉链长度</th><th>拉头</th><th>数量</th><th>尺寸(长×宽)</th><th>参考价格</th><th>实际耗用</th><th>供应商编号</th><th>供应商名称</th><th>图片</th><th>备注</th><th>行操作</th></tr></thead>
+        <tbody><tr><td><input type="checkbox"></td><td>2026-05-27</td><td>32S 全棉府绸</td><td>147cm</td><td>白</td><td class="color-col">蓝</td><td class="color-col">灰</td><td>主面料</td><td>100% 棉</td><td>—</td><td>(版师)</td><td>—</td><td>1.2</td><td>—</td><td>28.50</td><td>(版师)</td><td>S001</td><td>苏州福利纺织</td><td>[图]</td><td></td><td class="row-act">[🟠 生成材料订单]</td></tr><tr><td><input type="checkbox"></td><td>2026-05-27</td><td>65/35 涤棉府绸</td><td>150cm</td><td>本色</td><td class="color-col">蓝</td><td class="color-col">灰</td><td>里料</td><td>T/R 65/35</td><td>—</td><td>—</td><td>—</td><td>0.4</td><td>—</td><td>18.20</td><td>(版师)</td><td>S002</td><td>常州金顺</td><td>[图]</td><td></td><td class="row-act">[🟠 生成材料订单]</td></tr><tr><td><input type="checkbox"></td><td>2026-05-27</td><td>YKK 5# 拉链</td><td>—</td><td>黑</td><td class="color-col">蓝</td><td class="color-col">灰</td><td>拉链</td><td>—</td><td>—</td><td>18cm</td><td>金属</td><td>1</td><td>—</td><td>1.80</td><td>(版师)</td><td>S008</td><td>盛达辅料</td><td>[图]</td><td></td><td class="row-act">[🟠 生成材料订单]</td></tr></tbody>
+      </table>
+      </div>
+      
+        <div class="deleted-fields">
+          <div class="df-head">❌ 业务方明确删除 4 列（仅供评审对照原 docx）</div>
+          <ul><li><b>是否确定</b> <span style="color:var(--gray-5)">— #20 不要了</span></li><li><b>更改</b> <span style="color:var(--gray-5)">— #21 不要了</span></li><li><b>材料编号</b> <span style="color:var(--gray-5)">— #22 不要了（呼应第 1 章删面料库）</span></li><li><b>计量单位</b> <span style="color:var(--gray-5)">— #25 这个不要</span></li></ul>
+        </div>
+    </div>
+        <div class="field-logic-wrap">
+          <div class="flw-head">📋 字段操作逻辑（17 个）</div>
+          <table class="field-logic-table">
+            <thead><tr>
+              <th style="width:170px">字段</th>
+              <th style="width:75px">类型</th>
+              <th style="width:55px">必填</th>
+              <th style="width:80px">控件</th>
+              <th style="width:60px">填写人</th>
+              <th>操作逻辑 / 业务规则</th>
+            </tr></thead>
+            <tbody><tr><td><b>安排日期</b></td><td class="dt-cell">日期</td><td><span class="opt-tag">选填</span></td><td>日期</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">材料安排日期</td></tr><tr><td><b>品名</b><span class="anno-mark">[#23]</span></td><td class="dt-cell">文本</td><td><span class="req-tag">必填</span></td><td>文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">文本录入，不从数据库导入，每款单独填</td></tr><tr><td><b>门幅</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">147cm 等</td></tr><tr><td><b>颜色 1 / 2 / N</b><span class="anno-mark">动态加列 [#24]</span></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">默认 1 列；表头有 [+加颜色列] 按钮，每点一次加一列</td></tr><tr><td><b>部位</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">主面料 / 里料 / 拉链 等</td></tr><tr><td><b>成份</b></td><td class="dt-cell">下拉选项</td><td><span class="opt-tag">选填</span></td><td>下拉单选</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">下拉，可累积历史值；100% Polyester 等</td></tr><tr><td><b>码带</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">—</td></tr><tr><td><b>拉链长度</b><span class="anno-mark">[#9]</span></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本</td><td><span class="by-tag by-pat">版师</span></td><td class="rule-cell">版师填</td></tr><tr><td><b>拉头</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">—</td></tr><tr><td><b>数量</b></td><td class="dt-cell">数字</td><td><span class="opt-tag">选填</span></td><td>数字</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">—</td></tr><tr><td><b>尺寸(长×宽)</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">—</td></tr><tr><td><b>参考价格</b></td><td class="dt-cell">数字</td><td><span class="opt-tag">选填</span></td><td>数字</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">—</td></tr><tr><td><b>实际耗用</b><span class="anno-mark">[#26]</span></td><td class="dt-cell">数字</td><td><span class="opt-tag">选填</span></td><td>数字</td><td><span class="by-tag by-pat">版师</span></td><td class="rule-cell">版师在自己页面填</td></tr><tr><td><b>供应商编号</b></td><td class="dt-cell">选择带出</td><td><span class="opt-tag">选填</span></td><td>点选弹窗</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">点按钮从【工厂资料】选，自动带名称</td></tr><tr><td><b>供应商名称</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>只读文本</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">系统自动填</td></tr><tr><td><b>图片</b></td><td class="dt-cell">图片</td><td><span class="opt-tag">选填</span></td><td>图片上传</td><td><span class="by-tag by-mix">业务/版师</span></td><td class="rule-cell">该条材料图片</td></tr><tr><td><b>备注</b></td><td class="dt-cell">多行文本</td><td><span class="opt-tag">选填</span></td><td>多行文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">—</td></tr></tbody>
+          </table>
+        </div><h3 class="section-divider">▣ 寄样跟踪（新增分组）</h3>
+    <div class="fieldset">
+      <div class="fieldset-head">寄样跟踪 <span class="count">8 字段</span></div>
+      <div class="fieldset-body grid-3"><div class="field"><label>材料寄出单号</label><input class="input" value=""></div><div class="field"><label>材料寄出日期<span class="by-sys">系统</span></label><input class="input readonly" value="" readonly></div><div class="field"><label>样衣意见附件</label><div class="file-upload">📎 上传文件 (多文件)</div></div><div class="field"><label>寄回快递单号<span class="by-pat">版师</span></label><input class="input" value=""></div><div class="field"><label>寄回日期<span class="by-sys">系统</span></label><input class="input readonly" value="" readonly></div><div class="field"><label><span class="req">*</span>件数<span class="by-pat">版师</span></label><input class="input" type="number" value=""></div><div class="field"><label><span class="req">*</span>版师工时单价(CNY)<span class="by-pat">版师</span></label><input class="input" type="number" value=""></div><div class="field"><label>工时金额(CNY)<span class="by-sys">系统</span></label><input class="input readonly" value="" readonly></div></div>
+      
+    </div>
+        <div class="field-logic-wrap">
+          <div class="flw-head">📋 字段操作逻辑（8 个）</div>
+          <table class="field-logic-table">
+            <thead><tr>
+              <th style="width:170px">字段</th>
+              <th style="width:75px">类型</th>
+              <th style="width:55px">必填</th>
+              <th style="width:80px">控件</th>
+              <th style="width:60px">填写人</th>
+              <th>操作逻辑 / 业务规则</th>
+            </tr></thead>
+            <tbody><tr><td><b>材料寄出单号</b><span class="anno-mark">新增 [#5]</span></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">🔑 关键触发字段：填入后自动推送本单到版师工作台 + 状态变&#x27;打样中&#x27;</td></tr><tr><td><b>材料寄出日期</b><span class="anno-mark">新增</span></td><td class="dt-cell">日期</td><td><span class="opt-tag">选填</span></td><td>只读日期</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">材料寄出单号填入时自动写今天</td></tr><tr><td><b>样衣意见附件</b><span class="anno-mark">新增 [#5]</span></td><td class="dt-cell">文件(多)</td><td><span class="opt-tag">选填</span></td><td>文件上传</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">客户反馈样衣意见（业务上传图片 / PDF / Word）</td></tr><tr><td><b>寄回快递单号</b><span class="anno-mark">新增 [#5]</span></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本</td><td><span class="by-tag by-pat">版师</span></td><td class="rule-cell">版师样衣完成寄回时填</td></tr><tr><td><b>寄回日期</b><span class="anno-mark">新增</span></td><td class="dt-cell">日期</td><td><span class="opt-tag">选填</span></td><td>只读日期</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">寄回单号填入时自动写</td></tr><tr><td><b>件数</b><span class="anno-mark">新增 [#16]</span></td><td class="dt-cell">数字</td><td><span class="req-tag">必填</span></td><td>数字</td><td><span class="by-tag by-pat">版师</span></td><td class="rule-cell">完成的样衣件数（版师填）</td></tr><tr><td><b>版师工时单价(CNY)</b><span class="anno-mark">改 [E1]</span></td><td class="dt-cell">数字</td><td><span class="req-tag">必填</span></td><td>数字</td><td><span class="by-tag by-pat">版师</span></td><td class="rule-cell">★ v1.3：每件版师收费，固定人民币 CNY（E1 决策）</td></tr><tr><td><b>工时金额(CNY)</b><span class="anno-mark">改 [E1]</span></td><td class="dt-cell">公式</td><td><span class="opt-tag">选填</span></td><td>公式计算</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">★ = 件数 × 单价；CNY；填完自动生成对账单 → 联动付款申请</td></tr></tbody>
+          </table>
+        </div><h3 class="section-divider">▣ 变更记录</h3>
+    <div class="fieldset">
+      <div class="fieldset-head">变更记录 <span class="count">1 字段</span></div>
+      <div class="fieldset-body grid-3"><div class="field"><label>变更记录</label><textarea class="memo"></textarea></div></div>
+      
+    </div>
+    </div>
+    <div class="page-logic-panel"><div class="plp-head">⚙ 页面级操作逻辑（按钮 / 事件 / 校验 / 联动）</div><div class="plp-body"><div class="pl-cat"><h4>🔘 操作按钮</h4><table class="pl-table"><thead><tr><th style="width:180px">按钮</th><th>行为</th></tr></thead><tbody><tr><td>💾 保存</td><td>保存样衣信息；按当前角色限制（业务/版师）可保存字段不同</td></tr><tr><td>🔵 自动生成报价单</td><td>把材料明细 + 单耗 + 参考价格推到「客户报价」单据；★ v1.3 报价单号自动 Q-YYYYMMDD-序号</td></tr><tr><td>🟢 推送版师</td><td>推送本单到版师工作台；材料寄出单号填入时系统自动调用</td></tr><tr><td>🟠 生成材料订单（行级）</td><td>材料明细每行右侧按钮，点击为该行生成一张采购单</td></tr><tr><td>复制</td><td>★ v1.3：基本信息+材料明细复制；寄样跟踪/状态/制单日期不复制；新样衣自动编号 S-YYYYMMDD-序号</td></tr><tr><td>导出</td><td>导出 PDF / Word</td></tr><tr><td>🗑 删除</td><td>★ v1.3：① 待派单可删 ② 已被客户报价引用的样衣 阻止删除（A6）</td></tr></tbody></table></div><div class="pl-cat"><h4>⚡ 页面事件（系统自动执行）</h4><table class="pl-table"><thead><tr><th style="width:180px">时机</th><th>系统做什么</th></tr></thead><tbody><tr><td>新建时</td><td>★ v1.3 自动生成 S-YYYYMMDD-序号 / 制单日期=今天 / 制单人员=当前登录人</td></tr><tr><td>选中间商后</td><td>自动带中间商名称</td></tr><tr><td>选最终买家后</td><td>自动带最终买家编号</td></tr><tr><td>选制版师后</td><td>本单归属此版师，进入该版师工作台</td></tr><tr><td>填材料寄出单号</td><td>① 寄出日期=今天 ② 状态→打样中 ③ 推送版师工作台</td></tr><tr><td>版师填寄回单号</td><td>① 寄回日期=今天 ② 状态→已寄回</td></tr><tr><td>版师填件数+单价</td><td>① 工时金额公式(CNY)生效 ② 自动建对账单 ③ 联动付款申请</td></tr><tr><td>★ 被客户报价转销售合同</td><td>★ v1.3：本样衣状态自动 → 已成单（列表绿色加粗显示 — B1）</td></tr><tr><td>★ 用户改样衣的客户/材料</td><td>★ v1.3：实时同步到所有引用本样衣的 草稿/已报价 客户报价单（C1）；已成单状态不同步</td></tr></tbody></table></div><div class="pl-cat"><h4>✅ 字段校验规则</h4><ul class="pl-ul"><li>必填：样衣编号 / 样衣类别 / 客户款号</li><li>唯一（不可重复）：样衣编号</li><li>材料明细 至少 1 行；明细的「品名」必填</li><li>版师保存时：实际耗用 / 件数 / 工时单价 必填</li><li>材料编号字段已删除（呼应第 1 章删面料库）—— 不再做编号校验</li></ul></div><div class="pl-cat"><h4>🔗 字段联动 / 显隐</h4><ul class="pl-ul"><li>中间商编号 → 自动带中间商名称</li><li>关联最终买家 → 自动带最终买家编号</li><li>客户款号 → 业务直接录入（不再从面辅料开发挑款号）</li><li>材料寄出单号 → 自动推送版师工作台 + 状态变更</li><li>版师·件数 / 单价 → 工时金额公式生效 + 触发自动建对账单</li><li>业务·权限不足者 → 单价 / 总价 / 工时金额 不可见</li></ul></div></div></div>
+  </section>
+
+  <section id="editor-pat" class="design-section">
+    <div class="sect-head">
+      <div>
+        <h2><span class="sect-no">B</span> 版师视图 · 编辑页</h2>
+        <p class="sect-desc">版师从工作台进入——仅编辑：实际耗用 / 拉链长度 / 附件 / 寄回单号 / 件数 / 工时单价</p>
+      </div>
+      <div class="sect-head .sect-meta" style="padding-top:4px">
+        <span class="badge badge-w">版师专用</span>
+      </div>
+    </div>
+    <div class="design-frame">
+      
+    <div class="page-toolbar">
+      <div class="tb-left">
+        <span class="page-title">样衣管理 · 编辑（版师视图）</span>
+        <span class="badge badge-i">版师工作台进入</span>
+        <span class="badge badge-w">打样中</span>
+      </div>
+      <div class="tb-right">
+        <button class="btn btn-p">💾 保存</button>
+        <button class="btn btn-s">关闭</button>
+      </div>
+    </div>
+
+    <div class="biz-notes" style="background:#FFF7EA;border-left:3px solid var(--amber)">
+      <b>📌 版师视图特点</b>
+      <ul>
+        <li>业务录入的基本信息（客户/款号/中间商等）<b>只读</b>，版师不能改</li>
+        <li>仅能编辑：<b>材料明细的"实际耗用"/"拉链长度"、附件、寄回单号、件数、工时单价</b></li>
+        <li>看不到客户单价（业务的报价权限） — 但能看到自己的工时单价</li>
+      </ul>
+    </div>
+
+    <div class="fieldset" style="opacity:.7">
+      <div class="fieldset-head">▣ 基本信息（只读，业务录入）<span class="count">13 字段</span></div>
+      <div class="fieldset-body grid-3">
+        <div class="field"><label>样衣编号</label><input class="input readonly" value="S-20260527-01" readonly></div>
+        <div class="field"><label>样衣类别</label><input class="input readonly" value="销样·头样" readonly></div>
+        <div class="field"><label>客户款号</label><input class="input readonly" value="H-2026-S001" readonly></div>
+        <div class="field"><label>中间商</label><input class="input readonly" value="CN001 上海福德" readonly></div>
+        <div class="field"><label>最终买家</label><input class="input readonly" value="H&amp;M Asia" readonly></div>
+        <div class="field"><label>制版师</label><input class="input readonly" value="王版师 (我自己)" readonly></div>
+      </div>
+    </div>
+
+    <div class="subtable-wrap">
+      <div class="subtable-head">
+        <span class="st-title">▸ 材料明细 <span class="count">· 仅"实际耗用""拉链长度""附件"可编辑</span></span>
+      </div>
+      <div style="overflow-x:auto">
+      <table class="table">
+        <thead><tr>
+          <th>品名</th><th>部位</th><th>规格/门幅</th><th>颜色</th>
+          <th class="editable">拉链长度 ✏️</th>
+          <th class="editable">实际耗用 ✏️</th>
+          <th>参考价格</th>
+          <th class="editable">附件 ✏️</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>32S 全棉府绸</td><td>主面料</td><td>147cm</td><td>白</td>
+              <td><input class="input mini" value="—"></td>
+              <td><input class="input mini" value="1.2"></td>
+              <td>¥28.50</td>
+              <td><button class="btn btn-s btn-sm">📎 上传</button></td></tr>
+          <tr><td>YKK 5# 拉链</td><td>拉链</td><td>—</td><td>黑</td>
+              <td><input class="input mini" value="18cm"></td>
+              <td><input class="input mini" value="1"></td>
+              <td>¥1.80</td>
+              <td><button class="btn btn-s btn-sm">📎 上传</button></td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+
+    <div class="fieldset">
+      <div class="fieldset-head" style="background:linear-gradient(135deg,#FBF1DA 0%,var(--canvas) 100%);color:#7A5810">▣ 寄样跟踪（版师可编辑）<span class="count">完成样衣后填这部分</span></div>
+      <div class="fieldset-body grid-3">
+        <div class="field"><label>寄回快递单号</label><input class="input" placeholder="SF1234567890"></div>
+        <div class="field"><label>寄回日期</label><input class="input readonly" value="自动填" readonly></div>
+        <div class="field"><label>件数 *</label><input class="input" type="number" value="3"></div>
+        <div class="field"><label>工时单价 *</label><input class="input" type="number" value="120"></div>
+        <div class="field"><label>工时金额</label><input class="input readonly" value="¥ 360 (自动)" readonly></div>
+        <div class="field"><label></label><div style="font-size:11px;color:var(--amber)">💡 填完保存 → 自动生成对账单</div></div>
+      </div>
+    </div>
+    
+    </div>
+  </section>
+
+  <section id="list" class="design-section">
+    <div class="sect-head">
+      <div>
+        <h2><span class="sect-no">C</span> 列表页（浏览 + 检索一体）</h2>
+        <p class="sect-desc">浏览、检索、筛选、批量操作样衣管理记录</p>
+      </div>
+      <div class="sect-head .sect-meta" style="padding-top:4px">
+        <span class="badge badge-s">列表 + 检索一体</span>
+      </div>
+    </div>
+    <div class="design-frame">
+      
+    <div class="page-toolbar">
+      <div class="tb-left"><span class="page-title">样衣管理 · 列表</span></div>
+      <div class="tb-right">
+        <button class="btn btn-p btn-sm">+ 新建</button>
+        <button class="btn btn-s btn-sm">导入 Excel</button>
+        <button class="btn btn-s btn-sm">导出</button>
+        <button class="btn btn-s btn-sm">删除</button>
+        <button class="btn btn-s btn-sm">复制</button>
+        <button class="btn btn-s btn-sm">···</button>
+      </div>
+    </div>
+    <div class="smart-search-bar">
+      <span class="ss-icon">🔍</span>
+      <input class="input ss-input" placeholder="智能搜索 — 在 样衣编号 / 客户款号 / 中间商名称 / 最终买家 / 制版师 / 制单人员 中模糊匹配…">
+      <button class="btn btn-p btn-sm">搜索</button>
+      <button class="btn btn-t btn-sm">清空</button>
+      <button class="btn btn-s btn-sm">高级筛选 ▾</button>
+    </div>
+    <div class="adv-filter-panel">
+      <div class="afp-head">高级筛选</div>
+      <div class="afp-grid">
+        <div class="field"><label>样衣编号</label><input class="input"></div>
+        <div class="field"><label>客户款号</label><input class="input"></div>
+        <div class="field"><label>中间商</label><input class="input"></div>
+        <div class="field"><label>样衣类别</label><select class="select"><option>全部</option><option>销样</option><option>头样</option><option>二样</option><option>三样</option><option>产前样</option><option>船样</option><option>拍照样</option></select></div>
+        <div class="field"><label>制版师</label><select class="select"><option>全部</option></select></div>
+        <div class="field"><label>业务员</label><select class="select"><option>全部</option></select></div>
+        <div class="field"><label>状态</label><select class="select"><option>全部</option><option>待派单</option><option>打样中</option><option>已寄出</option><option>已寄回</option><option>已对账</option><option>已完成</option></select></div>
+        <div class="field"><label>制单日期</label><div style="display:flex;gap:6px;flex:1"><input class="date" type="date" style="flex:1"><span style="line-height:28px">~</span><input class="date" type="date" style="flex:1"></div></div>
+        <div class="field"><label>寄出日期</label><div style="display:flex;gap:6px;flex:1"><input class="date" type="date" style="flex:1"><span style="line-height:28px">~</span><input class="date" type="date" style="flex:1"></div></div>
+      </div>
+    </div>
+    <table class="table table-list">
+      <thead><tr>
+        <th style="width:30px"><input type="checkbox"></th>
+        <th>样衣编号</th><th>客户款号</th><th>样衣类别</th><th>中间商</th>
+        <th>制版师</th><th>状态</th><th>制单日期</th><th>寄出日期</th><th>寄回日期</th><th>业务员</th><th>操作</th>
+      </tr></thead>
+      <tbody><tr><td><input type="checkbox"></td><td>S-20260527-01</td><td>H-2026-S001</td><td>销样·头样</td><td>H&M Asia</td><td>王版师</td><td><span class='status status-doing'>打样中</span></td><td>2026-05-27</td><td>—</td><td>—</td><td>张三</td><td><button class="btn btn-t btn-sm">编辑</button> <button class="btn btn-t btn-sm">查看</button></td></tr><tr><td><input type="checkbox"></td><td>S-20260527-02</td><td>UN-26-A88</td><td>销样</td><td>UNIQLO HK</td><td>—</td><td><span class='status status-pending'>待派单</span></td><td>2026-05-27</td><td>—</td><td>—</td><td>张三</td><td><button class="btn btn-t btn-sm">编辑</button> <button class="btn btn-t btn-sm">查看</button></td></tr><tr><td><input type="checkbox"></td><td>S-20260526-01</td><td>ATL-2026-K12</td><td>二样·产前样</td><td>Atlantic Trading</td><td>刘版师</td><td><span class='status status-success'>已成单</span></td><td>2026-05-26</td><td>2026-05-26</td><td>2026-05-26</td><td>李四</td><td><button class="btn btn-t btn-sm">编辑</button> <button class="btn btn-t btn-sm">查看</button></td></tr><tr><td><input type="checkbox"></td><td>S-20260525-01</td><td>EF-2026-G7</td><td>头样</td><td>Euro Fashion</td><td>王版师</td><td><span class='status status-done'>已完成</span></td><td>2026-05-25</td><td>2026-05-25</td><td>2026-05-26</td><td>赵六</td><td><button class="btn btn-t btn-sm">编辑</button> <button class="btn btn-t btn-sm">查看</button></td></tr></tbody>
+    </table>
+    <div class="pagination">
+      共 38 条 · <select class="select" style="display:inline-block;width:80px"><option>10/页</option></select> ·
+      <button class="btn btn-s btn-sm">‹</button>
+      <button class="btn btn-p btn-sm">1</button>
+      <button class="btn btn-s btn-sm">2</button>
+      <button class="btn btn-s btn-sm">3</button>
+      <button class="btn btn-s btn-sm">›</button>
+    </div>
+    
+        <div class="field-logic-wrap">
+          <div class="flw-head">📋 元素操作逻辑（工具栏 / 搜索 / 表格 / 行 / 分页）</div>
+          <table class="field-logic-table">
+            <thead><tr><th style="width:200px">元素</th><th>操作逻辑 / 业务规则</th></tr></thead>
+            <tbody>
+              <tr><td colspan="2" style="background:#EDF1F7;font-weight:600;color:var(--indigo);padding:4px 8px">▸ 顶部工具栏按钮</td></tr>
+              <tr><td><b>+ 新建</b></td><td>跳转编辑页空白态；★ v1.3 自动生成 S-YYYYMMDD-序号</td></tr>
+              <tr><td><b>导入 Excel</b></td><td>批量导入（迁移历史样衣）</td></tr>
+              <tr><td><b>导出</b></td><td>当前列表导出 Excel</td></tr>
+              <tr><td><b>删除</b></td><td>★ v1.3：① 仅"待派单"状态可删 ② <b style="color:var(--vermilion)">已被客户报价单引用的样衣 一律阻止删除</b>（A6 决策）③ 弹错"已被 Q-... 引用，无法删除"</td></tr>
+              <tr><td><b>复制</b></td><td>★ v1.3 加强：基本信息复制；材料明细复制；寄样跟踪 / 状态 / 制单日期 不复制；新单状态"待派单"（K1）</td></tr>
+
+              <tr><td colspan="2" style="background:#EDF1F7;font-weight:600;color:var(--indigo);padding:4px 8px">▸ 智能搜索 + 高级筛选</td></tr>
+              <tr><td><b>🔍 智能搜索框</b></td><td>关键字在以下字段模糊匹配：<b>样衣编号 / 客户款号 / 中间商名称 / 最终买家 / 制版师 / 制单人员</b>（沿用原 docx 智能搜索字段，去掉已删的"是否完成"等）</td></tr>
+              <tr><td><b>高级筛选 ▾</b></td><td>展开下方高级筛选面板：样衣类别 / 制版师 / 业务员 / 状态 / 日期范围 等</td></tr>
+
+              <tr><td colspan="2" style="background:#EDF1F7;font-weight:600;color:var(--indigo);padding:4px 8px">▸ 表格列</td></tr>
+              <tr><td><b>状态列</b></td><td>枚举：<span class="status status-pending">待派单</span> / <span class="status status-doing">打样中</span> / <span class="status status-sent">已寄出</span> / <span class="status status-returned">已寄回</span> / <span class="status status-done">已对账 / 已完成</span> / ★ <span class="status status-success">已成单</span>（v1.3 新增：被客户报价转销售合同后自动置此，绿色加粗显示 — B1）</td></tr>
+              <tr><td><b>样衣类别列</b></td><td>多选用"·"分隔显示</td></tr>
+              <tr><td><b>制版师列</b></td><td>"—"表示未指派，所有版师工作台均可见</td></tr>
+              <tr><td><b>操作列</b></td><td>编辑 / 查看（只读）</td></tr>
+
+              <tr><td colspan="2" style="background:#EDF1F7;font-weight:600;color:var(--indigo);padding:4px 8px">▸ 行交互</td></tr>
+              <tr><td><b>双击行</b></td><td>跳转编辑页</td></tr>
+              <tr><td><b>表头排序</b></td><td>默认按样衣编号倒序；点击列头切换升/降</td></tr>
+
+              <tr><td colspan="2" style="background:#EDF1F7;font-weight:600;color:var(--indigo);padding:4px 8px">▸ 分页</td></tr>
+              <tr><td><b>每页数下拉</b></td><td>10 / 20 / 50 / 100 切换</td></tr>
+            </tbody>
+          </table>
+        </div>
+    
+    </div>
+  </section>
+</main>
+
+<!-- 批注 Modal -->
+<div class="anno-modal-mask" id="annoModal">
+  <div class="anno-modal">
+    <div class="anno-modal-head">
+      <span>💬 添加批注</span>
+      <span class="x" onclick="closeAnnoModal()">×</span>
+    </div>
+    <div class="anno-modal-body">
+      <label>对哪个元素的批注</label>
+      <div class="target-info" id="annoTarget">—</div>
+      <label>批注内容（描述您想怎么改）</label>
+      <textarea id="annoText" placeholder="例如：&#10;- 这个字段我们不需要&#10;- 改成下拉单选&#10;- 加一列「客户料号」"></textarea>
+    </div>
+    <div class="anno-modal-foot">
+      <button class="btn btn-g btn-sm" id="annoDelBtn" onclick="deleteAnno()" style="display:none">删除批注</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-s btn-sm" onclick="closeAnnoModal()">取消</button>
+      <button class="btn btn-c btn-sm" onclick="saveAnno()">💾 保存批注</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'xygl_v2_annotations';
+let currentAnno = null;
+function loadAnnos() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch(e) { return {}; } }
+function saveAnnos(a) { localStorage.setItem(STORAGE_KEY, JSON.stringify(a)); }
+function getTextSummary(el) {
+  if (el.classList.contains('field')) { const lbl = el.querySelector('label'); return '字段 · ' + (lbl ? lbl.textContent.replace(/[*✕]/g,'').trim() : '?'); }
+  if (el.classList.contains('fieldset-head')) return '分组 · ' + el.textContent.replace(/\s+/g,' ').trim().slice(0,40);
+  if (el.classList.contains('subtable-head')) { const t = el.querySelector('.st-title'); return '子表 · ' + (t ? t.textContent.replace(/\s+/g,' ').trim().slice(0,40) : '?'); }
+  if (el.classList.contains('section-divider')) return '区块 · ' + el.textContent.replace(/▣/g,'').trim();
+  if (el.classList.contains('page-toolbar')) { const t = el.querySelector('.page-title'); return '工具栏 · ' + (t ? t.textContent.trim() : '?'); }
+  if (el.classList.contains('smart-search-bar')) return '智能搜索栏';
+  if (el.classList.contains('adv-filter-panel')) return '高级筛选面板';
+  if (el.classList.contains('biz-notes')) return '业务规则卡';
+  if (el.classList.contains('field-logic-wrap')) { const h = el.querySelector('.flw-head'); return '操作逻辑表 · ' + (h ? h.textContent.trim() : ''); }
+  if (el.classList.contains('page-logic-panel')) return '页面级操作逻辑';
+  if (el.classList.contains('deleted-fields')) return '已删除字段提示';
+  return el.textContent.trim().slice(0,40) || '元素';
+}
+function findSection(el) {
+  const s = el.closest('section.design-section');
+  if (s) { const h = s.querySelector('.sect-head h2'); if (h) return h.textContent.replace(/\s+/g,' ').trim(); }
+  return '通用';
+}
+const SELECTORS = ['.field', '.fieldset-head', '.subtable-head', '.section-divider', '.page-toolbar', '.smart-search-bar', '.adv-filter-panel', '.biz-notes', '.field-logic-wrap', '.page-logic-panel', '.table-list', '.pagination', '.deleted-fields'];
+let idCounter = 0;
+function setupAnnotatables() {
+  document.querySelectorAll(SELECTORS.join(',')).forEach(el => {
+    if (el.hasAttribute('data-anno-target')) return;
+    idCounter++;
+    const summary = getTextSummary(el);
+    const section = findSection(el);
+    const annoId = section + '|' + summary + '|#' + idCounter;
+    el.setAttribute('data-anno-target', annoId);
+    const btn = document.createElement('button');
+    btn.className = 'anno-icon'; btn.textContent = '💬'; btn.title = '点击批注';
+    btn.style.right = '-22px'; btn.style.top = '0';
+    btn.onclick = (e) => { e.stopPropagation(); openAnnoModal(annoId, summary, section); };
+    el.appendChild(btn);
+  });
+  refreshAnnoIcons();
+}
+function refreshAnnoIcons() {
+  const annos = loadAnnos();
+  document.querySelectorAll('[data-anno-target]').forEach(el => {
+    const id = el.getAttribute('data-anno-target');
+    const btn = el.querySelector(':scope > .anno-icon');
+    if (btn) {
+      if (annos[id]) { btn.classList.add('has-note'); btn.textContent = '✓'; }
+      else { btn.classList.remove('has-note'); btn.textContent = '💬'; }
+    }
+  });
+  const count = Object.keys(loadAnnos()).length;
+  const c = document.getElementById('annoCount'); if (c) c.textContent = count;
+  const ex = document.getElementById('annoExport'); if (ex) ex.style.display = count > 0 ? 'inline-block' : 'none';
+  const cl = document.getElementById('annoClear'); if (cl) cl.style.display = count > 0 ? 'inline-block' : 'none';
+}
+function toggleAnno() {
+  const on = document.body.classList.toggle('anno-on');
+  const btn = document.getElementById('annoToggle');
+  btn.textContent = '💬 批注模式：' + (on ? 'ON' : 'OFF');
+  btn.classList.toggle('on', on);
+  if (on && !document.querySelector('[data-anno-target]')) setupAnnotatables();
+  else if (on) refreshAnnoIcons();
+}
+function openAnnoModal(id, summary, section) {
+  currentAnno = id;
+  document.getElementById('annoTarget').innerHTML = '<b>[' + section + ']</b> ' + summary;
+  const annos = loadAnnos();
+  const ex = annos[id];
+  document.getElementById('annoText').value = ex ? ex.text : '';
+  document.getElementById('annoDelBtn').style.display = ex ? 'inline-block' : 'none';
+  document.getElementById('annoModal').classList.add('open');
+  setTimeout(() => document.getElementById('annoText').focus(), 50);
+}
+function closeAnnoModal() { document.getElementById('annoModal').classList.remove('open'); currentAnno = null; }
+function saveAnno() {
+  const text = document.getElementById('annoText').value.trim();
+  if (!text) { alert('请输入批注内容'); return; }
+  const annos = loadAnnos();
+  annos[currentAnno] = { text, target: document.getElementById('annoTarget').textContent, date: new Date().toISOString() };
+  saveAnnos(annos); refreshAnnoIcons(); closeAnnoModal();
+}
+function deleteAnno() {
+  if (!confirm('确认删除？')) return;
+  const a = loadAnnos(); delete a[currentAnno]; saveAnnos(a); refreshAnnoIcons(); closeAnnoModal();
+}
+function clearAnno() {
+  if (!confirm('确认清空所有批注？（建议先导出）')) return;
+  localStorage.removeItem(STORAGE_KEY); refreshAnnoIcons();
+}
+function exportAnno() {
+  const annos = loadAnnos();
+  const keys = Object.keys(annos);
+  if (keys.length === 0) { alert('暂无批注'); return; }
+  const grouped = {};
+  keys.forEach(k => {
+    const sec = k.split('|')[0];
+    if (!grouped[sec]) grouped[sec] = [];
+    grouped[sec].push({ id: k, ...annos[k] });
+  });
+  let md = '# 样衣管理 UI 设计稿 v2 · 业务方批注\n\n';
+  md += '> 导出时间：' + new Date().toLocaleString('zh-CN') + '\n';
+  md += '> 批注总数：' + keys.length + '\n\n---\n\n';
+  Object.keys(grouped).forEach(sec => {
+    md += '## ' + sec + '\n\n';
+    grouped[sec].forEach((a, i) => {
+      md += '### 批注 ' + (i+1) + '：' + a.target.replace(/^\[[^\]]+\]\s*/, '') + '\n\n';
+      md += a.text.split('\n').map(l => '> ' + l).join('\n') + '\n\n';
+    });
+    md += '---\n\n';
+  });
+  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '样衣管理_批注_' + new Date().toISOString().slice(0,10) + '.md';
+  a.click();
+}
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('annoModal').onclick = (e) => { if (e.target.id === 'annoModal') closeAnnoModal(); };
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAnnoModal(); });
+});
+</script>
+</body></html>
