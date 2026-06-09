@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>订单 · UI 设计稿 v1.0（草案）</title>
+<style>
+:root{
+  --indigo:#1E3A5F;--indigo-d:#152A45;--indigo-l:#2C5180;
+  --linen:#F5EDDC;--linen-d:#E8DCC0;--canvas:#FBF8F2;
+  --rust:#D17A40;--rust-d:#B86530;--vermilion:#C04042;
+  --teal:#3E8E7E;--amber:#C8901E;
+  --gray-9:#1F1F22;--gray-7:#37383C;--gray-5:#6F7178;
+  --gray-3:#B5B7BD;--gray-1:#E5E2DA;--gray-0:#F4F1EA;
+  --font:"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;
+  --r:4px;--r-lg:6px;
+  --shadow-sm:0 1px 2px rgba(30,58,95,.05);--shadow:0 2px 8px rgba(30,58,95,.10);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:13px/1.55 var(--font);color:var(--gray-9);background:#EEEAE0}
+a{color:var(--indigo);text-decoration:none}
+
+.topbar{position:fixed;top:0;left:0;right:0;height:48px;background:var(--indigo);color:#fff;display:flex;align-items:center;padding:0 24px;z-index:100;border-bottom:3px solid var(--rust);box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.topbar .logo{font-size:15px;font-weight:600}
+.topbar .logo small{font-size:11px;color:#C9D6E5;margin-left:8px;font-weight:400}
+.topbar .actions{margin-left:auto;display:flex;gap:8px;align-items:center;font-size:12px}
+
+.sidenav{position:fixed;top:48px;left:0;bottom:0;width:240px;background:#fff;border-right:1px solid var(--gray-1);overflow-y:auto;padding:14px 0;font-size:13px}
+.sidenav .nav-cat{padding:10px 16px 4px;color:var(--gray-5);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;border-top:1px solid var(--gray-1);margin-top:6px}
+.sidenav a.nav-dj{display:block;padding:8px 16px;color:var(--indigo);font-weight:600;font-size:13px;border-left:3px solid transparent}
+.sidenav a.nav-dj:hover{background:var(--linen);border-left-color:var(--rust)}
+.sidenav a.nav-sub{display:block;padding:5px 16px;color:var(--gray-7);font-size:12.5px;border-left:3px solid transparent}
+.sidenav a.nav-sub:hover{background:var(--canvas);color:var(--indigo);border-left-color:var(--gray-3)}
+
+.main{margin-left:240px;padding:64px 32px 80px;max-width:1280px}
+.dj-block{padding:28px 32px;background:linear-gradient(135deg,var(--indigo) 0%,var(--indigo-l) 100%);color:#fff;border-radius:8px;margin:30px 0 16px}
+.dj-block h1{font-size:22px;margin-bottom:6px;font-weight:600}
+.dj-block h1 small{font-family:"SF Mono",Monaco,monospace;color:#C9D6E5;font-size:14px;font-weight:400;margin-left:8px}
+.dj-block .dj-summary{font-size:13px;color:#D5DDE8;line-height:1.7}
+
+.design-section{margin-bottom:32px}
+.sect-head{display:flex;justify-content:space-between;align-items:flex-start;margin:0 8px 12px;padding-bottom:8px;border-bottom:2px solid var(--gray-1)}
+.sect-head h2{font-size:16px;color:var(--gray-9);font-weight:600;margin-bottom:4px}
+.sect-head .sect-no{display:inline-block;background:var(--rust);color:#fff;padding:1px 8px;border-radius:3px;font-size:13px;margin-right:8px}
+.sect-head .sect-desc{font-size:12px;color:var(--gray-5)}
+
+.biz-notes{background:#FFF7EA;border:1px solid #EDD8A8;border-left:3px solid var(--amber);border-radius:4px;padding:12px 16px;margin:0 8px 14px}
+.biz-notes b{color:#7A5810;font-size:12.5px}
+.biz-notes ul{list-style:none;margin-top:6px}
+.biz-notes li{font-size:12px;color:#5C4307;line-height:1.7;padding:2px 0 2px 18px;position:relative}
+.biz-notes li:before{content:"▸";position:absolute;left:6px;color:var(--amber)}
+
+.design-frame{background:#fff;border:1px solid var(--gray-1);border-radius:8px;padding:16px;box-shadow:var(--shadow-sm)}
+
+.page-toolbar{display:flex;justify-content:space-between;align-items:center;background:#FBF8F2;border:1px solid var(--gray-1);border-radius:6px;padding:8px 14px;margin-bottom:14px;flex-wrap:wrap;gap:6px}
+.tb-left{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tb-right{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.page-title{font-size:14px;color:var(--indigo);font-weight:600}
+
+.btn{display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:4px;font-size:12.5px;cursor:pointer;border:1px solid;line-height:1.5;font-family:inherit}
+.btn-p{background:var(--indigo);color:#fff;border-color:var(--indigo)}
+.btn-c{background:var(--rust);color:#fff;border-color:var(--rust)}
+.btn-s{background:#fff;color:var(--gray-7);border-color:var(--gray-1)}
+.btn-g{background:#fff;color:var(--vermilion);border-color:var(--gray-1)}
+.btn-t{background:transparent;color:var(--indigo);border-color:transparent;padding:3px 8px}
+.btn-sm{padding:3px 9px;font-size:11.5px}
+.req{color:var(--vermilion);margin-right:3px}
+
+.section-divider{font-size:14px;color:var(--indigo);font-weight:600;padding:14px 12px 8px;margin-top:8px;border-bottom:2px solid var(--linen);background:linear-gradient(90deg,var(--linen) 0%,transparent 60%);border-radius:4px 4px 0 0}
+
+.fieldset{background:#fff;border:1px solid var(--gray-1);border-radius:6px;margin-bottom:12px;overflow:hidden}
+.fieldset-head{background:linear-gradient(135deg,var(--linen) 0%,var(--canvas) 100%);padding:8px 16px;border-bottom:1px solid var(--gray-1);font-size:13px;font-weight:600;color:var(--indigo);display:flex;justify-content:space-between;align-items:center}
+.fieldset-head .count{color:var(--gray-5);font-weight:400;font-size:11px}
+.fieldset-body{padding:14px 18px}
+.fieldset-body.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:4px 28px}
+
+.field{display:flex;align-items:center;gap:8px;margin-bottom:8px;min-height:30px}
+.field label{width:120px;text-align:right;color:var(--gray-7);font-size:12.5px;flex-shrink:0;line-height:1.3;display:flex;align-items:center;justify-content:flex-end;gap:4px}
+.input,.select,.date,.memo{flex:1;background:#fff;border:1px solid var(--gray-1);border-radius:4px;padding:5px 9px;font:12.5px/1.4 var(--font);color:var(--gray-9);min-width:0}
+.input.readonly{background:var(--gray-0);color:var(--gray-5)}
+.input.mini{width:70px;max-width:70px}
+.memo{min-height:48px;font-family:inherit;resize:vertical}
+.btn-edit{display:flex;align-items:center;padding:0;overflow:hidden;border:1px solid var(--gray-1);border-radius:4px;background:#fff;cursor:pointer;flex:1}
+.btn-edit .v{flex:1;padding:5px 9px;color:var(--gray-3);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btn-edit .v.has{color:var(--gray-9)}
+.btn-edit button{background:var(--gray-0);border:none;border-left:1px solid var(--gray-1);padding:5px 9px;cursor:pointer;color:var(--gray-5)}
+.multiselect{flex:1;border:1px solid var(--gray-1);background:#fff;padding:5px 9px;border-radius:4px;font-size:12.5px}
+.image-box{width:100%;height:50px;background:var(--gray-0);border:1px dashed var(--gray-3);border-radius:4px;display:flex;align-items:center;justify-content:center;color:var(--gray-3);font-size:11px;cursor:pointer}
+.file-upload{flex:1;background:var(--gray-0);border:1px dashed var(--gray-3);border-radius:4px;padding:8px 12px;color:var(--gray-5);font-size:12px;text-align:center}
+
+.by-sys{display:inline-block;font-size:9.5px;padding:0 4px;border-radius:3px;background:#E8F4F0;color:var(--teal);margin-left:4px}
+.by-pat{display:inline-block;font-size:9.5px;padding:0 4px;border-radius:3px;background:#FBF1DA;color:#7A5810;margin-left:4px}
+.by-mix{display:inline-block;font-size:9.5px;padding:0 4px;border-radius:3px;background:#F5E5F5;color:#7A2D7A;margin-left:4px}
+
+.subtable-wrap{background:#fff;border:1px solid var(--gray-1);border-radius:6px;margin-bottom:12px;overflow:hidden}
+.subtable-head{background:linear-gradient(135deg,#F0E8D2 0%,var(--canvas) 100%);padding:8px 14px;border-bottom:1px solid var(--gray-1);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px}
+.subtable-head .st-title{color:var(--indigo);font-size:13px;font-weight:600}
+.subtable-head .count{color:var(--gray-5);font-weight:400;font-size:11px}
+.subtable-head .st-tools{display:flex;gap:5px;flex-wrap:wrap}
+.table{width:100%;border-collapse:collapse;font-size:12px}
+.table th{background:var(--gray-0);text-align:left;padding:6px 10px;font-weight:600;color:var(--gray-7);border-bottom:1px solid var(--gray-1);white-space:nowrap}
+.table th.color-col{background:#FFF7EA;color:#7A5810}
+.table th.color-col .del-col{background:none;border:none;color:var(--vermilion);cursor:pointer;font-size:14px;margin-left:4px}
+.table th.editable{background:#FBF1DA;color:#7A5810}
+.table td{padding:5px 10px;color:var(--gray-9);border-bottom:1px solid var(--gray-1)}
+.table tbody tr:hover td{background:var(--linen)}
+.table td.row-act{white-space:nowrap;color:var(--rust);font-size:11px;cursor:pointer}
+.table td.color-col{background:#FFFCEF}
+.table td.calc{background:#E8F4F0;color:var(--teal);font-weight:600}
+.table tfoot td{background:var(--linen);font-weight:600;color:var(--indigo);border-top:2px solid var(--linen-d)}
+
+.status{display:inline-block;padding:1px 7px;border-radius:9px;font-size:10.5px;font-weight:500}
+.status-pending{background:#E5E7EB;color:#374151}
+.status-doing{background:#FBF1DA;color:#7A5810}
+.status-sent{background:#DBEAFE;color:#1E3A5F}
+.status-returned{background:#E8F4F0;color:var(--teal)}
+.status-done{background:#D1FAE5;color:#065F46}
+.status-success{background:#10B981;color:#fff;font-weight:600;box-shadow:0 0 0 1px #059669}
+
+.smart-search-bar{display:flex;gap:8px;align-items:center;background:linear-gradient(135deg,var(--linen) 0%,var(--canvas) 100%);border:1px solid var(--linen-d);border-radius:6px;padding:10px 14px;margin-bottom:10px}
+.smart-search-bar .ss-icon{font-size:16px;color:var(--indigo)}
+.smart-search-bar .ss-input{flex:1;border-color:var(--linen-d);font-size:13px;padding:6px 10px;background:#fff}
+.adv-filter-panel{background:#FBFBFB;border:1px solid var(--gray-1);border-top:3px solid var(--indigo);border-radius:4px;padding:10px 14px 12px;margin-bottom:12px}
+.adv-filter-panel .afp-head{font-size:11.5px;color:var(--indigo);font-weight:600;margin-bottom:8px}
+.adv-filter-panel .afp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px 22px}
+.pagination{margin-top:14px;display:flex;gap:6px;align-items:center;justify-content:flex-end;font-size:12px;color:var(--gray-5);flex-wrap:wrap}
+
+.badge{display:inline-block;padding:1px 7px;border-radius:9px;font-size:10.5px;font-weight:500;border:1px solid}
+.badge-i{background:#EDF1F7;color:var(--indigo);border-color:#D5DDE8}
+.badge-s{background:#E8F4F0;color:var(--teal);border-color:#C8E2D9}
+.badge-w{background:#FBF1DA;color:var(--amber);border-color:#EDD8A8}
+
+.field-logic-wrap{border-top:1px solid var(--gray-1);background:#FCFAF4;padding:0 18px 12px;margin-bottom:14px}
+.field-logic-wrap .flw-head{color:var(--indigo);font-size:12px;font-weight:600;padding:10px 0 6px}
+.field-logic-table{width:100%;border-collapse:collapse;font-size:11.5px;background:#fff;border:1px solid var(--gray-1);border-radius:4px}
+.field-logic-table th{background:#EDF1F7;text-align:left;padding:5px 8px;font-weight:600;color:var(--indigo);border-bottom:1px solid var(--gray-1);font-size:11px}
+.field-logic-table td{padding:5px 8px;color:var(--gray-9);border-bottom:1px solid var(--gray-1);vertical-align:top;line-height:1.6}
+.field-logic-table tbody tr:nth-child(even) td{background:#FBF8F2}
+.field-logic-table .dt-cell{color:var(--teal);font-size:11px;white-space:nowrap}
+.field-logic-table .rule-cell{color:var(--gray-7)}
+.req-tag{display:inline-block;background:#FBEAEA;color:var(--vermilion);font-size:10px;padding:1px 6px;border-radius:8px;font-weight:600}
+.opt-tag{display:inline-block;background:var(--gray-0);color:var(--gray-5);font-size:10px;padding:1px 6px;border-radius:8px}
+.by-tag{display:inline-block;font-size:10px;padding:1px 5px;border-radius:3px}
+.by-tag.by-sys{background:#E8F4F0;color:var(--teal)}
+.by-tag.by-pat{background:#FBF1DA;color:#7A5810}
+.by-tag.by-biz{background:#EDF1F7;color:var(--indigo)}
+.by-tag.by-mix{background:#F5E5F5;color:#7A2D7A}
+.anno-mark{display:inline-block;background:var(--rust);color:#fff;font-size:9.5px;padding:1px 5px;border-radius:3px;margin-left:6px;font-weight:600}
+
+.page-logic-panel{background:#fff;border:1px solid var(--indigo);border-radius:6px;margin-top:14px;overflow:hidden}
+.plp-head{background:linear-gradient(135deg,var(--indigo) 0%,var(--indigo-l) 100%);color:#fff;padding:10px 16px;font-size:13px;font-weight:600}
+.plp-body{padding:16px 18px;display:grid;grid-template-columns:1fr;gap:14px}
+.pl-cat h4{color:var(--indigo);font-size:12.5px;font-weight:600;margin-bottom:6px;border-bottom:1px solid var(--linen);padding-bottom:4px}
+.pl-table{width:100%;border-collapse:collapse;font-size:12px;background:var(--canvas);border:1px solid var(--gray-1);border-radius:4px}
+.pl-table th{background:#E8EFF6;text-align:left;padding:5px 8px;font-weight:600;color:var(--indigo);font-size:11px}
+.pl-table td{padding:6px 8px;color:var(--gray-9);border-top:1px solid var(--gray-1);vertical-align:top;line-height:1.65}
+.pl-table td:first-child{font-weight:600;color:var(--indigo);white-space:nowrap}
+.pl-ul{list-style:none;padding:0;margin:0}
+.pl-ul li{padding:5px 10px 5px 22px;background:var(--canvas);border-left:3px solid var(--teal);margin-bottom:4px;border-radius:0 4px 4px 0;font-size:12px;line-height:1.7;position:relative}
+.pl-ul li:before{content:"▸";position:absolute;left:8px;color:var(--teal);font-weight:bold}
+
+.flow-box{font-family:"SF Mono",Consolas,monospace;white-space:pre;overflow-x:auto;background:var(--indigo-d);color:#e8eef5;padding:14px 16px;border-radius:8px;font-size:12px;line-height:1.6;margin:0 8px 14px}
+
+.formula-card{background:#E8F4F0;border:1px solid #C8E2D9;border-left:3px solid var(--teal);border-radius:4px;padding:10px 16px;margin:10px 0}
+.formula-card code{background:#fff;border:1px solid #C8E2D9;border-radius:3px;padding:1px 6px;font-family:Consolas,monospace;color:var(--indigo);font-size:12px}
+.mode-pills{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+.mode-pill{border:1px solid var(--gray-1);border-radius:16px;padding:3px 12px;font-size:12px;background:#fff;color:var(--gray-7)}
+.mode-pill.on{background:var(--indigo);color:#fff;border-color:var(--indigo)}
+
+/* ===== 评审工具:批注 / 补充需求 / 保存（移植自 v2） ===== */
+.topbar{flex-wrap:wrap;gap:12px;min-height:48px;height:auto}
+.topbar .stat{display:flex;gap:10px;font-size:12px;color:#dde6f0;margin-left:auto}
+.topbar .stat b{color:#fff}
+.topbar .acts{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.t-btn{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.28);padding:5px 11px;border-radius:14px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.t-btn:hover{background:rgba(255,255,255,.24)}
+.t-btn.on{background:var(--rust);border-color:var(--rust)}
+.t-btn.save .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--teal);margin-right:5px;vertical-align:middle}
+.t-btn.save.dirty .dot{background:var(--amber)}
+.t-btn.save.fail .dot{background:var(--vermilion)}
+.mode-tag{font-size:11px;color:#cdd8e6;white-space:nowrap}
+
+.anno-icon{display:none;position:absolute;top:-9px;right:-9px;background:var(--rust);color:#fff;width:22px;height:22px;border-radius:50%;font-size:12px;line-height:22px;text-align:center;cursor:pointer;z-index:60;box-shadow:0 2px 5px rgba(0,0,0,.25);border:none;font-family:inherit;padding:0}
+.anno-icon.has{background:var(--vermilion)}
+body.anno-on .anno-icon{display:block}
+body.anno-on [data-anchor]{outline:1px dashed rgba(209,122,64,.4);outline-offset:3px;border-radius:4px}
+body.anno-on [data-anchor]:hover{outline:1px solid var(--rust)}
+.pin{display:inline-block;font-size:11px;background:var(--rust);color:#fff;border-radius:20px;padding:1px 8px;margin-left:6px;cursor:pointer}
+.flash{animation:flash 1.3s ease}
+@keyframes flash{0%,100%{background:transparent}25%{background:var(--linen)}}
+
+textarea,input[type=text]{font-family:inherit;font-size:13px;border:1px solid var(--gray-1);border-radius:5px;padding:7px 9px;background:#fff;color:var(--gray-9);width:100%}
+textarea{resize:vertical;min-height:60px;line-height:1.6}
+label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
+.modal select{font-family:inherit;font-size:13px;border:1px solid var(--gray-1);border-radius:5px;padding:7px 9px;background:#fff;color:var(--gray-9);width:100%}
+
+.req-zone{margin-top:8px}
+.req-group .rgh{font-weight:600;color:var(--indigo);font-size:13px;margin:12px 0 5px;border-bottom:1px dashed var(--gray-3);padding-bottom:4px}
+.req-item{background:#fff;border:1px solid var(--gray-1);border-radius:6px;padding:11px 13px;margin:7px 4px;box-shadow:var(--shadow-sm);position:relative}
+.req-item .rt{font-weight:600;color:var(--gray-9)}
+.req-item .rd{font-size:13px;color:var(--gray-7);margin:4px 0;white-space:pre-wrap}
+.req-item .rm{font-size:11px;color:var(--gray-5);display:flex;gap:8px;flex-wrap:wrap}
+.req-item .ra{position:absolute;top:9px;right:10px;display:flex;gap:6px}
+.req-empty{color:var(--gray-3);font-size:13px;padding:10px 4px}
+
+.mask{position:fixed;inset:0;background:rgba(21,42,69,.46);display:none;z-index:200;align-items:center;justify-content:center;padding:20px}
+.mask.open{display:flex}
+.modal{background:#fff;border-radius:10px;width:520px;max-width:100%;max-height:88vh;overflow:auto;box-shadow:0 24px 60px rgba(0,0,0,.3)}
+.modal-h{padding:13px 18px;border-bottom:1px solid var(--gray-1);font-weight:700;color:var(--indigo-d);display:flex;justify-content:space-between;align-items:center}
+.modal-h .x{cursor:pointer;color:var(--gray-5);font-size:20px}
+.modal-b{padding:16px 18px}
+.modal-f{padding:12px 18px;border-top:1px solid var(--gray-1);display:flex;gap:8px;justify-content:flex-end;background:var(--gray-0)}
+.tgt{font-size:12px;color:var(--gray-5);background:var(--gray-0);border-radius:5px;padding:7px 10px;margin-bottom:8px}
+.anno-li{border:1px solid var(--gray-1);border-radius:5px;padding:8px 10px;margin:6px 0;background:var(--gray-0)}
+.anno-li .al-t{white-space:pre-wrap;font-size:13px}.anno-li .al-m{font-size:11px;color:var(--gray-5);margin-top:4px;display:flex;gap:8px}
+
+.drawer{position:fixed;top:0;right:0;bottom:0;width:400px;max-width:92vw;background:var(--canvas);box-shadow:-4px 0 24px rgba(0,0,0,.18);transform:translateX(100%);transition:transform .22s;z-index:210;display:flex;flex-direction:column}
+.drawer.open{transform:none}
+.drawer-h{padding:13px 16px;background:var(--indigo);color:#fff;font-weight:700;display:flex;justify-content:space-between;align-items:center}
+.drawer-h .x{cursor:pointer;font-size:20px}
+.drawer-tabs{display:flex;border-bottom:1px solid var(--gray-1);background:#fff}
+.drawer-tabs button{flex:1;border:none;background:none;padding:9px 4px;cursor:pointer;font-family:inherit;font-size:12.5px;color:var(--gray-5);border-bottom:2px solid transparent}
+.drawer-tabs button.on{color:var(--indigo);border-bottom-color:var(--rust);font-weight:600}
+.drawer-b{flex:1;overflow:auto;padding:12px 14px}
+.sum-item{background:#fff;border:1px solid var(--gray-1);border-radius:5px;padding:9px 11px;margin:7px 0;cursor:pointer;box-shadow:var(--shadow-sm)}
+.sum-item:hover{border-color:var(--rust)}
+.sum-item .sa{font-size:11px;color:var(--indigo-l);font-weight:600;margin-bottom:3px}
+.sum-item .sb{font-size:13px;white-space:pre-wrap}
+.sum-item .sm{font-size:11px;color:var(--gray-5);margin-top:3px}
+.sum-orphan{border-color:var(--vermilion)!important}
+.sum-h{font-size:12px;font-weight:700;color:var(--gray-5);margin:10px 0 4px}
+.sum-empty{color:var(--gray-3);font-size:13px;padding:10px}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--indigo-d);color:#fff;padding:11px 20px;border-radius:24px;font-size:13px;box-shadow:var(--shadow);z-index:300;max-width:80vw}
+@media print{.topbar,.anno-icon,.drawer,.mask,.toast,.btn,.pin{display:none!important}}
+</style>
+</head><body class="">
+
+<div class="topbar">
+  <div class="logo">🪡 样衣制造管理系统 · 新版 UI 设计稿<small>03 订单 · v1.0 草案</small></div>
+  <div class="stat"><span>批注 <b id="stAnno">9</b></span><span>补充需求 <b id="stReq">0</b></span></div>
+  <div class="acts">
+    <span class="mode-tag" id="modeTag">就地保存可用</span>
+    <button class="t-btn on" id="btnAnno" onclick="toggleAnnoMode()">💬 批注：开</button>
+    <button class="t-btn" onclick="openReqModal(null,'')">➕ 补充需求</button>
+    <button class="t-btn" onclick="openSummary()">📋 汇总</button>
+    <button class="t-btn" onclick="exportMd()">📥 导出</button>
+    <button class="t-btn save dirty" id="btnSave" onclick="save()"><span class="dot"></span><span id="saveLabel">保存*</span></button>
+  </div>
+</div>
+
+<nav class="sidenav">
+  <div class="nav-cat" style="border:none;margin-top:0">订单 · 1 单据</div>
+  <div class="nav-group">
+    <a class="nav-dj" href="#overview">📍 业务流位置</a>
+    <a class="nav-sub" href="#editor">　编辑页（新建订单）</a>
+    <a class="nav-sub" href="#list">　列表页</a>
+    <a class="nav-sub" href="#dlg">　弹窗：Excel 导入尺码</a>
+  </div>
+</nav>
+
+<main class="main">
+  <div class="dj-block" style="background:linear-gradient(135deg,var(--rust) 0%,#A85423 100%)">
+    <h1>📦 订单 · UI 设计稿 v1.0<small>03 · 数据表 DD</small></h1>
+    <p class="dj-summary">
+    订单是<b>报价生效后正式下大货的单据</b>，是材料采购与生产加工的<b>共同源头</b>：从③客户报价一键导入基础信息与材料明细，业务补 PO 号、尺码数量搭配、附件，系统按用料定额自动算出各材料采购量，再向下生成材料合同 / 加工合同。<br>
+    <b>编号规则</b>：O-YYYYMMDD-序号（如 O-20260608-01，当天顺序自动生成）　·　<b>来源</b>：③客户报价 Q-YYYYMMDD-序号 一键导入　·　<b>覆盖视图</b>：编辑页（新建订单）+ 列表页<br>
+    <span style="background:rgba(255,255,255,.18);padding:2px 8px;border-radius:4px;font-size:12px">📌 v1.0 业务方答复落地：① 从报价单一键导入 ② 单件耗用＝单件用量 ③ 大货总数＝各尺码颜色数量之和 ④ 损耗默认 3%（单料/整单可调）⑤ 采购量微调超 ±10% 弹窗确认 ⑥ 附件增加「填充量」共 5 类 ⑦ 材料品名可手动调整（D5）⑧ 报价改不反向同步订单（快照）</span>
+    </p>
+  </div>
+
+  <div id="overview" class="dj-block">
+    <h1>📍 业务流位置</h1>
+    <p class="dj-summary">订单处在「报价 → 下单 → 采购/生产」的中枢，向上承接报价，向下分出材料采购线与生产加工线。</p>
+  </div>
+  <div class="flow-box" data-anno-target="" data-anno-label="业务流位置图" data-anchor="a0" style="position: relative;">③客户报价 Q-…              ④ 订单 O-…（本设计稿）                      下游
+┌──────────────┐  📥从报价   ┌────────────────────────────┐  🔵生成材料合同   ⑤ 材料合同 HT-…
+│ 已生效报价单  │ ─一键导入─▶ │ 基础信息 + 尺码数量搭配      │ ───────────────▶ （按分色/分码出表）
+│ 款号/单价/交期│            │ + 附件(5类) + 材料明细        │
+│ 件数/材料明细 │            │ + 用料核算(大货数×单耗×损耗)  │  🏭生成加工合同   ⑤′ 生产加工合同 HT-…
+└──────────────┘            └────────────────────────────┘ ───────────────▶ （款式/数量/交期+单价）
+   报价改 ✗不反向同步订单（快照）                                          → 推送供应商门户(盖章→发货→对账→开票)</div>
+
+  <div class="biz-notes" data-anno-target="" data-anno-label="订单业务规则总览" data-anchor="a1" style="position: relative;"><b>📦 订单 · 业务规则</b><ul>
+    <li>🔑 订单是采购与生产的共同源头：基础信息、材料明细均由③客户报价【一键导入】，业务只补 PO 号、尺码数量、附件。</li>
+    <li>📋 编号规则：订单 O-YYYYMMDD-序号，自动生成；下游材料/加工合同 HT-YYYYMMDD-序号。</li>
+    <li>🔢 大货总数量 ＝ 尺码数量搭配表所有格子之和（各尺码 × 各颜色），系统自动汇总（业务答复）。</li>
+    <li>📐 用料核算：单料采购量 ＝ 大货总数 × 单件耗用 ×(1 + 损耗率)；单件耗用＝每件衣服用料多少（业务答复）；损耗默认 3%，可按单料或整单调整。</li>
+    <li>🎯 分色 / 分码拆分：可整单统一，也可个别物料单独设定——按尺码或按颜色分别核算用量。</li>
+    <li>⚠️ 系统算出的采购量可手动微调；<b>微调幅度超过 ±10% 需弹窗二次确认</b>（业务批注）。</li>
+    <li>📎 附件 5 类：彩稿 / 大货尺寸表 / 大货纸板 / 包装资料 / <b>填充量</b>（业务新增）。</li>
+    <li>✏️ 材料品名沿用③报价带入的文本，<b>可手动调整</b>（D5：不重建料库）。</li>
+    <li>🔒 快照：报价单事后修改 <b>不</b> 反向同步到已生成订单；订单一旦生成下游合同也走快照。</li>
+  </ul></div>
+
+  <!-- ============ 编辑页 ============ -->
+  <section id="editor" class="design-section">
+    <div class="sect-head">
+      <div>
+        <h2><span class="sect-no">A</span> 编辑页 · 新建订单（从报价导入）</h2>
+        <p class="sect-desc">业务主用——从报价导入 → 补 PO/尺码/附件 → 系统算料 → 生成材料/加工合同</p>
+      </div>
+      <div style="padding-top:4px">
+        <span class="badge badge-i">业务员主用</span>
+        <span class="badge badge-s">5 分组</span>
+      </div>
+    </div>
+    <div class="design-frame">
+
+      <div class="page-toolbar" data-anno-target="" data-anno-label="编辑页工具栏按钮" data-anchor="a2" style="position: relative;">
+        <div class="tb-left">
+          <span class="page-title">订单 · 编辑</span>
+          <span class="badge badge-w">草稿</span>
+        </div>
+        <div class="tb-right">
+          <button class="btn btn-p">💾 保存</button>
+          <button class="btn btn-c">📥 从报价导入</button>
+          <button class="btn btn-p">🔵 生成材料合同</button>
+          <button class="btn btn-p">🏭 生成加工合同</button>
+          <button class="btn btn-s">复制</button>
+          <button class="btn btn-s">导出</button>
+          <button class="btn btn-s">···</button>
+        </div>
+      </div>
+
+      <!-- 分组1 基础信息 -->
+      <h3 class="section-divider">▣ 基础信息</h3>
+      <div class="fieldset" data-anno-target="" data-anno-label="分组·基础信息" data-anchor="a3" style="position: relative;">
+        <div class="fieldset-head">基础信息 <span class="count">15 字段 · 报价带入可改 + 业务新增(币种/佣金/生产工厂)</span></div>
+        <div class="fieldset-body grid-3">
+          <div class="field"><label><span class="req">*</span>订单编号<span class="by-sys">系统</span></label><input class="input readonly" value="O-20260608-01" readonly=""></div>
+          <div class="field"><label><span class="req">*</span>关联报价单号</label><div class="btn-edit"><div class="v has">Q-20260529-01</div><button>…</button></div></div>
+          <div class="field"><label><span class="req">*</span>客户款号</label><input class="input" value="MNA263M525"></div>
+          <div class="field"><label>单品单价</label><input class="input" value="145.00"></div>
+          <div class="field"><label>币种<span class="by-mix">新增</span></label><select class="select"><option>RMB</option><option>USD</option></select></div>
+          <div class="field"><label><span class="req">*</span>约定交期</label><input class="input" type="date" value="2026-07-30"></div>
+          <div class="field"><label>佣金 %<span class="by-mix">新增</span></label><input class="input" value="0"></div>
+          <div class="field"><label>生产工厂<span class="by-mix">新增</span></label><div class="btn-edit"><div class="v">从供应商库选（可后填）…</div><button>…</button></div></div>
+          <div class="field"><label><span class="req">*</span>客户 PO 号</label><input class="input" value="PO-HM-2026-0312"></div>
+          <div class="field"><label>中间商编号<span class="by-sys">系统</span></label><input class="input readonly" value="CN001" readonly=""></div>
+          <div class="field"><label>中间商名称<span class="by-sys">系统</span></label><input class="input readonly" value="上海福德贸易" readonly=""></div>
+          <div class="field"><label>最终买家<span class="by-sys">系统</span></label><input class="input readonly" value="H&amp;M Asia" readonly=""></div>
+          <div class="field"><label>大货总数量<span class="by-sys">系统</span></label><input class="input readonly" value="1454" readonly=""></div>
+          <div class="field"><label>外销员</label><input class="input" value="张三"></div>
+          <div class="field"><label>制单日期<span class="by-sys">系统</span></label><input class="input readonly" value="2026-06-08" readonly=""></div>
+        </div>
+      </div>
+      <div class="field-logic-wrap">
+        <div class="flw-head">📋 字段操作逻辑（15 个）</div>
+        <table class="field-logic-table">
+          <thead><tr><th style="width:150px">字段</th><th style="width:80px">类型</th><th style="width:50px">必填</th><th style="width:80px">控件</th><th style="width:60px">填写人</th><th>操作逻辑 / 业务规则</th></tr></thead>
+          <tbody>
+            <tr><td><b>订单编号</b></td><td class="dt-cell">文本</td><td><span class="req-tag">必填</span></td><td>只读文本</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">新建时自动生成 O-YYYYMMDD-序号，全局唯一、不可改</td></tr>
+            <tr><td><b>关联报价单号</b><span class="anno-mark">导入源</span></td><td class="dt-cell">选择带出</td><td><span class="req-tag">必填</span></td><td>点选弹窗</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">从【已生效客户报价】中选 Q-…；选定后【📥从报价导入】带出款号/单价/交期/件数/客户/材料明细</td></tr>
+            <tr><td><b>客户款号</b><span class="anno-mark">可改</span></td><td class="dt-cell">文本</td><td><span class="req-tag">必填</span></td><td>文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">报价带入，可改</td></tr>
+            <tr><td><b>单品单价</b></td><td class="dt-cell">数字</td><td><span class="opt-tag">选填</span></td><td>数字</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">报价带入对客单价，可改</td></tr>
+            <tr><td><b>约定交期</b></td><td class="dt-cell">日期</td><td><span class="req-tag">必填</span></td><td>日期</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">报价带入，可改</td></tr>
+            <tr><td><b>币种</b><span class="anno-mark">新增</span></td><td class="dt-cell">下拉</td><td><span class="opt-tag">选填</span></td><td>下拉</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">★ 单品单价的币种：RMB / USD（数据库后续可扩）；原「报价件数」按业务要求<b>已取消</b></td></tr>
+            <tr><td><b>客户 PO 号</b><span class="anno-mark">业务补录</span></td><td class="dt-cell">文本</td><td><span class="req-tag">必填</span></td><td>文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">业务手动录入客户采购订单号</td></tr>
+            <tr><td><b>中间商编号 / 名称</b></td><td class="dt-cell">选择带出</td><td><span class="opt-tag">选填</span></td><td>只读</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">报价带入，引用【客户资料】</td></tr>
+            <tr><td><b>最终买家</b></td><td class="dt-cell">选择带出</td><td><span class="opt-tag">选填</span></td><td>只读</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">报价带入</td></tr>
+            <tr><td><b>大货总数量</b><span class="anno-mark">=尺码合计</span></td><td class="dt-cell">数字</td><td><span class="req-tag">必填</span></td><td>只读</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">★ 自动 ＝ 尺码数量搭配表所有格子之和（各尺码×各颜色），驱动用料核算</td></tr>
+            <tr><td><b>外销员</b></td><td class="dt-cell">下拉</td><td><span class="opt-tag">选填</span></td><td>下拉</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">默认当前登录人</td></tr>
+            <tr><td><b>制单日期</b></td><td class="dt-cell">日期</td><td><span class="opt-tag">选填</span></td><td>只读</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">默认今天</td></tr>
+            <tr><td><b>佣金 %</b><span class="anno-mark">新增</span></td><td class="dt-cell">数字</td><td><span class="opt-tag">选填</span></td><td>数字</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">★ 默认 0；按百分比填（如 3% 填 3）；后续<b>结算/对账关联</b>此佣金</td></tr>
+            <tr><td><b>生产工厂</b><span class="anno-mark">新增</span></td><td class="dt-cell">选择带出</td><td><span class="opt-tag">选填</span></td><td>点选弹窗</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">★ 从【工厂资料/供应商库】选，<b>可后填</b>；填入后工厂自动绑定本订单，工厂侧可见订单信息</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 分组2 尺码数量搭配 -->
+      <h3 class="section-divider">▣ 尺码数量搭配（按 PO 号 · 可 Excel 导入）</h3>
+      <div class="subtable-wrap" data-anno-target="" data-anno-label="分组·尺码数量搭配" data-anchor="a4" style="position: relative;">
+        <div class="subtable-head">
+          <span class="st-title">▸ 尺码数量搭配<span class="count"> · 行=款号·颜色·尺码，列=各 PO（列头三行：PO号 / 目的地 / 收货人）；TOTAL QTY=该款色尺码跨 PO 合计 · 单款可分不同 PO、同一 PO 可含多款</span></span>
+          <div class="st-tools"><button class="btn btn-c btn-sm">[📋 Excel 导入]</button><button class="btn btn-s btn-sm">[+ 加 PO 列]</button><button class="btn btn-s btn-sm">[+ 加款/色·尺码行]</button></div>
+        </div>
+        <div style="overflow-x:auto">
+        <table class="table">
+          <thead>
+            <tr><th rowspan="3">款号</th><th rowspan="3">颜色</th><th rowspan="3">尺码</th><th class="color-col">PO-RSIN</th><th class="color-col">PO-BH1</th><th class="color-col">PO-WCIN</th><th rowspan="3" class="calc">TOTAL<br>QTY</th></tr>
+            <tr><th class="color-col">目的地 SERBIA</th><th class="color-col">BOSNIA</th><th class="color-col">CZECH R</th></tr>
+            <tr><th class="color-col">收货人 SV SERBIA</th><th class="color-col">SV BOSNIA</th><th class="color-col">BDS SLOVAKIA</th></tr>
+          </thead>
+          <tbody>
+            <tr><td rowspan="6"><b>MNA263M525</b></td><td rowspan="3">黑色</td><td>S</td><td>55</td><td>24</td><td>59</td><td class="calc">138</td></tr>
+            <tr><td>M</td><td>115</td><td>72</td><td>119</td><td class="calc">306</td></tr>
+            <tr><td>L</td><td>156</td><td>115</td><td>145</td><td class="calc">416</td></tr>
+            <tr><td rowspan="3">藏青</td><td>S</td><td>48</td><td>16</td><td>36</td><td class="calc">100</td></tr>
+            <tr><td>M</td><td>98</td><td>43</td><td>67</td><td class="calc">208</td></tr>
+            <tr><td>L</td><td>131</td><td>68</td><td>87</td><td class="calc">286</td></tr>
+          </tbody>
+          <tfoot>
+            <tr><td colspan="3">各 PO 合计</td><td class="calc">603</td><td class="calc">338</td><td class="calc">513</td><td class="calc">1454</td></tr>
+          </tfoot>
+        </table>
+        </div>
+        <div style="font-size:11.5px;color:var(--gray-5);padding:7px 4px 0">📊 系统按「款号·颜色·尺码」自动汇总所有 PO，生成<b>总数量搭配（不分 PO）</b>＝上方 TOTAL QTY 列；<b>大货总数量 ＝ 总计 1454</b>。一个 PO 对应一份搭配（目的地/收货人），供分批出货/发运。</div>
+      </div>
+      <div class="field-logic-wrap">
+        <div class="flw-head">📋 字段操作逻辑</div>
+        <table class="field-logic-table">
+          <thead><tr><th style="width:150px">项</th><th style="width:80px">类型</th><th style="width:50px">必填</th><th style="width:80px">控件</th><th style="width:60px">填写人</th><th>操作逻辑 / 业务规则</th></tr></thead>
+          <tbody>
+            <tr><td><b>PO 号</b><span class="anno-mark">新增·业务诉求</span></td><td class="dt-cell">动态列</td><td><span class="req-tag">必填</span></td><td>表头加列</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">★ 一个 PO ＝ 一列(一份搭配)；点 [+加 PO 列] 增加；同一订单可含多个 PO，单款可分到不同 PO</td></tr>
+            <tr><td><b>目的地 / 收货人</b><span class="anno-mark">新增</span></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">每个 PO 的 Final destination(目的地) + Consignee(收货人)，作 PO 列头</td></tr>
+            <tr><td><b>款号·颜色·尺码行</b></td><td class="dt-cell">动态行</td><td><span class="opt-tag">选填</span></td><td>加行</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">每款·每色·每尺码一行；点 [+加款/色·尺码行] 增加</td></tr>
+            <tr><td><b>数量格</b><span class="anno-mark">必填</span></td><td class="dt-cell">数字</td><td><span class="req-tag">必填</span></td><td>数字</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">某 款·色·尺码 在某 PO 的下单数量；改动实时重算 TOTAL QTY / 各 PO 合计 / 总计</td></tr>
+            <tr><td><b>TOTAL QTY</b></td><td class="dt-cell">公式</td><td><span class="opt-tag">选填</span></td><td>只读</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">该款·色·尺码跨所有 PO 之和</td></tr>
+            <tr><td><b>总数量搭配 / 大货总数量</b><span class="anno-mark">自动汇总</span></td><td class="dt-cell">公式</td><td><span class="opt-tag">选填</span></td><td>只读</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">★ 系统按 款·色·尺码 汇总所有 PO 生成「总搭配」(不分 PO)；总计 ＝ 所有格之和 → 回填「大货总数量」，驱动用料核算</td></tr>
+            <tr><td><b>Excel 导入</b><span class="anno-mark">业务诉求</span></td><td class="dt-cell">导入</td><td><span class="opt-tag">选填</span></td><td>向导</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">★ 固定模板（款号/颜色/尺码 + 各 PO 号·目的地·收货人·数量），上传后解析自动生成此表；校验款号/尺码/数值，异常弹窗</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 分组3 附件 -->
+      <h3 class="section-divider">▣ 附件档案（5 类）</h3>
+      <div class="fieldset" data-anno-target="" data-anno-label="分组·附件档案" data-anchor="a5" style="position: relative;">
+        <div class="fieldset-head">附件档案 <span class="count">5 类 · 多文件上传/预览/下载/替换</span></div>
+        <div class="fieldset-body grid-3">
+          <div class="field"><label>彩稿</label><div class="file-upload">📎 上传文件（多文件）</div></div>
+          <div class="field"><label>大货尺寸表</label><div class="file-upload">📎 上传文件（多文件）</div></div>
+          <div class="field"><label>大货纸板</label><div class="file-upload">📎 上传文件（多文件）</div></div>
+          <div class="field"><label>包装资料</label><div class="file-upload">📎 上传文件（多文件）</div></div>
+          <div class="field"><label>填充量<span class="by-mix">新增</span></label><div class="file-upload">📎 上传文件（多文件）</div></div>
+        </div>
+      </div>
+      <div class="field-logic-wrap">
+        <div class="flw-head">📋 字段操作逻辑（5 类）</div>
+        <table class="field-logic-table">
+          <thead><tr><th style="width:150px">附件类别</th><th style="width:90px">类型</th><th style="width:60px">填写人</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td><b>彩稿</b></td><td class="dt-cell">文件(多)</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">款式彩图 / 效果图</td></tr>
+            <tr><td><b>大货尺寸表</b></td><td class="dt-cell">文件(多)</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">各尺码成衣尺寸表</td></tr>
+            <tr><td><b>大货纸板</b></td><td class="dt-cell">文件(多)</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">裁剪纸样 / 排版文件</td></tr>
+            <tr><td><b>包装资料</b></td><td class="dt-cell">文件(多)</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">包装方式 / 唛头 / 装箱要求</td></tr>
+            <tr><td><b>填充量</b><span class="anno-mark">业务新增</span></td><td class="dt-cell">文件(多)</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">★ 羽绒/棉服填充克重表（业务批注新增）</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 分组4 材料明细 -->
+      <h3 class="section-divider">▣ 材料明细（从报价带入，品名可改）</h3>
+      <div class="subtable-wrap" data-anno-target="" data-anno-label="分组·材料明细" data-anchor="a6" style="position: relative;">
+        <div class="subtable-head">
+          <span class="st-title">▸ 材料明细<span class="count"> · 报价自动带入，无需手工新增 · 示例 3 行</span></span>
+          <div class="st-tools"><button class="btn btn-s btn-sm">[+ 添加行]</button><button class="btn btn-s btn-sm">[— 删除]</button><button class="btn btn-s btn-sm">[📥 从报价导入]</button></div>
+        </div>
+        <div style="overflow-x:auto">
+        <table class="table">
+          <thead><tr><th>品名</th><th>部位</th><th>门幅/尺寸</th><th>颜色</th><th>成份</th><th>供应商</th><th>单位</th><th>单件耗用</th><th>损耗%</th><th>拆分</th><th class="calc">采购量</th><th>备注</th><th>附件</th></tr></thead>
+          <tbody>
+            <tr><td>32S 全棉府绸</td><td>主面料</td><td>147cm</td><td>黑/藏青/军绿</td><td>100% 棉</td><td>苏州福利</td><td>米</td><td>1.20</td><td>3</td><td>按色</td><td class="calc">1797.1</td><td></td><td><span style="color:var(--rust)">📎 拖入照片</span></td></tr>
+            <tr><td>65/35 涤棉府绸</td><td>里料</td><td>150cm</td><td>本色</td><td>T/R 65/35</td><td>常州金顺</td><td>米</td><td>0.40</td><td>3</td><td>不拆</td><td class="calc">599.0</td><td></td><td><span style="color:var(--rust)">📎 拖入照片</span></td></tr>
+            <tr><td>YKK 5# 拉链</td><td>拉链</td><td>按尺码 S60/M65/L70cm</td><td>配色</td><td>—</td><td>盛达辅料</td><td>条</td><td>1.00</td><td>3</td><td>按尺码</td><td class="calc">1498</td><td>整数进1</td><td><span style="color:var(--rust)">📎 拖入照片</span></td></tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+      <div class="field-logic-wrap">
+        <div class="flw-head">📋 字段操作逻辑（13 个）</div>
+        <table class="field-logic-table">
+          <thead><tr><th style="width:130px">字段</th><th style="width:80px">类型</th><th style="width:50px">必填</th><th style="width:70px">控件</th><th style="width:60px">填写人</th><th>操作逻辑 / 业务规则</th></tr></thead>
+          <tbody>
+            <tr><td><b>品名</b><span class="anno-mark">可改·与部位对调</span></td><td class="dt-cell">文本</td><td><span class="req-tag">必填</span></td><td>文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">★ 报价带入文本，可手动调整（不重建料库）；列序按业务要求<b>品名在前、部位在后</b></td></tr>
+            <tr><td><b>部位</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">报价带入，可改（主面料/里料/拉链等）</td></tr>
+            <tr><td><b>门幅 / 尺寸</b><span class="anno-mark">尺寸类按尺码</span></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">★ 面料填门幅(147cm)；<b>尺寸类材料(拉链/绳子/螺纹)拆分=按尺码时，填各尺码对应尺寸</b>(如 S60/M65/L70cm)</td></tr>
+            <tr><td><b>颜色 / 成份</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">报价带入，可改</td></tr>
+            <tr><td><b>供应商</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本/点选</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">报价带入，可改；后续生成材料合同按供应商拆单</td></tr>
+            <tr><td><b>计量单位</b></td><td class="dt-cell">下拉</td><td><span class="req-tag">必填</span></td><td>下拉</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">米 / 条 / 个 / 码 等</td></tr>
+            <tr><td><b>单件耗用</b><span class="anno-mark">单件用量</span></td><td class="dt-cell">数字</td><td><span class="req-tag">必填</span></td><td>数字</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">★ 每件衣服用料多少（＝单件用量），报价带入可改</td></tr>
+            <tr><td><b>损耗%</b><span class="anno-mark">默认3%</span></td><td class="dt-cell">数字</td><td><span class="req-tag">必填</span></td><td>数字</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">★ 默认 3%，范围 0~100；可按单料改，也可整单统一改</td></tr>
+            <tr><td><b>拆分</b><span class="anno-mark">分色/分码</span></td><td class="dt-cell">下拉</td><td><span class="opt-tag">选填</span></td><td>下拉</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">不拆 / 按尺码 / 按颜色；★ 尺寸类材料选「按尺码」并在「门幅/尺寸」填各码尺寸</td></tr>
+            <tr><td><b>采购量</b><span class="anno-mark">公式·整数进1</span></td><td class="dt-cell">公式</td><td><span class="opt-tag">选填</span></td><td>数字</td><td><span class="by-tag by-mix">系统/业务</span></td><td class="rule-cell">★ ＝ 大货总数 × 单件耗用 ×(1+损耗%)；<b>整数类材料(拉链/扣子/螺纹，单位个/条)结果向上取整、保留整数</b>(业务批注，如 1454×1.03=1497.62→1498)；可微调，偏离超 ±10% 弹窗</td></tr>
+            <tr><td><b>备注</b></td><td class="dt-cell">多行文本</td><td><span class="opt-tag">选填</span></td><td>多行文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">—</td></tr>
+            <tr><td><b>附件</b><span class="anno-mark">新增</span></td><td class="dt-cell">图片(多)</td><td><span class="opt-tag">选填</span></td><td>拖拽上传</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">★ 备注后新增列：可<b>拖入材料照片</b>(实物/色卡)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 分组5 用料核算 -->
+      <h3 class="section-divider">▣ 用料核算</h3>
+      <div class="fieldset" data-anno-target="" data-anno-label="分组·用料核算" data-anchor="a7" style="position: relative;">
+        <div class="fieldset-head">用料核算 <span class="count">核算模式 + 公式 + 分色/分码拆分</span></div>
+        <div class="fieldset-body">
+          <div style="margin-bottom:8px"><span style="color:var(--gray-7);font-size:12px">整单核算模式：</span>
+            <span class="mode-pills">
+              <span class="mode-pill on">● 不拆分</span>
+              <span class="mode-pill">○ 按尺码（分码）</span>
+              <span class="mode-pill">○ 按颜色（分色）</span>
+            </span>
+            <span style="margin-left:6px;color:var(--gray-7);font-size:12px">整单损耗率默认 <input class="input mini" value="3" style="width:46px">%</span>
+            <span style="font-size:11.5px;color:var(--gray-5);display:block;margin-top:4px">（整单统一设置；个别物料可在材料明细「拆分」列与「损耗%」单独改）</span>
+          </div>
+          <div class="formula-card">
+            <b style="color:var(--teal)">📐 采购量公式</b><br>
+            · 不拆分：<code>单料采购量 = 大货总数 × 单件耗用 × (1 + 损耗率)</code><br>
+            · 按分码：<code>某尺码该料量 = 该尺码数量 × 单件耗用 × (1 + 损耗率)</code>，各尺码分别出量<br>
+            · 按分色：<code>某颜色该料量 = 该颜色数量 × 单件耗用 × (1 + 损耗率)</code>，各颜色分别出量<br>
+            · 损耗默认 3%，可单料/整单调整；采购量可手动微调，<b style="color:var(--vermilion)">超 ±10% 弹窗确认</b>。<br>
+            · 多款号同单时，分色/分码按颜色或尺码<b>跨款号汇总</b>（如黑色 ＝ 各款黑色数量之和）。<br>
+            · ★ <b>整数类材料（拉链/扣子/螺纹，单位 个/条）</b>：损耗加完后<b>向上取整、保留整数</b>（业务批注，如 1454×1.03＝1497.62 → 1498）。
+          </div>
+          <div style="overflow-x:auto;margin-top:8px">
+          <table class="table">
+            <thead><tr><th>材料</th><th>大货总数</th><th>单件耗用</th><th>损耗%</th><th class="calc">系统采购量</th><th class="editable">最终采购量 ✏️</th><th>偏差</th></tr></thead>
+            <tbody>
+              <tr><td>32S 全棉府绸（按色）</td><td>1454</td><td>1.20</td><td>3</td><td class="calc">1797.1</td><td><input class="input mini" value="1797.1"></td><td>0%</td></tr>
+              <tr><td>65/35 涤棉府绸</td><td>1454</td><td>0.40</td><td>3</td><td class="calc">599.0</td><td><input class="input mini" value="620"></td><td style="color:var(--amber)">+3.5%</td></tr>
+              <tr><td>YKK 5# 拉链 <span style="color:var(--teal)">（整数进1）</span></td><td>1454</td><td>1.00</td><td>3</td><td class="calc">1498</td><td><input class="input mini" value="1498"></td><td>0%</td></tr>
+            </tbody>
+          </table>
+          </div>
+          <div style="margin-top:8px;text-align:right"><button class="btn btn-s btn-sm">📤 导出用料汇总表</button></div>
+        </div>
+      </div>
+      <div class="field-logic-wrap">
+        <div class="flw-head">📋 字段操作逻辑</div>
+        <table class="field-logic-table">
+          <thead><tr><th style="width:150px">项</th><th style="width:80px">类型</th><th style="width:60px">填写人</th><th>操作逻辑 / 业务规则</th></tr></thead>
+          <tbody>
+            <tr><td><b>核算模式</b></td><td class="dt-cell">单选</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">整单：不拆 / 按尺码 / 按颜色；切换后所有「随整单」的物料重算</td></tr>
+            <tr><td><b>系统采购量</b><span class="anno-mark">整数进1</span></td><td class="dt-cell">公式</td><td><span class="by-tag by-sys">系统</span></td><td class="rule-cell">按公式实时计算；分色/分码时分别出多条；★ 整数类材料(个/条)向上取整、保留整数</td></tr>
+            <tr><td><b>最终采购量</b><span class="anno-mark">±10%弹窗</span></td><td class="dt-cell">数字</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">★ 默认＝系统采购量，可手动微调；偏离超 ±10% 弹窗二次确认（业务批注）</td></tr>
+            <tr><td><b>用料汇总表</b></td><td class="dt-cell">导出</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">可导出明细台账（材料/数量/损耗/最终量），供采购对账</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 页面级逻辑 -->
+      <div class="page-logic-panel"><div class="plp-head">⚙ 页面级操作逻辑（按钮 / 事件 / 校验 / 联动）</div><div class="plp-body">
+        <div class="pl-cat"><h4>🔘 操作按钮</h4><table class="pl-table"><thead><tr><th style="width:170px">按钮</th><th>行为</th></tr></thead><tbody>
+          <tr><td>💾 保存</td><td>保存订单；状态 草稿 → 已下单</td></tr>
+          <tr><td>📥 从报价导入</td><td>选关联报价单 Q-… → 带出 款号/单价/交期/件数/客户/中间商/最终买家 + 复制全部材料明细(品名可改)</td></tr>
+          <tr><td>🔵 生成材料合同</td><td>把材料明细+最终采购量(按分色/分码)按供应商拆成多张材料合同 HT-…（多对多，D2）</td></tr>
+          <tr><td>🏭 生成加工合同</td><td>把款式/数量/交期推到生产加工合同 HT-…，业务填单价</td></tr>
+          <tr><td>复制</td><td>复制基础信息+尺码+材料明细，新订单自动编号</td></tr>
+          <tr><td>🗑 删除</td><td>未生成下游合同可删；已被合同引用则阻止删除（沿用引用禁删）</td></tr>
+        </tbody></table></div>
+        <div class="pl-cat"><h4>⚡ 页面事件（系统自动执行）</h4><table class="pl-table"><thead><tr><th style="width:170px">时机</th><th>系统做什么</th></tr></thead><tbody>
+          <tr><td>新建时</td><td>自动生成 O-YYYYMMDD-序号 / 制单日期=今天 / 外销员=当前登录人</td></tr>
+          <tr><td>选关联报价后</td><td>带出基础字段 + 复制材料明细（单件耗用＝报价耗用）</td></tr>
+          <tr><td>尺码/PO 数量格变化</td><td>实时重算 TOTAL QTY / 各 PO 合计 / 总计 → 回填「大货总数量」→ 触发用料重算</td></tr>
+          <tr><td>改单件耗用/损耗/大货总数</td><td>按公式实时重算「系统采购量」</td></tr>
+          <tr><td>改「最终采购量」</td><td>★ 算偏差；偏离系统值超 ±10% 弹窗二次确认（业务批注）</td></tr>
+          <tr><td>切换核算模式</td><td>不拆/按尺码/按颜色 → 重算并展开/收起分项</td></tr>
+          <tr><td>选生产工厂后</td><td>★ 工厂自动绑定本订单，工厂侧工作台可见订单信息（批注）</td></tr>
+          <tr><td>填佣金后</td><td>★ 进入后续结算/对账金额（批注）</td></tr>
+          <tr><td>报价单事后被修改</td><td>★ 不反向同步本订单（快照）</td></tr>
+        </tbody></table></div>
+        <div class="pl-cat"><h4>✅ 字段校验规则</h4><ul class="pl-ul">
+          <li>必填：订单编号 / 关联报价单号 / 客户款号 / 约定交期 / 客户 PO 号</li>
+          <li>尺码数量搭配 至少 1 个 PO 列 + 1 个数量格 &gt; 0；每个 PO 需填目的地/收货人；大货总数量 = 总计 &gt; 0</li>
+          <li>材料明细 至少 1 行；行内「品名 / 单位 / 单件耗用 / 损耗%」必填</li>
+          <li>损耗% 范围 0~100；单件耗用 &gt; 0；整数类材料(个/条)采购量向上取整保留整数</li>
+          <li>最终采购量偏离系统值 &gt; ±10% → 必须弹窗确认后才保存</li>
+          <li>Excel 导入尺码：校验尺码编码与数值格式，异常行弹窗提示</li>
+        </ul></div>
+        <div class="pl-cat"><h4>🔗 字段联动 / 显隐</h4><ul class="pl-ul">
+          <li>关联报价单 → 一键带入基础字段 + 材料明细</li>
+          <li>各 PO 数量 → TOTAL QTY/各 PO 合计/总计(总搭配) → 大货总数量 → 用料核算</li>
+          <li>核算模式 = 按颜色/按尺码 → 材料「拆分」列默认随之；个别物料可单独覆盖</li>
+          <li>单件耗用 / 损耗 / 大货总数 任一变化 → 系统采购量重算</li>
+          <li>佣金 → 后续结算/对账金额关联；生产工厂 → 绑定订单、工厂侧可见</li>
+          <li>权限不足者 → 单价 / 采购量金额 不可见</li>
+        </ul></div>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- ============ 列表页 ============ -->
+  <section id="list" class="design-section">
+    <div class="sect-head">
+      <div>
+        <h2><span class="sect-no">B</span> 列表页（浏览 + 检索一体）</h2>
+        <p class="sect-desc">智能搜索 + 高级筛选 + 状态着色 + 批量操作</p>
+      </div>
+      <div style="padding-top:4px"><span class="badge badge-i">业务/主管</span></div>
+    </div>
+    <div class="design-frame">
+      <div class="page-toolbar" data-anno-target="" data-anno-label="列表页工具栏" data-anchor="a8" style="position: relative;">
+        <div class="tb-left"><span class="page-title">订单 · 列表</span><span class="badge badge-s">共 26 条</span></div>
+        <div class="tb-right">
+          <button class="btn btn-c">+ 新建</button>
+          <button class="btn btn-s">📥 从报价建订单</button>
+          <button class="btn btn-s">导出</button>
+          <button class="btn btn-g">删除</button>
+          <button class="btn btn-s">···</button>
+        </div>
+      </div>
+      <div class="smart-search-bar">
+        <span class="ss-icon">🔍</span>
+        <input class="input ss-input" placeholder="搜索：订单号 / 客户款号 / 客户 PO / 中间商 / 最终买家 / 业务员">
+        <button class="btn btn-p">搜索</button>
+        <button class="btn btn-t">高级筛选 ▾</button>
+      </div>
+      <div class="adv-filter-panel">
+        <div class="afp-head">高级筛选</div>
+        <div class="afp-grid">
+          <div class="field"><label>订单编号</label><input class="input"></div>
+          <div class="field"><label>客户款号</label><input class="input"></div>
+          <div class="field"><label>客户 PO 号</label><input class="input"></div>
+          <div class="field"><label>中间商</label><input class="input"></div>
+          <div class="field"><label>状态</label><select class="select"><option>全部</option><option>草稿</option><option>已下单</option><option>已生成合同</option><option>生产中</option><option>已完成</option></select></div>
+          <div class="field"><label>交期范围</label><input class="input" type="date"></div>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+      <table class="table">
+        <thead><tr><th style="width:30px"><input type="checkbox"></th><th>订单编号</th><th>客户款号</th><th>客户 PO</th><th>中间商 / 买家</th><th>大货总数</th><th>单品单价</th><th>约定交期</th><th>状态</th><th>业务员</th><th>操作</th></tr></thead>
+        <tbody>
+          <tr><td><input type="checkbox"></td><td>O-20260608-01</td><td>MNA263M525</td><td>PO-HM-2026-0312</td><td>上海福德 / H&amp;M</td><td>1454</td><td>¥145.00</td><td>2026-07-30</td><td><span class="status status-doing">已下单</span></td><td>张三</td><td class="row-act">编辑 · 复制</td></tr>
+          <tr><td><input type="checkbox"></td><td>O-20260607-03</td><td>MONT-KIDS-08</td><td>PO-MONT-115</td><td>金利织带 / MONT</td><td>13322</td><td>¥62.00</td><td>2026-07-20</td><td><span class="status status-sent">已生成合同</span></td><td>李四</td><td class="row-act">编辑 · 复制</td></tr>
+          <tr><td><input type="checkbox"></td><td>O-20260605-02</td><td>KSA253M600</td><td>PO-KM-600</td><td>维希亚 / 直客</td><td>3050</td><td>¥88.00</td><td>2026-07-10</td><td><span class="status status-returned">生产中</span></td><td>张三</td><td class="row-act">编辑 · 复制</td></tr>
+          <tr><td><input type="checkbox"></td><td>O-20260601-01</td><td>MNA260F310</td><td>PO-HM-2026-0288</td><td>上海福德 / H&amp;M</td><td>2400</td><td>¥132.00</td><td>2026-06-28</td><td><span class="status status-success">已完成</span></td><td>王五</td><td class="row-act">编辑 · 复制</td></tr>
+          <tr><td><input type="checkbox"></td><td>O-20260530-04</td><td>—（草稿）</td><td>—</td><td>—</td><td>0</td><td>—</td><td>—</td><td><span class="status status-pending">草稿</span></td><td>李四</td><td class="row-act">编辑 · 删除</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <div class="pagination"><span>共 26 条</span><button class="btn btn-s btn-sm">‹</button><button class="btn btn-p btn-sm">1</button><button class="btn btn-s btn-sm">2</button><button class="btn btn-s btn-sm">3</button><button class="btn btn-s btn-sm">›</button><span>10 条/页</span></div>
+    </div>
+  </section>
+
+  <!-- ============ 弹窗：Excel 导入 ============ -->
+  <section id="dlg" class="design-section">
+    <div class="sect-head">
+      <div><h2><span class="sect-no">C</span> 弹窗 · Excel 导入尺码数量搭配</h2>
+        <p class="sect-desc">业务诉求:配比数据用 Excel 批量导入,系统解析自动生成尺码搭配表</p></div>
+    </div>
+    <div class="design-frame" data-anno-target="" data-anno-label="弹窗·Excel导入尺码" data-anchor="a9" style="position: relative;">
+      <div class="biz-notes" style="margin:0 0 12px"><b>📋 导入流程(4 步) · 含 PO 维度</b><ul>
+        <li>① 下载固定模板（列：款号 / 颜色 / 尺码 / 各 PO 号·目的地·收货人·数量），按客户排期文件填好</li>
+        <li>② 上传 Excel → 系统解析（识别多 PO 列）</li>
+        <li>③ 校验：款号/尺码编码、PO 号·目的地·收货人、数值是否合法；异常行红色标出 + 弹窗提示</li>
+        <li>④ 确认入库 → 自动生成「款·色·码 × PO」搭配表 + 汇总总搭配，总计回填「大货总数量」</li>
+      </ul></div>
+      <div style="overflow-x:auto">
+      <table class="table">
+        <thead><tr><th>行</th><th>款号</th><th>颜色</th><th>尺码</th><th>PO 号</th><th>目的地</th><th>收货人</th><th>数量</th><th>校验</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>MNA263M525</td><td>黑色</td><td>S</td><td>PO-RSIN</td><td>SERBIA</td><td>SV SERBIA</td><td>55</td><td><span class="status status-done">✓ 通过</span></td></tr>
+          <tr><td>2</td><td>MNA263M525</td><td>黑色</td><td>M</td><td>PO-RSIN</td><td>SERBIA</td><td>SV SERBIA</td><td>115</td><td><span class="status status-done">✓ 通过</span></td></tr>
+          <tr><td>3</td><td>MNA263M525</td><td>黑色</td><td>S</td><td>PO-BH1</td><td>BOSNIA</td><td>—</td><td>24</td><td><span class="status" style="background:#FBEAEA;color:#C04042">✗ 缺收货人</span></td></tr>
+        </tbody>
+      </table>
+      </div>
+      <div style="margin-top:12px;text-align:right"><button class="btn btn-s">下载错误报告</button> <button class="btn btn-s">取消</button> <button class="btn btn-c">确认导入（2 行通过）</button></div>
+    </div>
+  </section>
+
+  <!-- 补充需求专区 -->
+  <section id="reqs" class="design-section">
+    <div class="sect-head"><div><h2><span class="sect-no">📌</span> 补充需求汇总 <button class="btn btn-c btn-sm" onclick="openReqModal(null,'')">＋ 新增</button></h2>
+      <p class="sect-desc">业务方在评审中想到的新需求,可挂到某个分组或全局</p></div></div>
+    <div class="design-frame"><div class="req-zone" id="reqZone"><div class="req-empty">暂无补充需求。点上方「＋ 新增」或顶栏「➕ 补充需求」添加。</div></div></div>
+  </section>
+
+  <div style="margin:24px 8px;color:var(--gray-5);font-size:12px;border-top:1px solid var(--gray-1);padding-top:12px">
+    订单 · UI 设计稿 v1.0（已应用业务回传 9 条修订）· 数据表 DD · ★ 业务批注落地：①单价加币种 ②加佣金 ③删报价件数 ④尺码数量搭配加 PO 号(目的地/收货人)+自动汇总总搭配 ⑤损耗后整数进1 ⑥加生产工厂(绑定订单) ⑦尺寸类材料按尺码填尺寸 ⑧品名↔部位对换 ⑨材料明细加附件列。下游⑤材料合同·⑤′加工合同为触发示意。<span id="lastSavedFoot"></span>
+  </div>
+  <div id="print-summary" style="display:none"></div>
+</main>
+
+<!-- 批注 Modal -->
+<div class="mask" id="annoMask"><div class="modal">
+  <div class="modal-h"><span id="annoTitle">批注 · 分组·材料明细</span><span class="x" onclick="closeMask('annoMask')">×</span></div>
+  <div class="modal-b"><div class="tgt" id="annoTarget"><b>定位</b>:分组·材料明细</div><div id="annoList"><div class="anno-li"><div class="al-t">尺寸类材料“拉链，绳子，螺纹等”按尺码拆分，需要填入对应尺寸</div><div class="al-m"><span>匿名</span><span>2026-06-09 20:15</span><a href="javascript:void(0)" onclick="editAnno('an_mq6ls7o1_dwex')">编辑</a> <a href="javascript:void(0)" style="color:var(--vermilion)" onclick="delAnno('an_mq6ls7o1_dwex')">删除</a></div></div><div class="anno-li"><div class="al-t">品名和部位要对换一下位置</div><div class="al-m"><span>匿名</span><span>2026-06-09 20:17</span><a href="javascript:void(0)" onclick="editAnno('an_mq6lubro_acc6')">编辑</a> <a href="javascript:void(0)" style="color:var(--vermilion)" onclick="delAnno('an_mq6lubro_acc6')">删除</a></div></div><div class="anno-li"><div class="al-t">备注后面可以加一列附件-可拖入材料照片</div><div class="al-m"><span>匿名</span><span>2026-06-09 20:18</span><a href="javascript:void(0)" onclick="editAnno('an_mq6lvfy0_2zhr')">编辑</a> <a href="javascript:void(0)" style="color:var(--vermilion)" onclick="delAnno('an_mq6lvfy0_2zhr')">删除</a></div></div></div>
+    <label class="fl">新增批注</label><textarea id="annoText" placeholder="写下意见…"></textarea>
+    <label class="fl">批注人(可选)</label><input type="text" id="annoAuthor" placeholder="姓名"></div>
+  <div class="modal-f"><button class="btn btn-s" onclick="closeMask('annoMask')">取消</button><button class="btn btn-c" onclick="addAnno()">＋ 添加批注</button></div>
+</div></div>
+
+<!-- 补充需求 Modal -->
+<div class="mask" id="reqMask"><div class="modal">
+  <div class="modal-h"><span id="reqTitle">补充需求</span><span class="x" onclick="closeMask('reqMask')">×</span></div>
+  <div class="modal-b">
+    <label class="fl">归属(挂到哪个分组)</label>
+    <select id="reqScope"><option value="">全局</option><option value="base">基础信息</option><option value="size">尺码数量</option><option value="attach">附件档案</option><option value="mat">材料明细</option><option value="calc">用料核算</option><option value="list">列表页</option></select>
+    <label class="fl">标题</label><input type="text" id="reqTitleIn" placeholder="一句话概括需求">
+    <label class="fl">详述</label><textarea id="reqDetail" placeholder="详细说明…"></textarea>
+    <label class="fl">优先级</label><select id="reqPriority"><option value="">未定</option><option>P0</option><option>P1</option><option>P2</option></select>
+    <label class="fl">提出人(可选)</label><input type="text" id="reqAuthor" placeholder="姓名">
+  </div>
+  <div class="modal-f"><button class="btn btn-g" id="reqDelBtn" onclick="deleteReqFromModal()" style="display:none">删除</button><button class="btn btn-s" onclick="closeMask('reqMask')">取消</button><button class="btn btn-c" onclick="saveReq()">保存</button></div>
+</div></div>
+
+<!-- 汇总抽屉 -->
+<div class="mask" id="drawerMask" onclick="closeSummary()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-h"><span>📋 评审汇总</span><span class="x" onclick="closeSummary()">×</span></div>
+  <div class="drawer-tabs"><button class="on" data-tab="anno" onclick="switchTab('anno')">批注</button><button data-tab="req" onclick="switchTab('req')">补充需求</button></div>
+  <div class="drawer-b" id="drawerBody"></div>
+</div>
+
+<script id="review-data" type="application/json">{"schemaVersion":1,"meta":{"docId":"订单设计稿_v1.0","boardVersion":"v1.0","reviewer":"","lastSaved":"2026-06-09T12:18:21.602Z"},"annotations":[{"id":"an_mq6l5lh8_vdu9","anchorId":"a2","anchorLabel":"编辑页工具栏按钮","quote":"订单 · 编辑 草稿 💾 保存 📥 从报价导入 🔵 生成材料合同 🏭 生成加工合同 复制 导出 ··· 💬","text":"单品单价后面加一栏选择币种，目前只用“RMB”\"USD\"，数据库后面可以再增加","author":"","status":"open","createdAt":"2026-06-09T11:58:00.956Z","updatedAt":"2026-06-09T11:58:00.957Z"},{"id":"an_mq6l9qds_iram","anchorId":"a2","anchorLabel":"编辑页工具栏按钮","quote":"订单 · 编辑 草稿 💾 保存 📥 从报价导入 🔵 生成材料合同 🏭 生成加工合同 复制 导出 ··· ✓1","text":"增加一个“佣金”后面可以填数字 默认0 例如3%，就填3。。后面结算对账要关联到","author":"","status":"open","createdAt":"2026-06-09T12:01:13.936Z","updatedAt":"2026-06-09T12:01:35.677Z"},{"id":"an_mq6lanjo_ljq1","anchorId":"a2","anchorLabel":"编辑页工具栏按钮","quote":"订单 · 编辑 草稿 💾 保存 📥 从报价导入 🔵 生成材料合同 🏭 生成加工合同 复制 导出 ··· ✓2","text":"报价件数--取消","author":"","status":"open","createdAt":"2026-06-09T12:01:56.916Z","updatedAt":"2026-06-09T12:01:56.916Z"},{"id":"an_mq6ld4gk_bstd","anchorId":"a4","anchorLabel":"分组·尺码数量搭配","quote":"▸ 尺码数量搭配 · 行=颜色，列=尺码；合计回填「大货总数量」 · 示例 1 款 3 色 [📋 Excel 导入] ","text":"需要增加PO号，一个PO号对应一个数量搭配，最后需要自动生成一个总的数量搭配，具体见表格","author":"","status":"open","createdAt":"2026-06-09T12:03:52.148Z","updatedAt":"2026-06-09T12:03:52.148Z"},{"id":"an_mq6ll9hw_4zco","anchorId":"a7","anchorLabel":"分组·用料核算","quote":"用料核算 核算模式 + 公式 + 分色/分码拆分 整单核算模式： ● 不拆分 ○ 按尺码（分码） ○ 按颜色（分色） 整","text":"损耗加过之后保留整数进1，例如拉链扣子，必须是整数，没有小数点","author":"","status":"open","createdAt":"2026-06-09T12:10:11.924Z","updatedAt":"2026-06-09T12:10:24.718Z"},{"id":"an_mq6loy2k_5jfy","anchorId":"a3","anchorLabel":"分组·基础信息","quote":"基础信息 13 字段 · 报价带入可改 * 订单编号 系统 * 关联报价单号 Q-20260529-01 … * 客户款","text":"增加信息“生产工厂”从供应商库提取，可以后填，填入工厂后，工厂自动绑定订单，可见订单信息","author":"","status":"open","createdAt":"2026-06-09T12:13:03.740Z","updatedAt":"2026-06-09T12:13:03.740Z"},{"id":"an_mq6ls7o1_dwex","anchorId":"a6","anchorLabel":"分组·材料明细","quote":"▸ 材料明细 · 报价自动带入，无需手工新增 · 示例 3 行 [+ 添加行] [— 删除] [📥 从报价导入] 部位","text":"尺寸类材料“拉链，绳子，螺纹等”按尺码拆分，需要填入对应尺寸","author":"","status":"open","createdAt":"2026-06-09T12:15:36.145Z","updatedAt":"2026-06-09T12:15:36.145Z"},{"id":"an_mq6lubro_acc6","anchorId":"a6","anchorLabel":"分组·材料明细","quote":"▸ 材料明细 · 报价自动带入，无需手工新增 · 示例 3 行 [+ 添加行] [— 删除] [📥 从报价导入] 部位","text":"品名和部位要对换一下位置","author":"","status":"open","createdAt":"2026-06-09T12:17:14.773Z","updatedAt":"2026-06-09T12:17:14.773Z"},{"id":"an_mq6lvfy0_2zhr","anchorId":"a6","anchorLabel":"分组·材料明细","quote":"▸ 材料明细 · 报价自动带入，无需手工新增 · 示例 3 行 [+ 添加行] [— 删除] [📥 从报价导入] 部位","text":"备注后面可以加一列附件-可拖入材料照片","author":"","status":"open","createdAt":"2026-06-09T12:18:06.840Z","updatedAt":"2026-06-09T12:18:06.840Z"}],"requirements":[]}</script>
+
+<script>
+var MODULES=[{key:'base',label:'基础信息'},{key:'size',label:'尺码数量'},{key:'attach',label:'附件档案'},{key:'mat',label:'材料明细'},{key:'calc',label:'用料核算'},{key:'list',label:'列表页'}];
+function moduleLabel(k){for(var i=0;i<MODULES.length;i++){if(MODULES[i].key===k)return MODULES[i].label;}return '全局';}
+var reviewState=freshState();var dirty=false;var fileHandle=null;
+var capabilities={fsAccess:('showSaveFilePicker' in window)&&window.isSecureContext};
+var DRAFT_KEY='order-03-v2-draft::'+(location.pathname||'b');
+function freshState(){return {schemaVersion:1,meta:{docId:'订单设计稿_v1.0',boardVersion:'v1.0',reviewer:'',lastSaved:''},annotations:[],requirements:[]};}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function uid(p){return p+'_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,6);}
+function nowIso(){return new Date().toISOString();}
+function fmtTime(iso){if(!iso)return '';try{var d=new Date(iso),p=function(n){return(n<10?'0':'')+n;};return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());}catch(e){return '';}}
+var idOk=function(s){return typeof s==='string'&&/^[A-Za-z0-9_-]+$/.test(s);};
+function loadState(){var n=document.getElementById('review-data'),raw=n?n.textContent:'';if(!raw||!raw.trim())return freshState();try{return normalizeState(JSON.parse(raw));}catch(e){window.__rawCorrupt=raw;showToast('⚠ 已保存数据损坏,已用空白表打开');return freshState();}}
+function normalizeState(o){var b=freshState();if(!o||typeof o!=='object')return b;if(o.meta)for(var k in o.meta){if(o.meta.hasOwnProperty(k))b.meta[k]=o.meta[k];}
+  if(Array.isArray(o.annotations))b.annotations=o.annotations.filter(function(a){return a&&idOk(a.id)&&idOk(a.anchorId)&&typeof a.text==='string';});
+  if(Array.isArray(o.requirements))b.requirements=o.requirements.filter(function(r){return r&&idOk(r.id);}).map(function(r){var mk=(r.scope==='module'&&idOk(r.moduleKey)&&MODULES.some(function(m){return m.key===r.moduleKey;}))?r.moduleKey:null;return {id:r.id,scope:mk?'module':'global',moduleKey:mk,moduleLabel:mk?moduleLabel(mk):'全局',title:String(r.title==null?'':r.title),detail:String(r.detail==null?'':r.detail),priority:(['P0','P1','P2'].indexOf(r.priority)>=0?r.priority:''),author:String(r.author==null?'':r.author),createdAt:r.createdAt||'',updatedAt:r.updatedAt||''};});return b;}
+function flushStateToAnchor(){var s=JSON.stringify(reviewState);s=s.replace(/<\//g,'<\\/').replace(/<!--/g,'<\\u0021--');document.getElementById('review-data').textContent=s;}
+function serializeFullHTML(){flushStateToAnchor();var c=document.documentElement.cloneNode(true);
+  var rm=c.querySelectorAll('.anno-icon,[data-runtime],.toast');for(var i=0;i<rm.length;i++){if(rm[i].parentNode)rm[i].parentNode.removeChild(rm[i]);}
+  var on=c.querySelectorAll('.anno-on');for(var j=0;j<on.length;j++)on[j].classList.remove('anno-on');
+  var op=c.querySelectorAll('.mask.open,.drawer.open');for(var m=0;m<op.length;m++)op[m].classList.remove('open');
+  return '<!DOCTYPE html>\n'+c.outerHTML;}
+function guessName(){try{var n=decodeURIComponent((location.pathname||'').split('/').pop()||'');if(n&&/\.html?$/i.test(n))return n;}catch(e){}return '03-订单设计稿_v1.0.html';}
+function save(){var prev=reviewState.meta.lastSaved;reviewState.meta.lastSaved=nowIso();var html;try{html=serializeFullHTML();}catch(e){reviewState.meta.lastSaved=prev;showToast('⚠ 序列化失败:'+e.message);setSaveState('fail');return;}
+  setSaveState('busy');
+  if(capabilities.fsAccess){saveViaFSA(html).then(function(ok){if(ok==='abort'){reviewState.meta.lastSaved=prev;flushStateToAnchor();setSaveState(dirty?'dirty':'clean');return;}if(ok===true){markSaved('inplace',fileHandle&&fileHandle.name);}else{fallbackBlob(html);}}).catch(function(e){reviewState.meta.lastSaved=prev;showToast('⚠ 保存失败:'+(e&&e.message||e));setSaveState('fail');});}
+  else{fallbackBlob(html);}}
+function saveViaFSA(html){return (async function(){try{if(!fileHandle){fileHandle=await window.showSaveFilePicker({suggestedName:guessName(),types:[{description:'评审HTML',accept:{'text/html':['.html']}}]});}else{var p=await fileHandle.queryPermission({mode:'readwrite'});if(p!=='granted'){p=await fileHandle.requestPermission({mode:'readwrite'});}if(p!=='granted')throw new Error('no-perm');}var w=await fileHandle.createWritable();await w.write(html);await w.close();return true;}catch(e){if(e&&e.name==='AbortError')return 'abort';return false;}})();}
+function fallbackBlob(html){try{var b=new Blob([html],{type:'text/html;charset=utf-8'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=guessName();document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(u);},1500);markSaved('download');}catch(e){clipFallback(html);}}
+function clipFallback(html){if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(html).then(function(){markSaved('clip');},function(){manualCopy(html);});}else{manualCopy(html);}}
+function manualCopy(html){var ta=document.createElement('textarea');ta.value=html;ta.style.position='fixed';ta.style.top='8%';ta.style.left='5%';ta.style.width='90%';ta.style.height='70%';ta.style.zIndex=999;document.body.appendChild(ta);ta.focus();ta.select();showToast('请 Ctrl+A 全选、Ctrl+C 复制,粘到编辑器另存为 .html');ta.addEventListener('blur',function(){if(ta.parentNode)ta.parentNode.removeChild(ta);});setSaveState('clean');}
+function setSaveState(mode){var b=document.getElementById('btnSave'),l=document.getElementById('saveLabel');b.classList.remove('dirty','fail');if(mode==='busy'){l.textContent='保存中…';return;}if(mode==='fail'){b.classList.add('fail');l.textContent='保存失败,重试';return;}if(mode==='dirty'){b.classList.add('dirty');l.textContent='保存*';return;}l.textContent='保存';}
+function markDirty(){dirty=true;setSaveState('dirty');scheduleDraft();}
+var _dt=null;function scheduleDraft(){if(_dt)clearTimeout(_dt);_dt=setTimeout(function(){try{flushStateToAnchor();localStorage.setItem(DRAFT_KEY,JSON.stringify({savedAt:nowIso(),state:reviewState}));}catch(e){}},800);}
+function markSaved(mode,fn){if(mode==='inplace'){dirty=false;setSaveState('clean');try{localStorage.removeItem(DRAFT_KEY);}catch(e){}}else{dirty=true;setSaveState('dirty');}
+  var msg=mode==='inplace'?('✓ 已保存到文件「'+(fn||guessName())+'」 '+fmtTime(reviewState.meta.lastSaved)):mode==='download'?'⚠ 已下载新版本,请用它覆盖原文件(同名同目录);未覆盖前草稿已保留':mode==='clip'?'✓ 源码已复制,请粘贴另存覆盖原文件':'已保存';
+  showToast(msg);var lf=document.getElementById('lastSavedFoot');if(lf)lf.textContent='　最近保存:'+fmtTime(reviewState.meta.lastSaved)+(mode!=='inplace'?'(待覆盖原文件)':'');}
+function applyCapabilityUI(){var tag=document.getElementById('modeTag'),tip=document.getElementById('guideSaveTip');
+  if(capabilities.fsAccess){tag.textContent='就地保存可用';if(tip)tip.textContent='Chrome/Edge 经本地服务器可直接写回原文件';}
+  else{tag.textContent='下载模式';if(tip)tip.textContent='双击打开时保存=下载同名文件,用它覆盖原文件即可';}}
+
+/* 批注 */
+var annoOn=false,curAnchor=null;
+function toggleAnnoMode(){annoOn=!annoOn;document.body.classList.toggle('anno-on',annoOn);document.getElementById('btnAnno').textContent='💬 批注：'+(annoOn?'开':'关');document.getElementById('btnAnno').classList.toggle('on',annoOn);refreshAnnoIcons();}
+function refreshAnnoIcons(){var old=document.querySelectorAll('.anno-icon');old.forEach(function(n){if(n.parentNode)n.parentNode.removeChild(n);});if(!annoOn)return;
+  document.querySelectorAll('[data-anchor]').forEach(function(el){var aid=el.getAttribute('data-anchor');var cnt=reviewState.annotations.filter(function(a){return a.anchorId===aid;}).length;
+    var btn=document.createElement('button');btn.className='anno-icon'+(cnt?' has':'');btn.setAttribute('data-runtime','1');btn.textContent=cnt?('✓'+cnt):'💬';
+    btn.onclick=function(ev){ev.stopPropagation();openAnno(aid);};if(getComputedStyle(el).position==='static')el.style.position='relative';el.appendChild(btn);});}
+function anchorLabel(aid){var el=document.querySelector('[data-anchor="'+aid+'"]');return el?(el.getAttribute('data-anno-label')||aid):aid;}
+function anchorQuote(aid){var el=document.querySelector('[data-anchor="'+aid+'"]');if(!el)return '';return (el.innerText||el.textContent||'').replace(/\s+/g,' ').trim().slice(0,60);}
+function openAnno(aid){curAnchor=aid;document.getElementById('annoTitle').textContent='批注 · '+anchorLabel(aid);document.getElementById('annoTarget').innerHTML='<b>定位</b>:'+esc(anchorLabel(aid));document.getElementById('annoText').value='';document.getElementById('annoAuthor').value='';renderAnnoList(aid);openMask('annoMask');setTimeout(function(){document.getElementById('annoText').focus();},40);}
+function renderAnnoList(aid){var list=reviewState.annotations.filter(function(a){return a.anchorId===aid;}),h=document.getElementById('annoList');if(!list.length){h.innerHTML='<div class="req-empty">该处暂无批注</div>';return;}
+  h.innerHTML=list.map(function(a){return '<div class="anno-li"><div class="al-t">'+esc(a.text)+'</div><div class="al-m"><span>'+esc(a.author||'匿名')+'</span><span>'+fmtTime(a.updatedAt||a.createdAt)+'</span><a href="javascript:void(0)" onclick="editAnno(\''+a.id+'\')">编辑</a> <a href="javascript:void(0)" style="color:var(--vermilion)" onclick="delAnno(\''+a.id+'\')">删除</a></div></div>';}).join('');}
+function addAnno(){var txt=document.getElementById('annoText').value.trim();if(!txt){showToast('请先输入批注内容');return;}
+  reviewState.annotations.push({id:uid('an'),anchorId:curAnchor,anchorLabel:anchorLabel(curAnchor),quote:anchorQuote(curAnchor),text:txt,author:document.getElementById('annoAuthor').value.trim(),status:'open',createdAt:nowIso(),updatedAt:nowIso()});
+  document.getElementById('annoText').value='';renderAnnoList(curAnchor);refreshAnnoIcons();markDirty();updateStats();}
+function editAnno(id){var a=reviewState.annotations.filter(function(x){return x.id===id;})[0];if(!a)return;var nv=prompt('编辑批注:',a.text);if(nv==null)return;var t=nv.trim();if(!t){showToast('内容不能为空,如需移除请删除');return;}a.text=t;a.updatedAt=nowIso();renderAnnoList(a.anchorId);refreshAnnoIcons();markDirty();updateStats();}
+function delAnno(id){if(!confirm('确认删除这条批注?'))return;var a=reviewState.annotations.filter(function(x){return x.id===id;})[0];reviewState.annotations=reviewState.annotations.filter(function(x){return x.id!==id;});if(a)renderAnnoList(a.anchorId);refreshAnnoIcons();markDirty();updateStats();}
+function applyAnnotations(){refreshAnnoIcons();}
+
+/* 补充需求 */
+var editingReqId=null;
+function openReqModal(id,scope){editingReqId=id;document.getElementById('reqTitle').textContent=id?'编辑补充需求':'新增补充需求';document.getElementById('reqDelBtn').style.display=id?'':'none';
+  if(id){var r=reviewState.requirements.filter(function(x){return x.id===id;})[0];if(!r)return;document.getElementById('reqScope').value=r.scope==='module'?r.moduleKey:'';document.getElementById('reqTitleIn').value=r.title||'';document.getElementById('reqDetail').value=r.detail||'';document.getElementById('reqPriority').value=r.priority||'';document.getElementById('reqAuthor').value=r.author||'';}
+  else{document.getElementById('reqScope').value=scope||'';document.getElementById('reqTitleIn').value='';document.getElementById('reqDetail').value='';document.getElementById('reqPriority').value='';document.getElementById('reqAuthor').value='';}
+  openMask('reqMask');}
+function saveReq(){var sv=document.getElementById('reqScope').value,title=document.getElementById('reqTitleIn').value.trim(),detail=document.getElementById('reqDetail').value.trim();if(!title&&!detail){showToast('请至少填写标题或详述');return;}
+  var rec={scope:sv?'module':'global',moduleKey:sv||null,moduleLabel:sv?moduleLabel(sv):'全局',title:title,detail:detail,priority:document.getElementById('reqPriority').value,author:document.getElementById('reqAuthor').value.trim(),updatedAt:nowIso()};
+  if(editingReqId){var r=reviewState.requirements.filter(function(x){return x.id===editingReqId;})[0];if(r)for(var k in rec)r[k]=rec[k];}else{rec.id=uid('req');rec.createdAt=nowIso();reviewState.requirements.push(rec);}
+  closeMask('reqMask');renderRequirements();markDirty();updateStats();}
+function deleteReqFromModal(){if(!editingReqId)return;if(!confirm('确认删除这条补充需求?'))return;reviewState.requirements=reviewState.requirements.filter(function(x){return x.id!==editingReqId;});closeMask('reqMask');renderRequirements();markDirty();updateStats();}
+function quickDelReq(id){if(!confirm('确认删除?'))return;reviewState.requirements=reviewState.requirements.filter(function(x){return x.id!==id;});renderRequirements();markDirty();updateStats();}
+function renderRequirements(){var host=document.getElementById('reqZone');if(!reviewState.requirements.length){host.innerHTML='<div class="req-empty">暂无补充需求。点上方「＋ 新增」或顶栏「➕ 补充需求」添加。</div>';refreshPins();return;}
+  var groups={};reviewState.requirements.forEach(function(r){var k=r.scope==='module'?r.moduleKey:'__g';(groups[k]=groups[k]||[]).push(r);});
+  var order=['__g'].concat(MODULES.map(function(m){return m.key;})),h='';
+  order.forEach(function(k){var arr=groups[k];if(!arr||!arr.length)return;var name=k==='__g'?'全局':moduleLabel(k);h+='<div class="req-group"><div class="rgh">'+esc(name)+' ('+arr.length+')</div>';
+    arr.forEach(function(r){h+='<div class="req-item"><div class="ra"><button class="btn btn-s btn-sm" onclick="openReqModal(\''+r.id+'\',\'\')">编辑</button><button class="btn btn-g btn-sm" onclick="quickDelReq(\''+r.id+'\')">删</button></div><div class="rt">'+(r.priority?'<span class="badge badge-w">'+esc(r.priority)+'</span> ':'')+esc(r.title||'(无标题)')+'</div>'+(r.detail?'<div class="rd">'+esc(r.detail)+'</div>':'')+'<div class="rm"><span>'+esc(r.moduleLabel)+'</span><span>'+esc(r.author||'匿名')+'</span><span>'+fmtTime(r.updatedAt||r.createdAt)+'</span></div></div>';});h+='</div>';});
+  host.innerHTML=h;refreshPins();}
+function refreshPins(){document.querySelectorAll('.pin[data-pin]').forEach(function(p){if(p.parentNode)p.parentNode.removeChild(p);});
+  MODULES.forEach(function(m){var c=reviewState.requirements.filter(function(r){return r.scope==='module'&&r.moduleKey===m.key;}).length;if(!c)return;
+    var el=document.querySelector('[data-anchor="'+m.key+'"]');if(!el)return;
+    var p=document.createElement('span');p.className='pin';p.setAttribute('data-pin',m.key);p.setAttribute('data-runtime','1');p.textContent='📌'+c;
+    p.style.position='absolute';p.style.top='4px';p.style.left='4px';p.style.zIndex='6';p.onclick=function(ev){ev.stopPropagation();openSummary();switchTab('req');};
+    if(getComputedStyle(el).position==='static')el.style.position='relative';el.appendChild(p);});}
+function applyRequirements(){renderRequirements();}
+
+function updateStats(){document.getElementById('stAnno').textContent=reviewState.annotations.length;document.getElementById('stReq').textContent=reviewState.requirements.length;}
+
+/* 汇总抽屉 */
+var curTab='anno';
+function openSummary(){openMask('drawerMask');document.getElementById('drawer').classList.add('open');renderSummary();}
+function closeSummary(){document.getElementById('drawer').classList.remove('open');closeMask('drawerMask');}
+function switchTab(t){curTab=t;document.querySelectorAll('.drawer-tabs button').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-tab')===t);});renderSummary();}
+function renderSummary(){var host=document.getElementById('drawerBody'),h='';
+  if(curTab==='anno'){var orphan=reviewState.annotations.filter(function(a){return !document.querySelector('[data-anchor="'+a.anchorId+'"]');}),normal=reviewState.annotations.filter(function(a){return document.querySelector('[data-anchor="'+a.anchorId+'"]');});
+    if(!reviewState.annotations.length)h='<div class="sum-empty">暂无批注</div>';if(orphan.length){h+='<div class="sum-h" style="color:var(--vermilion)">⚠ 无法定位的批注('+orphan.length+')</div>';orphan.forEach(function(a){h+=sumAnno(a,true);});}if(normal.length){h+='<div class="sum-h">全部批注('+normal.length+')</div>';normal.forEach(function(a){h+=sumAnno(a,false);});}}
+  else{if(!reviewState.requirements.length)h='<div class="sum-empty">暂无补充需求</div>';reviewState.requirements.forEach(function(r){h+='<div class="sum-item" onclick="openReqModal(\''+r.id+'\',\'\')"><div class="sa">'+esc(r.moduleLabel)+(r.priority?' · '+esc(r.priority):'')+'</div><div class="sb"><b>'+esc(r.title||'(无标题)')+'</b>'+(r.detail?'\n'+esc(r.detail):'')+'</div></div>';});}
+  host.innerHTML=h||'<div class="sum-empty">暂无</div>';}
+function sumAnno(a,orphan){return '<div class="sum-item'+(orphan?' sum-orphan':'')+'" onclick="'+(orphan?'':'focusAnchor(\''+a.anchorId+'\')')+'"><div class="sa">'+esc(a.anchorLabel||a.anchorId)+(orphan?' <span style="color:var(--vermilion)">(锚点已失效)</span>':'')+'</div><div class="sb">'+esc(a.text)+'</div><div class="sm">'+esc(a.author||'匿名')+' · '+fmtTime(a.updatedAt||a.createdAt)+'</div></div>';}
+function focusAnchor(aid){closeSummary();var el=document.querySelector('[data-anchor="'+aid+'"]');if(!el)return;el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash');setTimeout(function(){el.classList.remove('flash');},1400);}
+
+function exportMd(){var L=['# 订单设计稿 v1.0 — 评审汇总','','导出:'+fmtTime(nowIso()),'','## 批注('+reviewState.annotations.length+')',''];
+  reviewState.annotations.forEach(function(a){L.push('- **'+(a.anchorLabel||a.anchorId)+'**:'+a.text+'  _( '+(a.author||'匿名')+' )_');});
+  L.push('','## 补充需求('+reviewState.requirements.length+')','');reviewState.requirements.forEach(function(r){L.push('- **['+(r.priority||'-')+'] '+r.moduleLabel+' · '+(r.title||'(无标题)')+'**'+(r.detail?':'+r.detail.replace(/\n/g,' '):'')+'  _( '+(r.author||'匿名')+' )_');});
+  var md=L.join('\n'),b=new Blob([md],{type:'text/markdown;charset=utf-8'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download='订单设计稿v1.0_评审汇总.md';document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(u);},1200);showToast('已导出评审汇总(.md)');}
+
+function openMask(id){document.getElementById(id).classList.add('open');}
+function closeMask(id){document.getElementById(id).classList.remove('open');}
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeMask('annoMask');closeMask('reqMask');closeSummary();}if((e.ctrlKey||e.metaKey)&&(e.key==='s'||e.key==='S')){e.preventDefault();save();}});
+function dismissGuide(){var n=document.getElementById('guideNever');if(n&&n.checked){try{localStorage.setItem('order-03-v2-guide-hide','1');}catch(e){}}var c=document.getElementById('guideCard');if(c)c.style.display='none';}
+var _tt=null;function showToast(msg){var t=document.createElement('div');t.className='toast';t.setAttribute('data-runtime','1');t.textContent=msg;document.body.appendChild(t);if(_tt)clearTimeout(_tt);_tt=setTimeout(function(){if(t.parentNode)t.parentNode.removeChild(t);},3600);}
+function checkAnchors(){var seen={};document.querySelectorAll('[data-anchor]').forEach(function(el){var a=el.getAttribute('data-anchor');if(seen[a]){try{console.warn('dup anchor',a);}catch(e){}}seen[a]=1;});}
+function maybeOfferDraft(){var raw;try{raw=localStorage.getItem(DRAFT_KEY);}catch(e){return;}if(!raw)return;try{var d=JSON.parse(raw);if(d&&d.savedAt&&(!reviewState.meta.lastSaved||d.savedAt>reviewState.meta.lastSaved)){if(confirm('检测到本机未保存草稿(暂存于 '+fmtTime(d.savedAt)+'),用草稿?\n确定=草稿,取消=文件已存内容。')){reviewState=normalizeState(d.state);reviewState.meta.lastSaved='';applyAnnotations();renderRequirements();updateStats();markDirty();showToast('已恢复草稿,记得点保存写回文件');}}}catch(e){}}
+function assignAnchors(){var es=document.querySelectorAll('[data-anno-target]');for(var i=0;i<es.length;i++)es[i].setAttribute('data-anchor','a'+i);}
+function init(){assignAnchors();reviewState=loadState();checkAnchors();applyCapabilityUI();applyAnnotations();renderRequirements();updateStats();dirty=false;setSaveState('clean');
+  var lf=document.getElementById('lastSavedFoot');if(lf&&reviewState.meta.lastSaved)lf.textContent='　最近保存:'+fmtTime(reviewState.meta.lastSaved);
+  try{if(localStorage.getItem('order-03-v2-guide-hide')==='1'){var c=document.getElementById('guideCard');if(c)c.style.display='none';}}catch(e){}
+  maybeOfferDraft();window.addEventListener('beforeunload',function(e){if(dirty){e.preventDefault();e.returnValue='';return '';}});}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+</script>
+
+</body></html>
