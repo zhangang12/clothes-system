@@ -233,7 +233,7 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
 </div>
 
 <nav class="sidenav">
-  <div class="nav-cat" style="border:none;margin-top:0">供应商门户 v2 · 小程序</div>
+  <div class="nav-cat" style="border:none;margin-top:0">供应商门户 v2.2 · H5</div>
   <a class="dj" href="#overview">📍 业务流位置</a>
   <a href="#login">　登录 + 我的合同</a>
   <a href="#flow">　合同详情 · 顺序锁定</a>
@@ -254,15 +254,15 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
   </div>
 
   <div class="dj-block" data-anchor="overview" id="grp-mn-intro" data-anno-label="标题·门户概述" style="position: relative;">
-    <h1>📱 供应商协同门户 · UI 设计稿 v2.2<small>对外端 · 首期 H5 网页 · v2.2:H5-only(A1)+加工厂可见订单明细(A2)</small></h1>
+    <h1>📱 供应商协同门户 · UI 设计稿 v2.2<small>对外端 · 首期 H5 网页 · v2.2:H5-only(A1)+加工厂可见订单明细(A2)+登录口径修正</small></h1>
     <p class="dj-summary">
-    面向外部供应商 / 加工厂的<b>H5 网页(首期;链接即用,微信小程序留后期)</b>。合同从⑤/⑤′推送后，供应商登录看自己的合同，按 <b>🔖盖章 → 📦发货 → 🧾对账 → 💵开票</b> 顺序操作（前一步未完成、后面锁定）。<br>
-    <b>v2.2(门户问题清单业务回复落地)</b>：① <b>A1</b> 首期只做 H5 网页、不做微信小程序(降低首期成本);② <b>A2</b> 加工合同推送后,加工厂在门户可见该订单明细(材料清单 / 材料订单数 / 大货纸板 / 填充量 / 尺寸表 / 数量搭配)及供应商大货进度。　<b>v2</b>:UI 美化 + 评审(批注 / 补充需求 / 保存回 HTML)。
+    面向外部供应商 / 加工厂的<b>H5 网页(首期;链接打开门户、仍需登录鉴权,微信小程序留后期)</b>。合同从⑤/⑤′推送后，供应商登录看自己的合同，按 <b>🔖盖章 → 📦发货 → 🧾对账 → 💵开票</b> 顺序操作（前一步未完成、后面锁定）。<br>
+    <b>v2.2(门户问题清单业务回复落地)</b>：① <b>A1</b> 首期只做 H5 网页、不做微信小程序(降低首期成本);② <b>A2</b> 加工合同推送后,加工厂在门户可见该订单明细(材料清单 / 材料订单数 / 大货纸板 / 填充量 / 尺寸表 / 数量搭配)及供应商大货进度。③ <b>登录口径修正</b>:账号由公司(达泰)后台开通并绑①工厂资料,H5 首期主登录=手机号短信验证码 / 账号密码;原"微信一键授权"在 H5 不成立(网页拿不到手机号),降级为"微信内打开、已绑定账号的免登增强",小程序式手机号一键授权留待后期小程序。　<b>v2</b>:UI 美化 + 评审(批注 / 补充需求 / 保存回 HTML)。
     </p>
   </div>
 
   <div class="flow-box" data-anchor="flow" id="grp-mn-flow" data-anno-label="业务流位置图" style="position: relative;">⑤ 材料合同 / ⑤′ 加工合同（内部录好）
-        │ 📤 推送供应商（专属链接 / 小程序通知）
+        │ 📤 推送供应商（专属链接 · 短信/邮件通知）
         ▼
 📱 供应商协同门户（本稿 · 对外端）
    🔖 盖章 ──▶ 📦 发货 ──▶ 🧾 对账 ──▶ 💵 开票    （顺序锁定）
@@ -272,6 +272,7 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
 
   <div class="biz-notes" data-anchor="rules" id="grp-mn-rule" data-anno-label="门户业务规则总览" style="position: relative;"><b>📱 门户 · 业务规则</b><ul>
     <li>🔑 对外端(<b>首期 H5 网页</b>,微信小程序后期·A1);账号由达泰后台为工厂开通并绑①工厂资料,凭专属链接/通知进入;供应商只见自己的合同与金额。</li>
+    <li>🔐 <b>登录(账号由公司开通,非自助注册)</b>:专属链接/通知仅<b>深链定位到该合同、不免鉴权</b>;首期 H5 主登录=手机号短信验证码 / 账号密码,凭与①工厂资料登记一致的手机号/账号进入(验证码仅校验持有权、不创建账号);微信仅作"微信内打开、已绑定账号的免登"增强(经公众号网页授权换 openid,需认证服务号 + 授权回调域名,会话过期需重登),不能凭微信号自助登录。</li>
     <li>🔒 四步顺序锁定:🔖盖章 → 📦发货 → 🧾对账 → 💵开票;前一步未完成后面置灰。</li>
     <li>🖋 盖章:一键电子章(自动贴 PDF 落款) / 上传纸质盖章照片。</li>
     <li>📦 发货:数量明细+物流+附件;多次发货每次增一条→业务审批。</li>
@@ -285,9 +286,9 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
   <!-- A 登录+合同 -->
   <section id="login" class="design-section">
     <div class="sect-head"><div><h2><span class="sect-no">A</span> 登录 + 我的合同</h2>
-      <p class="sect-desc">H5 链接 / 账号登录(首期不做小程序);登录后只见自己的合同</p></div><span class="badge badge-i">供应商端</span></div>
+      <p class="sect-desc">H5 链接打开 + 手机号验证码 / 账号密码登录(账号由公司开通、非自助注册);登录后只见自己的合同</p></div><span class="badge badge-i">供应商端</span></div>
     <div class="design-frame">
-      <div class="frame-note">📱 移动端示意(微信小程序)。手机屏内为供应商实际界面。</div>
+      <div class="frame-note">📱 移动端示意(H5 网页,手机浏览器 / 微信内皆可打开)。手机屏内为供应商实际界面。</div>
       <div class="phone-row">
         <div class="phone-wrap"><div class="phone" data-anchor="scr-login" id="grp-mn-login" data-anno-label="屏·登录" style="position: relative;"><div class="phone-scr">
           <div class="statusbar"><span>9:41</span><span class="sb-r"><span class="sig"><i></i><i></i><i></i><i></i></span> 5G <span class="bat"><i></i></span></span></div>
@@ -295,9 +296,11 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
           <div class="m-scr"><div class="m-body">
             <div class="m-hero"><div class="logo">🧵</div><h3>供应商协同门户</h3><p>查看并处理与贵司相关的合同</p></div>
             <div class="m-card">
-              <button class="m-btn wx">登录 · 微信一键授权</button>
-              <button class="m-btn ghost">账号密码登录</button>
-              <p style="font-size:11px;color:#9097A1;text-align:center;margin-top:12px">「达泰服装」为平台方<br>账号由其开通,登录后展示贵司的合同</p>
+              <div style="display:flex;gap:7px;margin-bottom:8px"><input type="text" placeholder="手机号(公司预留)" style="flex:1;min-width:0;border:1px solid #E2E4EA;border-radius:8px;padding:9px 10px;font-size:12.5px"><button class="m-btn ghost" style="width:auto;white-space:nowrap;padding:0 11px;flex-shrink:0">获取验证码</button></div>
+              <input type="text" placeholder="短信验证码" style="width:100%;border:1px solid #E2E4EA;border-radius:8px;padding:9px 10px;font-size:12.5px;margin-bottom:10px">
+              <button class="m-btn primary">登录</button>
+              <button class="m-btn ghost" style="margin-top:8px">账号密码登录</button>
+              <p style="font-size:11px;color:#9097A1;text-align:center;margin-top:12px">「达泰服装」为平台方,账号由其开通<br>手机号 / 账号需与①工厂资料登记一致;微信内打开可绑定后免登</p>
             </div>
           </div></div>
           <div class="m-home"></div>
@@ -323,8 +326,9 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
       <div class="field-logic-wrap" data-anchor="fl-login" id="grp-mn-loginlogic" data-anno-label="登录/合同·逻辑表" style="position: relative;">
         <div class="flw-head">📋 登录 / 合同列表 · 操作逻辑</div>
         <table class="flt"><thead><tr><th style="width:150px">项</th><th>逻辑</th></tr></thead><tbody>
-          <tr><td><b>微信一键登录</b><span class="anno-mark">业务诉求</span></td><td>授权手机号→匹配①工厂资料绑定账号;未绑定提示联系达泰开通</td></tr>
-          <tr><td><b>账号密码登录</b></td><td>备用通道;账号由达泰开通</td></tr>
+          <tr><td><b>手机号验证码登录</b><span class="anno-mark">主·H5</span></td><td>★ 账号由达泰后台为工厂开通并绑①工厂资料(预留联系人手机号);供应商输入手机号 → 短信验证码(<b>仅校验手机号持有权、不创建账号</b>)→ 命中已开通账号才登入;手机号未登记则提示「联系达泰开通」(<b>非自助注册</b>,不走"验证即注册")</td></tr>
+          <tr><td><b>账号密码登录</b></td><td>备用通道;账号 / 初始密码由达泰开通下发</td></tr>
+          <tr><td><b>微信免登</b><span class="anno-mark">增强·可选</span></td><td>仅当在<b>微信内</b>打开 H5:经<b>公众号网页授权(snsapi_base/userinfo)换取 openid</b>(需认证服务号 + 后台配置网页授权回调域名);首次仍须用手机号/账号登录后把 openid 绑到该已开通账号,之后<b>同一微信、会话有效期内</b>免密进入(换设备/换微信/会话过期仍需重新手机号或账号登录)。openid <b>仅在已绑定后用于匹配既有账号、不能新建账号、不作独立登录凭证</b>;非微信内打开则此增强不可用。小程序式"手机号一键授权"(getPhoneNumber)留待后期小程序</td></tr>
           <tr><td><b>我的合同</b></td><td>★ 仅显示推送给本供应商的合同(类型/款号/金额/状态);看不到别家</td></tr>
           <tr><td><b>状态标签</b></td><td>待盖章/待发货/待对账/待开票/已完成,随四步进度变化</td></tr>
         </tbody></table>
@@ -475,7 +479,7 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
           <li>对账金额=合同单价×已审批发货数量(系统算);开票发票金额必须=对账金额</li>
         </ul></div>
         <div class="pl-cat"><h4>🔗 与内部 / 财务联动</h4><ul class="pl-ul">
-          <li>合同页「推送供应商」→ 生成专属链接/小程序通知 → 供应商进入</li>
+          <li>合同页「推送供应商」→ 生成专属链接 + 短信/邮件通知 → 供应商进入</li>
           <li>每次发货 → 推达泰业务审批;对账确认 → 推业务审批</li>
           <li>开票提交 → 推财务,自动生成⑦付款申请(发票=对账金额校验通过)</li>
           <li>多次发货/部分对账:对账单可按已审批的发货批次分批生成</li>
