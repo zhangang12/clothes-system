@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-CN"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>合同 · UI 设计稿 v1.2（定稿）</title>
+<title>合同 · UI 设计稿 v1.3</title>
 <style>
 :root{
   --indigo:#1E3A5F;--indigo-d:#152A45;--indigo-l:#2C5180;
@@ -241,7 +241,7 @@ body.anno-on [data-anchor]:hover{outline:1px solid var(--rust)}
 </head><body class="">
 
 <div class="topbar">
-  <div class="logo">🪡 样衣制造管理系统 · 新版 UI 设计稿<small>04 合同 · v1.1</small></div>
+  <div class="logo">🪡 样衣制造管理系统 · 新版 UI 设计稿<small>04 合同 · v1.3</small></div>
   <div class="stat"><span>批注 <b id="stAnno">6</b></span><span>补充需求 <b id="stReq">1</b></span></div>
   <div class="acts">
     <span class="mode-tag" id="modeTag">就地保存可用</span>
@@ -277,11 +277,11 @@ body.anno-on [data-anchor]:hover{outline:1px solid var(--rust)}
   </div>
 
   <div class="dj-block" style="background:linear-gradient(135deg,var(--rust) 0%,#A85423 100%)">
-    <h1>📄 合同 · UI 设计稿 v1.2<small>04 · 定稿 · 数据表 HT</small></h1>
+    <h1>📄 合同 · UI 设计稿 v1.3<small>04 · 定稿 · 数据表 HT</small></h1>
     <p class="dj-summary">
     合同由④订单派生,分两类:<b>材料合同（原料/辅料购销协议）</b>给材料供应商、<b>生产加工合同（委托加工合同）</b>给加工厂。两类合同<b>基础条款大部分固定（模板）</b>,变动部分=甲方供应商 + 多选款号 + 货物明细（带入订单材料/款式）+ 价格。合同录好后推送供应商,进入⑥协同门户走 盖章→发货→对账→开票。<br>
     <b>编号规则</b>:HT-YYYYMMDD-序号 + 类型(材料/加工)　·　<b>来源</b>:④订单【生成材料合同 / 生成加工合同】　·　<b>覆盖视图</b>:材料合同编辑页 + 加工合同编辑页 + 合同列表页<br>
-    <span style="background:rgba(255,255,255,.18);padding:2px 8px;border-radius:4px;font-size:12px">📌 v1.2 定稿:合同串流程问题清单 v1.0 全部按推荐项经业务确认(详见下方「✅ 已确认决策」),并补门户进度/审批节点/数量来源标注/单价默认带参考价。　v1.1 改造(按业务反馈):① 委托方代表默认当前业务(登录人,可改)② 新增担保人 + 担保人身份证照片附件(选填)③ 交货期限默认:加工合同=订单交期−10天 / 材料合同=该款交期−45天 ④ 材料合同货物明细末尾新增「照片」列(可粘贴材料照片)⑤ 分色/分码按订单【尺码数量搭配】矩阵 + 订单尺寸自动出表 ⑥ 材料合同新增「补料」按钮(复制合同·编号补料-原合同号·数量默认0可改)　|　v1.0 依据:3 份真实合同模板 + 选供应商多选款号(D2) + 价格包含项勾选 + 电子章PDF落款 + 条款模板可配置</span>
+    <span style="background:rgba(255,255,255,.18);padding:2px 8px;border-radius:4px;font-size:12px">📌 v1.3(业务追加反馈):材料合同基础信息新增「发货地址」(默认该款号对应加工厂地址,可调整/手填),供 ⑤供应商门户「我要发货」带入收货地址。　v1.2 定稿:合同串流程问题清单 v1.0 全部按推荐项经业务确认(详见下方「✅ 已确认决策」),并补门户进度/审批节点/数量来源标注/单价默认带参考价。　v1.1 改造(按业务反馈):① 委托方代表默认当前业务(登录人,可改)② 新增担保人 + 担保人身份证照片附件(选填)③ 交货期限默认:加工合同=订单交期−10天 / 材料合同=该款交期−45天 ④ 材料合同货物明细末尾新增「照片」列(可粘贴材料照片)⑤ 分色/分码按订单【尺码数量搭配】矩阵 + 订单尺寸自动出表 ⑥ 材料合同新增「补料」按钮(复制合同·编号补料-原合同号·数量默认0可改)　|　v1.0 依据:3 份真实合同模板 + 选供应商多选款号(D2) + 价格包含项勾选 + 电子章PDF落款 + 条款模板可配置</span>
     </p>
   </div>
 
@@ -357,6 +357,7 @@ body.anno-on [data-anchor]:hover{outline:1px solid var(--rust)}
           <div class="field"><label>乙方代表<span class="by-biz">业务</span></label><input class="input" value="金小涵" placeholder="默认当前业务(登录人)，可改"></div>
           <div class="field"><label>担保人(丙方)</label><input class="input" value="" placeholder="可空，个人担保方姓名"></div>
           <div class="field"><label>担保人身份证照片 <span style="color:var(--gray-5);font-size:11px">(选填)</span></label><div style="border:1px dashed var(--gray-3);border-radius:6px;padding:8px 10px;color:var(--gray-5);font-size:12px;cursor:pointer">📎 点选 / 拖入 / 粘贴 担保人身份证照片(选填)</div></div>
+          <div class="field"><label>发货地址<span class="by-mix">系统/业务</span></label><input class="input" value="昆山市周市镇洞庭湖北路578号(昆山览月制衣)" placeholder="默认该款号对应加工厂地址,可调整/手填"></div>
         </div>
       </div>
       <div class="field-logic-wrap">
@@ -371,6 +372,7 @@ body.anno-on [data-anchor]:hover{outline:1px solid var(--rust)}
             <tr><td><b>乙方代表</b><span class="anno-mark">v1.1</span></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">★ 默认当前业务(登录人)，可改</td></tr>
             <tr><td><b>担保人(丙方)</b></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">个人担保方，一般留空</td></tr>
             <tr><td><b>担保人身份证照片</b><span class="anno-mark">v1.1</span></td><td class="dt-cell">附件</td><td><span class="opt-tag">选填</span></td><td>上传</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">★ 选填；可点选 / 拖入 / 粘贴担保人身份证照片</td></tr>
+            <tr><td><b>发货地址</b><span class="anno-mark">v1.3</span></td><td class="dt-cell">文本</td><td><span class="opt-tag">选填</span></td><td>文本</td><td><span class="by-tag by-mix">系统/业务</span></td><td class="rule-cell">★ v1.3(业务反馈):默认 = 该款号对应加工厂地址(材料发往加工厂),可调整 / 手填;供 ⑤供应商门户「我要发货」带入收货地址</td></tr>
             <tr><td><b>签约地点/日期</b></td><td class="dt-cell">文本/日期</td><td><span class="opt-tag">选填</span></td><td>文本/日期</td><td><span class="by-tag by-biz">业务</span></td><td class="rule-cell">默认本司地址/今天，可改</td></tr>
           </tbody>
         </table>
@@ -664,7 +666,7 @@ body.anno-on [data-anchor]:hover{outline:1px solid var(--rust)}
   </section>
 
   <div style="margin:24px 8px;color:var(--gray-5);font-size:12px;border-top:1px solid var(--gray-1);padding-top:12px">
-    合同 · UI 设计稿 v1.2（定稿）· 数据表 HT · 字段与条款取自 3 份真实合同(委托加工合同 / 原料辅料购销协议:主标、拉链)+ 蓝图⑤/⑤′ + 业务反馈。★ 合同串流程问题清单 v1.0 全部按推荐项经业务确认并落盘(见顶部「✅ 已确认决策」)。门户(盖章→发货→对账→开票)为阶段三,本稿设计两类合同编辑页 + 列表 + 门户进度回显。<span id="lastSavedFoot"></span>
+    合同 · UI 设计稿 v1.3· 数据表 HT · 字段与条款取自 3 份真实合同(委托加工合同 / 原料辅料购销协议:主标、拉链)+ 蓝图⑤/⑤′ + 业务反馈。★ 合同串流程问题清单 v1.0 全部按推荐项经业务确认并落盘(见顶部「✅ 已确认决策」)。门户(盖章→发货→对账→开票)为阶段三,本稿设计两类合同编辑页 + 列表 + 门户进度回显。<span id="lastSavedFoot"></span>
   </div>
 
   <!-- 补充需求专区 -->
@@ -732,7 +734,7 @@ function serializeFullHTML(){flushStateToAnchor();var c=document.documentElement
   var on=c.querySelectorAll('.anno-on');for(var j=0;j<on.length;j++)on[j].classList.remove('anno-on');
   var op=c.querySelectorAll('.mask.open,.drawer.open');for(var m=0;m<op.length;m++)op[m].classList.remove('open');
   return '<!DOCTYPE html>\n'+c.outerHTML;}
-function guessName(){try{var n=decodeURIComponent((location.pathname||'').split('/').pop()||'');if(n&&/\.html?$/i.test(n))return n;}catch(e){}return '04-合同设计稿_v1.2.html';}
+function guessName(){try{var n=decodeURIComponent((location.pathname||'').split('/').pop()||'');if(n&&/\.html?$/i.test(n))return n;}catch(e){}return '04-合同设计稿_v1.3.html';}
 function save(){var prev=reviewState.meta.lastSaved;reviewState.meta.lastSaved=nowIso();var html;try{html=serializeFullHTML();}catch(e){reviewState.meta.lastSaved=prev;showToast('⚠ 序列化失败:'+e.message);setSaveState('fail');return;}
   setSaveState('busy');
   if(capabilities.fsAccess){saveViaFSA(html).then(function(ok){if(ok==='abort'){reviewState.meta.lastSaved=prev;flushStateToAnchor();setSaveState(dirty?'dirty':'clean');return;}if(ok===true){markSaved('inplace',fileHandle&&fileHandle.name);}else{fallbackBlob(html);}}).catch(function(e){reviewState.meta.lastSaved=prev;showToast('⚠ 保存失败:'+(e&&e.message||e));setSaveState('fail');});}

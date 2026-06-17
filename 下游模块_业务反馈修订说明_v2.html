@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>下游模块 · 业务反馈修订说明 v2（订单定稿 / 合同v1.3 / 门户v2.1 / 对账付款v1.1）</title>
+<style>
+:root{--indigo:#1E3A5F;--indigo-l:#2C5180;--linen:#F5EDDC;--canvas:#FBF8F2;--rust:#D17A40;--teal:#3E8E7E;--amber:#C8901E;--gray-9:#1F1F22;--gray-7:#37383C;--gray-5:#6F7178;--gray-1:#E5E2DA;--gray-0:#F4F1EA;--font:"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:13.5px/1.7 var(--font);color:var(--gray-9);background:#EEEAE0;padding:28px 18px 60px}
+.wrap{max-width:1000px;margin:0 auto}
+.hero{padding:22px 26px;background:linear-gradient(135deg,var(--indigo),var(--indigo-l));color:#fff;border-radius:10px;margin-bottom:18px}
+.hero h1{font-size:20px;margin-bottom:6px}
+.hero p{color:#D5DDE8;font-size:13px}
+.mod{background:#fff;border:1px solid var(--gray-1);border-radius:9px;margin:16px 0;overflow:hidden;box-shadow:0 1px 3px rgba(30,58,95,.06)}
+.mod-h{padding:12px 18px;background:linear-gradient(135deg,var(--linen),var(--canvas));border-bottom:1px solid var(--gray-1);font-size:15px;font-weight:700;color:var(--indigo);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ver{font-size:11px;background:#E8F4F0;color:#1F6F5C;border:1px solid #C8E2D9;border-radius:7px;padding:1px 8px;font-weight:600}
+.mod table{width:100%;border-collapse:collapse;font-size:12.8px}
+.mod th{background:var(--gray-0);text-align:left;padding:8px 12px;color:var(--gray-7);border-bottom:1px solid var(--gray-1);font-weight:600;white-space:nowrap}
+.mod td{padding:8px 12px;border-bottom:1px solid var(--gray-1);vertical-align:top;line-height:1.65}
+.mod td:first-child{color:var(--rust);font-weight:600;white-space:nowrap;width:30px}
+.fb{color:var(--gray-9)}
+.do{color:var(--gray-7)}
+.do b{color:var(--indigo)}
+.where{font-size:11.5px;color:var(--gray-5);white-space:nowrap}
+.note{background:#FFF7EA;border:1px solid #EDD8A8;border-left:3px solid var(--amber);border-radius:6px;padding:10px 14px;margin:14px 0;font-size:12.8px;color:#5C4307;line-height:1.7}
+.foot{text-align:center;color:var(--gray-5);font-size:11.5px;margin-top:24px}
+</style></head><body><div class="wrap">
+
+<div class="hero"><h1>📝 下游模块 · 业务反馈修订说明 v2</h1>
+<p>按业务多轮回传落地:订单串流程问题清单<b>已定稿</b>、合同 <b>v1.3</b>、供应商门户 <b>v2.2</b>、对账·付款 <b>v1.2</b>;门户串流程问题清单 <b>18 题已定稿</b>(16 采纳推荐 + A1/A2)。下表逐条记录「业务反馈原话 → 落地做法 → UI 出处」。</p></div>
+
+<div class="note"><b>① 订单串流程问题清单 v1.0 — 已按推荐项定稿</b>:业务确认"全部按推荐来"。46 题答案已全部置为推荐项,可填写版预选完成、标注定稿;总览门户「订单串流程问题清单」由「待业务回复」翻为<b>已定稿(全部采纳推荐)</b>。</div>
+
+<div class="mod">
+  <div class="mod-h">📄 04 合同设计稿 <span class="ver">v1.2 → v1.3</span></div>
+  <table><thead><tr><th>#</th><th>业务反馈</th><th>落地做法</th><th>UI 出处</th></tr></thead><tbody>
+    <tr><td>1</td><td class="fb">合同基础信息增加一项:发货地址,默认款号对应加工厂,可调整可手填</td><td class="do">材料合同·基础信息新增 <b>发货地址</b> 字段(系统/业务,默认=该款号对应<b>加工厂地址</b>、可改/手填),并写入字段操作逻辑表;供 ⑤门户「我要发货」带入收货地址</td><td class="where">材料合同·基础信息</td></tr>
+  </tbody></table>
+  <div style="padding:8px 14px;font-size:11.5px;color:var(--gray-5)">注:v1.2 已落地的 6 条(委托方代表默认业务 / 担保人+身份证照片 / 交期默认 -10天·-45天 / 货物明细照片列 / 分色分码按订单矩阵出表 / 补料按钮)本轮保留不变;本次仅新增发货地址。</div>
+</div>
+
+<div class="mod">
+  <div class="mod-h">📱 05 供应商门户设计稿 <span class="ver">v2 → v2.1</span></div>
+  <table><thead><tr><th>#</th><th>业务反馈</th><th>落地做法</th><th>UI 出处</th></tr></thead><tbody>
+    <tr><td>1</td><td class="fb">「我要发货」需要带入合同发货地址,或者订单端输入地址,勾选对应合同,推送到供应商端</td><td class="do">发货屏新增:<b>对应合同/款号(可多选)</b>勾选(一次发货可对多张合同)、<b>收货地址</b>(合同发货地址带入·可改),随发货推送供应商端</td><td class="where">屏·我要发货</td></tr>
+  </tbody></table>
+</div>
+
+<div class="mod">
+  <div class="mod-h">🧾 06 对账·开票·付款设计稿 <span class="ver">v1.0 → v1.1</span></div>
+  <table><thead><tr><th>#</th><th>业务反馈</th><th>落地做法</th><th>UI 出处</th></tr></thead><tbody>
+    <tr><td>1</td><td class="fb">对账单号后面加一列对应款号,搜索款号能找到对账单</td><td class="do">对账单列表新增 <b>款号</b> 列,搜索框支持按款号检索</td><td class="where">对账单·列表</td></tr>
+    <tr><td>2</td><td class="fb">审批详情增加对应款号</td><td class="do">对账单审批详情头新增 <b>款号</b> 字段</td><td class="where">对账单·审批详情头</td></tr>
+    <tr><td>3</td><td class="fb">一张对账单可能关联很多张合同,关联合同放发货批次明细里、点了可跳合同;批次前加一列款号</td><td class="do">详情头「关联合同」改为"共 N 张";<b>发货批次明细</b>新增 <b>款号</b> 列 + <b>关联合同</b> 列(可点击跳转合同)</td><td class="where">对账单·发货批次明细</td></tr>
+    <tr><td>4</td><td class="fb">关联合同可以不显示在列表里(一对多)</td><td class="do">对账单列表移除「关联合同」列(改在发货批次明细逐批展示)</td><td class="where">对账单·列表</td></tr>
+    <tr><td>5</td><td class="fb">能否在对账批次明细里批注后退回</td><td class="do">发货批次明细新增 <b>批注</b> 列(逐批 ✏️批注);退回意见说明可结合批次批注一并退回、随通知供应商</td><td class="where">对账单·发货批次明细 / 审批操作</td></tr>
+    <tr><td>6</td><td class="fb">付款水单需要屏幕截图直接粘贴</td><td class="do">财务付款·付款凭证(水单)支持 <b>上传 / Ctrl+V 粘贴截图</b></td><td class="where">付款申请·财务付款</td></tr>
+    <tr><td>7</td><td class="fb">分批付款场景:增加批次、更改付款金额、自动算出已付总额</td><td class="do">财务付款新增 <b>本次付款金额</b>(可改)、<b>已付总额</b>、<b>未付余额</b>(系统累计);余额=0 转已付清</td><td class="where">付款申请·财务付款</td></tr>
+    <tr><td>8</td><td class="fb">业务需要可以新建付款申请(无合同):勾选费用/现金无票/预付款,手填供应商/银行/相关款号/日期/金额,参考老系统</td><td class="do">付款申请列表新增「<b>＋ 新建付款申请(无合同)</b>」按钮 + 表单(申请类型勾选、供应商/收款方、相关款号、银行信息、金额、日期、事由/附件)</td><td class="where">付款申请·无合同付款</td></tr>
+  </tbody></table>
+</div>
+
+<div class="mod">
+  <div class="mod-h">📱 门户问题清单 · 业务回复落地 <span class="ver">18 题已定稿</span></div>
+  <table><thead><tr><th>#</th><th>业务回复</th><th>落地做法</th><th>影响</th></tr></thead><tbody>
+    <tr><td>A1</td><td class="fb">门户只做 H5 网页(链接即用),不做微信小程序,降低首期成本</td><td class="do"><b>05 门户 v2.2</b>:概述/业务规则/登录屏均改为「首期 H5 网页(小程序留后期)」</td><td class="where">05 v2.1→v2.2</td></tr>
+    <tr><td>A2</td><td class="fb">加工合同生成后,订单明细要同步给加工厂在门户可见(材料清单/材料订单数/大货纸板/填充量/尺寸表/数量搭配),供应商大货也推送给加工厂</td><td class="do"><b>05 门户 v2.2</b>:业务规则新增「🏭 加工厂可见」——加工合同推送后加工厂可查看订单明细 + 供应商大货进度</td><td class="where">05 v2.2(新需求)</td></tr>
+    <tr><td>D4</td><td class="fb">对账单/发货单/付款申请编号本期定下;审批分级</td><td class="do"><b>06 对账付款 v1.2</b>:付款申请编号 <b>FK- → PR-</b>、补 <b>发货单 FH-</b>、对账单 DZ-(YYYYMMDD-序号);审批链 发货/对账→业务(超阈值加主管)、开票/付款→财务</td><td class="where">06 v1.1→v1.2</td></tr>
+    <tr><td>其余 16</td><td class="fb">账号绑工厂资料 / 盖章四步顺序锁定 / 发货一次多合同 + 收货地址带入 / 多次发货累计对账 / 含税校验 / 权限隔离 等</td><td class="do">全部<b>按推荐项确认</b>;门户串流程问题清单 18 题答案已回填并<b>定稿</b>;相关口径多已在 04/05/06 设计稿体现</td><td class="where">门户清单已定稿</td></tr>
+  </tbody></table>
+</div>
+
+<div class="note">📋 当前状态:门户串流程问题清单 <b>已定稿</b>(回填版);对账付款串流程问题清单仍为<b>待业务回复</b>(独立可填写版)。05/06 设计稿与两份清单暂未并入总览门户(下一轮整合)。</div>
+
+<div class="foot">下游模块 · 业务反馈修订说明 v2 · 样衣制造管理系统</div>
+</div></body></html>

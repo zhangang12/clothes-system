@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-CN"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>供应商协同门户 · UI 设计稿 v2（评审版·可补充需求）</title>
+<title>供应商协同门户 · UI 设计稿 v2.2</title>
 <style>
 :root{
   --indigo:#1E3A5F;--indigo-d:#152A45;--indigo-l:#2C5180;
@@ -217,18 +217,18 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
 
 @media print{.topbar,.anno-icon,.drawer,.mask,.toast,.btn,.pin{display:none!important}}
 </style>
-</head><body>
+</head><body class="">
 
 <div class="topbar">
-  <div class="logo">🪡 供应商协同门户<small>05 · v2 评审版</small></div>
-  <div class="stat"><span>批注 <b id="stAnno">0</b></span><span>补充需求 <b id="stReq">0</b></span></div>
+  <div class="logo">🪡 供应商协同门户<small>05 · v2.2</small></div>
+  <div class="stat"><span>批注 <b id="stAnno">1</b></span><span>补充需求 <b id="stReq">0</b></span></div>
   <div class="acts">
-    <span class="mode-tag" id="modeTag">检测保存模式…</span>
-    <button class="t-btn" id="btnAnno" onclick="toggleAnnoMode()">💬 批注：关</button>
+    <span class="mode-tag" id="modeTag">就地保存可用</span>
+    <button class="t-btn on" id="btnAnno" onclick="toggleAnnoMode()">💬 批注：开</button>
     <button class="t-btn" onclick="openReqModal(null,'')">➕ 补充需求</button>
     <button class="t-btn" onclick="openSummary()">📋 汇总</button>
     <button class="t-btn" onclick="exportMd()">📥 导出</button>
-    <button class="t-btn save" id="btnSave" onclick="save()"><span class="dot"></span><span id="saveLabel">保存</span></button>
+    <button class="t-btn save dirty" id="btnSave" onclick="save()"><span class="dot"></span><span id="saveLabel">保存*</span></button>
   </div>
 </div>
 
@@ -248,20 +248,20 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
     <ol>
       <li><b>批注</b>:点右上「💬 批注」开 → 任意区块/手机屏右上出现 💬,点它写意见。</li>
       <li><b>补充需求</b>:点「➕ 补充需求」,可挂到某个屏(登录/合同/盖章/发货/对账/开票)或全局。</li>
-      <li><b>保存</b>:点「💾 保存」把批注与补充需求<b>写回本 HTML 文件</b>(<span id="guideSaveTip"></span>),数据随文件走,回传方便。</li>
+      <li><b>保存</b>:点「💾 保存」把批注与补充需求<b>写回本 HTML 文件</b>(<span id="guideSaveTip">Chrome/Edge 经本地服务器可直接写回原文件</span>),数据随文件走,回传方便。</li>
     </ol>
     <label style="font-size:12px"><input type="checkbox" id="guideNever" style="width:auto"> 不再显示</label>
   </div>
 
-  <div class="dj-block" data-anchor="overview" data-anno-label="标题·门户概述">
-    <h1>📱 供应商协同门户 · UI 设计稿 v2<small>对外端 · 小程序</small></h1>
+  <div class="dj-block" data-anchor="overview" id="grp-mn-intro" data-anno-label="标题·门户概述" style="position: relative;">
+    <h1>📱 供应商协同门户 · UI 设计稿 v2.2<small>对外端 · 首期 H5 网页 · v2.2:H5-only(A1)+加工厂可见订单明细(A2)</small></h1>
     <p class="dj-summary">
-    面向外部供应商 / 加工厂的<b>微信小程序 / H5</b>。合同从⑤/⑤′推送后，供应商登录看自己的合同，按 <b>🔖盖章 → 📦发货 → 🧾对账 → 💵开票</b> 顺序操作（前一步未完成、后面锁定）。<br>
-    <b>v2 升级</b>：① 小程序 UI 美化（状态栏 / 原生导航 / 卡片化 / 步骤进度 / 底部操作栏）② 评审支持「批注 + 补充需求 + 保存回 HTML」。
+    面向外部供应商 / 加工厂的<b>H5 网页(首期;链接即用,微信小程序留后期)</b>。合同从⑤/⑤′推送后，供应商登录看自己的合同，按 <b>🔖盖章 → 📦发货 → 🧾对账 → 💵开票</b> 顺序操作（前一步未完成、后面锁定）。<br>
+    <b>v2.2(门户问题清单业务回复落地)</b>：① <b>A1</b> 首期只做 H5 网页、不做微信小程序(降低首期成本);② <b>A2</b> 加工合同推送后,加工厂在门户可见该订单明细(材料清单 / 材料订单数 / 大货纸板 / 填充量 / 尺寸表 / 数量搭配)及供应商大货进度。　<b>v2</b>:UI 美化 + 评审(批注 / 补充需求 / 保存回 HTML)。
     </p>
   </div>
 
-  <div class="flow-box" data-anchor="flow" data-anno-label="业务流位置图">⑤ 材料合同 / ⑤′ 加工合同（内部录好）
+  <div class="flow-box" data-anchor="flow" id="grp-mn-flow" data-anno-label="业务流位置图" style="position: relative;">⑤ 材料合同 / ⑤′ 加工合同（内部录好）
         │ 📤 推送供应商（专属链接 / 小程序通知）
         ▼
 📱 供应商协同门户（本稿 · 对外端）
@@ -270,25 +270,26 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
         ▼
 ⑦ 业务审批对账 → 财务付款</div>
 
-  <div class="biz-notes" data-anchor="rules" data-anno-label="门户业务规则总览"><b>📱 门户 · 业务规则</b><ul>
-    <li>🔑 对外端(微信小程序/H5);账号与①工厂资料绑定;供应商只见自己的合同与金额。</li>
+  <div class="biz-notes" data-anchor="rules" id="grp-mn-rule" data-anno-label="门户业务规则总览" style="position: relative;"><b>📱 门户 · 业务规则</b><ul>
+    <li>🔑 对外端(<b>首期 H5 网页</b>,微信小程序后期·A1);账号由达泰后台为工厂开通并绑①工厂资料,凭专属链接/通知进入;供应商只见自己的合同与金额。</li>
     <li>🔒 四步顺序锁定:🔖盖章 → 📦发货 → 🧾对账 → 💵开票;前一步未完成后面置灰。</li>
     <li>🖋 盖章:一键电子章(自动贴 PDF 落款) / 上传纸质盖章照片。</li>
     <li>📦 发货:数量明细+物流+附件;多次发货每次增一条→业务审批。</li>
     <li>🧾 对账:合同单价×已审批发货数量自动算→勾选→推业务审批。</li>
     <li>💵 开票:上传 PDF 发票+配对账(发票=对账金额)→推财务。</li>
-    <li>📨 推送供应商:内部在合同页点推送→生成专属链接/小程序通知,供应商点开即进入对应合同。</li>
+    <li>📨 推送供应商:内部在合同页点推送→生成专属链接/通知,供应商点开即进入对应合同。</li>
+    <li>🏭 <b>加工厂可见(A2·新增)</b>:加工合同推送后,加工厂在门户可查看该订单明细(材料清单 / 材料订单数 / 大货纸板 / 填充量 / 尺寸表 / 数量搭配)及供应商大货进度,便于配料与生产排期。</li>
     <li>👤 角色:内部=业务建合同/推送/审批对账;外部=供应商盖章/发货/对账/开票;财务=接收付款申请。</li>
   </ul></div>
 
   <!-- A 登录+合同 -->
   <section id="login" class="design-section">
     <div class="sect-head"><div><h2><span class="sect-no">A</span> 登录 + 我的合同</h2>
-      <p class="sect-desc">微信授权登录 / 账号密码;登录后只见自己的合同</p></div><span class="badge badge-i">供应商端</span></div>
+      <p class="sect-desc">H5 链接 / 账号登录(首期不做小程序);登录后只见自己的合同</p></div><span class="badge badge-i">供应商端</span></div>
     <div class="design-frame">
       <div class="frame-note">📱 移动端示意(微信小程序)。手机屏内为供应商实际界面。</div>
       <div class="phone-row">
-        <div class="phone-wrap"><div class="phone" data-anchor="scr-login" data-anno-label="屏·登录"><div class="phone-scr">
+        <div class="phone-wrap"><div class="phone" data-anchor="scr-login" id="grp-mn-login" data-anno-label="屏·登录" style="position: relative;"><div class="phone-scr">
           <div class="statusbar"><span>9:41</span><span class="sb-r"><span class="sig"><i></i><i></i><i></i><i></i></span> 5G <span class="bat"><i></i></span></span></div>
           <div class="m-nav"><span class="nav-title">供应商协同</span></div>
           <div class="m-scr"><div class="m-body">
@@ -302,7 +303,7 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
           <div class="m-home"></div>
         </div></div><div class="phone-cap">① 登录</div></div>
 
-        <div class="phone-wrap"><div class="phone" data-anchor="scr-list" data-anno-label="屏·我的合同列表"><div class="phone-scr">
+        <div class="phone-wrap"><div class="phone" data-anchor="scr-list" id="grp-mn-clist" data-anno-label="屏·我的合同列表" style="position: relative;"><div class="phone-scr">
           <div class="statusbar"><span>9:41</span><span class="sb-r"><span class="sig"><i></i><i></i><i></i><i></i></span> 5G <span class="bat"><i></i></span></span></div>
           <div class="m-nav"><span class="nav-title">我的合同</span><span class="nav-more">···</span></div>
           <div class="m-scr"><div class="m-body">
@@ -319,7 +320,7 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
           <div class="m-home"></div>
         </div></div><div class="phone-cap">② 我的合同(只见自己)</div></div>
       </div>
-      <div class="field-logic-wrap" data-anchor="fl-login" data-anno-label="登录/合同·逻辑表">
+      <div class="field-logic-wrap" data-anchor="fl-login" id="grp-mn-loginlogic" data-anno-label="登录/合同·逻辑表" style="position: relative;">
         <div class="flw-head">📋 登录 / 合同列表 · 操作逻辑</div>
         <table class="flt"><thead><tr><th style="width:150px">项</th><th>逻辑</th></tr></thead><tbody>
           <tr><td><b>微信一键登录</b><span class="anno-mark">业务诉求</span></td><td>授权手机号→匹配①工厂资料绑定账号;未绑定提示联系达泰开通</td></tr>
@@ -337,7 +338,7 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
       <p class="sect-desc">步骤进度 + 底部操作栏;前一步未完成后面锁定</p></div><span class="badge badge-w">核心交互</span></div>
     <div class="design-frame">
       <div class="phone-row">
-        <div class="phone-wrap"><div class="phone" data-anchor="scr-detail" data-anno-label="屏·合同详情顺序锁定"><div class="phone-scr">
+        <div class="phone-wrap"><div class="phone" data-anchor="scr-detail" id="grp-mn-cdetail" data-anno-label="屏·合同详情顺序锁定" style="position: relative;"><div class="phone-scr">
           <div class="statusbar"><span>9:41</span><span class="sb-r"><span class="sig"><i></i><i></i><i></i><i></i></span> 5G <span class="bat"><i></i></span></span></div>
           <div class="m-nav"><span class="nav-back">‹</span><span class="nav-title">HT-20260608-01</span><span class="nav-more">···</span></div>
           <div class="m-scr"><div class="m-body">
@@ -386,7 +387,7 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
       <p class="sect-desc">供应商各步实际界面 · 底部主操作栏</p></div></div>
     <div class="design-frame">
       <div class="phone-row">
-        <div class="phone-wrap"><div class="phone" data-anchor="scr-stamp" data-anno-label="屏·我要盖章"><div class="phone-scr">
+        <div class="phone-wrap"><div class="phone" data-anchor="scr-stamp" id="grp-mn-stamp" data-anno-label="屏·我要盖章" style="position: relative;"><div class="phone-scr">
           <div class="statusbar"><span>9:41</span><span class="sb-r"><span class="sig"><i></i><i></i><i></i><i></i></span> 5G <span class="bat"><i></i></span></span></div>
           <div class="m-nav"><span class="nav-back">‹</span><span class="nav-title">🔖 我要盖章</span></div>
           <div class="m-scr"><div class="m-body">
@@ -400,13 +401,18 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
           <div class="m-home"></div>
         </div></div><div class="phone-cap">🔖 盖章</div></div>
 
-        <div class="phone-wrap"><div class="phone" data-anchor="scr-ship" data-anno-label="屏·我要发货"><div class="phone-scr">
+        <div class="phone-wrap"><div class="phone" data-anchor="scr-ship" id="grp-mn-ship" data-anno-label="屏·我要发货" style="position: relative;"><div class="phone-scr">
           <div class="statusbar"><span>9:41</span><span class="sb-r"><span class="sig"><i></i><i></i><i></i><i></i></span> 5G <span class="bat"><i></i></span></span></div>
           <div class="m-nav"><span class="nav-back">‹</span><span class="nav-title">📦 我要发货</span></div>
           <div class="m-scr"><div class="m-body">
             <div class="m-card"><div class="m-card-h">本次发货 <span class="m-chip c-do">第 2 次</span></div>
               <div class="m-label">发货物料 / 数量</div>
               <div class="m-row"><span>5#尼龙开口·黑</span><b>800 条</b></div><div class="m-row"><span>5#尼龙闭口·黑</span><b>1500 条</b></div>
+              <div class="m-label">对应合同 / 款号 <span style="color:var(--gray-5);font-size:11px">(可多选·一次发货可对应多张合同)</span></div>
+              <div class="m-row"><label style="font-size:12px"><input type="checkbox" checked=""> HT-20260608-01 · MNA263M525</label></div>
+              <div class="m-row"><label style="font-size:12px"><input type="checkbox" checked=""> HT-20260608-01 · MNA263F525</label></div>
+              <div class="m-label">收货地址 <span style="color:var(--gray-5);font-size:11px">(合同发货地址带入·可改)</span></div>
+              <input class="m-input" value="昆山市周市镇洞庭湖北路578号(昆山览月制衣)">
               <div class="m-label">快递公司 / 单号</div><input class="m-input" value="顺丰 SF1234567890">
               <div class="m-label">附件(装箱单/货物照片)</div><div class="m-up"><span class="ic">📎</span>上传附件</div>
               <div class="lock-hint">📦 可多次发货,每次提交一条,由达泰业务审批。</div>
@@ -416,7 +422,7 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
           <div class="m-home"></div>
         </div></div><div class="phone-cap">📦 发货(多次·物流·附件)</div></div>
 
-        <div class="phone-wrap"><div class="phone" data-anchor="scr-recon" data-anno-label="屏·我要对账"><div class="phone-scr">
+        <div class="phone-wrap"><div class="phone" data-anchor="scr-recon" id="grp-mn-recon" data-anno-label="屏·我要对账" style="position: relative;"><div class="phone-scr">
           <div class="statusbar"><span>9:41</span><span class="sb-r"><span class="sig"><i></i><i></i><i></i><i></i></span> 5G <span class="bat"><i></i></span></span></div>
           <div class="m-nav"><span class="nav-back">‹</span><span class="nav-title">🧾 我要对账</span></div>
           <div class="m-scr"><div class="m-body">
@@ -432,7 +438,7 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
           <div class="m-home"></div>
         </div></div><div class="phone-cap">🧾 对账(自动算·勾选·推审批)</div></div>
 
-        <div class="phone-wrap"><div class="phone" data-anchor="scr-invoice" data-anno-label="屏·我要开票"><div class="phone-scr">
+        <div class="phone-wrap"><div class="phone" data-anchor="scr-invoice" id="grp-mn-invoice" data-anno-label="屏·我要开票" style="position: relative;"><div class="phone-scr">
           <div class="statusbar"><span>9:41</span><span class="sb-r"><span class="sig"><i></i><i></i><i></i><i></i></span> 5G <span class="bat"><i></i></span></span></div>
           <div class="m-nav"><span class="nav-back">‹</span><span class="nav-title">💵 我要开票</span></div>
           <div class="m-scr"><div class="m-body">
@@ -453,7 +459,7 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
           <div class="m-home"></div>
         </div></div><div class="phone-cap">💵 开票(传发票·配对账·推财务)</div></div>
       </div>
-      <div class="field-logic-wrap" data-anchor="fl-steps" data-anno-label="四步·逻辑表">
+      <div class="field-logic-wrap" data-anchor="fl-steps" id="grp-mn-steplogic" data-anno-label="四步·逻辑表" style="position: relative;">
         <div class="flw-head">📋 四步操作 · 字段与规则</div>
         <table class="flt"><thead><tr><th style="width:80px">步骤</th><th style="width:150px">关键字段</th><th>规则</th></tr></thead><tbody>
           <tr><td><b>🔖 盖章</b></td><td class="dt">电子章/照片</td><td>二选一(互斥):电子章自动贴PDF落款 / 上传纸质照片;任一完成后提交,解锁发货</td></tr>
@@ -462,7 +468,7 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
           <tr><td><b>💵 开票</b></td><td class="dt">发票/对账明细</td><td>发票金额须=对账金额否则拦截;推财务生成付款申请</td></tr>
         </tbody></table>
       </div>
-      <div class="page-logic-panel" data-anchor="pl-portal" data-anno-label="门户整体逻辑面板"><div class="plp-head">⚙ 门户整体逻辑(校验/权限 + 与内部·财务联动)</div><div class="plp-body">
+      <div class="page-logic-panel" data-anchor="pl-portal" id="grp-mn-panel" data-anno-label="门户整体逻辑面板" style="position: relative;"><div class="plp-head">⚙ 门户整体逻辑(校验/权限 + 与内部·财务联动)</div><div class="plp-body">
         <div class="pl-cat"><h4>✅ 校验 / 权限</h4><ul class="pl-ul">
           <li>登录账号与①工厂资料绑定;仅可见/可操作推送给本供应商的合同,看不到别家金额</li>
           <li>四步顺序锁定:前一步未完成,后续按钮置灰</li>
@@ -482,17 +488,17 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
   <section id="reqs" class="design-section">
     <div class="sect-head"><div><h2><span class="sect-no">📌</span> 补充需求汇总 <button class="btn btn-c btn-sm" onclick="openReqModal(null,'')">＋ 新增</button></h2>
       <p class="sect-desc">业务方在评审中想到的新需求,可挂到某个屏或全局</p></div></div>
-    <div class="design-frame"><div class="req-zone" id="reqZone"></div></div>
+    <div class="design-frame"><div class="req-zone" id="reqZone"><div class="req-empty">暂无补充需求。点上方「＋ 新增」或顶栏「➕ 补充需求」添加。</div></div></div>
   </section>
 
-  <div class="foot">供应商门户 · UI 设计稿 v2 · 小程序美化 + 评审(批注/补充需求/保存回HTML)。所有评审数据嵌在本 HTML 内,随文件流转。<span id="lastSavedFoot"></span></div>
+  <div class="foot">供应商门户 · UI 设计稿 v2.2 · UI + 评审(批注/补充需求/保存回HTML)。所有评审数据嵌在本 HTML 内,随文件流转。<span id="lastSavedFoot"></span></div>
   <div id="print-summary" style="display:none"></div>
 </main>
 
 <!-- 批注 Modal -->
 <div class="mask" id="annoMask"><div class="modal">
-  <div class="modal-h"><span id="annoTitle">批注</span><span class="x" onclick="closeMask('annoMask')">×</span></div>
-  <div class="modal-b"><div class="tgt" id="annoTarget"></div><div id="annoList"></div>
+  <div class="modal-h"><span id="annoTitle">批注 · 屏·我要发货</span><span class="x" onclick="closeMask('annoMask')">×</span></div>
+  <div class="modal-b"><div class="tgt" id="annoTarget"><b>定位</b>:屏·我要发货</div><div id="annoList"><div class="anno-li"><div class="al-t">需要带入合同发货地址，或者订单端输入地址，勾选对应合同，推送到供应商端</div><div class="al-m"><span>匿名</span><span>2026-06-17 09:39</span><a href="javascript:void(0)" onclick="editAnno('an_mqhelmol_lo2t')">编辑</a> <a href="javascript:void(0)" style="color:var(--vermilion)" onclick="delAnno('an_mqhelmol_lo2t')">删除</a></div></div></div>
     <label class="fl">新增批注</label><textarea id="annoText" placeholder="写下意见…"></textarea>
     <label class="fl">批注人(可选)</label><input type="text" id="annoAuthor" placeholder="姓名"></div>
   <div class="modal-f"><button class="btn btn-s" onclick="closeMask('annoMask')">取消</button><button class="btn btn-c" onclick="addAnno()">＋ 添加批注</button></div>
@@ -520,7 +526,7 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
   <div class="drawer-b" id="drawerBody"></div>
 </div>
 
-<script id="review-data" type="application/json">{"schemaVersion":1,"meta":{"docId":"供应商门户设计稿_v2","boardVersion":"v2","reviewer":"","lastSaved":""},"annotations":[],"requirements":[]}</script>
+<script id="review-data" type="application/json">{"schemaVersion":1,"meta":{"docId":"供应商门户设计稿_v2","boardVersion":"v2","reviewer":"","lastSaved":"2026-06-17T01:40:02.238Z"},"annotations":[{"id":"an_mqhelmol_lo2t","anchorId":"scr-ship","anchorLabel":"屏·我要发货","quote":"9:41 5G ‹ 📦 我要发货 本次发货 第 2 次 发货物料 / 数量 5#尼龙开口·黑 800 条 5#尼龙闭口","text":"需要带入合同发货地址，或者订单端输入地址，勾选对应合同，推送到供应商端","author":"","status":"open","createdAt":"2026-06-17T01:39:59.638Z","updatedAt":"2026-06-17T01:39:59.638Z"}],"requirements":[]}</script>
 
 <script>
 var MODULES=[{key:'login',label:'登录'},{key:'list',label:'我的合同'},{key:'detail',label:'合同详情'},{key:'stamp',label:'盖章'},{key:'ship',label:'发货'},{key:'recon',label:'对账'},{key:'invoice',label:'开票'}];
@@ -623,7 +629,7 @@ function renderSummary(){var host=document.getElementById('drawerBody'),h='';
 function sumAnno(a,orphan){return '<div class="sum-item'+(orphan?' sum-orphan':'')+'" onclick="'+(orphan?'':'focusAnchor(\''+a.anchorId+'\')')+'"><div class="sa">'+esc(a.anchorLabel||a.anchorId)+(orphan?' <span style="color:var(--vermilion)">(锚点已失效)</span>':'')+'</div><div class="sb">'+esc(a.text)+'</div><div class="sm">'+esc(a.author||'匿名')+' · '+fmtTime(a.updatedAt||a.createdAt)+'</div></div>';}
 function focusAnchor(aid){closeSummary();var el=document.querySelector('[data-anchor="'+aid+'"]');if(!el)return;el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash');setTimeout(function(){el.classList.remove('flash');},1400);}
 
-function exportMd(){var L=['# 供应商门户设计稿 v2 — 评审汇总','','导出:'+fmtTime(nowIso()),'','## 批注('+reviewState.annotations.length+')',''];
+function exportMd(){var L=['# 供应商门户设计稿 v2.2 — 评审汇总','','导出:'+fmtTime(nowIso()),'','## 批注('+reviewState.annotations.length+')',''];
   reviewState.annotations.forEach(function(a){L.push('- **'+(a.anchorLabel||a.anchorId)+'**:'+a.text+'  _( '+(a.author||'匿名')+' )_');});
   L.push('','## 补充需求('+reviewState.requirements.length+')','');reviewState.requirements.forEach(function(r){L.push('- **['+(r.priority||'-')+'] '+r.moduleLabel+' · '+(r.title||'(无标题)')+'**'+(r.detail?':'+r.detail.replace(/\n/g,' '):'')+'  _( '+(r.author||'匿名')+' )_');});
   var md=L.join('\n'),b=new Blob([md],{type:'text/markdown;charset=utf-8'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download='供应商门户v2_评审汇总.md';document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(u);},1200);showToast('已导出评审汇总(.md)');}
@@ -641,4 +647,5 @@ function init(){reviewState=loadState();checkAnchors();applyCapabilityUI();apply
   maybeOfferDraft();window.addEventListener('beforeunload',function(e){if(dirty){e.preventDefault();e.returnValue='';return '';}});}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 </script>
+
 </body></html>
