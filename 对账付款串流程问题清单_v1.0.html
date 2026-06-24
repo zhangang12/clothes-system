@@ -350,7 +350,10 @@ function applyCapabilityUI(){var tag=document.getElementById('modeTag'),tip=docu
 
 /* 题目渲染 + 作答 */
 function priClass(p){return p==='高'?'high':p==='中'?'mid':'low';}
-function srcChips(src){var out=[];for(var i=0;i<src.length;i++){var s=src[i];if(!s||!s.href)continue;out.push('<a class="src-chip" href="'+esc(s.href)+'" target="_blank" rel="noopener">📍 '+esc(s.label||s.href)+'</a>');}return out.join('');}
+var _MODMAP={"05-供应商门户":"mn","06-对账付款":"dz","04-合同":"hc","03-订单":"dd","02-客户报价":"bj","02-样衣":"yg","01-基础":"jc"};
+function _modOf(h){for(var k in _MODMAP){if(h.indexOf(k)>=0)return _MODMAP[k];}return "";}
+function chipNav(e,a){try{var mod=a.getAttribute("data-mod"),sel=a.getAttribute("data-sel");if(mod&&window.parent&&window.parent!==window&&window.parent.showDoc){e.preventDefault();window.parent.showDoc(mod,sel||null);return false;}}catch(_){}return true;}
+function srcChips(src){var out=[];for(var i=0;i<src.length;i++){var s=src[i];if(!s||!s.href)continue;var hp=String(s.href).split("#");var mod=_modOf(hp[0]);var sel=hp[1]?("#"+hp[1]):"";out.push('<a class="src-chip" href="'+esc(s.href)+'" target="_blank" rel="noopener" data-mod="'+mod+'" data-sel="'+esc(sel)+'" onclick="return chipNav(event,this)">📍 '+esc(s.label||s.href)+'</a>');}return out.join('');}
 function renderQuestions(){var root=document.getElementById('qRoot');if(!root)return;var html='';
   for(var si=0;si<QUESTIONS.length;si++){var S=QUESTIONS[si];
     html+='<div class="design-section" id="sec'+S.sec+'"><div class="sec-band" data-anno-target data-anno-label="'+esc('段 '+S.sec+' '+S.name)+'"><span class="sec-letter">'+S.sec+'</span><div><div class="sec-name">'+esc(S.name)+'</div><div class="sec-sum">'+esc(S.summary)+'</div></div></div>';

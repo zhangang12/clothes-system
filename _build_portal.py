@@ -19,6 +19,12 @@ DOC_FILES = {
     'ddq': os.path.join(UIDIR, '订单串流程问题清单_v1.0.html'),
     'hcq': os.path.join(UIDIR, '合同串流程问题清单_v1.0.html'),
     'rev': os.path.join(UIDIR, '三模块串流程_修订说明.html'),
+    'mn':  os.path.join(BASE, '05-供应商门户设计稿_v2.2.html'),
+    'dz':  os.path.join(BASE, '06-对账付款设计稿_v1.3.html'),
+    'mnq': os.path.join(BASE, '门户串流程问题清单_v1.0.html'),
+    'dzq': os.path.join(BASE, '对账付款串流程问题清单_v1.0.html'),
+    'dzq2':os.path.join(BASE, '对账付款_补充确认清单_v1.0.html'),
+    'rev2':os.path.join(BASE, '下游模块_业务反馈修订说明_v2.html'),
 }
 
 def b64file(p):
@@ -189,18 +195,24 @@ iframe#doc{flex:1;width:100%;border:none;background:#fff}
     <div class="it" data-doc="yg" onclick="showDoc('yg')"><span class="ic">📄</span><div>样衣管理<small>业务/版师 · 材料耗用</small></div></div>
     <div class="it" data-doc="dd" onclick="showDoc('dd')"><span class="ic">📦</span><div>订单 v1.0<span class="tag-ok">已定版</span><small>报价导入 · PO/用料核算</small></div></div>
     <div class="it" data-doc="hc" onclick="showDoc('hc')"><span class="ic">📄</span><div>合同 v1.3<span class="tag-ok">已定稿</span><small>材料合同 · 加工合同 · 列表</small></div></div>
+    <div class="it" data-doc="mn" onclick="showDoc('mn')"><span class="ic">📱</span><div>供应商门户 v2.2<span class="tag-ok">已定稿</span><small>盖章→发货→对账→开票</small></div></div>
+    <div class="it" data-doc="dz" onclick="showDoc('dz')"><span class="ic">🧾</span><div>对账付款 v1.3<span class="tag-ok">已定稿</span><small>对账单 · 付款申请</small></div></div>
   </div></div>
   <div class="grp" id="grp-q"><div class="grp-h" onclick="toggleGrp('grp-q')">❓ 全流程串接问题澄清<span class="ar">▾</span></div><div class="items">
     <div class="it" data-q="tri" onclick="showQ('tri')"><span class="ic">✅</span><div>三模块·已澄清问题清单<small>样衣→报价→基础资料</small></div></div>
     <div class="it" data-doc="rev" onclick="showDoc('rev')"><span class="ic">📝</span><div>三模块·串流程修订说明<small>业务反馈落地记录</small></div></div>
     <div class="it" data-q="order" onclick="showQ('order')"><span class="ic">📋</span><div>订单串流程问题清单 v1.0<span class="tag-ok">已定稿</span><small>46 题 · 按推荐项确认</small></div></div>
     <div class="it" data-q="contract" onclick="showQ('contract')"><span class="ic">📋</span><div>合同串流程问题清单 v1.0<span class="tag-ok">已定稿</span><small>按推荐项确认</small></div></div>
+    <div class="it" data-doc="mnq" onclick="showDoc('mnq')"><span class="ic">📋</span><div>门户串流程问题清单 v1.0<span class="tag-ok">已定稿</span><small>18 题 · 业务回填</small></div></div>
+    <div class="it" data-doc="dzq" onclick="showDoc('dzq')"><span class="ic">📋</span><div>对账付款串流程问题清单 v1.0<span class="tag-ok">已定稿</span><small>21 题</small></div></div>
+    <div class="it" data-doc="dzq2" onclick="showDoc('dzq2')"><span class="ic">📋</span><div>对账付款·补充确认清单 v1.0<span class="tag-ok">已定稿</span><small>9 题 · 编号/账期等</small></div></div>
+    <div class="it" data-doc="rev2" onclick="showDoc('rev2')"><span class="ic">📝</span><div>下游模块·业务反馈修订说明 v2<small>04/05/06 改动记录</small></div></div>
   </div></div>
 </aside>
 <div class="pf-main">
   <div class="scroll show" id="homeView"><div class="home">
-    <div class="hero"><h1>📚 UI 设计稿与需求 · 问题清单 总览（5 模块串流程）</h1>
-    <p>把分散的 5 份模块设计稿(含各稿内置需求说明)与全流程串接问题澄清整合到这一个文件,方便连贯阅读。左侧两组导航:<b>📐 UI 设计稿</b> 按模块看界面与需求;<b>❓ 全流程串接问题澄清</b> 看各阶段串接的待确认问题。问题清单里每条都带 <span style="background:#EDF1F7;border:1px solid #D5DDE8;border-radius:12px;padding:1px 8px">🔗 UI 出处</span> 链接,点一下即跳到对应设计稿的具体分节。当前:订单 03 设计稿<b>已定版</b>(订单串流程问题清单<b>已按推荐项定稿</b>)、合同 04 <b>v1.3 已定稿</b>(合同串流程问题清单全部按推荐项确认、并已落地业务追加反馈)。</p>
+    <div class="hero"><h1>📚 UI 设计稿与需求 · 问题清单 总览（7 模块全链路:基础→样衣→报价→订单→合同→门户→对账付款）</h1>
+    <p>把分散的 7 份模块设计稿(①基础资料 ②样衣 ③报价 ④订单 ⑤合同 ⑥供应商门户 ⑦对账付款)(含各稿内置需求说明)与全流程串接问题澄清整合到这一个文件,方便连贯阅读。左侧两组导航:<b>📐 UI 设计稿</b> 按模块看界面与需求;<b>❓ 全流程串接问题澄清</b> 看各阶段串接的待确认问题。问题清单里每条都带 <span style="background:#EDF1F7;border:1px solid #D5DDE8;border-radius:12px;padding:1px 8px">🔗 UI 出处</span> 链接,点一下即跳到对应设计稿的具体分节。当前:订单 03 设计稿<b>已定版</b>(订单串流程问题清单<b>已按推荐项定稿</b>)、合同 04 <b>v1.3 已定稿</b>(合同串流程问题清单全部按推荐项确认、并已落地业务追加反馈)。</p>
     <div class="flow">①基础资料 ─┐ (工厂/供应商·客户/中间商/最终买家)
 ②样衣管理 ─┤
            ▼
@@ -214,6 +226,8 @@ iframe#doc{flex:1;width:100%;border:none;background:#fff}
       <div class="card" onclick="showDoc('yg')"><div class="ct">📄 样衣管理</div><div class="cd">业务/版师/打样间协同,材料明细+实际耗用+4 附件;耗用是报价、订单的源头。</div></div>
       <div class="card" onclick="showDoc('dd')"><div class="ct">📦 订单 v1.0 <span style="color:var(--teal);font-size:11px">已定版</span></div><div class="cd">从报价一键导入,补 PO/尺码数量搭配、币种/佣金/生产工厂,按用料定额算采购量,向下生成合同。</div></div>
       <div class="card" onclick="showDoc('hc')"><div class="ct">📄 合同 v1.3 <span style="color:var(--teal);font-size:11px">已定稿</span></div><div class="cd">材料合同(原料/辅料购销)+ 生产加工合同(委托加工)+ 列表;含门户进度、审批、补料、电子章 PDF;按合同串流程推荐项定稿。</div></div>
+      <div class="card" onclick="showDoc('mn')"><div class="ct">📱 供应商门户 v2.2 <span style="color:var(--teal);font-size:11px">已定稿</span></div><div class="cd">对外端(首期 H5):登录看自己合同 → 🔖盖章→📦发货→🧾对账→💵开票 顺序锁定;发货带合同收货地址、加工厂可见订单明细。</div></div>
+      <div class="card" onclick="showDoc('dz')"><div class="ct">🧾 对账付款 v1.3 <span style="color:var(--teal);font-size:11px">已定稿</span></div><div class="cd">对账单(款号检索·一单多合同·批次锁价·主管二级审批)+ 付款申请(分批付款·水单·账期90/45)+ 无合同付款/预付冲抵。</div></div>
     </div>
     <div class="sec-title">❓ 全流程串接问题澄清</div>
     <div class="cards">
@@ -221,6 +235,9 @@ iframe#doc{flex:1;width:100%;border:none;background:#fff}
       <div class="card" onclick="showDoc('rev')"><div class="ct">📝 三模块·串流程修订说明</div><div class="cd">三模块按业务反馈所做修订的落地记录(原文嵌入)。</div></div>
       <div class="card" onclick="showQ('order')"><div class="ct">📋 订单串流程问题清单 v1.0 <span style="color:var(--teal);font-size:11px">已定稿</span></div><div class="cd">订单接入三模块的 46 个待确认问题,全部按推荐项经业务确认(订单设计稿已定版),每题带推荐项与 UI 出处链接;可打开可填写版查看。</div></div>
       <div class="card" onclick="showQ('contract')"><div class="ct">📋 合同串流程问题清单 v1.0 <span style="color:var(--teal);font-size:11px">已定稿</span></div><div class="cd">合同接入订单/基础资料/样衣报价的问题(全部按推荐项经业务确认、已落盘进合同 v1.3),每题带 UI 出处链接。</div></div>
+      <div class="card" onclick="showDoc('mnq')"><div class="ct">📋 门户串流程问题清单 v1.0 <span style="color:var(--teal);font-size:11px">已定稿</span></div><div class="cd">门户接入合同/订单的 18 题(账号·盖章·发货·对账·权限),业务已回填;每题带 📍出处直链 05/04 设计稿。</div></div>
+      <div class="card" onclick="showDoc('dzq')"><div class="ct">📋 对账付款串流程问题清单 v1.0 <span style="color:var(--teal);font-size:11px">已定稿</span></div><div class="cd">对账付款接入门户/合同的 21 题(编号/对账组织/审批/发票账期/付款),业务已逐题答复。</div></div>
+      <div class="card" onclick="showDoc('dzq2')"><div class="ct">📋 对账付款·补充确认清单 v1.0 <span style="color:var(--teal);font-size:11px">已定稿</span></div><div class="cd">收口编号统一(DZ-/FH-/PR-款号-序号)、账期90/45、二级审批等 9 题,业务已确认,06 已落地 v1.3。</div></div>
     </div>
   </div></div>
   <div class="scroll" id="qView"></div>
@@ -237,7 +254,7 @@ var DOCB64={};/*__DOCB64__*/
 /*__QORDER__*/
 /*__QCONTRACT__*/
 var Q_TRI=/*__TRIJSON__*/;
-var DOCMETA={jc:{name:'基础资料设计稿 v1.3'},bj:{name:'客户报价设计稿 v1.3'},yg:{name:'样衣管理设计稿 v1.3'},dd:{name:'订单设计稿 v1.0（已定版）'},hc:{name:'合同设计稿 v1.3（已定稿）'},rev:{name:'三模块·串流程修订说明'},ddq:{name:'订单串流程问题清单 v1.0(可填写版)'},hcq:{name:'合同串流程问题清单 v1.0(可填写版)'}};
+var DOCMETA={jc:{name:'基础资料设计稿 v1.3'},bj:{name:'客户报价设计稿 v1.3'},yg:{name:'样衣管理设计稿 v1.3'},dd:{name:'订单设计稿 v1.0（已定版）'},hc:{name:'合同设计稿 v1.3（已定稿）'},rev:{name:'三模块·串流程修订说明'},ddq:{name:'订单串流程问题清单 v1.0(可填写版)'},hcq:{name:'合同串流程问题清单 v1.0(可填写版)'},mn:{name:'供应商门户设计稿 v2.2（已定稿）'},dz:{name:'对账付款设计稿 v1.3（已定稿）'},mnq:{name:'门户串流程问题清单 v1.0(可填写版·已定稿)'},dzq:{name:'对账付款串流程问题清单 v1.0(可填写版·已定稿)'},dzq2:{name:'对账付款·补充确认清单 v1.0(可填写版·已定稿)'},rev2:{name:'下游模块·业务反馈修订说明 v2'}};
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 var blobCache={};
 function blobUrl(key){if(blobCache[key])return blobCache[key];var b=DOCB64[key];if(!b)return '';var bin=atob(b);var bytes=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);var blob=new Blob([bytes],{type:'text/html'});var u=URL.createObjectURL(blob);blobCache[key]=u;return u;}

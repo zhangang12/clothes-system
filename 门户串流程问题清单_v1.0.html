@@ -349,6 +349,9 @@ function applyCapabilityUI(){var tag=document.getElementById('modeTag'),tip=docu
 
 /* 题目渲染 + 作答 */
 function priClass(p){return p==='高'?'high':p==='中'?'mid':'low';}
+var _MODMAP={"05-供应商门户":"mn","06-对账付款":"dz","04-合同":"hc","03-订单":"dd","02-客户报价":"bj","02-样衣":"yg","01-基础":"jc"};
+function _modOf(h){for(var k in _MODMAP){if(h.indexOf(k)>=0)return _MODMAP[k];}return "";}
+function chipNav(e,a){try{var mod=a.getAttribute("data-mod"),sel=a.getAttribute("data-sel");if(mod&&window.parent&&window.parent!==window&&window.parent.showDoc){e.preventDefault();window.parent.showDoc(mod,sel||null);return false;}}catch(_){}return true;}
 function renderQuestions(){var root=document.getElementById('qRoot');if(!root)return;var html='';
   for(var si=0;si<QUESTIONS.length;si++){var S=QUESTIONS[si];
     html+='<div class="design-section" id="sec'+S.sec+'"><div class="sec-band" data-anno-target data-anno-label="'+esc('段 '+S.sec+' '+S.name)+'"><span class="sec-letter">'+S.sec+'</span><div><div class="sec-name">'+esc(S.name)+'</div><div class="sec-sum">'+esc(S.summary)+'</div></div></div>';
@@ -362,7 +365,7 @@ function renderQuestions(){var root=document.getElementById('qRoot');if(!root)re
       html+='<label class="q-opt q-opt-other"><input type="radio" name="'+qid+'" value="other"><span class="q-otext">其他:</span><input type="text" class="q-other-in" data-qid="'+qid+'" placeholder="补充你的答复…"></label>';
       html+='</div>';
       if(q.src&&q.src.length){html+='<div class="q-src"><b>📍 出处</b> ';
-        for(var ci=0;ci<q.src.length;ci++){var sc=q.src[ci];html+='<a class="src-chip" href="'+esc(sc.href)+'" target="_blank" rel="noopener">📍 '+esc(sc.label)+'</a>';}
+        for(var ci=0;ci<q.src.length;ci++){var sc=q.src[ci];var hp=String(sc.href).split("#");var mod=_modOf(hp[0]);var sel=hp[1]?("#"+hp[1]):"";html+='<a class="src-chip" href="'+esc(sc.href)+'" target="_blank" rel="noopener" data-mod="'+mod+'" data-sel="'+esc(sel)+'" onclick="return chipNav(event,this)">📍 '+esc(sc.label)+'</a>';}
         html+='</div>';}
       if(q.ref)html+='<div class="q-ref">🔗 <b>关联</b> '+esc(q.ref)+'</div>';
       html+='</div>';
