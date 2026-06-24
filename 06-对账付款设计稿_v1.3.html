@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-CN"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>对账·开票·付款 · UI 设计稿 v1.2</title>
+<title>对账·开票·付款 · UI 设计稿 v1.3</title>
 <style>
 :root{
   --indigo:#1E3A5F;--indigo-d:#152A45;--indigo-l:#2C5180;
@@ -216,7 +216,7 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
 </head><body class="">
 
 <div class="topbar">
-  <div class="logo">🪡 样衣制造管理系统 · 新版 UI 设计稿<small>06 对账·开票·付款 · v1.2</small></div>
+  <div class="logo">🪡 样衣制造管理系统 · 新版 UI 设计稿<small>06 对账·开票·付款 · v1.3</small></div>
   <div class="stat"><span>批注 <b id="stAnno">7</b></span><span>补充需求 <b id="stReq">1</b></span></div>
   <div class="acts">
     <span class="mode-tag" id="modeTag">就地保存可用</span>
@@ -251,11 +251,11 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
   </div>
 
   <div class="dj-block" style="background:linear-gradient(135deg,var(--rust) 0%,#A85423 100%)">
-    <h1>💵 对账·开票·付款 · UI 设计稿 v1.2<small>06 · 数据表 DZ / PR</small></h1>
+    <h1>💵 对账·开票·付款 · UI 设计稿 v1.3<small>06 · 数据表 DZ / PR</small></h1>
     <p class="dj-summary">
     这是供应商协同的<b>内部财务侧闭环</b>：⑥门户里供应商「我要对账」推来<b>对账单</b>→ 业务审批；供应商「我要开票」推来发票 → 系统生成<b>付款申请</b>→ 财务按账期付款。<br>
     <b>编号</b>：对账单 DZ-YYYYMMDD-序号、付款申请 PR-YYYYMMDD-序号　·　<b>来源</b>：⑥供应商协同门户推送　·　<b>覆盖</b>：对账单(业务审批) + 付款申请(财务付款)<br>
-    <span style="background:rgba(255,255,255,.18);padding:2px 8px;border-radius:4px;font-size:12px">📌 v1.2(业务 D4 定编号):付款申请 PR- 改 PR- · 发货单 FH- · 对账单 DZ-(YYYYMMDD-序号)。　v1.1 改造(按业务反馈):对账单列表/详情按款号检索 · 一单多合同(关联合同移到发货批次明细可点跳·批次加款号列) · 批次批注后退回 · 付款水单截图粘贴 · 分批付款(本次金额/已付/未付自动算) · 新增「无合同付款申请」(费用/现金无票/预付款)。　v1.0 规则：① 对账单=合同单价×已发货数量(门户自动算)，业务审批通过才解锁供应商开票 ② 发票金额必须=对账金额(门户已校验) ③ 付款申请由开票自动生成 ④ 账期取合同结算条款(材料45天/加工30天)，到期高亮 ⑤ 财务编号=供应商+日期(业务答复)</span>
+    <span style="background:rgba(255,255,255,.18);padding:2px 8px;border-radius:4px;font-size:12px">📌 v1.3(业务补充确认落地):编号统一 对账单 DZ-款号-序号 / 发货单 FH-款号-序号 / 付款申请 PR-款号-序号(多款取主款) · 账期 材料发货日+90天 / 加工发货日+45天(可改) · 对账单业务主管二级审批 · 一张对账单不混含两类合同 · 超发弹窗确认 · 预付款可勾选冲抵。　v1.2(业务 D4):付款申请 FK-→PR- · 发货单 FH- · 对账单 DZ-。　v1.1 改造(按业务反馈):对账单列表/详情按款号检索 · 一单多合同(关联合同移到发货批次明细可点跳·批次加款号列) · 批次批注后退回 · 付款水单截图粘贴 · 分批付款(本次金额/已付/未付自动算) · 新增「无合同付款申请」(费用/现金无票/预付款)。　v1.0 规则：① 对账单=合同单价×已发货数量(门户自动算)，业务审批通过才解锁供应商开票 ② 发票金额必须=对账金额(门户已校验) ③ 付款申请由开票自动生成 ④ 账期取合同结算条款(材料45天/加工30天)，到期高亮 ⑤ 财务编号=供应商+日期(业务答复)</span>
     </p>
   </div>
 
@@ -273,13 +273,13 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
                                           ✅ 付款完成（主线终点）</div>
 
   <div class="biz-notes" data-anno-target="" id="grp-dz-rule" data-anno-label="对账付款业务规则总览" data-anchor="a1" style="position: relative;"><b>💵 对账·开票·付款 · 业务规则</b><ul>
-    <li>🧾 对账单来源:⑥门户供应商「我要对账」推送;金额 = 合同单价 × 已审批发货数量(门户自动算)。</li>
-    <li>✅ 业务审批:对账单到业务台 → 审批通过(解锁供应商「我要开票」)或退回(填意见,供应商重新对账)。</li>
-    <li>💵 付款申请:供应商开票上传发票后,系统<b>自动生成付款申请</b>(关联对账单/发票);发票金额必须 = 对账金额(门户已校验)。</li>
-    <li>📅 账期:取合同结算条款——材料合同出货后 45 天、加工合同送达后 30 天;到期日 = 对账确认日 + 账期,临近/逾期高亮。</li>
-    <li>💰 财务付款:财务核对发票/对账 → 确认付款,登记付款方式/日期/凭证;付款后状态→已付款。</li>
-    <li>🔢 编号:对账单 DZ-、发货单 FH-、付款申请 PR-;财务侧亦可按「供应商+日期」检索(业务答复)。</li>
-    <li>👥 角色:业务=审批对账;财务=只读金额、确认付款;供应商在门户侧操作。</li>
+    <li>🧾 对账单来源:⑥门户供应商「我要对账」推送;同供应商一次推送的已审批发货批次合并为一张对账单(可跨多合同/多款);金额 = 合同单价 × 已审批发货数量,<b>单价按发货批次锁价</b>(快照,后续改价不影响)。</li>
+    <li>✅ 业务审批(v1.3 二级):业务员初审 + <b>业务主管二级审批</b>通过才解锁供应商「我要开票」;退回可逐批 ✏️批注、随退回通知供应商重对账;一张对账单<b>仅同一类型合同</b>(材料 或 加工,不混含);累计实发 > 合同量时需业务弹窗确认超发后方可对账。</li>
+    <li>💵 付款申请:供应商开票后系统<b>自动生成付款申请</b>(关联对账单/发票);发票金额 = 对账金额(严格相等,容差 ≤¥0.01),发票号全局查重防重复报销。</li>
+    <li>📅 账期(v1.3 业务定):<b>材料 = 发货日 + 90 天、加工 = 发货日 + 45 天</b>(可人工改);到期日 = 发货日 + 账期,临近/逾期高亮。</li>
+    <li>💰 财务付款:可<b>分批付款</b>(本次金额 / 已付总额 / 未付余额自动累计,余额=0 转「已付清」),每批传水单(支持截图粘贴);<b>无合同付款</b>(费用/现金无票/预付款)走审批、纳入应付;<b>预付款</b>登记款号/供应商,后续同款付款时提示并可勾选冲抵防重复。</li>
+    <li>🔢 编号(v1.3 业务定):对账单 <b>DZ-款号-序号</b> / 发货单 <b>FH-款号-序号</b> / 付款申请 <b>PR-款号-序号</b>(多款对账单取主款号;前缀沿用 PR-);支持按款号、供应商+日期检索。</li>
+    <li>👥 角色:业务员初审 + 业务主管二级审批对账;财务=只读金额、确认付款;供应商在门户侧操作。</li>
   </ul></div>
 
   <!-- ============ 对账单 业务审批 ============ -->
@@ -339,9 +339,9 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
         </div>
       </div>
       <div class="approve-bar" data-anno-target="" id="grp-dz-approve" data-anno-label="对账单·审批操作" data-anchor="a5" style="position: relative;">
-        <span class="ab-label">✅ 业务审批：核对发货批次与金额无误后</span>
+        <span class="ab-label">✅ 业务审批(二级)：业务员初审 + 业务主管复核无误后</span>
         <span>对账金额 <span class="amt-big">¥3,820</span></span>
-        <button class="btn btn-ok">✓ 审批通过（解锁供应商开票）</button>
+        <button class="btn btn-ok">✓ 主管二级审批通过（解锁开票）</button>
         <button class="btn btn-g">✗ 退回</button>
       </div>
       <div class="field" style="margin:8px 8px 0"><label>退回意见</label><input class="input" placeholder="点「退回」时必填;可结合上方发货批次明细的逐批「✏️批注」一并退回(批注随退回通知供应商重新对账)"></div>
@@ -412,7 +412,7 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
           <div class="field"><label>对账金额<span class="by-sys">系统</span></label><input class="input readonly" value="¥3,820.00" readonly=""></div>
           <div class="field"><label>发票金额<span class="by-sys">系统</span></label><input class="input readonly" value="¥3,820.00 ✓ 一致" readonly=""></div>
           <div class="field"><label>发票文件<span class="by-sys">系统</span></label><input class="input readonly" value="📄 发票.pdf（供应商上传）" readonly=""></div>
-          <div class="field"><label>结算账期<span class="by-sys">系统</span></label><input class="input readonly" value="出货后 45 天（材料合同）" readonly=""></div>
+          <div class="field"><label>结算账期<span class="by-sys">系统</span></label><input class="input readonly" value="发货日 + 90 天（材料合同·可改）" readonly=""></div>
           <div class="field"><label>到期日<span class="by-sys">系统</span></label><input class="input readonly" value="2026-08-02" readonly=""></div>
         </div>
       </div>
@@ -493,7 +493,7 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
   </section>
 
   <div style="margin:24px 8px;color:var(--gray-5);font-size:12px;border-top:1px solid var(--gray-1);padding-top:12px">
-    对账·开票·付款 · UI 设计稿 v1.2 · 数据表 DZ/FK · 内部财务侧,承接⑥门户的对账/开票推送。规则取自蓝图⑦ + 业务反馈(发票=对账金额/多次发货增条审批/财务编号=供应商+日期/账期取合同结算条款)。至此主线 订单→合同→门户→财务 闭环;⑧大货资料/⑨船务为生产线,待业务单独讨论。<span id="lastSavedFoot"></span>
+    对账·开票·付款 · UI 设计稿 v1.3 · 数据表 DZ/FK · 内部财务侧,承接⑥门户的对账/开票推送。规则取自蓝图⑦ + 业务反馈(发票=对账金额/多次发货增条审批/财务编号=供应商+日期/账期取合同结算条款)。至此主线 订单→合同→门户→财务 闭环;⑧大货资料/⑨船务为生产线,待业务单独讨论。<span id="lastSavedFoot"></span>
   </div>
   <div id="print-summary" style="display:none"></div>
 </main>
@@ -632,7 +632,7 @@ function renderSummary(){var host=document.getElementById('drawerBody'),h='';
 function sumAnno(a,orphan){return '<div class="sum-item'+(orphan?' sum-orphan':'')+'" onclick="'+(orphan?'':'focusAnchor(\''+a.anchorId+'\')')+'"><div class="sa">'+esc(a.anchorLabel||a.anchorId)+(orphan?' <span style="color:var(--vermilion)">(锚点已失效)</span>':'')+'</div><div class="sb">'+esc(a.text)+'</div><div class="sm">'+esc(a.author||'匿名')+' · '+fmtTime(a.updatedAt||a.createdAt)+'</div></div>';}
 function focusAnchor(aid){closeSummary();var el=document.querySelector('[data-anchor="'+aid+'"]');if(!el)return;el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash');setTimeout(function(){el.classList.remove('flash');},1400);}
 
-function exportMd(){var L=['# 对账付款设计稿 v1.2 — 评审汇总','','导出:'+fmtTime(nowIso()),'','## 批注('+reviewState.annotations.length+')',''];
+function exportMd(){var L=['# 对账付款设计稿 v1.3 — 评审汇总','','导出:'+fmtTime(nowIso()),'','## 批注('+reviewState.annotations.length+')',''];
   reviewState.annotations.forEach(function(a){L.push('- **'+(a.anchorLabel||a.anchorId)+'**:'+a.text+'  _( '+(a.author||'匿名')+' )_');});
   L.push('','## 补充需求('+reviewState.requirements.length+')','');reviewState.requirements.forEach(function(r){L.push('- **['+(r.priority||'-')+'] '+r.moduleLabel+' · '+(r.title||'(无标题)')+'**'+(r.detail?':'+r.detail.replace(/\n/g,' '):'')+'  _( '+(r.author||'匿名')+' )_');});
   var md=L.join('\n'),b=new Blob([md],{type:'text/markdown;charset=utf-8'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download='06-对账付款设计稿_v1.0_评审汇总.md';document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(u);},1200);showToast('已导出评审汇总(.md)');}
