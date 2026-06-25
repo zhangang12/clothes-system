@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>对账付款 · 补充确认清单(无合同 / 空白对账单) v1.1</title>
+<style>
+:root{
+  --indigo:#1E3A5F;--indigo-d:#152A45;--indigo-l:#2C5180;
+  --linen:#F5EDDC;--linen-d:#E8DCC0;--canvas:#FBF8F2;
+  --rust:#D17A40;--rust-d:#B86530;--vermilion:#C04042;
+  --teal:#3E8E7E;--amber:#C8901E;
+  --gray-9:#1F1F22;--gray-7:#37383C;--gray-5:#6F7178;
+  --gray-3:#B5B7BD;--gray-1:#E5E2DA;--gray-0:#F4F1EA;
+  --font:"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;
+  --r:4px;--r-lg:6px;
+  --shadow-sm:0 1px 2px rgba(30,58,95,.05);--shadow:0 2px 8px rgba(30,58,95,.10);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:13px/1.55 var(--font);color:var(--gray-9);background:#EEEAE0}
+a{color:var(--indigo);text-decoration:none}
+
+.topbar{position:fixed;top:0;left:0;right:0;min-height:48px;height:auto;background:var(--indigo);color:#fff;display:flex;align-items:center;padding:0 24px;z-index:100;border-bottom:3px solid var(--rust);box-shadow:0 2px 8px rgba(0,0,0,.15);flex-wrap:wrap;gap:12px}
+.topbar .logo{font-size:15px;font-weight:600}
+.topbar .logo small{font-size:11px;color:#C9D6E5;margin-left:8px;font-weight:400}
+.topbar .stat{display:flex;gap:10px;font-size:12px;color:#dde6f0;margin-left:auto}
+.topbar .stat b{color:#fff}
+.topbar .acts{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.t-btn{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.28);padding:5px 11px;border-radius:14px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.t-btn:hover{background:rgba(255,255,255,.24)}
+.t-btn.on{background:var(--rust);border-color:var(--rust)}
+.t-btn.save .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--teal);margin-right:5px;vertical-align:middle}
+.t-btn.save.dirty .dot{background:var(--amber)}
+.t-btn.save.fail .dot{background:var(--vermilion)}
+.mode-tag{font-size:11px;color:#cdd8e6;white-space:nowrap}
+
+.sidenav{position:fixed;top:48px;left:0;bottom:0;width:240px;background:#fff;border-right:1px solid var(--gray-1);overflow-y:auto;padding:14px 0;font-size:13px}
+.sidenav .nav-cat{padding:10px 16px 4px;color:var(--gray-5);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;border-top:1px solid var(--gray-1);margin-top:6px}
+.sidenav a.nav-dj{display:block;padding:8px 16px;color:var(--indigo);font-weight:600;font-size:13px;border-left:3px solid transparent}
+.sidenav a.nav-dj:hover{background:var(--linen);border-left-color:var(--rust)}
+.sidenav a.nav-sub{display:block;padding:5px 16px;color:var(--gray-7);font-size:12.5px;border-left:3px solid transparent}
+.sidenav a.nav-sub:hover{background:var(--canvas);color:var(--indigo);border-left-color:var(--gray-3)}
+
+.main{margin-left:240px;padding:64px 32px 80px;max-width:1180px}
+.dj-block{padding:28px 32px;background:linear-gradient(135deg,var(--indigo) 0%,var(--indigo-l) 100%);color:#fff;border-radius:8px;margin:30px 0 16px}
+.dj-block h1{font-size:22px;margin-bottom:6px;font-weight:600}
+.dj-block h1 small{font-family:"SF Mono",Monaco,monospace;color:#C9D6E5;font-size:14px;font-weight:400;margin-left:8px}
+.dj-block .dj-summary{font-size:13px;color:#D5DDE8;line-height:1.7}
+
+.biz-notes{background:#FFF7EA;border:1px solid #EDD8A8;border-left:3px solid var(--amber);border-radius:4px;padding:12px 16px;margin:0 0 14px}
+.biz-notes b{color:#7A5810;font-size:12.5px}
+.biz-notes ul{list-style:none;margin-top:6px}
+.biz-notes li{font-size:12px;color:#5C4307;line-height:1.7;padding:2px 0 2px 18px;position:relative}
+.biz-notes li:before{content:"▸";position:absolute;left:6px;color:var(--amber)}
+
+.flow-box{font-family:"SF Mono",Consolas,monospace;white-space:pre;overflow-x:auto;background:var(--indigo-d);color:#e8eef5;padding:14px 16px;border-radius:8px;font-size:12px;line-height:1.65;margin:0 0 14px}
+
+.prio-card{background:#fff;border:1px solid var(--gray-1);border-top:3px solid var(--rust);border-radius:6px;padding:14px 18px;margin:0 0 18px;box-shadow:var(--shadow-sm)}
+.prio-card h3{color:var(--indigo);font-size:14px;margin-bottom:8px}
+.prio-list{list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:4px 22px}
+.prio-list li{font-size:12.5px;color:var(--gray-7);line-height:1.7;padding-left:6px}
+.prio-list li b{color:var(--rust-d)}
+@media(max-width:880px){.prio-list{grid-template-columns:1fr}}
+
+.sec-band{display:flex;gap:12px;align-items:flex-start;background:linear-gradient(135deg,var(--linen) 0%,var(--canvas) 100%);border:1px solid var(--linen-d);border-left:4px solid var(--rust);border-radius:6px;padding:12px 16px;margin:26px 0 12px}
+.sec-letter{flex-shrink:0;width:30px;height:30px;background:var(--rust);color:#fff;border-radius:6px;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.sec-name{color:var(--indigo);font-size:15px;font-weight:600}
+.sec-sum{color:var(--gray-7);font-size:12px;line-height:1.6;margin-top:3px}
+
+.q-block{background:#fff;border:1px solid var(--gray-1);border-radius:6px;padding:13px 16px;margin:0 0 11px;box-shadow:var(--shadow-sm)}
+.q-block:hover{border-color:var(--gray-3)}
+.q-top{display:flex;align-items:flex-start;gap:8px;margin-bottom:6px}
+.q-no{flex-shrink:0;background:var(--indigo);color:#fff;font-weight:700;font-size:12px;padding:1px 8px;border-radius:4px;font-family:"SF Mono",monospace}
+.q-pri{flex-shrink:0;font-size:10.5px;font-weight:600;padding:1px 7px;border-radius:9px}
+.q-pri-high{background:#FBEAEA;color:var(--vermilion)}
+.q-pri-mid{background:#FBF1DA;color:#7A5810}
+.q-pri-low{background:#E8F4F0;color:var(--teal)}
+.q-title{font-size:13.5px;font-weight:600;color:var(--gray-9);line-height:1.5}
+.q-scene{font-size:12px;color:var(--gray-7);background:var(--gray-0);border-radius:5px;padding:7px 10px;margin:0 0 9px;line-height:1.65}
+.q-scene b{color:var(--indigo)}
+.q-opts{display:flex;flex-direction:column;gap:4px}
+.q-opt{display:flex;align-items:flex-start;gap:8px;border:1px solid var(--gray-1);border-radius:5px;padding:7px 11px;cursor:pointer;background:var(--canvas)}
+.q-opt:hover{border-color:var(--rust);background:#FFF7EA}
+.q-opt input[type=radio]{margin-top:2px;flex-shrink:0;width:14px;height:14px;accent-color:var(--rust);cursor:pointer}
+.q-otext{font-size:12.5px;color:var(--gray-9);line-height:1.55}
+.q-opt-rec{border-color:#C8E2D9;background:#F1FAF7}
+.q-rec{font-style:normal;background:var(--teal);color:#fff;font-size:10px;padding:0 6px;border-radius:8px;margin-left:5px;font-weight:600}
+.q-opt-other{background:#fff}
+.q-other-in{flex:1;min-width:120px;border:1px solid var(--gray-1);border-radius:4px;padding:3px 8px;font:12.5px var(--font);color:var(--gray-9)}
+.q-ref{font-size:11px;color:var(--gray-5);margin-top:8px;line-height:1.6;border-top:1px dashed var(--gray-1);padding-top:6px}
+.q-ref b{color:var(--gray-7)}
+.q-src{font-size:11px;color:var(--gray-5);margin-top:6px;line-height:1.9}
+.q-src b{color:var(--gray-7);margin-right:4px}
+.src-chip{display:inline-block;background:var(--linen);color:var(--indigo);border:1px solid var(--linen-d);border-radius:11px;padding:2px 9px;margin:0 5px 4px 0;font-size:11px;text-decoration:none;white-space:nowrap}
+.src-chip:hover{background:#FFF7EA;border-color:var(--rust);color:var(--rust-d)}
+
+.btn{display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:4px;font-size:12.5px;cursor:pointer;border:1px solid;line-height:1.5;font-family:inherit}
+.btn-c{background:var(--rust);color:#fff;border-color:var(--rust)}
+.btn-s{background:#fff;color:var(--gray-7);border-color:var(--gray-1)}
+.btn-g{background:#fff;color:var(--vermilion);border-color:var(--gray-1)}
+.btn-sm{padding:3px 9px;font-size:11.5px}
+.badge{display:inline-block;padding:1px 7px;border-radius:9px;font-size:10.5px;font-weight:500;border:1px solid}
+.badge-w{background:#FBF1DA;color:var(--amber);border-color:#EDD8A8}
+
+/* 评审工具:批注 / 补充需求 / 保存 */
+.guide-card{background:#fff;border:1px solid var(--gray-1);border-left:3px solid var(--teal);border-radius:6px;padding:12px 16px;margin:0 0 16px;font-size:12.5px;color:var(--gray-7);box-shadow:var(--shadow-sm)}
+.guide-card b{color:var(--indigo)}
+.guide-card .gc-f{margin-top:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;font-size:11.5px;color:var(--gray-5)}
+.anno-icon{display:none;position:absolute;top:-9px;right:-9px;background:var(--rust);color:#fff;width:22px;height:22px;border-radius:50%;font-size:12px;line-height:22px;text-align:center;cursor:pointer;z-index:60;box-shadow:0 2px 5px rgba(0,0,0,.25);border:none;font-family:inherit;padding:0}
+.anno-icon.has{background:var(--vermilion)}
+body.anno-on .anno-icon{display:block}
+body.anno-on [data-anchor]{outline:1px dashed rgba(209,122,64,.4);outline-offset:3px;border-radius:4px}
+body.anno-on [data-anchor]:hover{outline:1px solid var(--rust)}
+.pin{display:inline-block;font-size:11px;background:var(--rust);color:#fff;border-radius:20px;padding:1px 8px;margin-left:6px;cursor:pointer}
+.flash{animation:flash 1.3s ease}
+@keyframes flash{0%,100%{background:transparent}25%{background:var(--linen)}}
+
+textarea,input[type=text]{font-family:inherit;font-size:13px;border:1px solid var(--gray-1);border-radius:5px;padding:7px 9px;background:#fff;color:var(--gray-9);width:100%}
+textarea{resize:vertical;min-height:60px;line-height:1.6}
+label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
+.modal select{font-family:inherit;font-size:13px;border:1px solid var(--gray-1);border-radius:5px;padding:7px 9px;background:#fff;color:var(--gray-9);width:100%}
+
+.req-zone{margin-top:8px}
+.req-group .rgh{font-weight:600;color:var(--indigo);font-size:13px;margin:12px 0 5px;border-bottom:1px dashed var(--gray-3);padding-bottom:4px}
+.req-item{background:#fff;border:1px solid var(--gray-1);border-radius:6px;padding:11px 13px;margin:7px 4px;box-shadow:var(--shadow-sm);position:relative}
+.req-item .rt{font-weight:600;color:var(--gray-9)}
+.req-item .rd{font-size:13px;color:var(--gray-7);margin:4px 0;white-space:pre-wrap}
+.req-item .rm{font-size:11px;color:var(--gray-5);display:flex;gap:8px;flex-wrap:wrap}
+.req-item .ra{position:absolute;top:9px;right:10px;display:flex;gap:6px}
+.req-empty{color:var(--gray-3);font-size:13px;padding:10px 4px}
+
+.mask{position:fixed;inset:0;background:rgba(21,42,69,.46);display:none;z-index:200;align-items:center;justify-content:center;padding:20px}
+.mask.open{display:flex}
+.modal{background:#fff;border-radius:10px;width:520px;max-width:100%;max-height:88vh;overflow:auto;box-shadow:0 24px 60px rgba(0,0,0,.3)}
+.modal-h{padding:13px 18px;border-bottom:1px solid var(--gray-1);font-weight:700;color:var(--indigo-d);display:flex;justify-content:space-between;align-items:center}
+.modal-h .x{cursor:pointer;color:var(--gray-5);font-size:20px}
+.modal-b{padding:16px 18px}
+.modal-f{padding:12px 18px;border-top:1px solid var(--gray-1);display:flex;gap:8px;justify-content:flex-end;background:var(--gray-0)}
+.tgt{font-size:12px;color:var(--gray-5);background:var(--gray-0);border-radius:5px;padding:7px 10px;margin-bottom:8px}
+.anno-li{border:1px solid var(--gray-1);border-radius:5px;padding:8px 10px;margin:6px 0;background:var(--gray-0)}
+.anno-li .al-t{white-space:pre-wrap;font-size:13px}.anno-li .al-m{font-size:11px;color:var(--gray-5);margin-top:4px;display:flex;gap:8px}
+
+.drawer{position:fixed;top:0;right:0;bottom:0;width:400px;max-width:92vw;background:var(--canvas);box-shadow:-4px 0 24px rgba(0,0,0,.18);transform:translateX(100%);transition:transform .22s;z-index:210;display:flex;flex-direction:column}
+.drawer.open{transform:none}
+.drawer-h{padding:13px 16px;background:var(--indigo);color:#fff;font-weight:700;display:flex;justify-content:space-between;align-items:center}
+.drawer-h .x{cursor:pointer;font-size:20px}
+.drawer-tabs{display:flex;border-bottom:1px solid var(--gray-1);background:#fff}
+.drawer-tabs button{flex:1;border:none;background:none;padding:9px 4px;cursor:pointer;font-family:inherit;font-size:12.5px;color:var(--gray-5);border-bottom:2px solid transparent}
+.drawer-tabs button.on{color:var(--indigo);border-bottom-color:var(--rust);font-weight:600}
+.drawer-b{flex:1;overflow:auto;padding:12px 14px}
+.sum-item{background:#fff;border:1px solid var(--gray-1);border-radius:5px;padding:9px 11px;margin:7px 0;cursor:pointer;box-shadow:var(--shadow-sm)}
+.sum-item:hover{border-color:var(--rust)}
+.sum-item .sa{font-size:11px;color:var(--indigo-l);font-weight:600;margin-bottom:3px}
+.sum-item .sb{font-size:13px;white-space:pre-wrap}
+.sum-item .sm{font-size:11px;color:var(--gray-5);margin-top:3px}
+.sum-orphan{border-color:var(--vermilion)!important}
+.sum-h{font-size:12px;font-weight:700;color:var(--gray-5);margin:10px 0 4px}
+.sum-empty{color:var(--gray-3);font-size:13px;padding:10px}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--indigo-d);color:#fff;padding:11px 20px;border-radius:24px;font-size:13px;box-shadow:var(--shadow);z-index:300;max-width:80vw}
+.foot{margin-top:26px;padding:14px 4px;border-top:1px solid var(--gray-1);font-size:11.5px;color:var(--gray-5);line-height:1.7}
+@media print{.topbar,.anno-icon,.drawer,.mask,.toast,.t-btn,.pin,.sidenav{display:none!important}.main{margin-left:0}}
+</style>
+</head><body class="">
+
+<div class="topbar">
+  <div class="logo">🪡 样衣制造管理系统<small>对账 · 开票 · 付款 · 串流程问题清单 v1.0</small></div>
+  <div class="stat"><span>批注 <b id="stAnno">0</b></span><span>补充需求 <b id="stReq">0</b></span><span>已答 <b id="stAns">9/9</b></span></div>
+  <div class="acts">
+    <span class="mode-tag" id="modeTag">就地保存可用</span>
+    <button class="t-btn" id="btnAnno" onclick="toggleAnnoMode()">💬 批注：关</button>
+    <button class="t-btn" onclick="openReqModal(null,'')">➕ 补充需求</button>
+    <button class="t-btn" onclick="openSummary()">📋 汇总</button>
+    <button class="t-btn" onclick="exportMd()">📥 导出</button>
+    <button class="t-btn save dirty" id="btnSave" onclick="save()"><span class="dot"></span><span id="saveLabel">保存*</span></button>
+  </div>
+</div>
+
+<nav class="sidenav">
+  <div class="nav-cat" style="border:none;margin-top:0">串流程问题 · 21 题</div>
+  <a class="nav-dj" href="#overview">📍 总览 + 业务流图</a>
+  <a class="nav-dj" href="#prio">⭐ 最优先:编号统一</a>
+  <a class="nav-sub" href="#secA">　A 无合同费用·入口与明细</a>
+  <a class="nav-sub" href="#secB">　B 无合同费用·关键规则</a>
+  <a class="nav-sub" href="#secC">　C 审批 / 统计 / 下游</a>
+  <a class="nav-sub" href="#extra">　业务方补充意见</a>
+</nav>
+
+<main class="main">
+  <div id="overview" class="dj-block" style="background:linear-gradient(135deg,var(--rust) 0%,#A85423 100%)">
+    <h1>💵 对账付款 · 补充确认清单<small>无合同 / 空白对账单 · v1.1</small></h1>
+    <p class="dj-summary">
+    业务提出:无合同的费用(费用 / 现金无票 / 预付款)由业务在「对账单」列表<b>＋新建一张空白对账单</b>(除对账单号外手动填、对账金额按明细小计自动合计)→ 审批 → <b>生成付款申请</b>。本清单收口这条「空白对账单」流程仍待业务拍板的细节:<b>入口去重 / 费用明细字段 / 三类区别 / 无票校验 / 预付冲抵 / 编号 / 审批权限 / 统计口径</b>,共 <b>9</b> 题,分 3 段。确认后我方据此落地 06。<br>
+    <b>怎么用</b>:每题点选一个选项(标 <span style="background:var(--teal);padding:1px 6px;border-radius:8px;font-size:11px">推荐</span> 的是我方建议),不满意可选「其他」并填写;每题下方 <b>📍出处</b> 链接可新标签打开对应设计稿定位;任意位置可 💬批注、可 ➕补充需求;填完点右上角 <b>💾 保存</b> 将答复写回本 HTML 文件回传即可。
+    </p>
+  </div>
+
+  <div class="guide-card" id="guideCard">
+    <b>💡 操作提示</b>　① 直接在每题点选答案(单选),或选「其他」补充;② 顶栏「💬 批注」开启后可对任意题目/段落写批注;③「➕ 补充需求」记录清单未覆盖的新需求;④ 改动后顶栏保存点变 <b style="color:var(--amber)">橙点</b>,点「💾 保存」写回文件。
+    <div class="gc-f"><span id="guideSaveTip">Chrome/Edge 经本地服务器可直接写回原文件</span><label style="display:flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" id="guideNever"> 不再提示 <button class="btn btn-s btn-sm" onclick="dismissGuide()">知道了</button></label></div>
+  </div>
+
+  <div class="flow-box" data-anno-target="" data-anno-label="空白对账单流程" data-anchor="a0">无合同费用 · 空白对账单流程(本次设计):
+  业务在【对账单·列表】点「＋ 新建对账单」 → 生成空白对账单(除对账单号系统自动外,其余手动填)
+        │  填 费用明细(类型:费用/现金无票/预付款 · 事由 · 相关款号 · 金额 · 附件);对账金额 = Σ小计 自动
+        ▼
+  对账审批(业务/主管) ──通过──▶ 生成【付款申请】──▶ 财务付款(可分批 + 水单)
+  与门户推来的合同对账单走同一条「对账 → 付款申请」路径。</div>
+
+  <div class="prio-card" id="prio">
+    <h3>⭐ 最需先拍板(影响落地)</h3>
+    <ul class="prio-list">
+      <li><b>A1</b> 无合同入口是否统一(去掉付款列表旧的直接新建)?</li>
+      <li><b>A2</b> 空白对账单「费用明细」填哪些字段?</li>
+      <li><b>B1</b> 现金无票时发票校验怎么放行?</li>
+      <li><b>B2</b> 预付款如何冲抵核销防重复付?</li>
+      <li><b>C1</b> 无合同费用审批层级 + 谁能新建?</li>
+    </ul>
+  </div>
+
+  <div id="qRoot"></div>
+
+  <div class="sec-band" id="extra"><span class="sec-letter" style="background:var(--teal)">✎</span><div><div class="sec-name">业务方补充意见</div><div class="sec-sum">清单未覆盖到的疑问、新需求,点这里或顶栏「➕ 补充需求」添加;也可对任一题目开「💬 批注」。</div></div></div>
+  <div class="req-zone" id="reqZone"><div class="req-empty">暂无补充需求。点上方「＋ 新增」或顶栏「➕ 补充需求」添加。</div></div>
+  <div style="text-align:right;margin-top:8px"><button class="btn btn-s btn-sm" onclick="openReqModal(null,'')">＋ 新增补充需求</button></div>
+
+  <div class="foot">对账付款 · 补充确认清单(无合同 / 空白对账单) v1.1 · 收口"业务新建空白对账单处理无合同费用"流程的待确认细节 · 共 9 题(A 入口与明细 3 / B 关键规则 3 / C 审批统计下游 3)。本页可点选作答 + 批注 + 📍出处链接,保存即写回本文件回传。<span id="lastSavedFoot"></span></div>
+</main>
+
+<!-- 批注 Modal -->
+<div class="mask" id="annoMask"><div class="modal">
+  <div class="modal-h"><span id="annoTitle">批注</span><span class="x" onclick="closeMask('annoMask')">×</span></div>
+  <div class="modal-b"><div class="tgt" id="annoTarget"></div><div id="annoList"></div>
+    <label class="fl">新增批注</label><textarea id="annoText" placeholder="写下意见…"></textarea>
+    <label class="fl">批注人(可选)</label><input type="text" id="annoAuthor" placeholder="姓名"></div>
+  <div class="modal-f"><button class="btn btn-s" onclick="closeMask('annoMask')">取消</button><button class="btn btn-c" onclick="addAnno()">＋ 添加批注</button></div>
+</div></div>
+
+<!-- 补充需求 Modal -->
+<div class="mask" id="reqMask"><div class="modal">
+  <div class="modal-h"><span id="reqTitle">补充需求</span><span class="x" onclick="closeMask('reqMask')">×</span></div>
+  <div class="modal-b">
+    <label class="fl">归属(挂到哪一段)</label>
+    <select id="reqScope"><option value="">全局</option><option value="A">A 编号检索</option><option value="B">B 对账组织</option><option value="C">C 审批退回累计</option><option value="D">D 发票账期</option><option value="E">E 付款执行</option></select>
+    <label class="fl">标题</label><input type="text" id="reqTitleIn" placeholder="一句话概括需求">
+    <label class="fl">详述</label><textarea id="reqDetail" placeholder="详细说明…"></textarea>
+    <label class="fl">优先级</label><select id="reqPriority"><option value="">未定</option><option>P0</option><option>P1</option><option>P2</option></select>
+    <label class="fl">提出人(可选)</label><input type="text" id="reqAuthor" placeholder="姓名">
+  </div>
+  <div class="modal-f"><button class="btn btn-g" id="reqDelBtn" onclick="deleteReqFromModal()" style="display:none">删除</button><button class="btn btn-s" onclick="closeMask('reqMask')">取消</button><button class="btn btn-c" onclick="saveReq()">保存</button></div>
+</div></div>
+
+<!-- 汇总抽屉 -->
+<div class="mask" id="drawerMask" onclick="closeSummary()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-h"><span>📋 评审汇总</span><span class="x" onclick="closeSummary()">×</span></div>
+  <div class="drawer-tabs"><button class="on" data-tab="anno" onclick="switchTab('anno')">批注</button><button data-tab="req" onclick="switchTab('req')">补充需求</button></div>
+  <div class="drawer-b" id="drawerBody"></div>
+</div>
+
+<script id="review-data" type="application/json">{"schemaVersion":1,"meta":{"docId":"对账付款_补充确认清单_无合同_v1.1","boardVersion":"v1.1","reviewer":"","lastSaved":""},"annotations":[],"requirements":[],"answers":{}}</script>
+
+<script id="questions-data" type="application/json"></script>
+
+<script>
+/* ===== 题库 ===== */
+var QUESTIONS=[
+{"sec": "A", "name": "无合同费用 · 入口与明细", "summary": "你已加「对账单·新建空白对账单」作为无合同费用入口。这一段定入口去重与费用明细字段。", "qs": [{"pri": "高", "t": "无合同费用入口是否统一为「对账单·新建空白对账单」,去掉付款申请列表里旧的「新建付款申请(无合同)」直接入口?", "s": "现在有两个口子:① 对账单列表「＋新建」(新加,建空白对账单→生成付款申请);② 付款申请列表「＋新建付款申请(无合同)」(旧的,直接建付款申请)。", "o": ["统一:只保留对账单「＋新建」,无合同费用一律走 建空白对账单→审批→生成付款申请;去掉付款列表直接新建", "保留两个入口并行", "其他:____"], "rec": 0, "ref": "06 对账单列表「＋新建」↔ 付款申请列表旧入口", "src": [{"href": "06-对账付款设计稿_v1.3.html#grp-dz-list", "label": "06·对账单列表"}, {"href": "06-对账付款设计稿_v1.3.html#grp-dz-fklist", "label": "06·付款申请列表"}]}, {"pri": "高", "t": "空白对账单的「费用明细」要填哪些字段?", "s": "门户对账单明细是发货批次(物料/数量/合同单价/小计);无合同费用没有发货批次,需要一套费用明细字段。", "o": ["费用项目/事由 · 金额 · 相关款号(可空) · 附件(单笔费用可只一行直接填金额)", "上述再加 供应商 · 数量 · 单价(按量算小计)", "其他:____"], "rec": 0, "ref": "06 发货批次明细 ↔ 无合同费用明细", "src": [{"href": "06-对账付款设计稿_v1.3.html#grp-dz-batch", "label": "06·发货批次明细"}, {"href": "06-对账付款设计稿_v1.3.html#grp-dz-nocontract", "label": "06·无合同费用"}]}, {"pri": "中", "t": "费用 / 现金无票 / 预付款 三类,是共用一张空白对账单(仅「类型」字段区分)还是各自独立?", "s": "三类业务性质不同(报销费用 / 无票现金 / 预付)。", "o": ["共用同一张空白对账单表单,用「类型」字段区分,后续规则按类型走", "每类单独表单/流程", "其他:____"], "rec": 0, "ref": "06 无合同费用·申请类型", "src": [{"href": "06-对账付款设计稿_v1.3.html#grp-dz-nocontract", "label": "06·无合同费用"}]}]},
+{"sec": "B", "name": "无合同费用 · 关键规则", "summary": "无票发票校验、预付款冲抵、编号取法——这几条直接影响付款能否走通。", "qs": [{"pri": "高", "t": "现金无票时,付款申请「发票金额 = 对账金额」校验怎么处理?", "s": "无票类没有发票,无法满足发票=对账金额校验。", "o": ["无票类:上传收据/无票情况说明 + 审批人确认 即可放行(免发票校验)", "必须补票才能付款(不允许无票付款)", "其他:____"], "rec": 0, "ref": "06 付款详情·发票校验 / 确认付款", "src": [{"href": "06-对账付款设计稿_v1.3.html#grp-dz-fkhead", "label": "06·付款申请详情"}, {"href": "06-对账付款设计稿_v1.3.html#grp-dz-confirm", "label": "06·确认付款"}]}, {"pri": "高", "t": "预付款如何与后续正式合同对账冲抵核销(防重复付)?", "s": "预付时还没有实际对账对象;后续该款号/供应商会产生正式对账付款。", "o": ["预付登记款号/供应商,后续同款号/供应商对账付款时系统提示存在预付、可勾选冲抵已付总额", "人工线下台账核销,系统不做冲抵", "其他:____"], "rec": 0, "ref": "06 无合同费用·预付款冲抵", "src": [{"href": "06-对账付款设计稿_v1.3.html#grp-dz-nocontract", "label": "06·无合同费用"}]}, {"pri": "中", "t": "无合同费用对账单编号怎么取(常常没有款号)?", "s": "已定 DZ-款号-序号,但无合同费用经常没有款号。", "o": ["DZ-费用-序号(无款号时用『费用』占位)", "DZ-供应商简称-序号", "DZ-YYYYMMDD-序号(无款号回退按日期)", "其他:____"], "rec": 0, "ref": "06 对账单编号规则(DZ-款号-序号)", "src": [{"href": "06-对账付款设计稿_v1.3.html#grp-dz-list", "label": "06·对账单列表"}, {"href": "06-对账付款设计稿_v1.3.html#grp-dz-rule", "label": "06·业务规则"}]}]},
+{"sec": "C", "name": "审批 / 统计 / 下游", "summary": "无合同费用的审批层级与建单权限、统计口径,以及下游两模块是否本期启动。", "qs": [{"pri": "高", "t": "无合同费用对账单的审批层级,以及谁能新建?", "s": "合同对账走『业务员初审 + 业务主管二级审批』。", "o": ["同合同对账:业务员初审 + 主管二级审批;业务员可新建", "按金额阈值升级(超 ____ 元才主管二级,小额业务员单审)", "按类型:预付款必主管审、普通费用业务员单审", "其他:____"], "rec": 0, "ref": "06 对账审批操作", "src": [{"href": "06-对账付款设计稿_v1.3.html#grp-dz-approve", "label": "06·对账审批操作"}]}, {"pri": "中", "t": "无合同对账单/付款是否纳入应付与到期统计?报表是否与合同付款分开看?", "s": "无合同费用可能无账期/无到期日。", "o": ["纳入应付/到期统计;报表可按「合同付款 / 无合同费用」分组查看", "纳入统计但不分组", "不纳入到期统计(无账期),仅记录", "其他:____"], "rec": 0, "ref": "06 付款申请列表/应付汇总", "src": [{"href": "06-对账付款设计稿_v1.3.html#grp-dz-fklist", "label": "06·付款申请列表"}]}, {"pri": "低", "t": "下游 ⑧大货资料/生产、⑨船务资料 是否仍按『暂缓下期』?", "s": "主线 04-07 已基本闭环。", "o": ["仍暂缓,先把 04-07 主线按本轮反馈定稿落地", "本期启动 ⑧⑨ 需求与设计", "其他:____"], "rec": 0, "ref": "架构蓝图 ⑧⑨【待细化】", "src": [{"href": "订单及下游模块_总体架构蓝图_v0.1.md", "label": "架构蓝图 v0.1"}]}]}
+];
+
+/* ===== 评审系统(批注 / 补充需求 / 答复 / 保存回 HTML) ===== */
+var MODULES=[{key:'A',label:'编号检索'},{key:'B',label:'对账组织'},{key:'C',label:'审批退回累计'},{key:'D',label:'发票账期'},{key:'E',label:'付款执行'}];
+function moduleLabel(k){for(var i=0;i<MODULES.length;i++){if(MODULES[i].key===k)return MODULES[i].label;}return '全局';}
+var reviewState=freshState();var dirty=false;var fileHandle=null;
+var capabilities={fsAccess:('showSaveFilePicker' in window)&&window.isSecureContext};
+var DRAFT_KEY='dz-crossflow-v1-draft::'+(location.pathname||'b');
+function freshState(){return {schemaVersion:1,meta:{docId:'对账付款_补充确认清单_无合同_v1.1',boardVersion:'v1.0',reviewer:'',lastSaved:''},annotations:[],requirements:[],answers:{}};}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function uid(p){return p+'_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,6);}
+function nowIso(){return new Date().toISOString();}
+function fmtTime(iso){if(!iso)return '';try{var d=new Date(iso),p=function(n){return(n<10?'0':'')+n;};return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());}catch(e){return '';}}
+var idOk=function(s){return typeof s==='string'&&/^[A-Za-z0-9_-]+$/.test(s);};
+function loadState(){var n=document.getElementById('review-data'),raw=n?n.textContent:'';if(!raw||!raw.trim())return freshState();try{return normalizeState(JSON.parse(raw));}catch(e){window.__rawCorrupt=raw;showToast('⚠ 已保存数据损坏,已用空白表打开');return freshState();}}
+function normalizeState(o){var b=freshState();if(!o||typeof o!=='object')return b;if(o.meta)for(var k in o.meta){if(o.meta.hasOwnProperty(k))b.meta[k]=o.meta[k];}
+  if(Array.isArray(o.annotations))b.annotations=o.annotations.filter(function(a){return a&&idOk(a.id)&&idOk(a.anchorId)&&typeof a.text==='string';});
+  if(Array.isArray(o.requirements))b.requirements=o.requirements.filter(function(r){return r&&idOk(r.id);}).map(function(r){var mk=(r.scope==='module'&&idOk(r.moduleKey)&&MODULES.some(function(m){return m.key===r.moduleKey;}))?r.moduleKey:null;return {id:r.id,scope:mk?'module':'global',moduleKey:mk,moduleLabel:mk?moduleLabel(mk):'全局',title:String(r.title==null?'':r.title),detail:String(r.detail==null?'':r.detail),priority:(['P0','P1','P2'].indexOf(r.priority)>=0?r.priority:''),author:String(r.author==null?'':r.author),createdAt:r.createdAt||'',updatedAt:r.updatedAt||''};});
+  if(o.answers&&typeof o.answers==='object'){var na={};for(var qk in o.answers){if(!o.answers.hasOwnProperty(qk)||!idOk(qk))continue;var av=o.answers[qk];if(!av||typeof av!=='object')continue;var ch=av.choice;var okch=(ch===null||ch==='other'||(typeof ch==='number'&&ch>=0&&ch<50))?ch:null;na[qk]={choice:okch,other:typeof av.other==='string'?av.other.slice(0,2000):''};}b.answers=na;}
+  return b;}
+function flushStateToAnchor(){var s=JSON.stringify(reviewState);s=s.replace(/<\//g,'<\\/').replace(/<!--/g,'<\\u0021--');document.getElementById('review-data').textContent=s;}
+function serializeFullHTML(){flushStateToAnchor();var c=document.documentElement.cloneNode(true);
+  var rm=c.querySelectorAll('.anno-icon,[data-runtime],.toast');for(var i=0;i<rm.length;i++){if(rm[i].parentNode)rm[i].parentNode.removeChild(rm[i]);}
+  var on=c.querySelectorAll('.anno-on');for(var j=0;j<on.length;j++)on[j].classList.remove('anno-on');
+  var op=c.querySelectorAll('.mask.open,.drawer.open');for(var m=0;m<op.length;m++)op[m].classList.remove('open');
+  var qr=c.querySelector('#qRoot');if(qr)qr.innerHTML='';
+  return '<!DOCTYPE html>\n'+c.outerHTML;}
+function guessName(){try{var n=decodeURIComponent((location.pathname||'').split('/').pop()||'');if(n&&/\.html?$/i.test(n))return n;}catch(e){}return '对账付款_补充确认清单_无合同_v1.1.html';}
+function save(){var prev=reviewState.meta.lastSaved;reviewState.meta.lastSaved=nowIso();var html;try{html=serializeFullHTML();}catch(e){reviewState.meta.lastSaved=prev;showToast('⚠ 序列化失败:'+e.message);setSaveState('fail');return;}
+  setSaveState('busy');
+  if(capabilities.fsAccess){saveViaFSA(html).then(function(ok){if(ok==='abort'){reviewState.meta.lastSaved=prev;flushStateToAnchor();setSaveState(dirty?'dirty':'clean');return;}if(ok===true){markSaved('inplace',fileHandle&&fileHandle.name);}else{fallbackBlob(html);}}).catch(function(e){reviewState.meta.lastSaved=prev;showToast('⚠ 保存失败:'+(e&&e.message||e));setSaveState('fail');});}
+  else{fallbackBlob(html);}}
+function saveViaFSA(html){return (async function(){try{if(!fileHandle){fileHandle=await window.showSaveFilePicker({suggestedName:guessName(),types:[{description:'评审HTML',accept:{'text/html':['.html']}}]});}else{var p=await fileHandle.queryPermission({mode:'readwrite'});if(p!=='granted'){p=await fileHandle.requestPermission({mode:'readwrite'});}if(p!=='granted')throw new Error('no-perm');}var w=await fileHandle.createWritable();await w.write(html);await w.close();return true;}catch(e){if(e&&e.name==='AbortError')return 'abort';return false;}})();}
+function fallbackBlob(html){try{var b=new Blob([html],{type:'text/html;charset=utf-8'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=guessName();document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(u);},1500);markSaved('download');}catch(e){clipFallback(html);}}
+function clipFallback(html){if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(html).then(function(){markSaved('clip');},function(){manualCopy(html);});}else{manualCopy(html);}}
+function manualCopy(html){var ta=document.createElement('textarea');ta.value=html;ta.style.position='fixed';ta.style.top='8%';ta.style.left='5%';ta.style.width='90%';ta.style.height='70%';ta.style.zIndex=999;document.body.appendChild(ta);ta.focus();ta.select();showToast('请 Ctrl+A 全选、Ctrl+C 复制,粘到编辑器另存为 .html');ta.addEventListener('blur',function(){if(ta.parentNode)ta.parentNode.removeChild(ta);});setSaveState('clean');}
+function setSaveState(mode){var b=document.getElementById('btnSave'),l=document.getElementById('saveLabel');b.classList.remove('dirty','fail');if(mode==='busy'){l.textContent='保存中…';return;}if(mode==='fail'){b.classList.add('fail');l.textContent='保存失败,重试';return;}if(mode==='dirty'){b.classList.add('dirty');l.textContent='保存*';return;}l.textContent='保存';}
+function markDirty(){dirty=true;setSaveState('dirty');scheduleDraft();}
+var _dt=null;function scheduleDraft(){if(_dt)clearTimeout(_dt);_dt=setTimeout(function(){try{flushStateToAnchor();localStorage.setItem(DRAFT_KEY,JSON.stringify({savedAt:nowIso(),state:reviewState}));}catch(e){}},800);}
+function markSaved(mode,fn){if(mode==='inplace'){dirty=false;setSaveState('clean');try{localStorage.removeItem(DRAFT_KEY);}catch(e){}}else{dirty=true;setSaveState('dirty');}
+  var msg=mode==='inplace'?('✓ 已保存到文件「'+(fn||guessName())+'」 '+fmtTime(reviewState.meta.lastSaved)):mode==='download'?'⚠ 已下载新版本,请用它覆盖原文件(同名同目录);未覆盖前草稿已保留':mode==='clip'?'✓ 源码已复制,请粘贴另存覆盖原文件':'已保存';
+  showToast(msg);var lf=document.getElementById('lastSavedFoot');if(lf)lf.textContent='　最近保存:'+fmtTime(reviewState.meta.lastSaved)+(mode!=='inplace'?'(待覆盖原文件)':'');}
+function applyCapabilityUI(){var tag=document.getElementById('modeTag'),tip=document.getElementById('guideSaveTip');
+  if(capabilities.fsAccess){tag.textContent='就地保存可用';if(tip)tip.textContent='Chrome/Edge 经本地服务器可直接写回原文件';}
+  else{tag.textContent='下载模式';if(tip)tip.textContent='双击打开时保存=下载同名文件,用它覆盖原文件即可';}}
+
+/* 题目渲染 + 作答 */
+function priClass(p){return p==='高'?'high':p==='中'?'mid':'low';}
+var _MODMAP={"05-供应商门户":"mn","06-对账付款":"dz","04-合同":"hc","03-订单":"dd","02-客户报价":"bj","02-样衣":"yg","01-基础":"jc"};
+function _modOf(h){for(var k in _MODMAP){if(h.indexOf(k)>=0)return _MODMAP[k];}return "";}
+function chipNav(e,a){try{var mod=a.getAttribute("data-mod"),sel=a.getAttribute("data-sel");if(mod&&window.parent&&window.parent!==window&&window.parent.showDoc){e.preventDefault();window.parent.showDoc(mod,sel||null);return false;}}catch(_){}return true;}
+function srcChips(src){var out=[];for(var i=0;i<src.length;i++){var s=src[i];if(!s||!s.href)continue;var hp=String(s.href).split("#");var mod=_modOf(hp[0]);var sel=hp[1]?("#"+hp[1]):"";out.push('<a class="src-chip" href="'+esc(s.href)+'" target="_blank" rel="noopener" data-mod="'+mod+'" data-sel="'+esc(sel)+'" onclick="return chipNav(event,this)">📍 '+esc(s.label||s.href)+'</a>');}return out.join('');}
+function renderQuestions(){var root=document.getElementById('qRoot');if(!root)return;var html='';
+  for(var si=0;si<QUESTIONS.length;si++){var S=QUESTIONS[si];
+    html+='<div class="design-section" id="sec'+S.sec+'"><div class="sec-band" data-anno-target data-anno-label="'+esc('段 '+S.sec+' '+S.name)+'"><span class="sec-letter">'+S.sec+'</span><div><div class="sec-name">'+esc(S.name)+'</div><div class="sec-sum">'+esc(S.summary)+'</div></div></div>';
+    for(var qi=0;qi<S.qs.length;qi++){var q=S.qs[qi];var qid=S.sec+(qi+1);
+      html+='<div class="q-block" data-anno-target data-anno-label="'+esc(qid+' '+q.t.slice(0,22))+'">';
+      html+='<div class="q-top"><span class="q-no">'+qid+'</span><span class="q-pri q-pri-'+priClass(q.pri)+'">'+q.pri+'</span><span class="q-title">'+esc(q.t)+'</span></div>';
+      html+='<div class="q-scene"><b>场景</b> '+esc(q.s)+'</div>';
+      html+='<div class="q-opts" data-qid="'+qid+'">';
+      for(var oi=0;oi<q.o.length;oi++){var rec=(oi===q.rec);
+        html+='<label class="q-opt'+(rec?' q-opt-rec':'')+'"><input type="radio" name="'+qid+'" value="'+oi+'"><span class="q-otext">'+esc(q.o[oi])+(rec?' <em class="q-rec">推荐</em>':'')+'</span></label>';}
+      html+='<label class="q-opt q-opt-other"><input type="radio" name="'+qid+'" value="other"><span class="q-otext">其他:</span><input type="text" class="q-other-in" data-qid="'+qid+'" placeholder="补充你的答复…"></label>';
+      html+='</div>';
+      if(q.ref)html+='<div class="q-ref">🔗 <b>关联</b> '+esc(q.ref)+'</div>';
+      if(q.src&&q.src.length)html+='<div class="q-src"><b>📍 出处</b> '+srcChips(q.src)+'</div>';
+      html+='</div>';
+    }
+    html+='</div>';
+  }
+  root.innerHTML=html;}
+function ansFor(qid){if(!reviewState.answers)reviewState.answers={};if(!reviewState.answers[qid])reviewState.answers[qid]={choice:null,other:''};return reviewState.answers[qid];}
+function setChoice(qid,val){var a=ansFor(qid);a.choice=(val==='other')?'other':parseInt(val,10);markDirty();updateStats();}
+function setOther(qid,val){var a=ansFor(qid);a.other=val;var r=document.querySelector('input[name="'+qid+'"][value="other"]');if(val&&r&&!r.checked){r.checked=true;a.choice='other';}markDirty();updateStats();}
+function bindAnswers(){var root=document.getElementById('qRoot');if(!root)return;
+  root.addEventListener('change',function(e){var t=e.target;if(t&&t.tagName==='INPUT'&&t.type==='radio'&&t.name){setChoice(t.name,t.value);}});
+  root.addEventListener('input',function(e){var t=e.target;if(t&&t.className&&t.className.indexOf('q-other-in')>=0){setOther(t.getAttribute('data-qid'),t.value);}});}
+function applyAnswers(){if(!reviewState.answers)return;for(var qid in reviewState.answers){if(!reviewState.answers.hasOwnProperty(qid))continue;var a=reviewState.answers[qid];if(!a)continue;if(a.choice!=null){var v=(a.choice==='other')?'other':String(a.choice);var r=document.querySelector('input[name="'+qid+'"][value="'+v+'"]');if(r)r.checked=true;}if(a.other){var oi=document.querySelector('.q-other-in[data-qid="'+qid+'"]');if(oi)oi.value=a.other;}}}
+function answeredCount(){var c=0;if(reviewState.answers){for(var k in reviewState.answers){if(!reviewState.answers.hasOwnProperty(k))continue;var a=reviewState.answers[k];if(a&&(a.choice!=null||(a.other&&a.other.trim())))c++;}}return c;}
+function totalQuestions(){var n=0;for(var i=0;i<QUESTIONS.length;i++)n+=QUESTIONS[i].qs.length;return n;}
+
+/* 批注 */
+var annoOn=false,curAnchor=null;
+function toggleAnnoMode(){annoOn=!annoOn;document.body.classList.toggle('anno-on',annoOn);document.getElementById('btnAnno').textContent='💬 批注：'+(annoOn?'开':'关');document.getElementById('btnAnno').classList.toggle('on',annoOn);refreshAnnoIcons();}
+function refreshAnnoIcons(){var old=document.querySelectorAll('.anno-icon');old.forEach(function(n){if(n.parentNode)n.parentNode.removeChild(n);});if(!annoOn)return;
+  document.querySelectorAll('[data-anchor]').forEach(function(el){var aid=el.getAttribute('data-anchor');var cnt=reviewState.annotations.filter(function(a){return a.anchorId===aid;}).length;
+    var btn=document.createElement('button');btn.className='anno-icon'+(cnt?' has':'');btn.setAttribute('data-runtime','1');btn.textContent=cnt?('✓'+cnt):'💬';
+    btn.onclick=function(ev){ev.stopPropagation();openAnno(aid);};if(getComputedStyle(el).position==='static')el.style.position='relative';el.appendChild(btn);});}
+function anchorLabel(aid){var el=document.querySelector('[data-anchor="'+aid+'"]');return el?(el.getAttribute('data-anno-label')||aid):aid;}
+function anchorQuote(aid){var el=document.querySelector('[data-anchor="'+aid+'"]');if(!el)return '';return (el.innerText||el.textContent||'').replace(/\s+/g,' ').trim().slice(0,60);}
+function openAnno(aid){curAnchor=aid;document.getElementById('annoTitle').textContent='批注 · '+anchorLabel(aid);document.getElementById('annoTarget').innerHTML='<b>定位</b>:'+esc(anchorLabel(aid));document.getElementById('annoText').value='';document.getElementById('annoAuthor').value='';renderAnnoList(aid);openMask('annoMask');setTimeout(function(){document.getElementById('annoText').focus();},40);}
+function renderAnnoList(aid){var list=reviewState.annotations.filter(function(a){return a.anchorId===aid;}),h=document.getElementById('annoList');if(!list.length){h.innerHTML='<div class="req-empty">该处暂无批注</div>';return;}
+  h.innerHTML=list.map(function(a){return '<div class="anno-li"><div class="al-t">'+esc(a.text)+'</div><div class="al-m"><span>'+esc(a.author||'匿名')+'</span><span>'+fmtTime(a.updatedAt||a.createdAt)+'</span><a href="javascript:void(0)" onclick="editAnno(\''+a.id+'\')">编辑</a> <a href="javascript:void(0)" style="color:var(--vermilion)" onclick="delAnno(\''+a.id+'\')">删除</a></div></div>';}).join('');}
+function addAnno(){var txt=document.getElementById('annoText').value.trim();if(!txt){showToast('请先输入批注内容');return;}
+  reviewState.annotations.push({id:uid('an'),anchorId:curAnchor,anchorLabel:anchorLabel(curAnchor),quote:anchorQuote(curAnchor),text:txt,author:document.getElementById('annoAuthor').value.trim(),status:'open',createdAt:nowIso(),updatedAt:nowIso()});
+  document.getElementById('annoText').value='';renderAnnoList(curAnchor);refreshAnnoIcons();markDirty();updateStats();}
+function editAnno(id){var a=reviewState.annotations.filter(function(x){return x.id===id;})[0];if(!a)return;var nv=prompt('编辑批注:',a.text);if(nv==null)return;var t=nv.trim();if(!t){showToast('内容不能为空,如需移除请删除');return;}a.text=t;a.updatedAt=nowIso();renderAnnoList(a.anchorId);refreshAnnoIcons();markDirty();updateStats();}
+function delAnno(id){if(!confirm('确认删除这条批注?'))return;var a=reviewState.annotations.filter(function(x){return x.id===id;})[0];reviewState.annotations=reviewState.annotations.filter(function(x){return x.id!==id;});if(a)renderAnnoList(a.anchorId);refreshAnnoIcons();markDirty();updateStats();}
+function applyAnnotations(){refreshAnnoIcons();}
+
+/* 补充需求 */
+var editingReqId=null;
+function openReqModal(id,scope){editingReqId=id;document.getElementById('reqTitle').textContent=id?'编辑补充需求':'新增补充需求';document.getElementById('reqDelBtn').style.display=id?'':'none';
+  if(id){var r=reviewState.requirements.filter(function(x){return x.id===id;})[0];if(!r)return;document.getElementById('reqScope').value=r.scope==='module'?r.moduleKey:'';document.getElementById('reqTitleIn').value=r.title||'';document.getElementById('reqDetail').value=r.detail||'';document.getElementById('reqPriority').value=r.priority||'';document.getElementById('reqAuthor').value=r.author||'';}
+  else{document.getElementById('reqScope').value=scope||'';document.getElementById('reqTitleIn').value='';document.getElementById('reqDetail').value='';document.getElementById('reqPriority').value='';document.getElementById('reqAuthor').value='';}
+  openMask('reqMask');}
+function saveReq(){var sv=document.getElementById('reqScope').value,title=document.getElementById('reqTitleIn').value.trim(),detail=document.getElementById('reqDetail').value.trim();if(!title&&!detail){showToast('请至少填写标题或详述');return;}
+  var rec={scope:sv?'module':'global',moduleKey:sv||null,moduleLabel:sv?moduleLabel(sv):'全局',title:title,detail:detail,priority:document.getElementById('reqPriority').value,author:document.getElementById('reqAuthor').value.trim(),updatedAt:nowIso()};
+  if(editingReqId){var r=reviewState.requirements.filter(function(x){return x.id===editingReqId;})[0];if(r)for(var k in rec)r[k]=rec[k];}else{rec.id=uid('req');rec.createdAt=nowIso();reviewState.requirements.push(rec);}
+  closeMask('reqMask');renderRequirements();markDirty();updateStats();}
+function deleteReqFromModal(){if(!editingReqId)return;if(!confirm('确认删除这条补充需求?'))return;reviewState.requirements=reviewState.requirements.filter(function(x){return x.id!==editingReqId;});closeMask('reqMask');renderRequirements();markDirty();updateStats();}
+function quickDelReq(id){if(!confirm('确认删除?'))return;reviewState.requirements=reviewState.requirements.filter(function(x){return x.id!==id;});renderRequirements();markDirty();updateStats();}
+function renderRequirements(){var host=document.getElementById('reqZone');if(!reviewState.requirements.length){host.innerHTML='<div class="req-empty">暂无补充需求。点上方「＋ 新增」或顶栏「➕ 补充需求」添加。</div>';refreshPins();return;}
+  var groups={};reviewState.requirements.forEach(function(r){var k=r.scope==='module'?r.moduleKey:'__g';(groups[k]=groups[k]||[]).push(r);});
+  var order=['__g'].concat(MODULES.map(function(m){return m.key;})),h='';
+  order.forEach(function(k){var arr=groups[k];if(!arr||!arr.length)return;var name=k==='__g'?'全局':moduleLabel(k);h+='<div class="req-group"><div class="rgh">'+esc(name)+' ('+arr.length+')</div>';
+    arr.forEach(function(r){h+='<div class="req-item"><div class="ra"><button class="btn btn-s btn-sm" onclick="openReqModal(\''+r.id+'\',\'\')">编辑</button><button class="btn btn-g btn-sm" onclick="quickDelReq(\''+r.id+'\')">删</button></div><div class="rt">'+(r.priority?'<span class="badge badge-w">'+esc(r.priority)+'</span> ':'')+esc(r.title||'(无标题)')+'</div>'+(r.detail?'<div class="rd">'+esc(r.detail)+'</div>':'')+'<div class="rm"><span>'+esc(r.moduleLabel)+'</span><span>'+esc(r.author||'匿名')+'</span><span>'+fmtTime(r.updatedAt||r.createdAt)+'</span></div></div>';});h+='</div>';});
+  host.innerHTML=h;refreshPins();}
+function refreshPins(){document.querySelectorAll('.pin[data-pin]').forEach(function(p){if(p.parentNode)p.parentNode.removeChild(p);});
+  MODULES.forEach(function(m){var c=reviewState.requirements.filter(function(r){return r.scope==='module'&&r.moduleKey===m.key;}).length;if(!c)return;
+    var el=document.getElementById('sec'+m.key);if(!el)return;var band=el.querySelector('.sec-band')||el;
+    var p=document.createElement('span');p.className='pin';p.setAttribute('data-pin',m.key);p.setAttribute('data-runtime','1');p.textContent='📌'+c;
+    p.onclick=function(ev){ev.stopPropagation();openSummary();switchTab('req');};band.appendChild(p);});}
+function applyRequirements(){renderRequirements();}
+
+function updateStats(){document.getElementById('stAnno').textContent=reviewState.annotations.length;document.getElementById('stReq').textContent=reviewState.requirements.length;var ac=document.getElementById('stAns');if(ac)ac.textContent=answeredCount()+'/'+totalQuestions();}
+
+/* 汇总抽屉 */
+var curTab='anno';
+function openSummary(){openMask('drawerMask');document.getElementById('drawer').classList.add('open');renderSummary();}
+function closeSummary(){document.getElementById('drawer').classList.remove('open');closeMask('drawerMask');}
+function switchTab(t){curTab=t;document.querySelectorAll('.drawer-tabs button').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-tab')===t);});renderSummary();}
+function renderSummary(){var host=document.getElementById('drawerBody'),h='';
+  if(curTab==='anno'){var orphan=reviewState.annotations.filter(function(a){return !document.querySelector('[data-anchor="'+a.anchorId+'"]');}),normal=reviewState.annotations.filter(function(a){return document.querySelector('[data-anchor="'+a.anchorId+'"]');});
+    if(!reviewState.annotations.length)h='<div class="sum-empty">暂无批注</div>';if(orphan.length){h+='<div class="sum-h" style="color:var(--vermilion)">⚠ 无法定位的批注('+orphan.length+')</div>';orphan.forEach(function(a){h+=sumAnno(a,true);});}if(normal.length){h+='<div class="sum-h">全部批注('+normal.length+')</div>';normal.forEach(function(a){h+=sumAnno(a,false);});}}
+  else{if(!reviewState.requirements.length)h='<div class="sum-empty">暂无补充需求</div>';reviewState.requirements.forEach(function(r){h+='<div class="sum-item" onclick="openReqModal(\''+r.id+'\',\'\')"><div class="sa">'+esc(r.moduleLabel)+(r.priority?' · '+esc(r.priority):'')+'</div><div class="sb"><b>'+esc(r.title||'(无标题)')+'</b>'+(r.detail?'\n'+esc(r.detail):'')+'</div></div>';});}
+  host.innerHTML=h||'<div class="sum-empty">暂无</div>';}
+function sumAnno(a,orphan){return '<div class="sum-item'+(orphan?' sum-orphan':'')+'" onclick="'+(orphan?'':'focusAnchor(\''+a.anchorId+'\')')+'"><div class="sa">'+esc(a.anchorLabel||a.anchorId)+(orphan?' <span style="color:var(--vermilion)">(锚点已失效)</span>':'')+'</div><div class="sb">'+esc(a.text)+'</div><div class="sm">'+esc(a.author||'匿名')+' · '+fmtTime(a.updatedAt||a.createdAt)+'</div></div>';}
+function focusAnchor(aid){closeSummary();var el=document.querySelector('[data-anchor="'+aid+'"]');if(!el)return;el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash');setTimeout(function(){el.classList.remove('flash');},1400);}
+
+function exportMd(){var L=['# 对账 · 开票 · 付款 串流程问题清单 — 评审汇总','','导出:'+fmtTime(nowIso()),'','## 答复('+answeredCount()+'/'+totalQuestions()+')',''];
+  for(var si=0;si<QUESTIONS.length;si++){var S=QUESTIONS[si];L.push('### '+S.sec+' '+S.name);
+    for(var qi=0;qi<S.qs.length;qi++){var q=S.qs[qi];var qid=S.sec+(qi+1);var a=reviewState.answers&&reviewState.answers[qid];
+      var ansTxt='（未答）';if(a&&a.choice!=null){ansTxt=(a.choice==='other')?('其他:'+(a.other||'')):(typeof a.choice==='number'&&q.o[a.choice]!=null?q.o[a.choice]:'');if(a.choice!=='other'&&a.other)ansTxt+=' / 备注:'+a.other;}else if(a&&a.other){ansTxt='其他:'+a.other;}
+      L.push('- **'+qid+'** ['+q.pri+'] '+q.t);L.push('    → '+ansTxt);}
+    L.push('');}
+  L.push('## 批注('+reviewState.annotations.length+')','');
+  reviewState.annotations.forEach(function(a){L.push('- **'+(a.anchorLabel||a.anchorId)+'**:'+a.text+'  _( '+(a.author||'匿名')+' )_');});
+  L.push('','## 补充需求('+reviewState.requirements.length+')','');reviewState.requirements.forEach(function(r){L.push('- **['+(r.priority||'-')+'] '+r.moduleLabel+' · '+(r.title||'(无标题)')+'**'+(r.detail?':'+r.detail.replace(/\n/g,' '):'')+'  _( '+(r.author||'匿名')+' )_');});
+  var md=L.join('\n'),b=new Blob([md],{type:'text/markdown;charset=utf-8'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download='对账付款_补充确认清单_无合同_评审汇总.md';document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(u);},1200);showToast('已导出评审汇总(.md)');}
+
+function openMask(id){document.getElementById(id).classList.add('open');}
+function closeMask(id){document.getElementById(id).classList.remove('open');}
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeMask('annoMask');closeMask('reqMask');closeSummary();}if((e.ctrlKey||e.metaKey)&&(e.key==='s'||e.key==='S')){e.preventDefault();save();}});
+function dismissGuide(){var n=document.getElementById('guideNever');if(n&&n.checked){try{localStorage.setItem('dz-crossflow-v1-guide-hide','1');}catch(e){}}var c=document.getElementById('guideCard');if(c)c.style.display='none';}
+var _tt=null;function showToast(msg){var t=document.createElement('div');t.className='toast';t.setAttribute('data-runtime','1');t.textContent=msg;document.body.appendChild(t);if(_tt)clearTimeout(_tt);_tt=setTimeout(function(){if(t.parentNode)t.parentNode.removeChild(t);},3600);}
+function checkAnchors(){var seen={};document.querySelectorAll('[data-anchor]').forEach(function(el){var a=el.getAttribute('data-anchor');if(seen[a]){try{console.warn('dup anchor',a);}catch(e){}}seen[a]=1;});}
+function assignAnchors(){var es=document.querySelectorAll('[data-anno-target]');for(var i=0;i<es.length;i++)es[i].setAttribute('data-anchor','a'+i);}
+function maybeOfferDraft(){var raw;try{raw=localStorage.getItem(DRAFT_KEY);}catch(e){return;}if(!raw)return;try{var d=JSON.parse(raw);if(d&&d.savedAt&&(!reviewState.meta.lastSaved||d.savedAt>reviewState.meta.lastSaved)){if(confirm('检测到本机未保存草稿(暂存于 '+fmtTime(d.savedAt)+'),用草稿?\n确定=草稿,取消=文件已存内容。')){reviewState=normalizeState(d.state);reviewState.meta.lastSaved='';applyAnswers();applyAnnotations();renderRequirements();updateStats();markDirty();showToast('已恢复草稿,记得点保存写回文件');}}}catch(e){}}
+function init(){renderQuestions();bindAnswers();assignAnchors();reviewState=loadState();checkAnchors();applyCapabilityUI();applyAnswers();applyAnnotations();renderRequirements();updateStats();dirty=false;setSaveState('clean');
+  var lf=document.getElementById('lastSavedFoot');if(lf&&reviewState.meta.lastSaved)lf.textContent='　最近保存:'+fmtTime(reviewState.meta.lastSaved);
+  try{if(localStorage.getItem('dz-crossflow-v1-guide-hide')==='1'){var c=document.getElementById('guideCard');if(c)c.style.display='none';}}catch(e){}
+  maybeOfferDraft();window.addEventListener('beforeunload',function(e){if(dirty){e.preventDefault();e.returnValue='';return '';}});}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+</script>
+
+
+</body></html>
