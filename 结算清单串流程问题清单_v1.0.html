@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>结算清单 · 成本利润核算 · 串流程待确认问题清单 v1.0</title>
+<style>
+:root{
+  --indigo:#1E3A5F;--indigo-d:#152A45;--indigo-l:#2C5180;
+  --linen:#F5EDDC;--linen-d:#E8DCC0;--canvas:#FBF8F2;
+  --rust:#D17A40;--rust-d:#B86530;--vermilion:#C04042;
+  --teal:#3E8E7E;--amber:#C8901E;
+  --gray-9:#1F1F22;--gray-7:#37383C;--gray-5:#6F7178;
+  --gray-3:#B5B7BD;--gray-1:#E5E2DA;--gray-0:#F4F1EA;
+  --font:"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;
+  --r:4px;--r-lg:6px;
+  --shadow-sm:0 1px 2px rgba(30,58,95,.05);--shadow:0 2px 8px rgba(30,58,95,.10);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:13px/1.55 var(--font);color:var(--gray-9);background:#EEEAE0}
+a{color:var(--indigo);text-decoration:none}
+
+.topbar{position:fixed;top:0;left:0;right:0;min-height:48px;height:auto;background:var(--indigo);color:#fff;display:flex;align-items:center;padding:0 24px;z-index:100;border-bottom:3px solid var(--rust);box-shadow:0 2px 8px rgba(0,0,0,.15);flex-wrap:wrap;gap:12px}
+.topbar .logo{font-size:15px;font-weight:600}
+.topbar .logo small{font-size:11px;color:#C9D6E5;margin-left:8px;font-weight:400}
+.topbar .stat{display:flex;gap:10px;font-size:12px;color:#dde6f0;margin-left:auto}
+.topbar .stat b{color:#fff}
+.topbar .acts{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.t-btn{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.28);padding:5px 11px;border-radius:14px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.t-btn:hover{background:rgba(255,255,255,.24)}
+.t-btn.on{background:var(--rust);border-color:var(--rust)}
+.t-btn.save .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--teal);margin-right:5px;vertical-align:middle}
+.t-btn.save.dirty .dot{background:var(--amber)}
+.t-btn.save.fail .dot{background:var(--vermilion)}
+.mode-tag{font-size:11px;color:#cdd8e6;white-space:nowrap}
+
+.sidenav{position:fixed;top:48px;left:0;bottom:0;width:240px;background:#fff;border-right:1px solid var(--gray-1);overflow-y:auto;padding:14px 0;font-size:13px}
+.sidenav .nav-cat{padding:10px 16px 4px;color:var(--gray-5);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;border-top:1px solid var(--gray-1);margin-top:6px}
+.sidenav a.nav-dj{display:block;padding:8px 16px;color:var(--indigo);font-weight:600;font-size:13px;border-left:3px solid transparent}
+.sidenav a.nav-dj:hover{background:var(--linen);border-left-color:var(--rust)}
+.sidenav a.nav-sub{display:block;padding:5px 16px;color:var(--gray-7);font-size:12.5px;border-left:3px solid transparent}
+.sidenav a.nav-sub:hover{background:var(--canvas);color:var(--indigo);border-left-color:var(--gray-3)}
+
+.main{margin-left:240px;padding:64px 32px 80px;max-width:1180px}
+.dj-block{padding:28px 32px;background:linear-gradient(135deg,var(--indigo) 0%,var(--indigo-l) 100%);color:#fff;border-radius:8px;margin:30px 0 16px}
+.dj-block h1{font-size:22px;margin-bottom:6px;font-weight:600}
+.dj-block h1 small{font-family:"SF Mono",Monaco,monospace;color:#C9D6E5;font-size:14px;font-weight:400;margin-left:8px}
+.dj-block .dj-summary{font-size:13px;color:#D5DDE8;line-height:1.7}
+
+.biz-notes{background:#FFF7EA;border:1px solid #EDD8A8;border-left:3px solid var(--amber);border-radius:4px;padding:12px 16px;margin:0 0 14px}
+.biz-notes b{color:#7A5810;font-size:12.5px}
+.biz-notes ul{list-style:none;margin-top:6px}
+.biz-notes li{font-size:12px;color:#5C4307;line-height:1.7;padding:2px 0 2px 18px;position:relative}
+.biz-notes li:before{content:"▸";position:absolute;left:6px;color:var(--amber)}
+
+.flow-box{font-family:"SF Mono",Consolas,monospace;white-space:pre;overflow-x:auto;background:var(--indigo-d);color:#e8eef5;padding:14px 16px;border-radius:8px;font-size:12px;line-height:1.65;margin:0 0 14px}
+
+.prio-card{background:#fff;border:1px solid var(--gray-1);border-top:3px solid var(--rust);border-radius:6px;padding:14px 18px;margin:0 0 18px;box-shadow:var(--shadow-sm)}
+.prio-card h3{color:var(--indigo);font-size:14px;margin-bottom:8px}
+.prio-list{list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:4px 22px}
+.prio-list li{font-size:12.5px;color:var(--gray-7);line-height:1.7;padding-left:6px}
+.prio-list li b{color:var(--rust-d)}
+@media(max-width:880px){.prio-list{grid-template-columns:1fr}}
+
+.sec-band{display:flex;gap:12px;align-items:flex-start;background:linear-gradient(135deg,var(--linen) 0%,var(--canvas) 100%);border:1px solid var(--linen-d);border-left:4px solid var(--rust);border-radius:6px;padding:12px 16px;margin:26px 0 12px}
+.sec-letter{flex-shrink:0;width:30px;height:30px;background:var(--rust);color:#fff;border-radius:6px;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.sec-name{color:var(--indigo);font-size:15px;font-weight:600}
+.sec-sum{color:var(--gray-7);font-size:12px;line-height:1.6;margin-top:3px}
+
+.q-block{background:#fff;border:1px solid var(--gray-1);border-radius:6px;padding:13px 16px;margin:0 0 11px;box-shadow:var(--shadow-sm)}
+.q-block:hover{border-color:var(--gray-3)}
+.q-top{display:flex;align-items:flex-start;gap:8px;margin-bottom:6px}
+.q-no{flex-shrink:0;background:var(--indigo);color:#fff;font-weight:700;font-size:12px;padding:1px 8px;border-radius:4px;font-family:"SF Mono",monospace}
+.q-pri{flex-shrink:0;font-size:10.5px;font-weight:600;padding:1px 7px;border-radius:9px}
+.q-pri-high{background:#FBEAEA;color:var(--vermilion)}
+.q-pri-mid{background:#FBF1DA;color:#7A5810}
+.q-pri-low{background:#E8F4F0;color:var(--teal)}
+.q-title{font-size:13.5px;font-weight:600;color:var(--gray-9);line-height:1.5}
+.q-scene{font-size:12px;color:var(--gray-7);background:var(--gray-0);border-radius:5px;padding:7px 10px;margin:0 0 9px;line-height:1.65}
+.q-scene b{color:var(--indigo)}
+.q-opts{display:flex;flex-direction:column;gap:4px}
+.q-opt{display:flex;align-items:flex-start;gap:8px;border:1px solid var(--gray-1);border-radius:5px;padding:7px 11px;cursor:pointer;background:var(--canvas)}
+.q-opt:hover{border-color:var(--rust);background:#FFF7EA}
+.q-opt input[type=radio]{margin-top:2px;flex-shrink:0;width:14px;height:14px;accent-color:var(--rust);cursor:pointer}
+.q-otext{font-size:12.5px;color:var(--gray-9);line-height:1.55}
+.q-opt-rec{border-color:#C8E2D9;background:#F1FAF7}
+.q-rec{font-style:normal;background:var(--teal);color:#fff;font-size:10px;padding:0 6px;border-radius:8px;margin-left:5px;font-weight:600}
+.q-opt-other{background:#fff}
+.q-other-in{flex:1;min-width:120px;border:1px solid var(--gray-1);border-radius:4px;padding:3px 8px;font:12.5px var(--font);color:var(--gray-9)}
+.q-ref{font-size:11px;color:var(--gray-5);margin-top:8px;line-height:1.6;border-top:1px dashed var(--gray-1);padding-top:6px}
+.q-ref b{color:var(--gray-7)}
+.q-src{font-size:11px;color:var(--gray-5);margin-top:6px;line-height:1.9}
+.q-src b{color:var(--gray-7);margin-right:4px}
+.src-chip{display:inline-block;background:var(--linen);color:var(--indigo);border:1px solid var(--linen-d);border-radius:11px;padding:2px 9px;margin:0 5px 4px 0;font-size:11px;text-decoration:none;white-space:nowrap}
+.src-chip:hover{background:#FFF7EA;border-color:var(--rust);color:var(--rust-d)}
+
+.btn{display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:4px;font-size:12.5px;cursor:pointer;border:1px solid;line-height:1.5;font-family:inherit}
+.btn-c{background:var(--rust);color:#fff;border-color:var(--rust)}
+.btn-s{background:#fff;color:var(--gray-7);border-color:var(--gray-1)}
+.btn-g{background:#fff;color:var(--vermilion);border-color:var(--gray-1)}
+.btn-sm{padding:3px 9px;font-size:11.5px}
+.badge{display:inline-block;padding:1px 7px;border-radius:9px;font-size:10.5px;font-weight:500;border:1px solid}
+.badge-w{background:#FBF1DA;color:var(--amber);border-color:#EDD8A8}
+
+/* 评审工具:批注 / 补充需求 / 保存 */
+.guide-card{background:#fff;border:1px solid var(--gray-1);border-left:3px solid var(--teal);border-radius:6px;padding:12px 16px;margin:0 0 16px;font-size:12.5px;color:var(--gray-7);box-shadow:var(--shadow-sm)}
+.guide-card b{color:var(--indigo)}
+.guide-card .gc-f{margin-top:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;font-size:11.5px;color:var(--gray-5)}
+.anno-icon{display:none;position:absolute;top:-9px;right:-9px;background:var(--rust);color:#fff;width:22px;height:22px;border-radius:50%;font-size:12px;line-height:22px;text-align:center;cursor:pointer;z-index:60;box-shadow:0 2px 5px rgba(0,0,0,.25);border:none;font-family:inherit;padding:0}
+.anno-icon.has{background:var(--vermilion)}
+body.anno-on .anno-icon{display:block}
+body.anno-on [data-anchor]{outline:1px dashed rgba(209,122,64,.4);outline-offset:3px;border-radius:4px}
+body.anno-on [data-anchor]:hover{outline:1px solid var(--rust)}
+.pin{display:inline-block;font-size:11px;background:var(--rust);color:#fff;border-radius:20px;padding:1px 8px;margin-left:6px;cursor:pointer}
+.flash{animation:flash 1.3s ease}
+@keyframes flash{0%,100%{background:transparent}25%{background:var(--linen)}}
+
+textarea,input[type=text]{font-family:inherit;font-size:13px;border:1px solid var(--gray-1);border-radius:5px;padding:7px 9px;background:#fff;color:var(--gray-9);width:100%}
+textarea{resize:vertical;min-height:60px;line-height:1.6}
+label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
+.modal select{font-family:inherit;font-size:13px;border:1px solid var(--gray-1);border-radius:5px;padding:7px 9px;background:#fff;color:var(--gray-9);width:100%}
+
+.req-zone{margin-top:8px}
+.req-group .rgh{font-weight:600;color:var(--indigo);font-size:13px;margin:12px 0 5px;border-bottom:1px dashed var(--gray-3);padding-bottom:4px}
+.req-item{background:#fff;border:1px solid var(--gray-1);border-radius:6px;padding:11px 13px;margin:7px 4px;box-shadow:var(--shadow-sm);position:relative}
+.req-item .rt{font-weight:600;color:var(--gray-9)}
+.req-item .rd{font-size:13px;color:var(--gray-7);margin:4px 0;white-space:pre-wrap}
+.req-item .rm{font-size:11px;color:var(--gray-5);display:flex;gap:8px;flex-wrap:wrap}
+.req-item .ra{position:absolute;top:9px;right:10px;display:flex;gap:6px}
+.req-empty{color:var(--gray-3);font-size:13px;padding:10px 4px}
+
+.mask{position:fixed;inset:0;background:rgba(21,42,69,.46);display:none;z-index:200;align-items:center;justify-content:center;padding:20px}
+.mask.open{display:flex}
+.modal{background:#fff;border-radius:10px;width:520px;max-width:100%;max-height:88vh;overflow:auto;box-shadow:0 24px 60px rgba(0,0,0,.3)}
+.modal-h{padding:13px 18px;border-bottom:1px solid var(--gray-1);font-weight:700;color:var(--indigo-d);display:flex;justify-content:space-between;align-items:center}
+.modal-h .x{cursor:pointer;color:var(--gray-5);font-size:20px}
+.modal-b{padding:16px 18px}
+.modal-f{padding:12px 18px;border-top:1px solid var(--gray-1);display:flex;gap:8px;justify-content:flex-end;background:var(--gray-0)}
+.tgt{font-size:12px;color:var(--gray-5);background:var(--gray-0);border-radius:5px;padding:7px 10px;margin-bottom:8px}
+.anno-li{border:1px solid var(--gray-1);border-radius:5px;padding:8px 10px;margin:6px 0;background:var(--gray-0)}
+.anno-li .al-t{white-space:pre-wrap;font-size:13px}.anno-li .al-m{font-size:11px;color:var(--gray-5);margin-top:4px;display:flex;gap:8px}
+
+.drawer{position:fixed;top:0;right:0;bottom:0;width:400px;max-width:92vw;background:var(--canvas);box-shadow:-4px 0 24px rgba(0,0,0,.18);transform:translateX(100%);transition:transform .22s;z-index:210;display:flex;flex-direction:column}
+.drawer.open{transform:none}
+.drawer-h{padding:13px 16px;background:var(--indigo);color:#fff;font-weight:700;display:flex;justify-content:space-between;align-items:center}
+.drawer-h .x{cursor:pointer;font-size:20px}
+.drawer-tabs{display:flex;border-bottom:1px solid var(--gray-1);background:#fff}
+.drawer-tabs button{flex:1;border:none;background:none;padding:9px 4px;cursor:pointer;font-family:inherit;font-size:12.5px;color:var(--gray-5);border-bottom:2px solid transparent}
+.drawer-tabs button.on{color:var(--indigo);border-bottom-color:var(--rust);font-weight:600}
+.drawer-b{flex:1;overflow:auto;padding:12px 14px}
+.sum-item{background:#fff;border:1px solid var(--gray-1);border-radius:5px;padding:9px 11px;margin:7px 0;cursor:pointer;box-shadow:var(--shadow-sm)}
+.sum-item:hover{border-color:var(--rust)}
+.sum-item .sa{font-size:11px;color:var(--indigo-l);font-weight:600;margin-bottom:3px}
+.sum-item .sb{font-size:13px;white-space:pre-wrap}
+.sum-item .sm{font-size:11px;color:var(--gray-5);margin-top:3px}
+.sum-orphan{border-color:var(--vermilion)!important}
+.sum-h{font-size:12px;font-weight:700;color:var(--gray-5);margin:10px 0 4px}
+.sum-empty{color:var(--gray-3);font-size:13px;padding:10px}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--indigo-d);color:#fff;padding:11px 20px;border-radius:24px;font-size:13px;box-shadow:var(--shadow);z-index:300;max-width:80vw}
+.foot{margin-top:26px;padding:14px 4px;border-top:1px solid var(--gray-1);font-size:11.5px;color:var(--gray-5);line-height:1.7}
+@media print{.topbar,.anno-icon,.drawer,.mask,.toast,.t-btn,.pin,.sidenav{display:none!important}.main{margin-left:0}}
+</style>
+</head><body class="">
+
+<div class="topbar">
+  <div class="logo">🪡 样衣制造管理系统<small>结算清单 · 成本利润核算 · 串流程问题清单 v1.0</small></div>
+  <div class="stat"><span>批注 <b id="stAnno">0</b></span><span>补充需求 <b id="stReq">0</b></span><span>已答 <b id="stAns">0/0</b></span></div>
+  <div class="acts">
+    <span class="mode-tag" id="modeTag">就地保存可用</span>
+    <button class="t-btn" id="btnAnno" onclick="toggleAnnoMode()">💬 批注：关</button>
+    <button class="t-btn" onclick="openReqModal(null,'')">➕ 补充需求</button>
+    <button class="t-btn" onclick="openSummary()">📋 汇总</button>
+    <button class="t-btn" onclick="exportMd()">📥 导出</button>
+    <button class="t-btn save" id="btnSave" onclick="save()"><span class="dot"></span><span id="saveLabel">保存</span></button>
+  </div>
+</div>
+
+<nav class="sidenav">
+  <div class="nav-cat" style="border:none;margin-top:0">串流程问题 · 21 题</div>
+  <a class="nav-dj" href="#overview">📍 总览 + 数据流图</a>
+  <a class="nav-dj" href="#prio">⭐ 优先回答 TOP 8</a>
+  <a class="nav-sub" href="#secA">　A 结算单位与粒度(主键)</a>
+  <a class="nav-sub" href="#secB">　B 成本归集与数量错配分摊</a>
+  <a class="nav-sub" href="#secC">　C 含税/无票计税·出口退税</a>
+  <a class="nav-sub" href="#secD">　D 出口收入侧:发票/收汇/汇率</a>
+  <a class="nav-sub" href="#secE">　E 结算生命周期:重算/锁定/异常</a>
+  <a class="nav-sub" href="#secF">　F 下游报表/KPI/权限</a>
+  <a class="nav-sub" href="#extra">　业务方补充意见</a>
+</nav>
+
+<main class="main">
+  <div id="overview" class="dj-block" style="background:linear-gradient(135deg,var(--rust) 0%,#A85423 100%)">
+    <h1>📊 结算清单 · 成本利润核算 · 串流程待确认问题清单<small>v1.0</small></h1>
+    <p class="dj-summary">
+    ⑧结算清单(07 设计稿)是订单履约的<b>最末端核算</b>,把成本侧(⑥对账付款)与收入侧(出口发票/收汇)在<b>款号</b>上拼起来算毛利/净利。<b>本清单不是确认设计稿对不对,而是把这条线上『跨模块拼接处尚未定死的业务规则与异常分支』全部交业务/财务拍板</b>——不抠清楚,后面编码就会一堆坑。按 6 个接缝梳理:① 结算主键/粒度(多订单多客户多汇率) ② 成本归集与数量错配分摊 ③ 含税/无票计税·出口退税 ④ 出口收入侧链路(发票/收汇/多汇率) ⑤ 结算生命周期(重算/锁定/异常) ⑥ 下游报表/权限。共 <b>21 题</b>,分 6 段,数据口径参照真实「24918 款 结算单.xlsx」。<br>
+    <b>怎么用</b>:每题点选一个选项(标 <span style="background:var(--teal);padding:1px 6px;border-radius:8px;font-size:11px">推荐</span> 的是我方建议),不满意可选「其他」并填写;每题下方 <b>📍出处</b> 链接可新标签打开对应设计稿定位;任意位置可 💬批注、可 ➕补充需求;填完点右上角 <b>💾 保存</b> 将答复写回本 HTML 文件回传即可。
+    </p>
+  </div>
+
+  <div class="guide-card" id="guideCard">
+    <b>💡 操作提示</b>　① 直接在每题点选答案(单选),或选「其他」补充;② 顶栏「💬 批注」开启后可对任意题目/段落写批注;③「➕ 补充需求」记录清单未覆盖的新需求;④ 改动后顶栏保存点变 <b style="color:var(--amber)">橙点</b>,点「💾 保存」写回文件。
+    <div class="gc-f"><span id="guideSaveTip">Chrome/Edge 经本地服务器可直接写回原文件</span><label style="display:flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" id="guideNever"> 不再提示 <button class="btn btn-s btn-sm" onclick="dismissGuide()">知道了</button></label></div>
+  </div>
+
+  <div class="flow-box" data-anno-target data-anno-label="结算数据流图">⑥对账付款(该款全部已付明细) ──汇总──▶ 总货款:含税 Σ合计 / 不含税(按税率换算)
+        │
+  ⑨船务 · 实际出口数量(出货件数) ─┐
+                               ├─▶ 【结算清单 JS-…】 成本单价 = 总货款 ÷ 出货件数(含税/不含税各一)
+  ③订单 · 客户/币种/数量 ─────────┘
+                               ▼
+  财务录入:发票金额(USD) / 实际收汇金额(USD) / 结算汇率 + 运杂/快邮/打样/其它费用
+                               ▼
+  结算金额 = 收汇金额 × 汇率 ─▶ 毛利 = 结算金额 − 总货款(不含税) ─▶ 财务及管理费 7% ─▶ 净利(负=亏损预警)
+                               ▼
+  保本汇率 = 成本单价 ÷ 美金单价(美金单价 = 发票金额 ÷ 出货件数)</div>
+
+  <div class="prio-card" id="prio">
+    <h3>⭐ 时间有限?建议优先回答这 8 题(最影响后续开发)</h3>
+    <ul class="prio-list">
+      <li><b>A1</b> 结算主键/粒度:款号 还是 款号+订单/客户?(多客户多汇率怎么算一个毛利)</li>
+      <li><b>B1</b> 快邮/打样/运杂 走没走对账付款?(账实一致 vs 结算手录)</li>
+      <li><b>B2</b> 出货&lt;投产时成本怎么分摊?未出货料成本进不进?</li>
+      <li><b>C1</b> 无票成本按含税全额计入(防毛利虚高)?</li>
+      <li><b>C3</b> 出口退税纳不纳入利润?怎么算、何时确认?</li>
+      <li><b>D1</b> 要不要补『出口发票/收汇』子模块做留痕?</li>
+      <li><b>D2</b> 结算金额基数:实际收汇 还是 发票金额?</li>
+      <li><b>E2</b> 结算何时可锁定?锁定后上游变了怎么办?</li>
+    </ul>
+  </div>
+
+  <div id="qRoot"></div>
+
+  <div class="sec-band" id="extra"><span class="sec-letter" style="background:var(--teal)">✎</span><div><div class="sec-name">业务方补充意见</div><div class="sec-sum">清单未覆盖到的疑问、新需求,点这里或顶栏「➕ 补充需求」添加;也可对任一题目开「💬 批注」。</div></div></div>
+  <div class="req-zone" id="reqZone"></div>
+  <div style="text-align:right;margin-top:8px"><button class="btn btn-s btn-sm" onclick="openReqModal(null,'')">＋ 新增补充需求</button></div>
+
+  <div class="foot">结算清单 · 成本利润核算 串流程问题清单 v1.0 · 题目按 6 个跨模块接缝梳理,口径参照真实「24918 款 结算单.xlsx」与 07/06 设计稿、架构蓝图 v0.1 · 共 21 题(A 结算粒度 4 / B 成本归集 4 / C 计税退税 3 / D 收入收汇 4 / E 生命周期 4 / F 报表权限 2)。本页可点选作答 + 批注 + 补充需求 + 📍出处链接,保存即写回本文件。<span id="lastSavedFoot"></span></div>
+</main>
+
+<!-- 批注 Modal -->
+<div class="mask" id="annoMask"><div class="modal">
+  <div class="modal-h"><span id="annoTitle">批注</span><span class="x" onclick="closeMask('annoMask')">×</span></div>
+  <div class="modal-b"><div class="tgt" id="annoTarget"></div><div id="annoList"></div>
+    <label class="fl">新增批注</label><textarea id="annoText" placeholder="写下意见…"></textarea>
+    <label class="fl">批注人(可选)</label><input type="text" id="annoAuthor" placeholder="姓名"></div>
+  <div class="modal-f"><button class="btn btn-s" onclick="closeMask('annoMask')">取消</button><button class="btn btn-c" onclick="addAnno()">＋ 添加批注</button></div>
+</div></div>
+
+<!-- 补充需求 Modal -->
+<div class="mask" id="reqMask"><div class="modal">
+  <div class="modal-h"><span id="reqTitle">补充需求</span><span class="x" onclick="closeMask('reqMask')">×</span></div>
+  <div class="modal-b">
+    <label class="fl">归属(挂到哪一段)</label>
+    <select id="reqScope"><option value="">全局</option><option value="A">A 结算粒度</option><option value="B">B 成本归集</option><option value="C">C 计税口径</option><option value="D">D 收入收汇</option><option value="E">E 生命周期</option><option value="F">F 报表权限</option></select>
+    <label class="fl">标题</label><input type="text" id="reqTitleIn" placeholder="一句话概括需求">
+    <label class="fl">详述</label><textarea id="reqDetail" placeholder="详细说明…"></textarea>
+    <label class="fl">优先级</label><select id="reqPriority"><option value="">未定</option><option>P0</option><option>P1</option><option>P2</option></select>
+    <label class="fl">提出人(可选)</label><input type="text" id="reqAuthor" placeholder="姓名">
+  </div>
+  <div class="modal-f"><button class="btn btn-g" id="reqDelBtn" onclick="deleteReqFromModal()" style="display:none">删除</button><button class="btn btn-s" onclick="closeMask('reqMask')">取消</button><button class="btn btn-c" onclick="saveReq()">保存</button></div>
+</div></div>
+
+<!-- 汇总抽屉 -->
+<div class="mask" id="drawerMask" onclick="closeSummary()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-h"><span>📋 评审汇总</span><span class="x" onclick="closeSummary()">×</span></div>
+  <div class="drawer-tabs"><button class="on" data-tab="anno" onclick="switchTab('anno')">批注</button><button data-tab="req" onclick="switchTab('req')">补充需求</button></div>
+  <div class="drawer-b" id="drawerBody"></div>
+</div>
+
+<script id="review-data" type="application/json">{"schemaVersion": 1, "meta": {"docId": "结算清单串流程问题清单_v1.0", "boardVersion": "v1.0", "reviewer": "", "lastSaved": ""}, "annotations": [], "requirements": [], "answers": {}}</script>
+
+<script id="questions-data" type="application/json"></script>
+
+<script>
+/* ===== 题库 ===== */
+var QUESTIONS=[{"sec": "A", "name": "结算单位与粒度(结算主键)", "summary": "这是结算最底层的数据模型决定。一个款号常跨多订单/多客户/多次出货/多张出口发票,单价、币种、汇率都可能不同。本段定结算单的主键与拆分粒度——它直接决定『多客户多汇率时一个毛利怎么算得出来』。", "qs": [{"pri": "高", "t": "结算单的核算单位(主键)是什么?一个款号跨多订单/多客户/多次出货/多汇率时,按什么粒度结算?", "s": "真实Excel是『一款一结算单』。但同款若分属多张订单/多个客户/多次出货,单价币种汇率不同,汇总成一个毛利会失真。", "o": ["款号+订单(客户)分别结算:各自的出货/收汇/汇率独立核算,避免多客户多汇率混算", "一款一单汇总:同款全部订单/出货/收汇并成一张,多汇率按加权平均", "按出口发票/出货批:一张出口发票(或一次出货)一张结算,最细粒度", "其他:____"], "rec": 0, "ref": "结算主键/粒度——决定数据模型", "src": [{"href": "07-结算清单设计稿_v1.0.html#list", "label": "07·结算清单列表"}, {"href": "07-结算清单设计稿_v1.0.html#new", "label": "07·基础信息"}]}, {"pri": "中", "t": "同一结算单位内多次出货/多笔收汇时,出货件数与收汇是累计合并成一个总数,还是逐笔保留再汇总?", "s": "分批出货、分期收汇很常见。合并成单值会丢掉各笔汇率/时点,逐笔保留更准但更复杂。", "o": ["逐笔保留(出货批/收汇笔)并汇总:成本单价用累计出货件数,结算金额=Σ(各笔收汇×各自汇率)", "只记合计件数与合计收汇,单一汇率", "其他:____"], "rec": 0, "ref": "多批出货/多笔收汇的累计方式", "src": [{"href": "07-结算清单设计稿_v1.0.html#new", "label": "07·出货件数"}, {"href": "07-结算清单设计稿_v1.0.html#profit", "label": "07·收汇信息"}]}, {"pri": "中", "t": "一张出口发票/订单含多个款号(拼柜/混款)时,收汇与成本如何拆分到各款?", "s": "出口常拼柜,一票多款。收汇是整票到账,需拆分到款才能算各款毛利。", "o": ["收汇按各款出口金额(发票)占比分摊到款;成本各款独立归集", "整票合并一张结算单、不拆款(只看整票毛利)", "收汇按各款出货件数占比分摊", "其他:____"], "rec": 0, "ref": "拼柜混款的收汇/成本拆分", "src": [{"href": "07-结算清单设计稿_v1.0.html#new", "label": "07·基础信息"}, {"href": "07-结算清单设计稿_v1.0.html#profit", "label": "07·毛利对比"}]}, {"pri": "中", "t": "结算单编号规则(JS-?)如何与对账(DZ-)/付款编号体系对齐?一款多结算单时如何区分?", "s": "需与已定的 DZ-款号-序号 等编号体系统一,且支持同款多单。", "o": ["JS-款号-序号(同款多单加序号或订单号后缀);无款号场景用占位", "JS-订单号-序号(按订单)", "JS-YYYYMMDD-序号(按日期)", "其他:____"], "rec": 0, "ref": "结算单编号规则与体系对齐", "src": [{"href": "07-结算清单设计稿_v1.0.html#list", "label": "07·结算清单列表"}, {"href": "06-对账付款设计稿_v1.4.html#grp-dz-rule", "label": "06·编号规则"}]}]}, {"sec": "B", "name": "成本归集与数量错配分摊", "summary": "总货款来自对账付款,但各物料采购数量不齐(定数/实发/耗损),且部分费用(快邮/打样/运杂)是否经对账付款存疑。本段定:期间费用的来源(账实一致 vs 手录)、出货≠投产时的成本分摊、补料回灌、未付行处理。", "qs": [{"pri": "高", "t": "快邮/打样/运杂等期间费用走没走对账付款?数据从哪来?(真实单里它们在利润表单列,不在对账单)", "s": "货代/加工在对账单进总货款;快邮/打样/运杂在利润表单列扣减。若这些费用没走对账付款而在结算手录,就会账实不一致。", "o": ["期间费用走『无合同费用→对账付款』按款号归集后带入利润表单列(账实一致),不在结算手录", "期间费用在结算单直接手录(不经对账付款,便利但账实分离)", "全部费用都经对账付款、结算不手录任何费用", "其他:____"], "rec": 0, "ref": "期间费用来源:经对账付款 vs 结算手录", "src": [{"href": "07-结算清单设计稿_v1.0.html#profit", "label": "07·利润表单列费用"}, {"href": "06-对账付款设计稿_v1.4.html#grp-dz-nocontract", "label": "06·无合同费用"}]}, {"pri": "高", "t": "数量错配分摊:出货<投产(短装/扣留/次品/样品留存)时,总货款全摊到已出货件数(单价虚高),还是按比例?未出货部分料成本如何处置?", "s": "各物料按定数/实发采购(含耗损);成本单价=总货款÷出货件数。若投产600只出550,料是按600+耗损买的,全摊到550会虚高。", "o": ["成本单价=已归集总货款÷实际出货件数(单价即反映耗损与短装的真实单位成本);可分离的未出货/次品料成本转『损耗/库存』、不进本结算单价,需业务标注", "全摊到出货件数,不区分未出货部分(最简单)", "按 出货件数÷投产件数 比例摊,未出货部分留待后续", "其他:____"], "rec": 0, "ref": "出货≠投产时的成本分摊口径", "src": [{"href": "07-结算清单设计稿_v1.0.html#unit", "label": "07·成本单价"}, {"href": "07-结算清单设计稿_v1.0.html#cost", "label": "07·成本明细"}]}, {"pri": "中", "t": "补料/补单成本(可能出货后才付款)是否回灌进已结算的本款总货款?", "s": "生产中常补料,成本可能在结算之后才发生。", "o": ["补料按相关款号归集,结算后到账的成本触发结算单『刷新重算』或进版本修订(见E段)", "补料另立结算单、不并入原款", "补料不进结算、仅线下台账", "其他:____"], "rec": 0, "ref": "补料成本回灌口径", "src": [{"href": "07-结算清单设计稿_v1.0.html#cost", "label": "07·成本明细(刷新付款汇总)"}]}, {"pri": "中", "t": "成本明细里『未付款』行(如本例箱贴)是否计入总货款?对成本单价偏低如何提示?", "s": "真实单中未付款的『箱贴』未计入总货款。", "o": ["未付款行不计入总货款,但灰显标『未付·不计入』,并提示『该款尚有N笔未付,成本可能偏低』", "已对账即计入(不论付没付)", "不显示未付款行", "其他:____"], "rec": 0, "ref": "未付行是否计入 + 提示", "src": [{"href": "07-结算清单设计稿_v1.0.html#cost", "label": "07·成本明细(未付·不计入)"}]}]}, {"sec": "C", "name": "含税/不含税 · 无票计税 · 出口退税", "summary": "毛利对标『不含税成本』的前提是进项税可抵扣;无票成本无进项可抵,口径不同会让毛利虚高。出口退税往往才是出口服装的真实利润来源(本例净利-1434极可能靠退税转正)。本段定计税口径与退税是否纳入。", "qs": [{"pri": "高", "t": "无票(现金无票)成本无进项可抵,应按含税全额计入成本(而非÷税率),确认?", "s": "毛利=结算金额−不含税成本,前提是增值税进项可抵扣;无票成本抵不了,若也按不含税计入会少算成本、毛利虚高。", "o": ["有票成本用不含税计入(进项可抵);无票/不可抵成本按含税全额计入(不÷税率)——毛利对标可抵后的实际成本", "一律按不含税计入(无票也÷1.13)", "一律按含税计入", "其他:____"], "rec": 0, "ref": "无票成本计税口径(防毛利虚高)", "src": [{"href": "07-结算清单设计稿_v1.0.html#cost", "label": "07·成本明细"}, {"href": "07-结算清单设计稿_v1.0.html#profit", "label": "07·毛利对比"}]}, {"pri": "高", "t": "不含税换算税率:固定÷1.13,还是按各行实际税率(材料13/货代6或9/加工13/免税)?", "s": "真实单统一÷1.13,但各料/费税率不同。", "o": ["按各行实际税率换算(对账/发票带税率时取之),缺税率默认13%;不一刀切1.13", "全部固定÷1.13(对齐现Excel)", "由财务按行手填税率", "其他:____"], "rec": 0, "ref": "不含税换算税率口径", "src": [{"href": "07-结算清单设计稿_v1.0.html#cost", "label": "07·成本明细(含税/不含税)"}]}, {"pri": "高", "t": "出口退税是否纳入结算利润?如纳入,退税额怎么算、何时确认?(出口服装常13%退税,常是真实利润来源)", "s": "本例净利-1434为负,出口退税很可能才是真实利润。退税=可退税不含税采购额×退税率。", "o": ["纳入:退税额=可退税不含税采购额×各料退税率(服装常13%),报关后预估、退税到账确认;净利分『含退税/不含退税』两看", "暂不纳入:本期只到净利(不含退税),退税线下/下期", "仅登记退税额、不并入净利,仅供参考", "其他:____"], "rec": 0, "ref": "出口退税是否纳入及算法/确认时点", "src": [{"href": "07-结算清单设计稿_v1.0.html#profit", "label": "07·毛利对比(净利)"}]}]}, {"sec": "D", "name": "出口收入侧:发票 / 收汇 / 汇率", "summary": "成本侧有完整 采购→对账→付款 链路,收入侧(客户出口发票→收汇)目前没有上游模块、收汇全靠人工录。本段定:要不要补收入侧留痕、结算金额基数(实际收汇 vs 发票)、多笔多汇率取法、汇率来源。", "qs": [{"pri": "高", "t": "客户出口发票+收汇怎么处理?是否补『出口发票/收汇』子模块做留痕,还是结算里人工录收汇?", "s": "成本侧链路完整,收入侧无上游模块,收汇人工录会缺留痕、难追溯。", "o": ["补『出口发票/收汇』子模块:订单→出口发票→收汇逐笔留痕,结算按结算单位汇总收汇,支持多笔多汇率", "维持现状:收汇金额/汇率在结算手填,不做上游留痕(对齐Excel)", "本期手录跑通、收入侧模块排下期", "其他:____"], "rec": 0, "ref": "收入侧链路:补模块 vs 手录", "src": [{"href": "07-结算清单设计稿_v1.0.html#new", "label": "07·基础信息"}, {"href": "07-结算清单设计稿_v1.0.html#profit", "label": "07·收汇信息"}]}, {"pri": "高", "t": "结算金额基数用『实际收汇金额』还是『出口发票金额』?实际收汇≠发票(银行费/短收/分期/多笔)时怎么记?", "s": "真实单结算金额=实际收汇2921.64×汇率,而非发票金额3012。差额常来自银行费/短收。", "o": ["结算金额=Σ(各笔实际收汇×该笔汇率)(以实际到账为准);发票金额仅用于算美金单价与开票核对;银行费/短收作差异行", "用发票金额×单一汇率", "两者都算并展示差额", "其他:____"], "rec": 0, "ref": "结算金额基数:实际收汇 vs 发票", "src": [{"href": "07-结算清单设计稿_v1.0.html#profit", "label": "07·毛利对比(结算金额)"}]}, {"pri": "高", "t": "一个结算单位多次收汇、汇率不同时,『结算汇率』取加权平均还是逐笔计?", "s": "分期收汇各笔汇率不同,单一汇率无法准确表达。", "o": ["逐笔收汇×各自汇率求和=结算金额,另展示加权平均汇率供参考", "取加权平均汇率×总收汇", "取最后一笔/约定汇率", "其他:____"], "rec": 0, "ref": "多笔收汇多汇率的取法", "src": [{"href": "07-结算清单设计稿_v1.0.html#profit", "label": "07·收汇信息"}]}, {"pri": "中", "t": "汇率与币种来源:收汇币种(USD为主?)、结算汇率手填还是取系统/银行结汇水单汇率?", "s": "真实单USD、汇率6.82(实际结汇)。", "o": ["币种以USD为主可扩展;汇率以银行实际结汇水单为准(可从收汇记录带入),允许手填留痕", "仅USD、手填", "系统当日汇率、不可改", "其他:____"], "rec": 0, "ref": "币种与汇率来源", "src": [{"href": "07-结算清单设计稿_v1.0.html#profit", "label": "07·收汇信息"}]}]}, {"sec": "E", "name": "结算生命周期:触发 / 重算 / 锁定 / 异常", "summary": "总货款与出货件数是陆续增长的(慢付款、分批出货、补料),结算是个动态过程。本段定:何时建、何时算『可锁定』、锁定后上游再变怎么办、能否部分结算、以及退运/退款/索赔等异常如何冲减。", "qs": [{"pri": "高", "t": "结算单生成时机与建单人:出货后即建(待收汇)还是收汇后才建?谁建(业务/财务)?", "s": "07列表有『待收汇/已结算』状态。", "o": ["出货后业务可建(带入付款汇总+出货件数、先出成本单价,状态『待收汇』);收汇后财务补收汇出毛利,状态『已结算』;两步走", "收汇后财务一次性建", "出货后系统自动建草稿", "其他:____"], "rec": 0, "ref": "结算单生成时机与建单人", "src": [{"href": "07-结算清单设计稿_v1.0.html#list", "label": "07·列表(待收汇/已结算)"}, {"href": "07-结算清单设计稿_v1.0.html#profit", "label": "07·财务收汇"}]}, {"pri": "高", "t": "锁定与重算:总货款/出货件数会陆续增长。什么时候算『结算完成可锁定』?锁定后上游再变怎么办?", "s": "慢付款/分批出货/补料导致结算是移动目标,必须有锁定与重算规则,否则账目反复。", "o": ["『已结算』为软锁:上游变更触发『待重算』提示,需财务复核后才覆盖并留版本(旧版留痕);彻底关账后只能红冲重开", "一旦结算即硬锁,变更只能新建结算单", "永远跟随上游实时变、不锁", "其他:____"], "rec": 0, "ref": "结算锁定与重算生命周期", "src": [{"href": "07-结算清单设计稿_v1.0.html#flow", "label": "07·页面联动"}]}, {"pri": "中", "t": "是否允许同款分批(按出货批/收汇笔)部分结算,最后汇总?还是必须一次性总结算?", "s": "长周期订单分批出货收汇,部分结算可早出毛利但更复杂。", "o": ["允许分批部分结算(每批出货+对应收汇各出一次毛利),并提供该款『累计/汇总』视图", "必须等全部出货收汇齐后一次性结算", "按A1粒度一单到底、不另分批", "其他:____"], "rec": 0, "ref": "部分结算 vs 一次性结算", "src": [{"href": "07-结算清单设计稿_v1.0.html#list", "label": "07·结算清单列表"}]}, {"pri": "中", "t": "异常分支:退运/退款/客户索赔/扣款,如何在结算体现并冲减毛利?", "s": "退运、客户索赔扣款会冲减收入或增加成本,必须能进结算。", "o": ["退运冲减出货件数与对应成本;退款/索赔/扣款作收入侧负数行冲减结算金额;均留痕并触发重算", "异常只线下处理、不进结算", "仅作备注、不冲数", "其他:____"], "rec": 0, "ref": "退运/退款/索赔的冲减口径", "src": [{"href": "07-结算清单设计稿_v1.0.html#profit", "label": "07·毛利对比"}, {"href": "07-结算清单设计稿_v1.0.html#flow", "label": "07·页面联动"}]}]}, {"sec": "F", "name": "下游:报表 / KPI / 权限", "summary": "结算之上的利润汇总看板与敏感数据权限。", "qs": [{"pri": "中", "t": "利润汇总报表:是否产出按款号/客户/月份的毛利率、净利、亏损款预警?口径与老系统利润表对齐?", "s": "单款核算之上通常需要利润汇总。", "o": ["产出利润汇总(款号/客户/月份的毛利率/净利/亏损预警),口径对齐老系统利润表(本稿已按真实24918款对齐),支持导出", "仅单款结算、汇总报表下期再做", "其他:____"], "rec": 0, "ref": "利润汇总报表/KPI", "src": [{"href": "07-结算清单设计稿_v1.0.html#list", "label": "07·列表(利润汇总)"}, {"href": "07-结算清单设计稿_v1.0.html#logic", "label": "07·字段与计算逻辑"}]}, {"pri": "中", "t": "权限与可见性:成本(采购价/供应商)与利润(毛利/净利)较敏感,谁能看/能改?", "s": "成本价、毛利净利涉密,需角色控权。", "o": ["成本明细只读(改回对账付款);毛利/净利/成本价按角色控可见(财务/管理可见,业务可见本款基本口径);结算锁定与红冲限财务/管理", "全部角色可见可改", "仅财务可见", "其他:____"], "rec": 0, "ref": "成本/利润数据权限", "src": [{"href": "07-结算清单设计稿_v1.0.html#logic", "label": "07·字段与计算逻辑"}]}]}];
+
+/* ===== 评审系统(批注 / 补充需求 / 答复 / 保存回 HTML) ===== */
+var MODULES=[{key:'A',label:'结算粒度'},{key:'B',label:'成本归集'},{key:'C',label:'计税口径'},{key:'D',label:'收入收汇'},{key:'E',label:'生命周期'},{key:'F',label:'报表权限'}];
+function moduleLabel(k){for(var i=0;i<MODULES.length;i++){if(MODULES[i].key===k)return MODULES[i].label;}return '全局';}
+var reviewState=freshState();var dirty=false;var fileHandle=null;
+var capabilities={fsAccess:('showSaveFilePicker' in window)&&window.isSecureContext};
+var DRAFT_KEY='dz-crossflow-v1-draft::'+(location.pathname||'b');
+function freshState(){return {schemaVersion:1,meta:{docId:'结算清单串流程问题清单_v1.0',boardVersion:'v1.0',reviewer:'',lastSaved:''},annotations:[],requirements:[],answers:{}};}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function uid(p){return p+'_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,6);}
+function nowIso(){return new Date().toISOString();}
+function fmtTime(iso){if(!iso)return '';try{var d=new Date(iso),p=function(n){return(n<10?'0':'')+n;};return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());}catch(e){return '';}}
+var idOk=function(s){return typeof s==='string'&&/^[A-Za-z0-9_-]+$/.test(s);};
+function loadState(){var n=document.getElementById('review-data'),raw=n?n.textContent:'';if(!raw||!raw.trim())return freshState();try{return normalizeState(JSON.parse(raw));}catch(e){window.__rawCorrupt=raw;showToast('⚠ 已保存数据损坏,已用空白表打开');return freshState();}}
+function normalizeState(o){var b=freshState();if(!o||typeof o!=='object')return b;if(o.meta)for(var k in o.meta){if(o.meta.hasOwnProperty(k))b.meta[k]=o.meta[k];}
+  if(Array.isArray(o.annotations))b.annotations=o.annotations.filter(function(a){return a&&idOk(a.id)&&idOk(a.anchorId)&&typeof a.text==='string';});
+  if(Array.isArray(o.requirements))b.requirements=o.requirements.filter(function(r){return r&&idOk(r.id);}).map(function(r){var mk=(r.scope==='module'&&idOk(r.moduleKey)&&MODULES.some(function(m){return m.key===r.moduleKey;}))?r.moduleKey:null;return {id:r.id,scope:mk?'module':'global',moduleKey:mk,moduleLabel:mk?moduleLabel(mk):'全局',title:String(r.title==null?'':r.title),detail:String(r.detail==null?'':r.detail),priority:(['P0','P1','P2'].indexOf(r.priority)>=0?r.priority:''),author:String(r.author==null?'':r.author),createdAt:r.createdAt||'',updatedAt:r.updatedAt||''};});
+  if(o.answers&&typeof o.answers==='object'){var na={};for(var qk in o.answers){if(!o.answers.hasOwnProperty(qk)||!idOk(qk))continue;var av=o.answers[qk];if(!av||typeof av!=='object')continue;var ch=av.choice;var okch=(ch===null||ch==='other'||(typeof ch==='number'&&ch>=0&&ch<50))?ch:null;na[qk]={choice:okch,other:typeof av.other==='string'?av.other.slice(0,2000):''};}b.answers=na;}
+  return b;}
+function flushStateToAnchor(){var s=JSON.stringify(reviewState);s=s.replace(/<\//g,'<\\/').replace(/<!--/g,'<\\u0021--');document.getElementById('review-data').textContent=s;}
+function serializeFullHTML(){flushStateToAnchor();var c=document.documentElement.cloneNode(true);
+  var rm=c.querySelectorAll('.anno-icon,[data-runtime],.toast');for(var i=0;i<rm.length;i++){if(rm[i].parentNode)rm[i].parentNode.removeChild(rm[i]);}
+  var on=c.querySelectorAll('.anno-on');for(var j=0;j<on.length;j++)on[j].classList.remove('anno-on');
+  var op=c.querySelectorAll('.mask.open,.drawer.open');for(var m=0;m<op.length;m++)op[m].classList.remove('open');
+  var qr=c.querySelector('#qRoot');if(qr)qr.innerHTML='';
+  return '<!DOCTYPE html>\n'+c.outerHTML;}
+function guessName(){try{var n=decodeURIComponent((location.pathname||'').split('/').pop()||'');if(n&&/\.html?$/i.test(n))return n;}catch(e){}return '结算清单串流程问题清单_v1.0.html';}
+function save(){var prev=reviewState.meta.lastSaved;reviewState.meta.lastSaved=nowIso();var html;try{html=serializeFullHTML();}catch(e){reviewState.meta.lastSaved=prev;showToast('⚠ 序列化失败:'+e.message);setSaveState('fail');return;}
+  setSaveState('busy');
+  if(capabilities.fsAccess){saveViaFSA(html).then(function(ok){if(ok==='abort'){reviewState.meta.lastSaved=prev;flushStateToAnchor();setSaveState(dirty?'dirty':'clean');return;}if(ok===true){markSaved('inplace',fileHandle&&fileHandle.name);}else{fallbackBlob(html);}}).catch(function(e){reviewState.meta.lastSaved=prev;showToast('⚠ 保存失败:'+(e&&e.message||e));setSaveState('fail');});}
+  else{fallbackBlob(html);}}
+function saveViaFSA(html){return (async function(){try{if(!fileHandle){fileHandle=await window.showSaveFilePicker({suggestedName:guessName(),types:[{description:'评审HTML',accept:{'text/html':['.html']}}]});}else{var p=await fileHandle.queryPermission({mode:'readwrite'});if(p!=='granted'){p=await fileHandle.requestPermission({mode:'readwrite'});}if(p!=='granted')throw new Error('no-perm');}var w=await fileHandle.createWritable();await w.write(html);await w.close();return true;}catch(e){if(e&&e.name==='AbortError')return 'abort';return false;}})();}
+function fallbackBlob(html){try{var b=new Blob([html],{type:'text/html;charset=utf-8'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=guessName();document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(u);},1500);markSaved('download');}catch(e){clipFallback(html);}}
+function clipFallback(html){if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(html).then(function(){markSaved('clip');},function(){manualCopy(html);});}else{manualCopy(html);}}
+function manualCopy(html){var ta=document.createElement('textarea');ta.value=html;ta.style.position='fixed';ta.style.top='8%';ta.style.left='5%';ta.style.width='90%';ta.style.height='70%';ta.style.zIndex=999;document.body.appendChild(ta);ta.focus();ta.select();showToast('请 Ctrl+A 全选、Ctrl+C 复制,粘到编辑器另存为 .html');ta.addEventListener('blur',function(){if(ta.parentNode)ta.parentNode.removeChild(ta);});setSaveState('clean');}
+function setSaveState(mode){var b=document.getElementById('btnSave'),l=document.getElementById('saveLabel');b.classList.remove('dirty','fail');if(mode==='busy'){l.textContent='保存中…';return;}if(mode==='fail'){b.classList.add('fail');l.textContent='保存失败,重试';return;}if(mode==='dirty'){b.classList.add('dirty');l.textContent='保存*';return;}l.textContent='保存';}
+function markDirty(){dirty=true;setSaveState('dirty');scheduleDraft();}
+var _dt=null;function scheduleDraft(){if(_dt)clearTimeout(_dt);_dt=setTimeout(function(){try{flushStateToAnchor();localStorage.setItem(DRAFT_KEY,JSON.stringify({savedAt:nowIso(),state:reviewState}));}catch(e){}},800);}
+function markSaved(mode,fn){if(mode==='inplace'){dirty=false;setSaveState('clean');try{localStorage.removeItem(DRAFT_KEY);}catch(e){}}else{dirty=true;setSaveState('dirty');}
+  var msg=mode==='inplace'?('✓ 已保存到文件「'+(fn||guessName())+'」 '+fmtTime(reviewState.meta.lastSaved)):mode==='download'?'⚠ 已下载新版本,请用它覆盖原文件(同名同目录);未覆盖前草稿已保留':mode==='clip'?'✓ 源码已复制,请粘贴另存覆盖原文件':'已保存';
+  showToast(msg);var lf=document.getElementById('lastSavedFoot');if(lf)lf.textContent='　最近保存:'+fmtTime(reviewState.meta.lastSaved)+(mode!=='inplace'?'(待覆盖原文件)':'');}
+function applyCapabilityUI(){var tag=document.getElementById('modeTag'),tip=document.getElementById('guideSaveTip');
+  if(capabilities.fsAccess){tag.textContent='就地保存可用';if(tip)tip.textContent='Chrome/Edge 经本地服务器可直接写回原文件';}
+  else{tag.textContent='下载模式';if(tip)tip.textContent='双击打开时保存=下载同名文件,用它覆盖原文件即可';}}
+
+/* 题目渲染 + 作答 */
+function priClass(p){return p==='高'?'high':p==='中'?'mid':'low';}
+var _MODMAP={"07-结算":"js","05-供应商门户":"mn","06-对账付款":"dz","04-合同":"hc","03-订单":"dd","02-客户报价":"bj","02-样衣":"yg","01-基础":"jc"};
+function _modOf(h){for(var k in _MODMAP){if(h.indexOf(k)>=0)return _MODMAP[k];}return "";}
+function chipNav(e,a){try{var mod=a.getAttribute("data-mod"),sel=a.getAttribute("data-sel");if(mod&&window.parent&&window.parent!==window&&window.parent.showDoc){e.preventDefault();window.parent.showDoc(mod,sel||null);return false;}}catch(_){}return true;}
+function srcChips(src){var out=[];for(var i=0;i<src.length;i++){var s=src[i];if(!s||!s.href)continue;var hp=String(s.href).split("#");var mod=_modOf(hp[0]);var sel=hp[1]?("#"+hp[1]):"";out.push('<a class="src-chip" href="'+esc(s.href)+'" target="_blank" rel="noopener" data-mod="'+mod+'" data-sel="'+esc(sel)+'" onclick="return chipNav(event,this)">📍 '+esc(s.label||s.href)+'</a>');}return out.join('');}
+function renderQuestions(){var root=document.getElementById('qRoot');if(!root)return;var html='';
+  for(var si=0;si<QUESTIONS.length;si++){var S=QUESTIONS[si];
+    html+='<div class="design-section" id="sec'+S.sec+'"><div class="sec-band" data-anno-target data-anno-label="'+esc('段 '+S.sec+' '+S.name)+'"><span class="sec-letter">'+S.sec+'</span><div><div class="sec-name">'+esc(S.name)+'</div><div class="sec-sum">'+esc(S.summary)+'</div></div></div>';
+    for(var qi=0;qi<S.qs.length;qi++){var q=S.qs[qi];var qid=S.sec+(qi+1);
+      html+='<div class="q-block" data-anno-target data-anno-label="'+esc(qid+' '+q.t.slice(0,22))+'">';
+      html+='<div class="q-top"><span class="q-no">'+qid+'</span><span class="q-pri q-pri-'+priClass(q.pri)+'">'+q.pri+'</span><span class="q-title">'+esc(q.t)+'</span></div>';
+      html+='<div class="q-scene"><b>场景</b> '+esc(q.s)+'</div>';
+      html+='<div class="q-opts" data-qid="'+qid+'">';
+      for(var oi=0;oi<q.o.length;oi++){var rec=(oi===q.rec);
+        html+='<label class="q-opt'+(rec?' q-opt-rec':'')+'"><input type="radio" name="'+qid+'" value="'+oi+'"><span class="q-otext">'+esc(q.o[oi])+(rec?' <em class="q-rec">推荐</em>':'')+'</span></label>';}
+      html+='<label class="q-opt q-opt-other"><input type="radio" name="'+qid+'" value="other"><span class="q-otext">其他:</span><input type="text" class="q-other-in" data-qid="'+qid+'" placeholder="补充你的答复…"></label>';
+      html+='</div>';
+      if(q.ref)html+='<div class="q-ref">🔗 <b>关联</b> '+esc(q.ref)+'</div>';
+      if(q.src&&q.src.length)html+='<div class="q-src"><b>📍 出处</b> '+srcChips(q.src)+'</div>';
+      html+='</div>';
+    }
+    html+='</div>';
+  }
+  root.innerHTML=html;}
+function ansFor(qid){if(!reviewState.answers)reviewState.answers={};if(!reviewState.answers[qid])reviewState.answers[qid]={choice:null,other:''};return reviewState.answers[qid];}
+function setChoice(qid,val){var a=ansFor(qid);a.choice=(val==='other')?'other':parseInt(val,10);markDirty();updateStats();}
+function setOther(qid,val){var a=ansFor(qid);a.other=val;var r=document.querySelector('input[name="'+qid+'"][value="other"]');if(val&&r&&!r.checked){r.checked=true;a.choice='other';}markDirty();updateStats();}
+function bindAnswers(){var root=document.getElementById('qRoot');if(!root)return;
+  root.addEventListener('change',function(e){var t=e.target;if(t&&t.tagName==='INPUT'&&t.type==='radio'&&t.name){setChoice(t.name,t.value);}});
+  root.addEventListener('input',function(e){var t=e.target;if(t&&t.className&&t.className.indexOf('q-other-in')>=0){setOther(t.getAttribute('data-qid'),t.value);}});}
+function applyAnswers(){if(!reviewState.answers)return;for(var qid in reviewState.answers){if(!reviewState.answers.hasOwnProperty(qid))continue;var a=reviewState.answers[qid];if(!a)continue;if(a.choice!=null){var v=(a.choice==='other')?'other':String(a.choice);var r=document.querySelector('input[name="'+qid+'"][value="'+v+'"]');if(r)r.checked=true;}if(a.other){var oi=document.querySelector('.q-other-in[data-qid="'+qid+'"]');if(oi)oi.value=a.other;}}}
+function answeredCount(){var c=0;if(reviewState.answers){for(var k in reviewState.answers){if(!reviewState.answers.hasOwnProperty(k))continue;var a=reviewState.answers[k];if(a&&(a.choice!=null||(a.other&&a.other.trim())))c++;}}return c;}
+function totalQuestions(){var n=0;for(var i=0;i<QUESTIONS.length;i++)n+=QUESTIONS[i].qs.length;return n;}
+
+/* 批注 */
+var annoOn=false,curAnchor=null;
+function toggleAnnoMode(){annoOn=!annoOn;document.body.classList.toggle('anno-on',annoOn);document.getElementById('btnAnno').textContent='💬 批注：'+(annoOn?'开':'关');document.getElementById('btnAnno').classList.toggle('on',annoOn);refreshAnnoIcons();}
+function refreshAnnoIcons(){var old=document.querySelectorAll('.anno-icon');old.forEach(function(n){if(n.parentNode)n.parentNode.removeChild(n);});if(!annoOn)return;
+  document.querySelectorAll('[data-anchor]').forEach(function(el){var aid=el.getAttribute('data-anchor');var cnt=reviewState.annotations.filter(function(a){return a.anchorId===aid;}).length;
+    var btn=document.createElement('button');btn.className='anno-icon'+(cnt?' has':'');btn.setAttribute('data-runtime','1');btn.textContent=cnt?('✓'+cnt):'💬';
+    btn.onclick=function(ev){ev.stopPropagation();openAnno(aid);};if(getComputedStyle(el).position==='static')el.style.position='relative';el.appendChild(btn);});}
+function anchorLabel(aid){var el=document.querySelector('[data-anchor="'+aid+'"]');return el?(el.getAttribute('data-anno-label')||aid):aid;}
+function anchorQuote(aid){var el=document.querySelector('[data-anchor="'+aid+'"]');if(!el)return '';return (el.innerText||el.textContent||'').replace(/\s+/g,' ').trim().slice(0,60);}
+function openAnno(aid){curAnchor=aid;document.getElementById('annoTitle').textContent='批注 · '+anchorLabel(aid);document.getElementById('annoTarget').innerHTML='<b>定位</b>:'+esc(anchorLabel(aid));document.getElementById('annoText').value='';document.getElementById('annoAuthor').value='';renderAnnoList(aid);openMask('annoMask');setTimeout(function(){document.getElementById('annoText').focus();},40);}
+function renderAnnoList(aid){var list=reviewState.annotations.filter(function(a){return a.anchorId===aid;}),h=document.getElementById('annoList');if(!list.length){h.innerHTML='<div class="req-empty">该处暂无批注</div>';return;}
+  h.innerHTML=list.map(function(a){return '<div class="anno-li"><div class="al-t">'+esc(a.text)+'</div><div class="al-m"><span>'+esc(a.author||'匿名')+'</span><span>'+fmtTime(a.updatedAt||a.createdAt)+'</span><a href="javascript:void(0)" onclick="editAnno(\''+a.id+'\')">编辑</a> <a href="javascript:void(0)" style="color:var(--vermilion)" onclick="delAnno(\''+a.id+'\')">删除</a></div></div>';}).join('');}
+function addAnno(){var txt=document.getElementById('annoText').value.trim();if(!txt){showToast('请先输入批注内容');return;}
+  reviewState.annotations.push({id:uid('an'),anchorId:curAnchor,anchorLabel:anchorLabel(curAnchor),quote:anchorQuote(curAnchor),text:txt,author:document.getElementById('annoAuthor').value.trim(),status:'open',createdAt:nowIso(),updatedAt:nowIso()});
+  document.getElementById('annoText').value='';renderAnnoList(curAnchor);refreshAnnoIcons();markDirty();updateStats();}
+function editAnno(id){var a=reviewState.annotations.filter(function(x){return x.id===id;})[0];if(!a)return;var nv=prompt('编辑批注:',a.text);if(nv==null)return;var t=nv.trim();if(!t){showToast('内容不能为空,如需移除请删除');return;}a.text=t;a.updatedAt=nowIso();renderAnnoList(a.anchorId);refreshAnnoIcons();markDirty();updateStats();}
+function delAnno(id){if(!confirm('确认删除这条批注?'))return;var a=reviewState.annotations.filter(function(x){return x.id===id;})[0];reviewState.annotations=reviewState.annotations.filter(function(x){return x.id!==id;});if(a)renderAnnoList(a.anchorId);refreshAnnoIcons();markDirty();updateStats();}
+function applyAnnotations(){refreshAnnoIcons();}
+
+/* 补充需求 */
+var editingReqId=null;
+function openReqModal(id,scope){editingReqId=id;document.getElementById('reqTitle').textContent=id?'编辑补充需求':'新增补充需求';document.getElementById('reqDelBtn').style.display=id?'':'none';
+  if(id){var r=reviewState.requirements.filter(function(x){return x.id===id;})[0];if(!r)return;document.getElementById('reqScope').value=r.scope==='module'?r.moduleKey:'';document.getElementById('reqTitleIn').value=r.title||'';document.getElementById('reqDetail').value=r.detail||'';document.getElementById('reqPriority').value=r.priority||'';document.getElementById('reqAuthor').value=r.author||'';}
+  else{document.getElementById('reqScope').value=scope||'';document.getElementById('reqTitleIn').value='';document.getElementById('reqDetail').value='';document.getElementById('reqPriority').value='';document.getElementById('reqAuthor').value='';}
+  openMask('reqMask');}
+function saveReq(){var sv=document.getElementById('reqScope').value,title=document.getElementById('reqTitleIn').value.trim(),detail=document.getElementById('reqDetail').value.trim();if(!title&&!detail){showToast('请至少填写标题或详述');return;}
+  var rec={scope:sv?'module':'global',moduleKey:sv||null,moduleLabel:sv?moduleLabel(sv):'全局',title:title,detail:detail,priority:document.getElementById('reqPriority').value,author:document.getElementById('reqAuthor').value.trim(),updatedAt:nowIso()};
+  if(editingReqId){var r=reviewState.requirements.filter(function(x){return x.id===editingReqId;})[0];if(r)for(var k in rec)r[k]=rec[k];}else{rec.id=uid('req');rec.createdAt=nowIso();reviewState.requirements.push(rec);}
+  closeMask('reqMask');renderRequirements();markDirty();updateStats();}
+function deleteReqFromModal(){if(!editingReqId)return;if(!confirm('确认删除这条补充需求?'))return;reviewState.requirements=reviewState.requirements.filter(function(x){return x.id!==editingReqId;});closeMask('reqMask');renderRequirements();markDirty();updateStats();}
+function quickDelReq(id){if(!confirm('确认删除?'))return;reviewState.requirements=reviewState.requirements.filter(function(x){return x.id!==id;});renderRequirements();markDirty();updateStats();}
+function renderRequirements(){var host=document.getElementById('reqZone');if(!reviewState.requirements.length){host.innerHTML='<div class="req-empty">暂无补充需求。点上方「＋ 新增」或顶栏「➕ 补充需求」添加。</div>';refreshPins();return;}
+  var groups={};reviewState.requirements.forEach(function(r){var k=r.scope==='module'?r.moduleKey:'__g';(groups[k]=groups[k]||[]).push(r);});
+  var order=['__g'].concat(MODULES.map(function(m){return m.key;})),h='';
+  order.forEach(function(k){var arr=groups[k];if(!arr||!arr.length)return;var name=k==='__g'?'全局':moduleLabel(k);h+='<div class="req-group"><div class="rgh">'+esc(name)+' ('+arr.length+')</div>';
+    arr.forEach(function(r){h+='<div class="req-item"><div class="ra"><button class="btn btn-s btn-sm" onclick="openReqModal(\''+r.id+'\',\'\')">编辑</button><button class="btn btn-g btn-sm" onclick="quickDelReq(\''+r.id+'\')">删</button></div><div class="rt">'+(r.priority?'<span class="badge badge-w">'+esc(r.priority)+'</span> ':'')+esc(r.title||'(无标题)')+'</div>'+(r.detail?'<div class="rd">'+esc(r.detail)+'</div>':'')+'<div class="rm"><span>'+esc(r.moduleLabel)+'</span><span>'+esc(r.author||'匿名')+'</span><span>'+fmtTime(r.updatedAt||r.createdAt)+'</span></div></div>';});h+='</div>';});
+  host.innerHTML=h;refreshPins();}
+function refreshPins(){document.querySelectorAll('.pin[data-pin]').forEach(function(p){if(p.parentNode)p.parentNode.removeChild(p);});
+  MODULES.forEach(function(m){var c=reviewState.requirements.filter(function(r){return r.scope==='module'&&r.moduleKey===m.key;}).length;if(!c)return;
+    var el=document.getElementById('sec'+m.key);if(!el)return;var band=el.querySelector('.sec-band')||el;
+    var p=document.createElement('span');p.className='pin';p.setAttribute('data-pin',m.key);p.setAttribute('data-runtime','1');p.textContent='📌'+c;
+    p.onclick=function(ev){ev.stopPropagation();openSummary();switchTab('req');};band.appendChild(p);});}
+function applyRequirements(){renderRequirements();}
+
+function updateStats(){document.getElementById('stAnno').textContent=reviewState.annotations.length;document.getElementById('stReq').textContent=reviewState.requirements.length;var ac=document.getElementById('stAns');if(ac)ac.textContent=answeredCount()+'/'+totalQuestions();}
+
+/* 汇总抽屉 */
+var curTab='anno';
+function openSummary(){openMask('drawerMask');document.getElementById('drawer').classList.add('open');renderSummary();}
+function closeSummary(){document.getElementById('drawer').classList.remove('open');closeMask('drawerMask');}
+function switchTab(t){curTab=t;document.querySelectorAll('.drawer-tabs button').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-tab')===t);});renderSummary();}
+function renderSummary(){var host=document.getElementById('drawerBody'),h='';
+  if(curTab==='anno'){var orphan=reviewState.annotations.filter(function(a){return !document.querySelector('[data-anchor="'+a.anchorId+'"]');}),normal=reviewState.annotations.filter(function(a){return document.querySelector('[data-anchor="'+a.anchorId+'"]');});
+    if(!reviewState.annotations.length)h='<div class="sum-empty">暂无批注</div>';if(orphan.length){h+='<div class="sum-h" style="color:var(--vermilion)">⚠ 无法定位的批注('+orphan.length+')</div>';orphan.forEach(function(a){h+=sumAnno(a,true);});}if(normal.length){h+='<div class="sum-h">全部批注('+normal.length+')</div>';normal.forEach(function(a){h+=sumAnno(a,false);});}}
+  else{if(!reviewState.requirements.length)h='<div class="sum-empty">暂无补充需求</div>';reviewState.requirements.forEach(function(r){h+='<div class="sum-item" onclick="openReqModal(\''+r.id+'\',\'\')"><div class="sa">'+esc(r.moduleLabel)+(r.priority?' · '+esc(r.priority):'')+'</div><div class="sb"><b>'+esc(r.title||'(无标题)')+'</b>'+(r.detail?'\n'+esc(r.detail):'')+'</div></div>';});}
+  host.innerHTML=h||'<div class="sum-empty">暂无</div>';}
+function sumAnno(a,orphan){return '<div class="sum-item'+(orphan?' sum-orphan':'')+'" onclick="'+(orphan?'':'focusAnchor(\''+a.anchorId+'\')')+'"><div class="sa">'+esc(a.anchorLabel||a.anchorId)+(orphan?' <span style="color:var(--vermilion)">(锚点已失效)</span>':'')+'</div><div class="sb">'+esc(a.text)+'</div><div class="sm">'+esc(a.author||'匿名')+' · '+fmtTime(a.updatedAt||a.createdAt)+'</div></div>';}
+function focusAnchor(aid){closeSummary();var el=document.querySelector('[data-anchor="'+aid+'"]');if(!el)return;el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash');setTimeout(function(){el.classList.remove('flash');},1400);}
+
+function exportMd(){var L=['# 对账 · 开票 · 付款 串流程问题清单 — 评审汇总','','导出:'+fmtTime(nowIso()),'','## 答复('+answeredCount()+'/'+totalQuestions()+')',''];
+  for(var si=0;si<QUESTIONS.length;si++){var S=QUESTIONS[si];L.push('### '+S.sec+' '+S.name);
+    for(var qi=0;qi<S.qs.length;qi++){var q=S.qs[qi];var qid=S.sec+(qi+1);var a=reviewState.answers&&reviewState.answers[qid];
+      var ansTxt='（未答）';if(a&&a.choice!=null){ansTxt=(a.choice==='other')?('其他:'+(a.other||'')):(typeof a.choice==='number'&&q.o[a.choice]!=null?q.o[a.choice]:'');if(a.choice!=='other'&&a.other)ansTxt+=' / 备注:'+a.other;}else if(a&&a.other){ansTxt='其他:'+a.other;}
+      L.push('- **'+qid+'** ['+q.pri+'] '+q.t);L.push('    → '+ansTxt);}
+    L.push('');}
+  L.push('## 批注('+reviewState.annotations.length+')','');
+  reviewState.annotations.forEach(function(a){L.push('- **'+(a.anchorLabel||a.anchorId)+'**:'+a.text+'  _( '+(a.author||'匿名')+' )_');});
+  L.push('','## 补充需求('+reviewState.requirements.length+')','');reviewState.requirements.forEach(function(r){L.push('- **['+(r.priority||'-')+'] '+r.moduleLabel+' · '+(r.title||'(无标题)')+'**'+(r.detail?':'+r.detail.replace(/\n/g,' '):'')+'  _( '+(r.author||'匿名')+' )_');});
+  var md=L.join('\n'),b=new Blob([md],{type:'text/markdown;charset=utf-8'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download='对账付款串流程问题清单_评审汇总.md';document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(u);},1200);showToast('已导出评审汇总(.md)');}
+
+function openMask(id){document.getElementById(id).classList.add('open');}
+function closeMask(id){document.getElementById(id).classList.remove('open');}
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeMask('annoMask');closeMask('reqMask');closeSummary();}if((e.ctrlKey||e.metaKey)&&(e.key==='s'||e.key==='S')){e.preventDefault();save();}});
+function dismissGuide(){var n=document.getElementById('guideNever');if(n&&n.checked){try{localStorage.setItem('dz-crossflow-v1-guide-hide','1');}catch(e){}}var c=document.getElementById('guideCard');if(c)c.style.display='none';}
+var _tt=null;function showToast(msg){var t=document.createElement('div');t.className='toast';t.setAttribute('data-runtime','1');t.textContent=msg;document.body.appendChild(t);if(_tt)clearTimeout(_tt);_tt=setTimeout(function(){if(t.parentNode)t.parentNode.removeChild(t);},3600);}
+function checkAnchors(){var seen={};document.querySelectorAll('[data-anchor]').forEach(function(el){var a=el.getAttribute('data-anchor');if(seen[a]){try{console.warn('dup anchor',a);}catch(e){}}seen[a]=1;});}
+function assignAnchors(){var es=document.querySelectorAll('[data-anno-target]');for(var i=0;i<es.length;i++)es[i].setAttribute('data-anchor','a'+i);}
+function maybeOfferDraft(){var raw;try{raw=localStorage.getItem(DRAFT_KEY);}catch(e){return;}if(!raw)return;try{var d=JSON.parse(raw);if(d&&d.savedAt&&(!reviewState.meta.lastSaved||d.savedAt>reviewState.meta.lastSaved)){if(confirm('检测到本机未保存草稿(暂存于 '+fmtTime(d.savedAt)+'),用草稿?\n确定=草稿,取消=文件已存内容。')){reviewState=normalizeState(d.state);reviewState.meta.lastSaved='';applyAnswers();applyAnnotations();renderRequirements();updateStats();markDirty();showToast('已恢复草稿,记得点保存写回文件');}}}catch(e){}}
+function init(){renderQuestions();bindAnswers();assignAnchors();reviewState=loadState();checkAnchors();applyCapabilityUI();applyAnswers();applyAnnotations();renderRequirements();updateStats();dirty=false;setSaveState('clean');
+  var lf=document.getElementById('lastSavedFoot');if(lf&&reviewState.meta.lastSaved)lf.textContent='　最近保存:'+fmtTime(reviewState.meta.lastSaved);
+  try{if(localStorage.getItem('dz-crossflow-v1-guide-hide')==='1'){var c=document.getElementById('guideCard');if(c)c.style.display='none';}}catch(e){}
+  maybeOfferDraft();window.addEventListener('beforeunload',function(e){if(dirty){e.preventDefault();e.returnValue='';return '';}});}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+</script>
+
+</body></html>

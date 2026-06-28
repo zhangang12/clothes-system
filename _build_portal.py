@@ -24,6 +24,8 @@ DOC_FILES = {
     'js':  os.path.join(BASE, '07-结算清单设计稿_v1.0.html'),
     'mnq': os.path.join(BASE, '门户串流程问题清单_v1.0.html'),
     'dzq': os.path.join(BASE, '对账付款串流程问题清单_v1.0.html'),
+    'jsq': os.path.join(BASE, '结算清单串流程问题清单_v1.0.html'),
+    'qc':  os.path.join(BASE, '样衣系统全流程问题确认清单_v1.0.html'),
     'dzq2':os.path.join(BASE, '对账付款_补充确认清单_v1.0.html'),
     'rev2':os.path.join(BASE, '下游模块_业务反馈修订说明_v2.html'),
 }
@@ -207,6 +209,8 @@ iframe#doc{flex:1;width:100%;border:none;background:#fff}
     <div class="it" data-q="contract" onclick="showQ('contract')"><span class="ic">📋</span><div>合同串流程问题清单 v1.0<span class="tag-ok">已定稿</span><small>按推荐项确认</small></div></div>
     <div class="it" data-doc="mnq" onclick="showDoc('mnq')"><span class="ic">📋</span><div>门户串流程问题清单 v1.0<span class="tag-ok">已定稿</span><small>18 题 · 业务回填</small></div></div>
     <div class="it" data-doc="dzq" onclick="showDoc('dzq')"><span class="ic">📋</span><div>对账付款串流程问题清单 v1.0<span class="tag-ok">已定稿</span><small>21 题</small></div></div>
+    <div class="it" data-doc="jsq" onclick="showDoc('jsq')"><span class="ic">📋</span><div>结算清单串流程问题清单 v1.0<span class="tag-ok">新增</span><small>21 题·6接缝</small></div></div>
+    <div class="it" data-doc="qc" onclick="showDoc('qc')"><span class="ic">🗂️</span><div>全流程问题确认清单 v1.0<span class="tag-ok">总纲</span><small>56题·9主题归并</small></div></div>
     <div class="it" data-doc="dzq2" onclick="showDoc('dzq2')"><span class="ic">📋</span><div>对账付款·补充确认清单 v1.0<span class="tag-ok">已定稿</span><small>9 题 · 编号/账期等</small></div></div>
     <div class="it" data-doc="rev2" onclick="showDoc('rev2')"><span class="ic">📝</span><div>下游模块·业务反馈修订说明 v2<small>04/05/06 改动记录</small></div></div>
   </div></div>
@@ -240,6 +244,8 @@ iframe#doc{flex:1;width:100%;border:none;background:#fff}
       <div class="card" onclick="showQ('contract')"><div class="ct">📋 合同串流程问题清单 v1.0 <span style="color:var(--teal);font-size:11px">已定稿</span></div><div class="cd">合同接入订单/基础资料/样衣报价的问题(全部按推荐项经业务确认、已落盘进合同 v1.3),每题带 UI 出处链接。</div></div>
       <div class="card" onclick="showDoc('mnq')"><div class="ct">📋 门户串流程问题清单 v1.0 <span style="color:var(--teal);font-size:11px">已定稿</span></div><div class="cd">门户接入合同/订单的 18 题(账号·盖章·发货·对账·权限),业务已回填;每题带 📍出处直链 05/04 设计稿。</div></div>
       <div class="card" onclick="showDoc('dzq')"><div class="ct">📋 对账付款串流程问题清单 v1.0 <span style="color:var(--teal);font-size:11px">已定稿</span></div><div class="cd">对账付款接入门户/合同的 21 题(编号/对账组织/审批/发票账期/付款),业务已逐题答复。</div></div>
+      <div class="card" onclick="showDoc('jsq')"><div class="ct">📋 结算清单串流程问题清单 v1.0 <span style="color:var(--rust);font-size:11px">新增</span></div><div class="cd">结算清单接入对账付款/船务/出口收入侧的 21 题,按 6 个跨模块接缝梳理(结算主键·数量错配分摊·无票计税·出口退税·收汇多汇率·结算锁定),待业务/财务拍板。</div></div>
+      <div class="card" onclick="showDoc('qc')"><div class="ct">🗂️ 全流程问题确认清单 v1.0 <span style="color:var(--rust);font-size:11px">总纲·新增</span></div><div class="cd">把散落在 6 份模块清单的约170条业务规则,按 9 条全流程主题(编号体系/引用一致性/耗用损耗/价格成本/状态流转/审批权限/门户闭环/结算/迁移报表)归并为 56 题,弥补 UI 设计稿跨模块接缝的缺口,交业务一次确认。</div></div>
       <div class="card" onclick="showDoc('dzq2')"><div class="ct">📋 对账付款·补充确认清单 v1.0 <span style="color:var(--teal);font-size:11px">已定稿</span></div><div class="cd">收口编号统一(DZ-/FH-/PR-款号-序号)、账期90/45、二级审批等 9 题,业务已确认,06 已落地 v1.3。</div></div>
     </div>
   </div></div>
@@ -257,7 +263,7 @@ var DOCB64={};/*__DOCB64__*/
 /*__QORDER__*/
 /*__QCONTRACT__*/
 var Q_TRI=/*__TRIJSON__*/;
-var DOCMETA={jc:{name:'基础资料设计稿 v1.3'},bj:{name:'客户报价设计稿 v1.3'},yg:{name:'样衣管理设计稿 v1.3'},dd:{name:'订单设计稿 v1.0（已定版）'},hc:{name:'合同设计稿 v1.3（已定稿）'},rev:{name:'三模块·串流程修订说明'},ddq:{name:'订单串流程问题清单 v1.0(可填写版)'},hcq:{name:'合同串流程问题清单 v1.0(可填写版)'},mn:{name:'供应商门户设计稿 v2.2（已定稿）'},dz:{name:'对账付款设计稿 v1.4（已定稿）'},js:{name:'结算清单设计稿 v1.0'},mnq:{name:'门户串流程问题清单 v1.0(可填写版·已定稿)'},dzq:{name:'对账付款串流程问题清单 v1.0(可填写版·已定稿)'},dzq2:{name:'对账付款·补充确认清单 v1.0(可填写版·已定稿)'},rev2:{name:'下游模块·业务反馈修订说明 v2'}};
+var DOCMETA={jc:{name:'基础资料设计稿 v1.3'},bj:{name:'客户报价设计稿 v1.3'},yg:{name:'样衣管理设计稿 v1.3'},dd:{name:'订单设计稿 v1.0（已定版）'},hc:{name:'合同设计稿 v1.3（已定稿）'},rev:{name:'三模块·串流程修订说明'},ddq:{name:'订单串流程问题清单 v1.0(可填写版)'},hcq:{name:'合同串流程问题清单 v1.0(可填写版)'},mn:{name:'供应商门户设计稿 v2.2（已定稿）'},dz:{name:'对账付款设计稿 v1.4（已定稿）'},js:{name:'结算清单设计稿 v1.0'},mnq:{name:'门户串流程问题清单 v1.0(可填写版·已定稿)'},dzq:{name:'对账付款串流程问题清单 v1.0(可填写版·已定稿)'},jsq:{name:'结算清单串流程问题清单 v1.0(可填写版)'},qc:{name:'样衣系统·全流程问题确认清单 v1.0(总纲·可填写)'},dzq2:{name:'对账付款·补充确认清单 v1.0(可填写版·已定稿)'},rev2:{name:'下游模块·业务反馈修订说明 v2'}};
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 var blobCache={};
 function blobUrl(key){if(blobCache[key])return blobCache[key];var b=DOCB64[key];if(!b)return '';var bin=atob(b);var bytes=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);var blob=new Blob([bytes],{type:'text/html'});var u=URL.createObjectURL(blob);blobCache[key]=u;return u;}

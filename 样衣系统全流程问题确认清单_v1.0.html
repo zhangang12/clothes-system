@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>样衣系统 · 全流程问题确认清单 v1.0</title>
+<style>
+:root{
+  --indigo:#1E3A5F;--indigo-d:#152A45;--indigo-l:#2C5180;
+  --linen:#F5EDDC;--linen-d:#E8DCC0;--canvas:#FBF8F2;
+  --rust:#D17A40;--rust-d:#B86530;--vermilion:#C04042;
+  --teal:#3E8E7E;--amber:#C8901E;
+  --gray-9:#1F1F22;--gray-7:#37383C;--gray-5:#6F7178;
+  --gray-3:#B5B7BD;--gray-1:#E5E2DA;--gray-0:#F4F1EA;
+  --font:"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;
+  --r:4px;--r-lg:6px;
+  --shadow-sm:0 1px 2px rgba(30,58,95,.05);--shadow:0 2px 8px rgba(30,58,95,.10);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:13px/1.55 var(--font);color:var(--gray-9);background:#EEEAE0}
+a{color:var(--indigo);text-decoration:none}
+
+.topbar{position:fixed;top:0;left:0;right:0;min-height:48px;height:auto;background:var(--indigo);color:#fff;display:flex;align-items:center;padding:0 24px;z-index:100;border-bottom:3px solid var(--rust);box-shadow:0 2px 8px rgba(0,0,0,.15);flex-wrap:wrap;gap:12px}
+.topbar .logo{font-size:15px;font-weight:600}
+.topbar .logo small{font-size:11px;color:#C9D6E5;margin-left:8px;font-weight:400}
+.topbar .stat{display:flex;gap:10px;font-size:12px;color:#dde6f0;margin-left:auto}
+.topbar .stat b{color:#fff}
+.topbar .acts{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.t-btn{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.28);padding:5px 11px;border-radius:14px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.t-btn:hover{background:rgba(255,255,255,.24)}
+.t-btn.on{background:var(--rust);border-color:var(--rust)}
+.t-btn.save .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--teal);margin-right:5px;vertical-align:middle}
+.t-btn.save.dirty .dot{background:var(--amber)}
+.t-btn.save.fail .dot{background:var(--vermilion)}
+.mode-tag{font-size:11px;color:#cdd8e6;white-space:nowrap}
+
+.sidenav{position:fixed;top:48px;left:0;bottom:0;width:240px;background:#fff;border-right:1px solid var(--gray-1);overflow-y:auto;padding:14px 0;font-size:13px}
+.sidenav .nav-cat{padding:10px 16px 4px;color:var(--gray-5);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;border-top:1px solid var(--gray-1);margin-top:6px}
+.sidenav a.nav-dj{display:block;padding:8px 16px;color:var(--indigo);font-weight:600;font-size:13px;border-left:3px solid transparent}
+.sidenav a.nav-dj:hover{background:var(--linen);border-left-color:var(--rust)}
+.sidenav a.nav-sub{display:block;padding:5px 16px;color:var(--gray-7);font-size:12.5px;border-left:3px solid transparent}
+.sidenav a.nav-sub:hover{background:var(--canvas);color:var(--indigo);border-left-color:var(--gray-3)}
+
+.main{margin-left:240px;padding:64px 32px 80px;max-width:1180px}
+.dj-block{padding:28px 32px;background:linear-gradient(135deg,var(--indigo) 0%,var(--indigo-l) 100%);color:#fff;border-radius:8px;margin:30px 0 16px}
+.dj-block h1{font-size:22px;margin-bottom:6px;font-weight:600}
+.dj-block h1 small{font-family:"SF Mono",Monaco,monospace;color:#C9D6E5;font-size:14px;font-weight:400;margin-left:8px}
+.dj-block .dj-summary{font-size:13px;color:#D5DDE8;line-height:1.7}
+
+.biz-notes{background:#FFF7EA;border:1px solid #EDD8A8;border-left:3px solid var(--amber);border-radius:4px;padding:12px 16px;margin:0 0 14px}
+.biz-notes b{color:#7A5810;font-size:12.5px}
+.biz-notes ul{list-style:none;margin-top:6px}
+.biz-notes li{font-size:12px;color:#5C4307;line-height:1.7;padding:2px 0 2px 18px;position:relative}
+.biz-notes li:before{content:"▸";position:absolute;left:6px;color:var(--amber)}
+
+.flow-box{font-family:"SF Mono",Consolas,monospace;white-space:pre;overflow-x:auto;background:var(--indigo-d);color:#e8eef5;padding:14px 16px;border-radius:8px;font-size:12px;line-height:1.65;margin:0 0 14px}
+
+.prio-card{background:#fff;border:1px solid var(--gray-1);border-top:3px solid var(--rust);border-radius:6px;padding:14px 18px;margin:0 0 18px;box-shadow:var(--shadow-sm)}
+.prio-card h3{color:var(--indigo);font-size:14px;margin-bottom:8px}
+.prio-list{list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:4px 22px}
+.prio-list li{font-size:12.5px;color:var(--gray-7);line-height:1.7;padding-left:6px}
+.prio-list li b{color:var(--rust-d)}
+@media(max-width:880px){.prio-list{grid-template-columns:1fr}}
+
+.sec-band{display:flex;gap:12px;align-items:flex-start;background:linear-gradient(135deg,var(--linen) 0%,var(--canvas) 100%);border:1px solid var(--linen-d);border-left:4px solid var(--rust);border-radius:6px;padding:12px 16px;margin:26px 0 12px}
+.sec-letter{flex-shrink:0;width:30px;height:30px;background:var(--rust);color:#fff;border-radius:6px;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.sec-name{color:var(--indigo);font-size:15px;font-weight:600}
+.sec-sum{color:var(--gray-7);font-size:12px;line-height:1.6;margin-top:3px}
+
+.q-block{background:#fff;border:1px solid var(--gray-1);border-radius:6px;padding:13px 16px;margin:0 0 11px;box-shadow:var(--shadow-sm)}
+.q-block:hover{border-color:var(--gray-3)}
+.q-top{display:flex;align-items:flex-start;gap:8px;margin-bottom:6px}
+.q-no{flex-shrink:0;background:var(--indigo);color:#fff;font-weight:700;font-size:12px;padding:1px 8px;border-radius:4px;font-family:"SF Mono",monospace}
+.q-pri{flex-shrink:0;font-size:10.5px;font-weight:600;padding:1px 7px;border-radius:9px}
+.q-pri-high{background:#FBEAEA;color:var(--vermilion)}
+.q-pri-mid{background:#FBF1DA;color:#7A5810}
+.q-pri-low{background:#E8F4F0;color:var(--teal)}
+.q-title{font-size:13.5px;font-weight:600;color:var(--gray-9);line-height:1.5}
+.q-scene{font-size:12px;color:var(--gray-7);background:var(--gray-0);border-radius:5px;padding:7px 10px;margin:0 0 9px;line-height:1.65}
+.q-scene b{color:var(--indigo)}
+.q-opts{display:flex;flex-direction:column;gap:4px}
+.q-opt{display:flex;align-items:flex-start;gap:8px;border:1px solid var(--gray-1);border-radius:5px;padding:7px 11px;cursor:pointer;background:var(--canvas)}
+.q-opt:hover{border-color:var(--rust);background:#FFF7EA}
+.q-opt input[type=radio]{margin-top:2px;flex-shrink:0;width:14px;height:14px;accent-color:var(--rust);cursor:pointer}
+.q-otext{font-size:12.5px;color:var(--gray-9);line-height:1.55}
+.q-opt-rec{border-color:#C8E2D9;background:#F1FAF7}
+.q-rec{font-style:normal;background:var(--teal);color:#fff;font-size:10px;padding:0 6px;border-radius:8px;margin-left:5px;font-weight:600}
+.q-opt-other{background:#fff}
+.q-other-in{flex:1;min-width:120px;border:1px solid var(--gray-1);border-radius:4px;padding:3px 8px;font:12.5px var(--font);color:var(--gray-9)}
+.q-ref{font-size:11px;color:var(--gray-5);margin-top:8px;line-height:1.6;border-top:1px dashed var(--gray-1);padding-top:6px}
+.q-ref b{color:var(--gray-7)}
+.q-src{font-size:11px;color:var(--gray-5);margin-top:6px;line-height:1.9}
+.q-src b{color:var(--gray-7);margin-right:4px}
+.src-chip{display:inline-block;background:var(--linen);color:var(--indigo);border:1px solid var(--linen-d);border-radius:11px;padding:2px 9px;margin:0 5px 4px 0;font-size:11px;text-decoration:none;white-space:nowrap}
+.src-chip:hover{background:#FFF7EA;border-color:var(--rust);color:var(--rust-d)}
+
+.btn{display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:4px;font-size:12.5px;cursor:pointer;border:1px solid;line-height:1.5;font-family:inherit}
+.btn-c{background:var(--rust);color:#fff;border-color:var(--rust)}
+.btn-s{background:#fff;color:var(--gray-7);border-color:var(--gray-1)}
+.btn-g{background:#fff;color:var(--vermilion);border-color:var(--gray-1)}
+.btn-sm{padding:3px 9px;font-size:11.5px}
+.badge{display:inline-block;padding:1px 7px;border-radius:9px;font-size:10.5px;font-weight:500;border:1px solid}
+.badge-w{background:#FBF1DA;color:var(--amber);border-color:#EDD8A8}
+
+/* 评审工具:批注 / 补充需求 / 保存 */
+.guide-card{background:#fff;border:1px solid var(--gray-1);border-left:3px solid var(--teal);border-radius:6px;padding:12px 16px;margin:0 0 16px;font-size:12.5px;color:var(--gray-7);box-shadow:var(--shadow-sm)}
+.guide-card b{color:var(--indigo)}
+.guide-card .gc-f{margin-top:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;font-size:11.5px;color:var(--gray-5)}
+.anno-icon{display:none;position:absolute;top:-9px;right:-9px;background:var(--rust);color:#fff;width:22px;height:22px;border-radius:50%;font-size:12px;line-height:22px;text-align:center;cursor:pointer;z-index:60;box-shadow:0 2px 5px rgba(0,0,0,.25);border:none;font-family:inherit;padding:0}
+.anno-icon.has{background:var(--vermilion)}
+body.anno-on .anno-icon{display:block}
+body.anno-on [data-anchor]{outline:1px dashed rgba(209,122,64,.4);outline-offset:3px;border-radius:4px}
+body.anno-on [data-anchor]:hover{outline:1px solid var(--rust)}
+.pin{display:inline-block;font-size:11px;background:var(--rust);color:#fff;border-radius:20px;padding:1px 8px;margin-left:6px;cursor:pointer}
+.flash{animation:flash 1.3s ease}
+@keyframes flash{0%,100%{background:transparent}25%{background:var(--linen)}}
+
+textarea,input[type=text]{font-family:inherit;font-size:13px;border:1px solid var(--gray-1);border-radius:5px;padding:7px 9px;background:#fff;color:var(--gray-9);width:100%}
+textarea{resize:vertical;min-height:60px;line-height:1.6}
+label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
+.modal select{font-family:inherit;font-size:13px;border:1px solid var(--gray-1);border-radius:5px;padding:7px 9px;background:#fff;color:var(--gray-9);width:100%}
+
+.req-zone{margin-top:8px}
+.req-group .rgh{font-weight:600;color:var(--indigo);font-size:13px;margin:12px 0 5px;border-bottom:1px dashed var(--gray-3);padding-bottom:4px}
+.req-item{background:#fff;border:1px solid var(--gray-1);border-radius:6px;padding:11px 13px;margin:7px 4px;box-shadow:var(--shadow-sm);position:relative}
+.req-item .rt{font-weight:600;color:var(--gray-9)}
+.req-item .rd{font-size:13px;color:var(--gray-7);margin:4px 0;white-space:pre-wrap}
+.req-item .rm{font-size:11px;color:var(--gray-5);display:flex;gap:8px;flex-wrap:wrap}
+.req-item .ra{position:absolute;top:9px;right:10px;display:flex;gap:6px}
+.req-empty{color:var(--gray-3);font-size:13px;padding:10px 4px}
+
+.mask{position:fixed;inset:0;background:rgba(21,42,69,.46);display:none;z-index:200;align-items:center;justify-content:center;padding:20px}
+.mask.open{display:flex}
+.modal{background:#fff;border-radius:10px;width:520px;max-width:100%;max-height:88vh;overflow:auto;box-shadow:0 24px 60px rgba(0,0,0,.3)}
+.modal-h{padding:13px 18px;border-bottom:1px solid var(--gray-1);font-weight:700;color:var(--indigo-d);display:flex;justify-content:space-between;align-items:center}
+.modal-h .x{cursor:pointer;color:var(--gray-5);font-size:20px}
+.modal-b{padding:16px 18px}
+.modal-f{padding:12px 18px;border-top:1px solid var(--gray-1);display:flex;gap:8px;justify-content:flex-end;background:var(--gray-0)}
+.tgt{font-size:12px;color:var(--gray-5);background:var(--gray-0);border-radius:5px;padding:7px 10px;margin-bottom:8px}
+.anno-li{border:1px solid var(--gray-1);border-radius:5px;padding:8px 10px;margin:6px 0;background:var(--gray-0)}
+.anno-li .al-t{white-space:pre-wrap;font-size:13px}.anno-li .al-m{font-size:11px;color:var(--gray-5);margin-top:4px;display:flex;gap:8px}
+
+.drawer{position:fixed;top:0;right:0;bottom:0;width:400px;max-width:92vw;background:var(--canvas);box-shadow:-4px 0 24px rgba(0,0,0,.18);transform:translateX(100%);transition:transform .22s;z-index:210;display:flex;flex-direction:column}
+.drawer.open{transform:none}
+.drawer-h{padding:13px 16px;background:var(--indigo);color:#fff;font-weight:700;display:flex;justify-content:space-between;align-items:center}
+.drawer-h .x{cursor:pointer;font-size:20px}
+.drawer-tabs{display:flex;border-bottom:1px solid var(--gray-1);background:#fff}
+.drawer-tabs button{flex:1;border:none;background:none;padding:9px 4px;cursor:pointer;font-family:inherit;font-size:12.5px;color:var(--gray-5);border-bottom:2px solid transparent}
+.drawer-tabs button.on{color:var(--indigo);border-bottom-color:var(--rust);font-weight:600}
+.drawer-b{flex:1;overflow:auto;padding:12px 14px}
+.sum-item{background:#fff;border:1px solid var(--gray-1);border-radius:5px;padding:9px 11px;margin:7px 0;cursor:pointer;box-shadow:var(--shadow-sm)}
+.sum-item:hover{border-color:var(--rust)}
+.sum-item .sa{font-size:11px;color:var(--indigo-l);font-weight:600;margin-bottom:3px}
+.sum-item .sb{font-size:13px;white-space:pre-wrap}
+.sum-item .sm{font-size:11px;color:var(--gray-5);margin-top:3px}
+.sum-orphan{border-color:var(--vermilion)!important}
+.sum-h{font-size:12px;font-weight:700;color:var(--gray-5);margin:10px 0 4px}
+.sum-empty{color:var(--gray-3);font-size:13px;padding:10px}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--indigo-d);color:#fff;padding:11px 20px;border-radius:24px;font-size:13px;box-shadow:var(--shadow);z-index:300;max-width:80vw}
+.foot{margin-top:26px;padding:14px 4px;border-top:1px solid var(--gray-1);font-size:11.5px;color:var(--gray-5);line-height:1.7}
+@media print{.topbar,.anno-icon,.drawer,.mask,.toast,.t-btn,.pin,.sidenav{display:none!important}.main{margin-left:0}}
+</style>
+</head><body class="">
+
+<div class="topbar">
+  <div class="logo">🪡 样衣制造管理系统<small>全流程问题确认清单 v1.0 · 弥补UI设计稿不足</small></div>
+  <div class="stat"><span>批注 <b id="stAnno">0</b></span><span>补充需求 <b id="stReq">0</b></span><span>已答 <b id="stAns">0/0</b></span></div>
+  <div class="acts">
+    <span class="mode-tag" id="modeTag">就地保存可用</span>
+    <button class="t-btn" id="btnAnno" onclick="toggleAnnoMode()">💬 批注：关</button>
+    <button class="t-btn" onclick="openReqModal(null,'')">➕ 补充需求</button>
+    <button class="t-btn" onclick="openSummary()">📋 汇总</button>
+    <button class="t-btn" onclick="exportMd()">📥 导出</button>
+    <button class="t-btn save" id="btnSave" onclick="save()"><span class="dot"></span><span id="saveLabel">保存</span></button>
+  </div>
+</div>
+
+<nav class="sidenav">
+  <div class="nav-cat" style="border:none;margin-top:0">全流程业务规则 · 56 题</div>
+  <a class="nav-dj" href="#overview">📍 总览 + 全流程图</a>
+  <a class="nav-dj" href="#prio">⭐ 优先回答 TOP 10</a>
+  <a class="nav-sub" href="#secA">　A 主数据与编号体系</a>
+  <a class="nav-sub" href="#secB">　B 引用一致性与快照</a>
+  <a class="nav-sub" href="#secC">　C 数量·耗用·损耗传递链</a>
+  <a class="nav-sub" href="#secD">　D 价格·成本·利润链</a>
+  <a class="nav-sub" href="#secE">　E 状态机与单据流转</a>
+  <a class="nav-sub" href="#secF">　F 审批·角色·权限</a>
+  <a class="nav-sub" href="#secG">　G 门户·发货·对账·付款</a>
+  <a class="nav-sub" href="#secH">　H 结算·成本利润</a>
+  <a class="nav-sub" href="#secI">　I 迁移·报表·导出·附件</a>
+  <a class="nav-sub" href="#extra">　业务方补充意见</a>
+</nav>
+
+<main class="main">
+  <div id="overview" class="dj-block" style="background:linear-gradient(135deg,var(--rust) 0%,#A85423 100%)">
+    <h1>💵 对账 · 开票 · 付款 · 串流程待确认问题清单<small>v1.0</small></h1>
+    <p class="dj-summary">
+    这是<b>整个系统的业务规则总纲</b>:样衣 → 报价 → 订单 → 合同 → 供应商门户(盖章/发货/对账/开票) → 付款 → 结算,一条端到端业务流。各模块 UI 设计稿是<b>按模块画的</b>,<b>跨模块的接缝规则容易漏</b>——而恰恰是这些接缝(编号体系/引用一致性/耗用损耗传递/价格成本链/状态反写/审批权限)最影响后续编码。本清单把散落在 6 份模块清单里的约 <b>170 条业务规则</b>,<b>按 9 条全流程主题归并</b>成 <b>56 题</b>,交业务/财务一次拍板,消除灰色地带。<br>
+    <b>怎么用</b>:每题点选一个选项(标 <span style="background:var(--teal);padding:1px 6px;border-radius:8px;font-size:11px">推荐</span> 的是我方建议),不满意可选「其他」并填写;每题下方 <b>📍出处</b> 链接可打开对应设计稿/模块清单定位;任意位置可 💬批注、可 ➕补充需求;填完点右上角 <b>💾 保存</b> 写回本文件回传。各模块的更细问题见对应《XX串流程问题清单》。
+    </p>
+  </div>
+
+  <div class="guide-card" id="guideCard">
+    <b>💡 操作提示</b>　① 直接在每题点选答案(单选),或选「其他」补充;② 顶栏「💬 批注」开启后可对任意题目/段落写批注;③「➕ 补充需求」记录清单未覆盖的新需求;④ 改动后顶栏保存点变 <b style="color:var(--amber)">橙点</b>,点「💾 保存」写回文件。
+    <div class="gc-f"><span id="guideSaveTip">Chrome/Edge 经本地服务器可直接写回原文件</span><label style="display:flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" id="guideNever"> 不再提示 <button class="btn btn-s btn-sm" onclick="dismissGuide()">知道了</button></label></div>
+  </div>
+
+  <div class="flow-box" data-anno-target data-anno-label="全流程业务流图">①基础资料(客户/工厂/供应商/币种汇率 主数据字典)── 贯穿所有单据
+        ▼
+②样衣 S- ──1:N──▶ ③报价 Q- ──1:N──▶ ④订单 O- ──按供应商拆──▶ ⑤材料合同/加工合同 HT-
+   实际耗用 ───────▶ 报价耗用 ───────▶ 单件耗用 ──▶ 采购量(含损耗)/大货数
+        │                                                     │ 推送供应商
+        │                                                     ▼
+        │                        ⑥供应商门户:盖章 → 发货 → 对账 DZ- → 开票 ──▶ 付款申请 PR-/FK-
+        │                                  (合同单价×已审批发货数量=对账金额;发票=对账金额校验)
+        │                                                     ▼
+        └──── 价格链:报价单价→订单单价→合同单价→对账金额→采购成本 ───▶ ⑧结算 JS-(成本单价/毛利/净利/退税)
+                                                          ▲ 收入侧:出口发票→收汇×汇率
+   贯穿全程的元规则:编号体系 · 引用一致性(快照/同步) · 状态机反写 · 审批角色权限 · 含税口径</div>
+
+  <div class="prio-card" id="prio">
+    <h3>⭐ 时间有限?建议优先回答这 8 题(最影响后续开发)</h3>
+    <ul class="prio-list">
+      <li><b>A1</b> 全链路单据编号前缀与规则是否一次定齐?</li>
+      <li><b>A3</b> 主数据是否统一『单一来源』,下游只引用?</li>
+      <li><b>B1</b> 引用上游:默认快照 还是 实时跟随?(全局元规则)</li>
+      <li><b>C1</b> 耗用三段(样衣→报价→订单)一致性与可改性?</li>
+      <li><b>C2</b> 损耗加在哪一段、加几次?(防重复计损)</li>
+      <li><b>D1</b> 报价→订单 取哪个单价?佣金归谁?</li>
+      <li><b>D5</b> 结算毛利/净利/退税算法是否确认?</li>
+      <li><b>E1</b> 样衣:报价:订单:合同 的 1:N 关系链?</li>
+      <li><b>E4</b> 门户四步(盖章→发货→对账→开票)顺序与回退?</li>
+      <li><b>F2</b> 角色字段级权限(单价/成本/毛利谁可见)?</li>
+    </ul>
+  </div>
+
+  <div id="qRoot"></div>
+
+  <div class="sec-band" id="extra"><span class="sec-letter" style="background:var(--teal)">✎</span><div><div class="sec-name">业务方补充意见</div><div class="sec-sum">清单未覆盖到的疑问、新需求,点这里或顶栏「➕ 补充需求」添加;也可对任一题目开「💬 批注」。</div></div></div>
+  <div class="req-zone" id="reqZone"></div>
+  <div style="text-align:right;margin-top:8px"><button class="btn btn-s btn-sm" onclick="openReqModal(null,'')">＋ 新增补充需求</button></div>
+
+  <div class="foot">样衣系统 · 全流程问题确认清单 v1.0 · 把散落在 6 份模块清单(三模块/订单/合同/门户/对账付款/结算)的约 170 条业务规则,按 9 条全流程主题归并为 56 题,弥补 UI 设计稿按模块画、漏掉跨模块接缝的不足 · A 主数据编号 8 / B 引用一致性 5 / C 数量耗用损耗 6 / D 价格成本利润 8 / E 状态流转 8 / F 审批权限 5 / G 门户闭环 6 / H 结算 5 / I 迁移报表附件 5。本页可点选作答 + 批注 + 补充需求 + 📍出处链接,保存即写回本文件。<span id="lastSavedFoot"></span></div>
+</main>
+
+<!-- 批注 Modal -->
+<div class="mask" id="annoMask"><div class="modal">
+  <div class="modal-h"><span id="annoTitle">批注</span><span class="x" onclick="closeMask('annoMask')">×</span></div>
+  <div class="modal-b"><div class="tgt" id="annoTarget"></div><div id="annoList"></div>
+    <label class="fl">新增批注</label><textarea id="annoText" placeholder="写下意见…"></textarea>
+    <label class="fl">批注人(可选)</label><input type="text" id="annoAuthor" placeholder="姓名"></div>
+  <div class="modal-f"><button class="btn btn-s" onclick="closeMask('annoMask')">取消</button><button class="btn btn-c" onclick="addAnno()">＋ 添加批注</button></div>
+</div></div>
+
+<!-- 补充需求 Modal -->
+<div class="mask" id="reqMask"><div class="modal">
+  <div class="modal-h"><span id="reqTitle">补充需求</span><span class="x" onclick="closeMask('reqMask')">×</span></div>
+  <div class="modal-b">
+    <label class="fl">归属(挂到哪一段)</label>
+    <select id="reqScope"><option value="">全局</option><option value="A">A 主数据编号</option><option value="B">B 引用一致性</option><option value="C">C 数量耗用损耗</option><option value="D">D 价格成本利润</option><option value="E">E 状态流转</option><option value="F">F 审批权限</option><option value="G">G 门户闭环</option><option value="H">H 结算</option><option value="I">I 迁移报表附件</option></select>
+    <label class="fl">标题</label><input type="text" id="reqTitleIn" placeholder="一句话概括需求">
+    <label class="fl">详述</label><textarea id="reqDetail" placeholder="详细说明…"></textarea>
+    <label class="fl">优先级</label><select id="reqPriority"><option value="">未定</option><option>P0</option><option>P1</option><option>P2</option></select>
+    <label class="fl">提出人(可选)</label><input type="text" id="reqAuthor" placeholder="姓名">
+  </div>
+  <div class="modal-f"><button class="btn btn-g" id="reqDelBtn" onclick="deleteReqFromModal()" style="display:none">删除</button><button class="btn btn-s" onclick="closeMask('reqMask')">取消</button><button class="btn btn-c" onclick="saveReq()">保存</button></div>
+</div></div>
+
+<!-- 汇总抽屉 -->
+<div class="mask" id="drawerMask" onclick="closeSummary()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-h"><span>📋 评审汇总</span><span class="x" onclick="closeSummary()">×</span></div>
+  <div class="drawer-tabs"><button class="on" data-tab="anno" onclick="switchTab('anno')">批注</button><button data-tab="req" onclick="switchTab('req')">补充需求</button></div>
+  <div class="drawer-b" id="drawerBody"></div>
+</div>
+
+<script id="review-data" type="application/json">{"schemaVersion": 1, "meta": {"docId": "样衣系统全流程问题确认清单_v1.0", "boardVersion": "v1.0", "reviewer": "", "lastSaved": ""}, "annotations": [], "requirements": [], "answers": {}}</script>
+
+<script id="questions-data" type="application/json"></script>
+
+<script>
+/* ===== 题库 ===== */
+var QUESTIONS=[{"sec": "A", "name": "主数据与编号体系(全局基座)", "summary": "编号前缀、主数据归属与字典,是所有单据的地基。各模块各自演示了一套编号(S-/Q-/O-/HT-/DZ-/FK-/JS-),主数据(客户/工厂/供应商/币种/汇率)分散在多处。本段一次定齐,避免后面对不上号、主数据多头维护。", "qs": [{"pri": "高", "t": "全链路单据编号前缀与规则是否本期一次定齐?(样衣S- / 报价Q- / 订单O- / 合同HT- / 对账DZ- / 付款FK-或PR- / 发货单 / 结算JS-)", "s": "三模块、订单、合同、对账、结算各自演示了编号,架构蓝图里对账/付款/发货单仍标【待定】。不统一会业务搞混、跨模块关联断。", "o": ["本期统一定齐:各单据加前缀(S/Q/O/HT/DZ/PR/FH/JS)-款号或日期-序号,序号当天递增、跨年重置;发货单一并定", "只定已上线模块(到对账付款),发货单/结算编号下期再定", "不加前缀,靠日期+序号+模块上下文区分", "其他:____"], "rec": 0, "ref": "全链路编号体系一次定稿", "src": [{"href": "订单及下游模块_总体架构蓝图_v0.1.md", "label": "架构 4.1 编号体系(待定)"}, {"href": "06-对账付款设计稿_v1.4.html#grp-dz-rule", "label": "06·编号规则"}]}, {"pri": "高", "t": "主数据编号(客户/中间商/工厂/制版师)是手填还是系统自动?", "s": "基础资料里这些编号目前业务手填。手填易重易乱,自动则需规则。", "o": ["改系统自动递增(客户CN001/工厂S001…),业务不再手填编号", "保持手填(业务录入时分配)", "关键主数据自动、其余手填", "其他:____"], "rec": 0, "ref": "主数据编号 手填vs自动", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/01-基础资料设计稿_v1.3.html", "label": "01·基础资料(主数据编号)"}]}, {"pri": "高", "t": "客户/工厂/供应商/币种/汇率 等主数据是否统一在基础资料维护『单一来源』,下游只引用不另建?", "s": "订单新增了币种/佣金、合同要本司主体、报价要汇率字典,若各处各填会主数据分裂。", "o": ["统一在基础资料建字典(客户/工厂/供应商/本司主体/币种汇率),下游单据只引用、不重复维护;谁维护、精度在字典定", "各模块按需各自维护,不强制统一字典", "本期先把客户/工厂统一,币种/汇率字典下期补", "其他:____"], "rec": 0, "ref": "主数据单一来源原则", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/01-基础资料设计稿_v1.3.html", "label": "01·基础资料"}, {"href": "UI设计稿汇总【已五个模块串流程】/03-订单设计稿_v1.0.html", "label": "03·订单(币种/佣金)"}]}, {"pri": "中", "t": "工厂库的『工厂类型』是否拆为『材料供应商 / 加工厂』两类身份,供订单/合同分别选用?(同一主体可两者兼具)", "s": "订单材料明细要选供应商、合同要分材料/加工,单一工厂类型不够用。", "o": ["拆两类身份(材料供应商/加工厂),一个主体可同时具备,下游按用途选对应身份", "保持单一『工厂类型』下拉不拆", "加标签区分但不拆字段", "其他:____"], "rec": 0, "ref": "供应商/加工厂身份拆分", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/01-基础资料设计稿_v1.3.html", "label": "01·基础资料(工厂库)"}, {"href": "UI设计稿汇总【已五个模块串流程】/04-合同设计稿_v1.3.html", "label": "04·合同(甲方)"}]}, {"pri": "中", "t": "供应商门户账号何时创建、与工厂资料如何绑定?未建档供应商怎么处理?", "s": "合同点『推送供应商』=门户账号入口;账号与工厂资料的绑定时机与方式未定。", "o": ["在工厂资料建档时即可开通门户账号并绑定;合同推送时校验已绑定,未建档则先补建档再推送", "推送合同时即时创建账号并回填工厂资料", "门户账号独立管理,不与工厂资料强绑", "其他:____"], "rec": 0, "ref": "门户账号创建与绑定", "src": [{"href": "05-供应商门户设计稿_v2.2.html#", "label": "05·门户(账号)"}, {"href": "UI设计稿汇总【已五个模块串流程】/04-合同设计稿_v1.3.html", "label": "04·合同(推送供应商)"}]}, {"pri": "中", "t": "PO号 / 目的地 / 收货人 是订单现场填,还是基础资料建台账复用?与『最终买家』什么关系?", "s": "订单现填易重复录入,建台账则需主数据。", "o": ["目的地/收货人在基础资料建台账复用,PO号订单现填;与最终买家关联带出默认", "全部订单现场手填,不建台账", "其他:____"], "rec": 0, "ref": "PO/目的地/收货人 来源", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/03-订单设计稿_v1.0.html", "label": "03·订单(PO/目的地)"}]}, {"pri": "高", "t": "客户三级关系:客户/中间商/最终买家 是几级链?一个最终买家可关联多个中间商时,报价/订单/结算按哪条线、是否拆单?", "s": "基础资料含中间商/最终买家,但未明确是否存在 总代→地区代理→最终买家 三级链,以及一买家多中间商时单据归属与拆单。", "o": ["明确为『中间商(可多级)+最终买家』、最终买家可关联多中间商;报价/订单选定一条『中间商→最终买家』线,款号相同中间商不同则拆单核算", "只设单层客户、不分中间商/最终买家", "建三级链(总代/地区代理/最终买家)", "其他:____"], "rec": 0, "ref": "客户三级关系与单据归属", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/01-基础资料设计稿_v1.3.html", "label": "01·基础资料(中间商/最终买家)"}]}, {"pri": "中", "t": "编号唯一性范围:多分公司/多工厂时,各单据(S/Q/O/HT/DZ…)与主数据编号(工厂S001/客户CN001)全局唯一还是分公司隔离?中间商/最终买家是否前缀区分?", "s": "涉及多组织时编号冲突与隔离规则。", "o": ["主数据与单据编号全局唯一(前缀+款号/日期+序号),多分公司用字段区分而非编号段;中间商/最终买家加前缀(如CM/FE)", "按分公司隔离各自序列", "不加中间商/最终买家前缀", "其他:____"], "rec": 0, "ref": "编号全局唯一 vs 分公司隔离", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/01-基础资料设计稿_v1.3.html", "label": "01·基础资料(编号)"}]}]}, {"sec": "B", "name": "引用一致性与快照原则(改了/删了怎么办)", "summary": "贯穿全系统的一条元规则:上游主数据或单据被改名/停用/删除/撤销时,已经引用它的下游单据是『跟着变』还是『保留快照』。各模块零散问过,这里统一拍一个全局原则,再列关键例外。", "qs": [{"pri": "高", "t": "全局原则:单据生成后,引用的上游数据一律『创建时快照』,还是『实时跟随』?", "s": "报价/订单都声称对上游是快照(改不反向同步);但客户改名等又希望显示最新。需一个统一默认+例外清单。", "o": ["默认快照(单据锁创建时值);仅『名称类显示字段』(客户名/供应商名)可选实时刷新,金额/条款/数量等业务值一律快照", "一律实时跟随上游最新", "一律快照、任何字段都不跟随", "其他:____"], "rec": 0, "ref": "快照 vs 同步 全局默认", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/02-客户报价设计稿_v1.3.html", "label": "02·报价(快照)"}, {"href": "UI设计稿汇总【已五个模块串流程】/03-订单设计稿_v1.0.html", "label": "03·订单(快照)"}]}, {"pri": "高", "t": "主数据(客户/工厂/供应商/制版师)删除如何处理?", "s": "被下游单据引用的主数据若硬删会断链。", "o": ["禁止物理删除,用『启用/停用』替代;确需删除时若有引用则阻止并提示『N张单据引用』,已关联单据保留名称快照", "允许删除,已关联单据保留快照", "允许删除并级联", "其他:____"], "rec": 0, "ref": "主数据删除:停用/阻止/快照", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/01-基础资料设计稿_v1.3.html", "label": "01·基础资料"}]}, {"pri": "高", "t": "上游单据(样衣/报价/订单/合同)被修改/撤销/作废时,已生成的下游单据如何提示与处理?", "s": "样衣删除→已成单订单?报价撤销→订单?订单改→已生成合同?都需边界。", "o": ["已被下游引用的上游单据:禁删/禁关键字段改(锁定),需改先解除下游引用或走变更单;撤销/作废给下游红标提示并人工确认影响", "上游可改,下游弹『上游已变,是否同步』由业务选", "上游改不影响下游(纯快照),不提示", "其他:____"], "rec": 0, "ref": "上游单据变更对下游的边界", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/02-样衣管理设计稿_v1.3.html", "label": "02·样衣"}, {"href": "UI设计稿汇总【已五个模块串流程】/04-合同设计稿_v1.3.html", "label": "04·合同(订单改删影响)"}]}, {"pri": "中", "t": "样衣删除/废弃时,关联的(经报价成单的)下游怎么办?", "s": "样衣是源头,删除影响报价/订单。", "o": ["阻止删除(提示有N张报价/订单引用);改用『已废弃』状态,下游保留快照", "允许删除,下游断关联留快照", "级联删除", "其他:____"], "rec": 0, "ref": "样衣删除的级联边界", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/02-样衣管理设计稿_v1.3.html", "label": "02·样衣"}, {"href": "UI设计稿汇总【已五个模块串流程】/02-客户报价设计稿_v1.3.html", "label": "02·报价"}]}, {"pri": "中", "t": "主数据停用后被历史单据引用的字段(如已停用供应商)是否灰显禁改?机密客户的敏感字段在版师/财务台是否隐藏、精细到字段级?", "s": "停用主数据仍被老单引用;机密客户字段需跨台字段级隐藏。", "o": ["停用主数据在历史单据灰显只读(保快照不可改);机密客户敏感字段(单价/客户)按角色字段级隐藏(版师/打样不可见),与列表脱敏一致", "停用即不可见、历史单据报错", "机密仅列表隐藏、详情不控", "其他:____"], "rec": 0, "ref": "停用引用灰显 + 机密字段权限", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/01-基础资料设计稿_v1.3.html", "label": "01·基础资料(停用/机密)"}]}]}, {"sec": "C", "name": "数量 · 耗用 · 损耗 传递链(最易算错的数值链)", "summary": "一件衣服的用量,从样衣『实际耗用』→报价『报价耗用』→订单『单件耗用』→合同采购量/大货数→发货实发→对账→结算出货件数,层层传递且各处口径不同;损耗在哪一段加、加几次更是高发坑。本段把这条数值链一次锁清。", "qs": [{"pri": "高", "t": "样衣实际耗用(版师填)→报价报价耗用→订单单件耗用,这三段数值是否强制一致?哪段能改、改了反向同步吗?", "s": "版师实际耗用≠报价耗用(业务可能加损耗)≠订单单件耗用,三段都能改会失控。", "o": ["以样衣实际耗用为源,报价/订单导入时为快照默认值、业务可在本单调整(不反向同步);三段允许不同但都可溯源到样衣值", "三段强制一致,只能回样衣改", "三段独立、互不关联", "其他:____"], "rec": 0, "ref": "耗用三段传递与可改性", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/02-样衣管理设计稿_v1.3.html", "label": "02·样衣(实际耗用)"}, {"href": "UI设计稿汇总【已五个模块串流程】/02-客户报价设计稿_v1.3.html", "label": "02·报价(报价耗用)"}, {"href": "UI设计稿汇总【已五个模块串流程】/03-订单设计稿_v1.0.html", "label": "03·订单(单件耗用)"}]}, {"pri": "高", "t": "损耗到底在哪一段加、加几次?(报价『含损金额=单价×耗用×(1+损耗)』,订单采购量又×(1+损耗%)——会不会重复计损)", "s": "报价已含损算金额,订单又用损耗算采购量,若口径不清会重复计损、采购超量。", "o": ["明确分工:报价损耗只用于『对客报价金额』;订单/合同损耗只用于『采购量核算』;两者是不同用途、不重复;统一损耗率来源(样衣/物料带出可改)", "全链路只在一处加损耗(指定哪处),其余不再加", "损耗各段各自填、不约束", "其他:____"], "rec": 0, "ref": "损耗加在哪段·防重复计损", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/02-客户报价设计稿_v1.3.html", "label": "02·报价(含损金额)"}, {"href": "UI设计稿汇总【已五个模块串流程】/03-订单设计稿_v1.0.html", "label": "03·订单(采购量)"}]}, {"pri": "高", "t": "合同数量口径:加工合同取『大货数』、材料合同取『采购量(含损耗)』——口径不同是否在合同标注来源?", "s": "两类合同数量来源不同,不标注易被当成同一个数核对出错。", "o": ["合同货物明细标注数量来源(大货数/采购量含损耗)与计算式,可点回订单用料核算;合同侧可微调并回写订单核算(留痕)", "标注来源但合同侧不可改(只读)", "不标注,按合同填写为准", "其他:____"], "rec": 0, "ref": "合同数量来源标注", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/04-合同设计稿_v1.3.html", "label": "04·合同(货物明细数量)"}, {"href": "UI设计稿汇总【已五个模块串流程】/03-订单设计稿_v1.0.html", "label": "03·订单(用料核算)"}]}, {"pri": "高", "t": "数量错配:订货量 vs 实发数 vs 出货件数,各环节(对账/结算)以哪个为准?欠发/超发/短装/次品如何处理?", "s": "采购按定数/实发、对账按实发、结算按出货件数,三者常不等;短装/超发/退货影响成本与毛利。", "o": ["对账按已审批实发数;结算成本单价按实际出货件数;系统展示『订货量 vs 实发 vs 出货』差额,超发需确认、欠发留尾、次品/未出货料成本可分离标注", "各环节都按实发,不展示差额", "以订货量为准、差异线下管", "其他:____"], "rec": 0, "ref": "订货/实发/出货 数量错配口径", "src": [{"href": "06-对账付款设计稿_v1.4.html#grp-dz-batch", "label": "06·发货批次"}, {"href": "07-结算清单设计稿_v1.0.html#unit", "label": "07·成本单价"}]}, {"pri": "中", "t": "颜色/尺码:样衣颜色是动态加列(颜色1/2/3)、订单按款·色·码搭配汇总、报价只一个颜色字段——跨模块怎么对齐?", "s": "动态颜色列与单字段、尺码搭配三处结构不一,导入映射易乱。", "o": ["以样衣颜色清单为源:报价多色用『/』合并或拆行(见报价口径),订单尺码搭配的色必须取自样衣色清单,三处对齐同一颜色字典", "各模块颜色各自维护、导入时人工映射", "其他:____"], "rec": 0, "ref": "颜色/尺码 跨模块对齐", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/02-样衣管理设计稿_v1.3.html", "label": "02·样衣(颜色列)"}, {"href": "UI设计稿汇总【已五个模块串流程】/03-订单设计稿_v1.0.html", "label": "03·订单(尺码搭配)"}]}, {"pri": "中", "t": "损耗默认值按品类预设(面料3%/辅料0%)还是全局统一?改损耗/本地改报价耗用是否需记录理由或标注『与样衣耗用不同』留痕?", "s": "报价损耗默认3%可改;报价耗用本地改不回写样衣,需审计追溯。", "o": ["损耗按品类预设默认(可改、全局可配);改损耗或本地改报价耗用时标注『原值X→改为Y』并可记理由供审计", "损耗全局统一一个值、改动不留痕", "损耗每行手填无默认", "其他:____"], "rec": 0, "ref": "损耗品类默认 + 耗用改动留痕", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/02-客户报价设计稿_v1.3.html", "label": "02·报价(含损金额/损耗)"}, {"href": "UI设计稿汇总【已五个模块串流程】/02-样衣管理设计稿_v1.3.html", "label": "02·样衣(实际耗用)"}]}]}, {"sec": "D", "name": "价格 · 成本 · 利润 链(报价→订单→合同→对账→结算)", "summary": "价格的另一条主线:对客报价单价(RMB/USD+利润率)→订单单品单价/佣金→合同单价→对账金额→采购成本→结算毛利/净利/退税。本段锁定取价口径、佣金归属、对账锁价、成本利润算法。", "qs": [{"pri": "高", "t": "报价单价有『RMB/USD单价+利润率』,订单新增『币种/单品单价/佣金%』——导入订单时单价取哪个?佣金归谁?", "s": "多个价字段,导入取值不清会算错合同/收入。", "o": ["按订单币种取报价对应币种单价为默认、业务可改;佣金%订单现填(默认0)或从客户/中间商主数据带出;利润率仅报价侧用", "固定取RMB单价,佣金always订单手填", "其他:____"], "rec": 0, "ref": "报价→订单 取价与佣金", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/02-客户报价设计稿_v1.3.html", "label": "02·报价(单价/利润率)"}, {"href": "UI设计稿汇总【已五个模块串流程】/03-订单设计稿_v1.0.html", "label": "03·订单(单价/佣金)"}]}, {"pri": "中", "t": "合同单价是否带入上游(报价/样衣)的供应商参考价做默认?加工单价(每件加工费)有无来源?", "s": "合同单价纯手填易错、效率低;有参考价可带默认。", "o": ["材料合同单价带上游供应商参考价做默认、可改;加工单价无上游来源则合同现填,可建『加工报价/工价表』供带出", "合同单价/加工单价一律现填,不带默认", "其他:____"], "rec": 0, "ref": "合同单价/加工价来源", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/04-合同设计稿_v1.3.html", "label": "04·合同(单价)"}, {"href": "UI设计稿汇总【已五个模块串流程】/02-客户报价设计稿_v1.3.html", "label": "02·报价(参考价)"}]}, {"pri": "高", "t": "对账金额=合同单价×已审批发货数量;合同改价/补充协议/同款多合同单价不同时,对账取哪个单价?以发货批次锁价吗?", "s": "合同事后改价会影响未对账批次,需锁价快照规则。", "o": ["发货批次锁价:每批记录发货当时生效的合同单价,对账与后续改价无关(快照);补充协议单独走调整行", "始终取合同当前单价,改价则未对账批次跟着变", "其他:____"], "rec": 0, "ref": "对账取价·批次锁价", "src": [{"href": "06-对账付款设计稿_v1.4.html#grp-dz-batch", "label": "06·发货批次(单价×数量)"}, {"href": "UI设计稿汇总【已五个模块串流程】/04-合同设计稿_v1.3.html", "label": "04·合同(改价)"}]}, {"pri": "高", "t": "含税/不含税口径:对账/发票/成本各处含税还是不含税?税率固定13%还是按行实际(材料13/货代6或9/加工13/免税)?", "s": "含税口径混用会导致对账校验、毛利计算错。", "o": ["对账/发票按含税核对;成本与毛利核算按不含税(进项可抵),按各行实际税率换算、缺税率默认13%;口径在各单注明", "全链路统一不含税÷1.13", "全链路含税", "其他:____"], "rec": 0, "ref": "含税/不含税与税率口径", "src": [{"href": "06-对账付款设计稿_v1.4.html#grp-dz-fkhead", "label": "06·付款(发票=对账)"}, {"href": "07-结算清单设计稿_v1.0.html#cost", "label": "07·成本(含税/不含税)"}]}, {"pri": "高", "t": "结算毛利/净利/退税算法是否确认?(毛利=结算金额−不含税成本;净利再扣运杂/快邮/打样/财务费7%;出口退税是否纳入)", "s": "出口服装退税常是真实利润来源(本例净利-1434可能靠退税转正),算法必须定。", "o": ["确认:毛利=结算金额−不含税总货款;净利=毛利−各项费用−财务费7%;出口退税纳入(可退税不含税采购额×退税率,报关后预估/到账确认),净利分含退税/不含退税两看", "退税暂不纳入,只到净利", "其他:____"], "rec": 0, "ref": "毛利/净利/退税算法", "src": [{"href": "07-结算清单设计稿_v1.0.html#profit", "label": "07·毛利对比"}]}, {"pri": "中", "t": "成本归集范围:货代/加工进成本总货款,快邮/打样/运杂走没走对账付款、还是结算手录?", "s": "期间费用若不经对账付款而手录,会账实不一致。", "o": ["货代/加工/材料经对账付款进总货款;快邮/打样/运杂走『无合同费用→对账付款』按款号归集后带入利润表单列(账实一致),不在结算手录", "期间费用结算直接手录", "其他:____"], "rec": 0, "ref": "成本归集与期间费用来源", "src": [{"href": "07-结算清单设计稿_v1.0.html#cost", "label": "07·成本明细"}, {"href": "06-对账付款设计稿_v1.4.html#grp-dz-nocontract", "label": "06·无合同费用"}]}, {"pri": "中", "t": "报价费用明细结构:新建报价自动带的费用项(加工费/线/包装/样衣费/测试费/运费)固定还是可自定义?按数量阶梯计费怎么表达?报价合计=(含损金额+费用)×(1+利润率)确认?", "s": "报价费用明细预设6行,合计含利润率。", "o": ["费用项为可配字典(默认6项可增删/改名),支持固定额或按数量阶梯;报价合计=(含损金额合计+费用合计)×(1+利润率)确认", "固定6项不可改", "费用全手填无预设", "其他:____"], "rec": 0, "ref": "报价费用明细结构与合计", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/02-客户报价设计稿_v1.3.html", "label": "02·报价(费用明细)"}]}, {"pri": "中", "t": "利润率是否有上下限管制、超限审批?有无分品类/客户利润率规划表?报价汇率自动带入后业务手改,是否留『系统建议 vs 实用汇率』、有效期内锁汇?", "s": "利润率默认0可改、参与算价;汇率自动带可手改。", "o": ["利润率设下限(低于需审批),可建分品类/客户利润率规划表;汇率自动带并记录系统建议值,业务可改留痕、报价有效期内锁汇", "利润率不限、汇率随时变", "利润率/汇率全手填不管制", "其他:____"], "rec": 0, "ref": "利润率管制 + 汇率留痕锁汇", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/02-客户报价设计稿_v1.3.html", "label": "02·报价(利润率/汇率)"}]}]}, {"sec": "E", "name": "状态机与单据流转主线(1:N / 前置 / 反写)", "summary": "端到端单据流:样衣→报价→订单→合同→门户(盖章/发货/对账/开票)→付款→结算。本段定各单据的一对多关系、前置状态约束、跨模块状态反写,以及门户四步顺序锁定。", "qs": [{"pri": "高", "t": "一对多关系链确认:样衣:报价、报价:订单、订单:材料合同/加工合同 各是 1:1 还是 1:N?", "s": "一个样衣多客户报价、一张报价生成几张订单、一个订单按供应商拆多张材料合同——关系定不清,数据模型就错。", "o": ["样衣1:N报价;报价1:N订单(且同报价可多次导入建单);订单按供应商自动拆为多张材料合同 + 1或N张加工合同", "全部1:1(再生成需复制)", "其他:____"], "rec": 0, "ref": "单据一对多关系链", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/02-客户报价设计稿_v1.3.html", "label": "02·报价"}, {"href": "UI设计稿汇总【已五个模块串流程】/03-订单设计稿_v1.0.html", "label": "03·订单(从报价导入)"}, {"href": "UI设计稿汇总【已五个模块串流程】/04-合同设计稿_v1.3.html", "label": "04·合同(按供应商拆单)"}]}, {"pri": "中", "t": "前置状态约束:样衣到哪个状态才能报价/下单?(制版中/打样中能否先报先下,还是必须已寄出/已对账完成)", "s": "业务常在样衣未完成时先报价先下单。", "o": ["允许样衣『制版中/打样中』即先报价先下单,但单据标『预报价/预下单』,样衣完成后校验关键值", "必须样衣到『已寄出』及之后才能报价/下单", "其他:____"], "rec": 0, "ref": "前置状态约束", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/02-样衣管理设计稿_v1.3.html", "label": "02·样衣(状态)"}, {"href": "UI设计稿汇总【已五个模块串流程】/02-客户报价设计稿_v1.3.html", "label": "02·报价"}]}, {"pri": "中", "t": "跨模块状态反写:下游动作是否回写上游状态?(报价已成单→样衣标记;生成合同→订单标『已生成合同』;门户发货/对账→合同状态回显)", "s": "状态各自为政会看不到全局进度。", "o": ["关键节点反写:报价成单→样衣列表标绿『已成单』;生成合同→订单『已生成合同』;门户盖章/发货/对账/开票→合同与订单状态回显", "各模块状态独立、不反写", "仅列表加提示不改状态", "其他:____"], "rec": 0, "ref": "跨模块状态反写", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/03-订单设计稿_v1.0.html", "label": "03·订单(状态机)"}, {"href": "UI设计稿汇总【已五个模块串流程】/04-合同设计稿_v1.3.html", "label": "04·合同(反写订单)"}]}, {"pri": "高", "t": "门户四步顺序锁定(盖章→发货→对账→开票)各步解锁条件?能否回退?(对账要等发货被业务审批通过吗)", "s": "四步依赖关系与回退规则直接决定门户流程实现。", "o": ["顺序锁定:盖章后可发货;发货被业务审批通过后才解锁对账;对账业务审批通过后才解锁开票;退回则回到对应步,已盖章/已发货撤销需审批留痕", "四步不强制顺序,可并行", "其他:____"], "rec": 0, "ref": "门户四步顺序与回退", "src": [{"href": "05-供应商门户设计稿_v2.2.html#", "label": "05·门户(盖章/发货/对账/开票)"}]}, {"pri": "中", "t": "转下游后上游能否再改?(报价转销售合同后能否改、合同被发货/对账引用后禁改哪些字段)", "s": "已流转单据再改会破坏下游一致性。", "o": ["转下游/被引用后锁关键字段(金额/数量/单价/明细),仅允许改备注类;确需改走变更单联动下游", "可改但联动更新下游", "转下游后完全锁定不可改", "其他:____"], "rec": 0, "ref": "流转后可改边界", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/02-客户报价设计稿_v1.3.html", "label": "02·报价(转合同)"}, {"href": "UI设计稿汇总【已五个模块串流程】/04-合同设计稿_v1.3.html", "label": "04·合同(被引用禁改)"}]}, {"pri": "中", "t": "样衣状态机与类别:派单→制版→打样→寄出 由谁推进?填『材料寄出单号』是否触发推送版师+转『打样中』?样衣类别多选(销样/头样/产前样/船样…)各自流程与转合同按哪类关联?", "s": "样衣3角色(业务/版师/打样间)、状态机、寄出单号触发推送、类别多选。", "o": ["业务派单→版师制版/打样→填材料寄出单号自动推版师并转『打样中』→寄出;类别多选作标签,转合同按关联报价不限类别;重复寄出单号记版本", "状态全手动改、类别单选", "其他:____"], "rec": 0, "ref": "样衣状态机/寄出触发/类别", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/02-样衣管理设计稿_v1.3.html", "label": "02·样衣(状态/类别/寄出单号)"}]}, {"pri": "中", "t": "合同模板/电子章/法律效力:条款模板来源、由谁维护、是否按类型(材料/加工)与供应商不同?本司电子章权限来源、纸质盖章上传如何留痕?合同PDF是否需可信时间戳/签章存证以保法律效力?", "s": "合同条款模板可配、落款电子章/纸质盖章、PDF法律效力。", "o": ["条款按类型(材料/加工)分模板、可配置、指定角色维护;本司电子章限授权人、纸质盖章上传照片留痕;对外合同PDF加可信时间戳/签章存证", "模板写死、无电子章存证", "其他:____"], "rec": 0, "ref": "合同模板/电子章/法律效力", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/04-合同设计稿_v1.3.html", "label": "04·合同(条款模板/盖章/PDF)"}]}, {"pri": "中", "t": "补料合同全链:补料合同编号(补料-原合同号)是否同序列、会否冲突?与原合同、订单用料核算什么关系?走不走供应商门户?对账并入原合同还是独立对账单?", "s": "生产中常补料,补料合同与原合同/订单/门户/对账关系需定。", "o": ["补料合同独立编号但双向关联原合同与款号、数量挂订单用料核算的补量;同样走门户盖章发货;对账按相关款号可并入原对账链或独立(业务选)", "补料不单独建合同/不走门户", "其他:____"], "rec": 0, "ref": "补料合同全链", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/04-合同设计稿_v1.3.html", "label": "04·合同(补料合同)"}, {"href": "06-对账付款设计稿_v1.4.html#grp-dz-batch", "label": "06·对账(补料归并)"}]}]}, {"sec": "F", "name": "审批 · 角色 · 权限(全局)", "summary": "全系统的审批流与角色可见性目前各模块零散。本段统一:哪些单据要审批、阈值与层级;业务/版师/打样/财务/主管/供应商 跨模块看什么、改什么;门户权限隔离。", "qs": [{"pri": "高", "t": "全局审批流:样衣/报价/订单/合同/对账 各需不需要审批?是否按金额阈值升级二级审批?", "s": "审批各模块各说各话,需统一矩阵。", "o": ["建审批矩阵:报价>阈值需主管审、订单/合同金额>阈值需审、对账业务员初审+主管二级;样衣建档免审;阈值可配", "全部免审(建档即生效)", "全部强制审批", "其他:____"], "rec": 0, "ref": "全局审批矩阵与阈值", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/03-订单设计稿_v1.0.html", "label": "03·订单(审批)"}, {"href": "06-对账付款设计稿_v1.4.html#grp-dz-approve", "label": "06·对账审批"}]}, {"pri": "高", "t": "角色全局可见性与字段级权限:业务/版师/打样/财务/主管/供应商 各能看哪些模块、哪些敏感字段(单价/成本/毛利)隐藏?", "s": "成本价、报价单价、毛利涉密,跨模块需字段级控权。", "o": ["按角色矩阵控制:版师/打样不见对客单价与毛利;财务见金额不改业务数据;供应商仅见门户自己的单;成本/毛利限财务/管理", "所有内部角色全可见", "仅按模块控、不到字段级", "其他:____"], "rec": 0, "ref": "角色矩阵与字段级权限", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/02-样衣管理设计稿_v1.3.html", "label": "02·样衣(角色)"}, {"href": "07-结算清单设计稿_v1.0.html#logic", "label": "07·结算(权限)"}]}, {"pri": "中", "t": "供应商门户权限隔离:如何保证供应商只见推送给自己的合同与金额、绝不串看别家?专属链接泄露怎么兜底?", "s": "门户是对外的,隔离不严是事故。", "o": ["账号级数据隔离(仅见自己被推送的单);专属链接+登录双重校验,链接可失效/重发;关键操作二次验证", "仅靠专属链接区分", "其他:____"], "rec": 0, "ref": "门户权限隔离", "src": [{"href": "05-供应商门户设计稿_v2.2.html#", "label": "05·门户(权限隔离)"}]}, {"pri": "中", "t": "业务在报价里改『报价耗用』、订单里改『单件耗用』是否反向更新样衣?(权限+数据流双重问题)", "s": "涉及谁有权改、改了是否回写源头。", "o": ["可改且为本单快照、不反向更新样衣(改样衣须回样衣模块);保留可溯源", "可改并反向同步样衣(双向)", "不可改,必须回样衣改", "其他:____"], "rec": 0, "ref": "下游改耗用是否回写样衣", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/02-客户报价设计稿_v1.3.html", "label": "02·报价"}, {"href": "UI设计稿汇总【已五个模块串流程】/02-样衣管理设计稿_v1.3.html", "label": "02·样衣"}]}, {"pri": "中", "t": "对客脱敏粒度:报价单价对中间商是否脱敏?最终买家能否看到中间商信息?供应商列对客隐藏是否可按客户授权级别(VIP可见)?", "s": "对客文件涉及单价/供应商/中间商可见性。", "o": ["报价PDF对客默认隐藏供应商;单价对最终买家可见、对中间商按授权;最终买家不可见中间商成本线;授权级别可配", "对客全隐藏供应商与中间商、单价照常", "不脱敏", "其他:____"], "rec": 0, "ref": "对客脱敏粒度", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/02-客户报价设计稿_v1.3.html", "label": "02·报价(PDF脱敏)"}]}]}, {"sec": "G", "name": "门户 · 发货 · 对账 · 开票 · 付款(供应商侧闭环)", "summary": "供应商门户到财务付款这段闭环的关键规则:发货地址/多合同多款/多次发货、对账一单多合同/批注退回/累计、开票校验/查重、账期/分批付款/水单/无合同付款/预付冲抵。", "qs": [{"pri": "高", "t": "门户『我要发货』:收货地址从哪来?一次发货能否勾选多张合同/多个款号?多次/部分发货怎么累计?", "s": "业务反馈一次发货可对应多张合同;多次部分发货需累计。", "o": ["地址带入合同/订单地址可改;一次发货可勾选同供应商多合同多款号一起推;多次发货每次一条走审批、系统累计已发数量直到发货完成,超合同量需确认", "一次发货限单合同单款;地址供应商手填", "其他:____"], "rec": 0, "ref": "发货:地址/多合同/多次累计", "src": [{"href": "05-供应商门户设计稿_v2.2.html#", "label": "05·门户(我要发货)"}]}, {"pri": "高", "t": "对账组织:一张对账单可对应多张合同吗?逐批『批注』后整单退回的流程与权限?多次发货如何累计对账(仅含已审批批次)?", "s": "业务反馈一单多合同、可逐批批注退回、对账只纳入已审批批次。", "o": ["同供应商一次推送的已审批批次合并为一张对账单(可跨多合同多款),关联合同在批次明细可点跳;可逐批批注、整单退回(批注随退回通知供应商);仅纳入已审批通过批次", "一张对账单严格对一张合同;批注仅内部、整单退回", "其他:____"], "rec": 0, "ref": "对账:一单多合同/批注退回/累计", "src": [{"href": "06-对账付款设计稿_v1.4.html#grp-dz-batch", "label": "06·对账批次明细"}, {"href": "05-供应商门户设计稿_v2.2.html#", "label": "05·门户(我要对账)"}]}, {"pri": "高", "t": "开票校验:发票金额=对账金额必须分毫不差吗?超票/欠票/多票配一对账如何处置?是否校验发票号/抬头/税号并查重防重复报销?", "s": "实务有税额尾差、合并开票、重复报销风险。", "o": ["默认严格相等(可设≤¥0.01容差),不符不生成付款申请退重开;发票PDF归档并登记发票号全局查重(同号不可重复付),抬头/税号人工核;暂一对账单一发票", "允许1%容差并支持多票配对;仅存档不查重", "其他:____"], "rec": 0, "ref": "开票=对账校验/查重", "src": [{"href": "06-对账付款设计稿_v1.4.html#grp-dz-fkhead", "label": "06·付款(发票校验)"}, {"href": "05-供应商门户设计稿_v2.2.html#", "label": "05·门户(我要开票)"}]}, {"pri": "高", "t": "账期与付款:到期日起算日(出货日/对账确认日/开票日)?分批付款累计与超付校验?水单粘贴?无合同付款(费用/现金无票/预付款)走不走审批、预付如何冲抵?", "s": "06内部对到期日起算有两处不一致表述,必须统一;分批/水单/无合同付款是业务反馈重点。", "o": ["到期日=最后发货日+合同账期(材料45/加工30,统一此口径);分批付款自动累计已付/未付、超付拦截、余额0转已付清,每批传水单(可截图粘贴);无合同付款走审批纳入应付,预付登记款号后续可勾选冲抵", "到期日=对账确认日+账期;无合同付款免审", "其他:____"], "rec": 0, "ref": "账期/分批/水单/无合同付款/预付", "src": [{"href": "06-对账付款设计稿_v1.4.html#grp-dz-fklist", "label": "06·付款(账期/分批)"}, {"href": "06-对账付款设计稿_v1.4.html#grp-dz-nocontract", "label": "06·无合同费用"}]}, {"pri": "高", "t": "样衣打样工时对账(独立于供应商对账的另一条线):版师填件数×单价(CNY)自动生成对账单——逐件还是多件/多款合并生成(业务批注:工时金额对账要一起提取很多款)?版师改件数后重算还是留原?工时单价限CNY、出口样衣需美元定价怎么办?", "s": "样衣模块版师工时会生成对账单,与供应商对账是不同线;业务要求多款合并。", "o": ["支持按版师/打样间+按月 或 业务自由勾选多款 合并生成工时对账单;版师改件数则标『待重算』复核后更新;工时单价默认CNY、特殊出口样衣可切币种留痕", "逐件逐单生成不合并、改件数不重算", "样衣工时不做对账仅记录", "其他:____"], "rec": 0, "ref": "样衣打样工时对账(多款合并)", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/02-样衣管理设计稿_v1.3.html", "label": "02·样衣(版师工时/对账)"}]}, {"pri": "中", "t": "门户登录形态与发货物流:门户走微信小程序+H5吗?账号如何开通?发货物流信息(快递/单号)与装箱单/货物照片是必填还是选填,对账审批是否依赖?", "s": "门户登录形态与发货附件必填性影响实现与审批。", "o": ["门户走微信小程序+H5双形态,账号由内部在工厂资料建档时开通;发货须填物流信息,装箱单/货物照片选填但对账审批可要求补齐", "仅H5;物流与附件全选填", "其他:____"], "rec": 0, "ref": "门户登录形态 + 发货物流附件", "src": [{"href": "05-供应商门户设计稿_v2.2.html#", "label": "05·门户(登录/我要发货)"}]}]}, {"sec": "H", "name": "结算 · 成本利润(末端)", "summary": "结算清单把成本侧(对账付款)与收入侧(出口发票/收汇)在款号上拼起来算利润。本段为主线级关键题,细目见《结算清单串流程问题清单》。", "qs": [{"pri": "高", "t": "结算核算单位(主键):一个款号跨多订单/多客户/多次出货/多汇率时,按什么粒度结算?", "s": "决定能否算出一个毛利,是结算数据模型的根。", "o": ["款号+订单(客户)分别结算,各自出货/收汇/汇率独立;同款另提供累计视图", "一款一单汇总,多汇率加权", "按出口发票/出货批", "其他:____"], "rec": 0, "ref": "结算主键/粒度", "src": [{"href": "07-结算清单设计稿_v1.0.html#list", "label": "07·结算列表"}, {"href": "结算清单串流程问题清单_v1.0.html", "label": "结算清单·串流程问题清单"}]}, {"pri": "高", "t": "出口收入侧链路:成本侧有 采购→对账→付款 完整链路,收入侧(客户出口发票→收汇)目前无上游模块。是否补『出口发票/收汇』子模块,还是结算手录?", "s": "收入侧无留痕、难追溯,且多笔多汇率难处理。", "o": ["补『出口发票/收汇』子模块:订单→出口发票→收汇逐笔留痕,结算按结算单位汇总、支持多笔多汇率;结算金额=Σ(各笔实际收汇×各自汇率)", "结算里人工录收汇金额/汇率,不做上游留痕(对齐现Excel)", "本期手录、收入侧模块下期补", "其他:____"], "rec": 0, "ref": "出口收入侧链路", "src": [{"href": "07-结算清单设计稿_v1.0.html#profit", "label": "07·收汇/毛利"}]}, {"pri": "中", "t": "结算生命周期:何时建(出货后/收汇后)、谁建?总货款/出货件数陆续增长,何时算可锁定?锁定后上游再变怎么办?", "s": "结算是动态过程,需锁定与重算规则。", "o": ["出货后业务可建(待收汇)、收汇后财务出毛利(已结算);已结算为软锁,上游变更触发待重算、财务复核后覆盖并留版本,关账后只能红冲重开", "收汇后财务一次性建并硬锁", "其他:____"], "rec": 0, "ref": "结算生命周期/锁定", "src": [{"href": "07-结算清单设计稿_v1.0.html#flow", "label": "07·页面联动"}]}, {"pri": "中", "t": "成本单价分摊与异常:成本单价=总货款÷出货件数(含税/不含税);短装/次品/退运/退款/索赔如何冲减?", "s": "出货≠投产、退运索赔都影响单位成本与毛利。", "o": ["成本单价=已归集总货款÷实际出货件数,未出货/次品料成本可分离标注;退运冲减出货与成本、退款/索赔作收入侧负数行冲减,均留痕重算", "全摊到出货件数,异常只线下", "其他:____"], "rec": 0, "ref": "成本分摊与异常冲减", "src": [{"href": "07-结算清单设计稿_v1.0.html#unit", "label": "07·成本单价"}]}, {"pri": "高", "t": "船务⑨ / 大货⑧ 下游是否本期启动?(结算出货件数依赖船务实际出口数量;业务 C3 反馈『大货资料/生产线落实』)", "s": "出货件数来自船务,目前暂缓;业务C3手填暗示想要。", "o": ["先把 04-07 主线按反馈定稿落地,船务⑨/大货⑧ 排下期;过渡期结算出货件数手填(标船务待对接)", "本期即启动船务⑧⑨需求与设计(大货资料/生产线落实)", "仅启动船务(出货件数),大货生产下期", "其他:____"], "rec": 0, "ref": "船务/大货下游启动节奏", "src": [{"href": "订单及下游模块_总体架构蓝图_v0.1.md", "label": "架构蓝图 ⑧⑨(待细化)"}, {"href": "07-结算清单设计稿_v1.0.html#new", "label": "07·结算(出货件数依赖船务)"}]}]}, {"sec": "I", "name": "数据迁移 · 报表 · 导出 · 附件", "summary": "上线相关的横向事项:旧系统数据迁移范围、关键报表/转化率/利润汇总、PDF导出/打印/脱敏、附件在各模块的继承复用。", "qs": [{"pri": "高", "t": "旧系统数据迁移范围:样衣/报价/客户工厂/历史单据 迁不迁、迁多少?", "s": "迁移范围影响上线方式与历史可追溯。", "o": ["客户/工厂主数据全迁;样衣/报价/单据仅迁近1年或未完成状态;久远历史只读归档或不迁", "全部迁", "不迁,新系统重新开始", "其他:____"], "rec": 0, "ref": "数据迁移范围", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/01-基础资料设计稿_v1.3.html", "label": "01·基础资料"}, {"href": "订单及下游模块_总体架构蓝图_v0.1.md", "label": "架构蓝图"}]}, {"pri": "中", "t": "关键报表/KPI:漏斗转化率(样衣→报价→合同)、业务员/客户成单率、利润汇总(款号/客户/月份毛利率·净利·亏损预警)是否本期做?", "s": "业务方关心转化率与利润看板。", "o": ["本期出:转化漏斗 + 成单率 + 利润汇总(亏损预警),口径对齐老系统利润表,可导出", "仅利润汇总,转化率下期", "本期都不做报表", "其他:____"], "rec": 0, "ref": "报表/KPI范围", "src": [{"href": "07-结算清单设计稿_v1.0.html#list", "label": "07·利润汇总"}, {"href": "UI设计稿汇总【已五个模块串流程】/02-客户报价设计稿_v1.3.html", "label": "02·报价"}]}, {"pri": "中", "t": "PDF导出/打印/脱敏:报价单/合同 PDF 内容范围、对客是否隐藏供应商/成本、电子章、打印vs导出?", "s": "对客文件需控制脱敏与签章。", "o": ["报价PDF业务勾选内容、对客默认隐藏供应商/成本;合同PDF按材料/加工不同模板、可脱敏、带电子章;打印=浏览器打印、导出=生成PDF文件", "PDF固定全量内容、不脱敏", "其他:____"], "rec": 0, "ref": "PDF/打印/脱敏", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/02-客户报价设计稿_v1.3.html", "label": "02·报价(PDF)"}, {"href": "UI设计稿汇总【已五个模块串流程】/04-合同设计稿_v1.3.html", "label": "04·合同(生成PDF)"}]}, {"pri": "中", "t": "附件继承:样衣的图稿/尺寸表/纸板/意见,是否随报价/订单继承复用?订单图片/大货尺寸表来源?", "s": "附件重复上传低效,继承则需规则。", "o": ["上游附件下游可选择性继承复用(如订单继承样衣图稿/尺寸表),业务可勾选随单发送的附件,也可另传", "附件各模块各自另传、不继承", "全部自动继承", "其他:____"], "rec": 0, "ref": "附件继承复用", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/02-样衣管理设计稿_v1.3.html", "label": "02·样衣(附件)"}, {"href": "UI设计稿汇总【已五个模块串流程】/03-订单设计稿_v1.0.html", "label": "03·订单(图片/尺寸表)"}]}, {"pri": "低", "t": "复制功能与草稿保留:样衣/报价/订单 是否要『复制建新单』?草稿状态保留期?", "s": "复制提效;草稿堆积需清理策略。", "o": ["样衣/报价/订单均支持复制建新单(带数据改关键值);草稿30天未提交自动归档,可手动清理", "均不需要复制;草稿永久保留", "其他:____"], "rec": 0, "ref": "复制/草稿保留", "src": [{"href": "UI设计稿汇总【已五个模块串流程】/02-客户报价设计稿_v1.3.html", "label": "02·报价"}, {"href": "UI设计稿汇总【已五个模块串流程】/02-样衣管理设计稿_v1.3.html", "label": "02·样衣"}]}]}];
+
+/* ===== 评审系统(批注 / 补充需求 / 答复 / 保存回 HTML) ===== */
+var MODULES=[{key:'A',label:'主数据编号'},{key:'B',label:'引用一致性'},{key:'C',label:'数量耗用损耗'},{key:'D',label:'价格成本利润'},{key:'E',label:'状态流转'},{key:'F',label:'审批权限'},{key:'G',label:'门户闭环'},{key:'H',label:'结算'},{key:'I',label:'迁移报表附件'}];
+function moduleLabel(k){for(var i=0;i<MODULES.length;i++){if(MODULES[i].key===k)return MODULES[i].label;}return '全局';}
+var reviewState=freshState();var dirty=false;var fileHandle=null;
+var capabilities={fsAccess:('showSaveFilePicker' in window)&&window.isSecureContext};
+var DRAFT_KEY='dz-crossflow-v1-draft::'+(location.pathname||'b');
+function freshState(){return {schemaVersion:1,meta:{docId:'样衣系统全流程问题确认清单_v1.0',boardVersion:'v1.0',reviewer:'',lastSaved:''},annotations:[],requirements:[],answers:{}};}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function uid(p){return p+'_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,6);}
+function nowIso(){return new Date().toISOString();}
+function fmtTime(iso){if(!iso)return '';try{var d=new Date(iso),p=function(n){return(n<10?'0':'')+n;};return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());}catch(e){return '';}}
+var idOk=function(s){return typeof s==='string'&&/^[A-Za-z0-9_-]+$/.test(s);};
+function loadState(){var n=document.getElementById('review-data'),raw=n?n.textContent:'';if(!raw||!raw.trim())return freshState();try{return normalizeState(JSON.parse(raw));}catch(e){window.__rawCorrupt=raw;showToast('⚠ 已保存数据损坏,已用空白表打开');return freshState();}}
+function normalizeState(o){var b=freshState();if(!o||typeof o!=='object')return b;if(o.meta)for(var k in o.meta){if(o.meta.hasOwnProperty(k))b.meta[k]=o.meta[k];}
+  if(Array.isArray(o.annotations))b.annotations=o.annotations.filter(function(a){return a&&idOk(a.id)&&idOk(a.anchorId)&&typeof a.text==='string';});
+  if(Array.isArray(o.requirements))b.requirements=o.requirements.filter(function(r){return r&&idOk(r.id);}).map(function(r){var mk=(r.scope==='module'&&idOk(r.moduleKey)&&MODULES.some(function(m){return m.key===r.moduleKey;}))?r.moduleKey:null;return {id:r.id,scope:mk?'module':'global',moduleKey:mk,moduleLabel:mk?moduleLabel(mk):'全局',title:String(r.title==null?'':r.title),detail:String(r.detail==null?'':r.detail),priority:(['P0','P1','P2'].indexOf(r.priority)>=0?r.priority:''),author:String(r.author==null?'':r.author),createdAt:r.createdAt||'',updatedAt:r.updatedAt||''};});
+  if(o.answers&&typeof o.answers==='object'){var na={};for(var qk in o.answers){if(!o.answers.hasOwnProperty(qk)||!idOk(qk))continue;var av=o.answers[qk];if(!av||typeof av!=='object')continue;var ch=av.choice;var okch=(ch===null||ch==='other'||(typeof ch==='number'&&ch>=0&&ch<50))?ch:null;na[qk]={choice:okch,other:typeof av.other==='string'?av.other.slice(0,2000):''};}b.answers=na;}
+  return b;}
+function flushStateToAnchor(){var s=JSON.stringify(reviewState);s=s.replace(/<\//g,'<\\/').replace(/<!--/g,'<\\u0021--');document.getElementById('review-data').textContent=s;}
+function serializeFullHTML(){flushStateToAnchor();var c=document.documentElement.cloneNode(true);
+  var rm=c.querySelectorAll('.anno-icon,[data-runtime],.toast');for(var i=0;i<rm.length;i++){if(rm[i].parentNode)rm[i].parentNode.removeChild(rm[i]);}
+  var on=c.querySelectorAll('.anno-on');for(var j=0;j<on.length;j++)on[j].classList.remove('anno-on');
+  var op=c.querySelectorAll('.mask.open,.drawer.open');for(var m=0;m<op.length;m++)op[m].classList.remove('open');
+  var qr=c.querySelector('#qRoot');if(qr)qr.innerHTML='';
+  return '<!DOCTYPE html>\n'+c.outerHTML;}
+function guessName(){try{var n=decodeURIComponent((location.pathname||'').split('/').pop()||'');if(n&&/\.html?$/i.test(n))return n;}catch(e){}return '样衣系统全流程问题确认清单_v1.0.html';}
+function save(){var prev=reviewState.meta.lastSaved;reviewState.meta.lastSaved=nowIso();var html;try{html=serializeFullHTML();}catch(e){reviewState.meta.lastSaved=prev;showToast('⚠ 序列化失败:'+e.message);setSaveState('fail');return;}
+  setSaveState('busy');
+  if(capabilities.fsAccess){saveViaFSA(html).then(function(ok){if(ok==='abort'){reviewState.meta.lastSaved=prev;flushStateToAnchor();setSaveState(dirty?'dirty':'clean');return;}if(ok===true){markSaved('inplace',fileHandle&&fileHandle.name);}else{fallbackBlob(html);}}).catch(function(e){reviewState.meta.lastSaved=prev;showToast('⚠ 保存失败:'+(e&&e.message||e));setSaveState('fail');});}
+  else{fallbackBlob(html);}}
+function saveViaFSA(html){return (async function(){try{if(!fileHandle){fileHandle=await window.showSaveFilePicker({suggestedName:guessName(),types:[{description:'评审HTML',accept:{'text/html':['.html']}}]});}else{var p=await fileHandle.queryPermission({mode:'readwrite'});if(p!=='granted'){p=await fileHandle.requestPermission({mode:'readwrite'});}if(p!=='granted')throw new Error('no-perm');}var w=await fileHandle.createWritable();await w.write(html);await w.close();return true;}catch(e){if(e&&e.name==='AbortError')return 'abort';return false;}})();}
+function fallbackBlob(html){try{var b=new Blob([html],{type:'text/html;charset=utf-8'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=guessName();document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(u);},1500);markSaved('download');}catch(e){clipFallback(html);}}
+function clipFallback(html){if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(html).then(function(){markSaved('clip');},function(){manualCopy(html);});}else{manualCopy(html);}}
+function manualCopy(html){var ta=document.createElement('textarea');ta.value=html;ta.style.position='fixed';ta.style.top='8%';ta.style.left='5%';ta.style.width='90%';ta.style.height='70%';ta.style.zIndex=999;document.body.appendChild(ta);ta.focus();ta.select();showToast('请 Ctrl+A 全选、Ctrl+C 复制,粘到编辑器另存为 .html');ta.addEventListener('blur',function(){if(ta.parentNode)ta.parentNode.removeChild(ta);});setSaveState('clean');}
+function setSaveState(mode){var b=document.getElementById('btnSave'),l=document.getElementById('saveLabel');b.classList.remove('dirty','fail');if(mode==='busy'){l.textContent='保存中…';return;}if(mode==='fail'){b.classList.add('fail');l.textContent='保存失败,重试';return;}if(mode==='dirty'){b.classList.add('dirty');l.textContent='保存*';return;}l.textContent='保存';}
+function markDirty(){dirty=true;setSaveState('dirty');scheduleDraft();}
+var _dt=null;function scheduleDraft(){if(_dt)clearTimeout(_dt);_dt=setTimeout(function(){try{flushStateToAnchor();localStorage.setItem(DRAFT_KEY,JSON.stringify({savedAt:nowIso(),state:reviewState}));}catch(e){}},800);}
+function markSaved(mode,fn){if(mode==='inplace'){dirty=false;setSaveState('clean');try{localStorage.removeItem(DRAFT_KEY);}catch(e){}}else{dirty=true;setSaveState('dirty');}
+  var msg=mode==='inplace'?('✓ 已保存到文件「'+(fn||guessName())+'」 '+fmtTime(reviewState.meta.lastSaved)):mode==='download'?'⚠ 已下载新版本,请用它覆盖原文件(同名同目录);未覆盖前草稿已保留':mode==='clip'?'✓ 源码已复制,请粘贴另存覆盖原文件':'已保存';
+  showToast(msg);var lf=document.getElementById('lastSavedFoot');if(lf)lf.textContent='　最近保存:'+fmtTime(reviewState.meta.lastSaved)+(mode!=='inplace'?'(待覆盖原文件)':'');}
+function applyCapabilityUI(){var tag=document.getElementById('modeTag'),tip=document.getElementById('guideSaveTip');
+  if(capabilities.fsAccess){tag.textContent='就地保存可用';if(tip)tip.textContent='Chrome/Edge 经本地服务器可直接写回原文件';}
+  else{tag.textContent='下载模式';if(tip)tip.textContent='双击打开时保存=下载同名文件,用它覆盖原文件即可';}}
+
+/* 题目渲染 + 作答 */
+function priClass(p){return p==='高'?'high':p==='中'?'mid':'low';}
+var _MODMAP={"05-供应商门户":"mn","06-对账付款":"dz","04-合同":"hc","03-订单":"dd","02-客户报价":"bj","02-样衣":"yg","01-基础":"jc"};
+function _modOf(h){for(var k in _MODMAP){if(h.indexOf(k)>=0)return _MODMAP[k];}return "";}
+function chipNav(e,a){try{var mod=a.getAttribute("data-mod"),sel=a.getAttribute("data-sel");if(mod&&window.parent&&window.parent!==window&&window.parent.showDoc){e.preventDefault();window.parent.showDoc(mod,sel||null);return false;}}catch(_){}return true;}
+function srcChips(src){var out=[];for(var i=0;i<src.length;i++){var s=src[i];if(!s||!s.href)continue;var hp=String(s.href).split("#");var mod=_modOf(hp[0]);var sel=hp[1]?("#"+hp[1]):"";out.push('<a class="src-chip" href="'+esc(s.href)+'" target="_blank" rel="noopener" data-mod="'+mod+'" data-sel="'+esc(sel)+'" onclick="return chipNav(event,this)">📍 '+esc(s.label||s.href)+'</a>');}return out.join('');}
+function renderQuestions(){var root=document.getElementById('qRoot');if(!root)return;var html='';
+  for(var si=0;si<QUESTIONS.length;si++){var S=QUESTIONS[si];
+    html+='<div class="design-section" id="sec'+S.sec+'"><div class="sec-band" data-anno-target data-anno-label="'+esc('段 '+S.sec+' '+S.name)+'"><span class="sec-letter">'+S.sec+'</span><div><div class="sec-name">'+esc(S.name)+'</div><div class="sec-sum">'+esc(S.summary)+'</div></div></div>';
+    for(var qi=0;qi<S.qs.length;qi++){var q=S.qs[qi];var qid=S.sec+(qi+1);
+      html+='<div class="q-block" data-anno-target data-anno-label="'+esc(qid+' '+q.t.slice(0,22))+'">';
+      html+='<div class="q-top"><span class="q-no">'+qid+'</span><span class="q-pri q-pri-'+priClass(q.pri)+'">'+q.pri+'</span><span class="q-title">'+esc(q.t)+'</span></div>';
+      html+='<div class="q-scene"><b>场景</b> '+esc(q.s)+'</div>';
+      html+='<div class="q-opts" data-qid="'+qid+'">';
+      for(var oi=0;oi<q.o.length;oi++){var rec=(oi===q.rec);
+        html+='<label class="q-opt'+(rec?' q-opt-rec':'')+'"><input type="radio" name="'+qid+'" value="'+oi+'"><span class="q-otext">'+esc(q.o[oi])+(rec?' <em class="q-rec">推荐</em>':'')+'</span></label>';}
+      html+='<label class="q-opt q-opt-other"><input type="radio" name="'+qid+'" value="other"><span class="q-otext">其他:</span><input type="text" class="q-other-in" data-qid="'+qid+'" placeholder="补充你的答复…"></label>';
+      html+='</div>';
+      if(q.ref)html+='<div class="q-ref">🔗 <b>关联</b> '+esc(q.ref)+'</div>';
+      if(q.src&&q.src.length)html+='<div class="q-src"><b>📍 出处</b> '+srcChips(q.src)+'</div>';
+      html+='</div>';
+    }
+    html+='</div>';
+  }
+  root.innerHTML=html;}
+function ansFor(qid){if(!reviewState.answers)reviewState.answers={};if(!reviewState.answers[qid])reviewState.answers[qid]={choice:null,other:''};return reviewState.answers[qid];}
+function setChoice(qid,val){var a=ansFor(qid);a.choice=(val==='other')?'other':parseInt(val,10);markDirty();updateStats();}
+function setOther(qid,val){var a=ansFor(qid);a.other=val;var r=document.querySelector('input[name="'+qid+'"][value="other"]');if(val&&r&&!r.checked){r.checked=true;a.choice='other';}markDirty();updateStats();}
+function bindAnswers(){var root=document.getElementById('qRoot');if(!root)return;
+  root.addEventListener('change',function(e){var t=e.target;if(t&&t.tagName==='INPUT'&&t.type==='radio'&&t.name){setChoice(t.name,t.value);}});
+  root.addEventListener('input',function(e){var t=e.target;if(t&&t.className&&t.className.indexOf('q-other-in')>=0){setOther(t.getAttribute('data-qid'),t.value);}});}
+function applyAnswers(){if(!reviewState.answers)return;for(var qid in reviewState.answers){if(!reviewState.answers.hasOwnProperty(qid))continue;var a=reviewState.answers[qid];if(!a)continue;if(a.choice!=null){var v=(a.choice==='other')?'other':String(a.choice);var r=document.querySelector('input[name="'+qid+'"][value="'+v+'"]');if(r)r.checked=true;}if(a.other){var oi=document.querySelector('.q-other-in[data-qid="'+qid+'"]');if(oi)oi.value=a.other;}}}
+function answeredCount(){var c=0;if(reviewState.answers){for(var k in reviewState.answers){if(!reviewState.answers.hasOwnProperty(k))continue;var a=reviewState.answers[k];if(a&&(a.choice!=null||(a.other&&a.other.trim())))c++;}}return c;}
+function totalQuestions(){var n=0;for(var i=0;i<QUESTIONS.length;i++)n+=QUESTIONS[i].qs.length;return n;}
+
+/* 批注 */
+var annoOn=false,curAnchor=null;
+function toggleAnnoMode(){annoOn=!annoOn;document.body.classList.toggle('anno-on',annoOn);document.getElementById('btnAnno').textContent='💬 批注：'+(annoOn?'开':'关');document.getElementById('btnAnno').classList.toggle('on',annoOn);refreshAnnoIcons();}
+function refreshAnnoIcons(){var old=document.querySelectorAll('.anno-icon');old.forEach(function(n){if(n.parentNode)n.parentNode.removeChild(n);});if(!annoOn)return;
+  document.querySelectorAll('[data-anchor]').forEach(function(el){var aid=el.getAttribute('data-anchor');var cnt=reviewState.annotations.filter(function(a){return a.anchorId===aid;}).length;
+    var btn=document.createElement('button');btn.className='anno-icon'+(cnt?' has':'');btn.setAttribute('data-runtime','1');btn.textContent=cnt?('✓'+cnt):'💬';
+    btn.onclick=function(ev){ev.stopPropagation();openAnno(aid);};if(getComputedStyle(el).position==='static')el.style.position='relative';el.appendChild(btn);});}
+function anchorLabel(aid){var el=document.querySelector('[data-anchor="'+aid+'"]');return el?(el.getAttribute('data-anno-label')||aid):aid;}
+function anchorQuote(aid){var el=document.querySelector('[data-anchor="'+aid+'"]');if(!el)return '';return (el.innerText||el.textContent||'').replace(/\s+/g,' ').trim().slice(0,60);}
+function openAnno(aid){curAnchor=aid;document.getElementById('annoTitle').textContent='批注 · '+anchorLabel(aid);document.getElementById('annoTarget').innerHTML='<b>定位</b>:'+esc(anchorLabel(aid));document.getElementById('annoText').value='';document.getElementById('annoAuthor').value='';renderAnnoList(aid);openMask('annoMask');setTimeout(function(){document.getElementById('annoText').focus();},40);}
+function renderAnnoList(aid){var list=reviewState.annotations.filter(function(a){return a.anchorId===aid;}),h=document.getElementById('annoList');if(!list.length){h.innerHTML='<div class="req-empty">该处暂无批注</div>';return;}
+  h.innerHTML=list.map(function(a){return '<div class="anno-li"><div class="al-t">'+esc(a.text)+'</div><div class="al-m"><span>'+esc(a.author||'匿名')+'</span><span>'+fmtTime(a.updatedAt||a.createdAt)+'</span><a href="javascript:void(0)" onclick="editAnno(\''+a.id+'\')">编辑</a> <a href="javascript:void(0)" style="color:var(--vermilion)" onclick="delAnno(\''+a.id+'\')">删除</a></div></div>';}).join('');}
+function addAnno(){var txt=document.getElementById('annoText').value.trim();if(!txt){showToast('请先输入批注内容');return;}
+  reviewState.annotations.push({id:uid('an'),anchorId:curAnchor,anchorLabel:anchorLabel(curAnchor),quote:anchorQuote(curAnchor),text:txt,author:document.getElementById('annoAuthor').value.trim(),status:'open',createdAt:nowIso(),updatedAt:nowIso()});
+  document.getElementById('annoText').value='';renderAnnoList(curAnchor);refreshAnnoIcons();markDirty();updateStats();}
+function editAnno(id){var a=reviewState.annotations.filter(function(x){return x.id===id;})[0];if(!a)return;var nv=prompt('编辑批注:',a.text);if(nv==null)return;var t=nv.trim();if(!t){showToast('内容不能为空,如需移除请删除');return;}a.text=t;a.updatedAt=nowIso();renderAnnoList(a.anchorId);refreshAnnoIcons();markDirty();updateStats();}
+function delAnno(id){if(!confirm('确认删除这条批注?'))return;var a=reviewState.annotations.filter(function(x){return x.id===id;})[0];reviewState.annotations=reviewState.annotations.filter(function(x){return x.id!==id;});if(a)renderAnnoList(a.anchorId);refreshAnnoIcons();markDirty();updateStats();}
+function applyAnnotations(){refreshAnnoIcons();}
+
+/* 补充需求 */
+var editingReqId=null;
+function openReqModal(id,scope){editingReqId=id;document.getElementById('reqTitle').textContent=id?'编辑补充需求':'新增补充需求';document.getElementById('reqDelBtn').style.display=id?'':'none';
+  if(id){var r=reviewState.requirements.filter(function(x){return x.id===id;})[0];if(!r)return;document.getElementById('reqScope').value=r.scope==='module'?r.moduleKey:'';document.getElementById('reqTitleIn').value=r.title||'';document.getElementById('reqDetail').value=r.detail||'';document.getElementById('reqPriority').value=r.priority||'';document.getElementById('reqAuthor').value=r.author||'';}
+  else{document.getElementById('reqScope').value=scope||'';document.getElementById('reqTitleIn').value='';document.getElementById('reqDetail').value='';document.getElementById('reqPriority').value='';document.getElementById('reqAuthor').value='';}
+  openMask('reqMask');}
+function saveReq(){var sv=document.getElementById('reqScope').value,title=document.getElementById('reqTitleIn').value.trim(),detail=document.getElementById('reqDetail').value.trim();if(!title&&!detail){showToast('请至少填写标题或详述');return;}
+  var rec={scope:sv?'module':'global',moduleKey:sv||null,moduleLabel:sv?moduleLabel(sv):'全局',title:title,detail:detail,priority:document.getElementById('reqPriority').value,author:document.getElementById('reqAuthor').value.trim(),updatedAt:nowIso()};
+  if(editingReqId){var r=reviewState.requirements.filter(function(x){return x.id===editingReqId;})[0];if(r)for(var k in rec)r[k]=rec[k];}else{rec.id=uid('req');rec.createdAt=nowIso();reviewState.requirements.push(rec);}
+  closeMask('reqMask');renderRequirements();markDirty();updateStats();}
+function deleteReqFromModal(){if(!editingReqId)return;if(!confirm('确认删除这条补充需求?'))return;reviewState.requirements=reviewState.requirements.filter(function(x){return x.id!==editingReqId;});closeMask('reqMask');renderRequirements();markDirty();updateStats();}
+function quickDelReq(id){if(!confirm('确认删除?'))return;reviewState.requirements=reviewState.requirements.filter(function(x){return x.id!==id;});renderRequirements();markDirty();updateStats();}
+function renderRequirements(){var host=document.getElementById('reqZone');if(!reviewState.requirements.length){host.innerHTML='<div class="req-empty">暂无补充需求。点上方「＋ 新增」或顶栏「➕ 补充需求」添加。</div>';refreshPins();return;}
+  var groups={};reviewState.requirements.forEach(function(r){var k=r.scope==='module'?r.moduleKey:'__g';(groups[k]=groups[k]||[]).push(r);});
+  var order=['__g'].concat(MODULES.map(function(m){return m.key;})),h='';
+  order.forEach(function(k){var arr=groups[k];if(!arr||!arr.length)return;var name=k==='__g'?'全局':moduleLabel(k);h+='<div class="req-group"><div class="rgh">'+esc(name)+' ('+arr.length+')</div>';
+    arr.forEach(function(r){h+='<div class="req-item"><div class="ra"><button class="btn btn-s btn-sm" onclick="openReqModal(\''+r.id+'\',\'\')">编辑</button><button class="btn btn-g btn-sm" onclick="quickDelReq(\''+r.id+'\')">删</button></div><div class="rt">'+(r.priority?'<span class="badge badge-w">'+esc(r.priority)+'</span> ':'')+esc(r.title||'(无标题)')+'</div>'+(r.detail?'<div class="rd">'+esc(r.detail)+'</div>':'')+'<div class="rm"><span>'+esc(r.moduleLabel)+'</span><span>'+esc(r.author||'匿名')+'</span><span>'+fmtTime(r.updatedAt||r.createdAt)+'</span></div></div>';});h+='</div>';});
+  host.innerHTML=h;refreshPins();}
+function refreshPins(){document.querySelectorAll('.pin[data-pin]').forEach(function(p){if(p.parentNode)p.parentNode.removeChild(p);});
+  MODULES.forEach(function(m){var c=reviewState.requirements.filter(function(r){return r.scope==='module'&&r.moduleKey===m.key;}).length;if(!c)return;
+    var el=document.getElementById('sec'+m.key);if(!el)return;var band=el.querySelector('.sec-band')||el;
+    var p=document.createElement('span');p.className='pin';p.setAttribute('data-pin',m.key);p.setAttribute('data-runtime','1');p.textContent='📌'+c;
+    p.onclick=function(ev){ev.stopPropagation();openSummary();switchTab('req');};band.appendChild(p);});}
+function applyRequirements(){renderRequirements();}
+
+function updateStats(){document.getElementById('stAnno').textContent=reviewState.annotations.length;document.getElementById('stReq').textContent=reviewState.requirements.length;var ac=document.getElementById('stAns');if(ac)ac.textContent=answeredCount()+'/'+totalQuestions();}
+
+/* 汇总抽屉 */
+var curTab='anno';
+function openSummary(){openMask('drawerMask');document.getElementById('drawer').classList.add('open');renderSummary();}
+function closeSummary(){document.getElementById('drawer').classList.remove('open');closeMask('drawerMask');}
+function switchTab(t){curTab=t;document.querySelectorAll('.drawer-tabs button').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-tab')===t);});renderSummary();}
+function renderSummary(){var host=document.getElementById('drawerBody'),h='';
+  if(curTab==='anno'){var orphan=reviewState.annotations.filter(function(a){return !document.querySelector('[data-anchor="'+a.anchorId+'"]');}),normal=reviewState.annotations.filter(function(a){return document.querySelector('[data-anchor="'+a.anchorId+'"]');});
+    if(!reviewState.annotations.length)h='<div class="sum-empty">暂无批注</div>';if(orphan.length){h+='<div class="sum-h" style="color:var(--vermilion)">⚠ 无法定位的批注('+orphan.length+')</div>';orphan.forEach(function(a){h+=sumAnno(a,true);});}if(normal.length){h+='<div class="sum-h">全部批注('+normal.length+')</div>';normal.forEach(function(a){h+=sumAnno(a,false);});}}
+  else{if(!reviewState.requirements.length)h='<div class="sum-empty">暂无补充需求</div>';reviewState.requirements.forEach(function(r){h+='<div class="sum-item" onclick="openReqModal(\''+r.id+'\',\'\')"><div class="sa">'+esc(r.moduleLabel)+(r.priority?' · '+esc(r.priority):'')+'</div><div class="sb"><b>'+esc(r.title||'(无标题)')+'</b>'+(r.detail?'\n'+esc(r.detail):'')+'</div></div>';});}
+  host.innerHTML=h||'<div class="sum-empty">暂无</div>';}
+function sumAnno(a,orphan){return '<div class="sum-item'+(orphan?' sum-orphan':'')+'" onclick="'+(orphan?'':'focusAnchor(\''+a.anchorId+'\')')+'"><div class="sa">'+esc(a.anchorLabel||a.anchorId)+(orphan?' <span style="color:var(--vermilion)">(锚点已失效)</span>':'')+'</div><div class="sb">'+esc(a.text)+'</div><div class="sm">'+esc(a.author||'匿名')+' · '+fmtTime(a.updatedAt||a.createdAt)+'</div></div>';}
+function focusAnchor(aid){closeSummary();var el=document.querySelector('[data-anchor="'+aid+'"]');if(!el)return;el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash');setTimeout(function(){el.classList.remove('flash');},1400);}
+
+function exportMd(){var L=['# 对账 · 开票 · 付款 串流程问题清单 — 评审汇总','','导出:'+fmtTime(nowIso()),'','## 答复('+answeredCount()+'/'+totalQuestions()+')',''];
+  for(var si=0;si<QUESTIONS.length;si++){var S=QUESTIONS[si];L.push('### '+S.sec+' '+S.name);
+    for(var qi=0;qi<S.qs.length;qi++){var q=S.qs[qi];var qid=S.sec+(qi+1);var a=reviewState.answers&&reviewState.answers[qid];
+      var ansTxt='（未答）';if(a&&a.choice!=null){ansTxt=(a.choice==='other')?('其他:'+(a.other||'')):(typeof a.choice==='number'&&q.o[a.choice]!=null?q.o[a.choice]:'');if(a.choice!=='other'&&a.other)ansTxt+=' / 备注:'+a.other;}else if(a&&a.other){ansTxt='其他:'+a.other;}
+      L.push('- **'+qid+'** ['+q.pri+'] '+q.t);L.push('    → '+ansTxt);}
+    L.push('');}
+  L.push('## 批注('+reviewState.annotations.length+')','');
+  reviewState.annotations.forEach(function(a){L.push('- **'+(a.anchorLabel||a.anchorId)+'**:'+a.text+'  _( '+(a.author||'匿名')+' )_');});
+  L.push('','## 补充需求('+reviewState.requirements.length+')','');reviewState.requirements.forEach(function(r){L.push('- **['+(r.priority||'-')+'] '+r.moduleLabel+' · '+(r.title||'(无标题)')+'**'+(r.detail?':'+r.detail.replace(/\n/g,' '):'')+'  _( '+(r.author||'匿名')+' )_');});
+  var md=L.join('\n'),b=new Blob([md],{type:'text/markdown;charset=utf-8'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download='对账付款串流程问题清单_评审汇总.md';document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(u);},1200);showToast('已导出评审汇总(.md)');}
+
+function openMask(id){document.getElementById(id).classList.add('open');}
+function closeMask(id){document.getElementById(id).classList.remove('open');}
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeMask('annoMask');closeMask('reqMask');closeSummary();}if((e.ctrlKey||e.metaKey)&&(e.key==='s'||e.key==='S')){e.preventDefault();save();}});
+function dismissGuide(){var n=document.getElementById('guideNever');if(n&&n.checked){try{localStorage.setItem('dz-crossflow-v1-guide-hide','1');}catch(e){}}var c=document.getElementById('guideCard');if(c)c.style.display='none';}
+var _tt=null;function showToast(msg){var t=document.createElement('div');t.className='toast';t.setAttribute('data-runtime','1');t.textContent=msg;document.body.appendChild(t);if(_tt)clearTimeout(_tt);_tt=setTimeout(function(){if(t.parentNode)t.parentNode.removeChild(t);},3600);}
+function checkAnchors(){var seen={};document.querySelectorAll('[data-anchor]').forEach(function(el){var a=el.getAttribute('data-anchor');if(seen[a]){try{console.warn('dup anchor',a);}catch(e){}}seen[a]=1;});}
+function assignAnchors(){var es=document.querySelectorAll('[data-anno-target]');for(var i=0;i<es.length;i++)es[i].setAttribute('data-anchor','a'+i);}
+function maybeOfferDraft(){var raw;try{raw=localStorage.getItem(DRAFT_KEY);}catch(e){return;}if(!raw)return;try{var d=JSON.parse(raw);if(d&&d.savedAt&&(!reviewState.meta.lastSaved||d.savedAt>reviewState.meta.lastSaved)){if(confirm('检测到本机未保存草稿(暂存于 '+fmtTime(d.savedAt)+'),用草稿?\n确定=草稿,取消=文件已存内容。')){reviewState=normalizeState(d.state);reviewState.meta.lastSaved='';applyAnswers();applyAnnotations();renderRequirements();updateStats();markDirty();showToast('已恢复草稿,记得点保存写回文件');}}}catch(e){}}
+function init(){renderQuestions();bindAnswers();assignAnchors();reviewState=loadState();checkAnchors();applyCapabilityUI();applyAnswers();applyAnnotations();renderRequirements();updateStats();dirty=false;setSaveState('clean');
+  var lf=document.getElementById('lastSavedFoot');if(lf&&reviewState.meta.lastSaved)lf.textContent='　最近保存:'+fmtTime(reviewState.meta.lastSaved);
+  try{if(localStorage.getItem('dz-crossflow-v1-guide-hide')==='1'){var c=document.getElementById('guideCard');if(c)c.style.display='none';}}catch(e){}
+  maybeOfferDraft();window.addEventListener('beforeunload',function(e){if(dirty){e.preventDefault();e.returnValue='';return '';}});}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+</script>
+
+</body></html>
