@@ -255,7 +255,7 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
     <p class="dj-summary">
     这是供应商协同的<b>内部财务侧闭环</b>：⑥门户里供应商「我要对账」推来<b>对账单</b>→ 业务审批；供应商「我要开票」推来发票 → 系统生成<b>付款申请</b>→ 财务按账期付款。<br>
     <b>编号</b>：对账单 DZ-YYYYMMDD-序号、付款申请 PR-YYYYMMDD-序号　·　<b>来源</b>：⑥供应商协同门户推送　·　<b>覆盖</b>：对账单(业务审批) + 付款申请(财务付款)<br>
-    <span style="background:rgba(255,255,255,.18);padding:2px 8px;border-radius:4px;font-size:12px">📌 v1.3(业务补充确认落地):编号统一 对账单 DZ-款号-序号 / 发货单 FH-款号-序号 / 付款申请 PR-款号-序号(多款取主款) · 账期 材料发货日+90天 / 加工发货日+45天(可改) · 对账单业务主管二级审批 · 一张对账单不混含两类合同 · 超发弹窗确认 · 预付款可勾选冲抵。　v1.2(业务 D4):付款申请 FK-→PR- · 发货单 FH- · 对账单 DZ-。　v1.1 改造(按业务反馈):对账单列表/详情按款号检索 · 一单多合同(关联合同移到发货批次明细可点跳·批次加款号列) · 批次批注后退回 · 付款水单截图粘贴 · 分批付款(本次金额/已付/未付自动算) · 新增「无合同付款申请」(费用/现金无票/预付款)。　v1.0 规则：① 对账单=合同单价×已发货数量(门户自动算)，业务审批通过才解锁供应商开票 ② 发票金额必须=对账金额(门户已校验) ③ 付款申请由开票自动生成 ④ 账期取合同结算条款(材料45天/加工30天)，到期高亮 ⑤ 财务编号=供应商+日期(业务答复)</span>
+    <span style="background:rgba(255,255,255,.18);padding:2px 8px;border-radius:4px;font-size:12px">📌 v1.4(无合同费用补充确认落地):无合同费用<b>双入口并行</b>(对账单·新建空白对账单 + 付款申请·新建无合同,业务确认保留两个,按 供应商+款号+金额+日期 防重) · 空白对账单费用明细<b>加 数量/单价/小计</b>(小计=数量×单价、对账金额=Σ小计,单笔可只填一行) · 三类(费用/现金无票/预付款)<b>共用一张</b>空白对账单、用「类型」字段区分 · 无款号编号 <b>DZ-费用-序号</b> · 无票免发票校验(收据+审批放行) · 预付款登记后续可勾选冲抵 · 无合同对账同合同二级审批 · 纳入应付并按「合同/无合同」分组。　v1.3(业务补充确认落地):编号统一 对账单 DZ-款号-序号 / 发货单 FH-款号-序号 / 付款申请 PR-款号-序号(多款取主款) · 账期 材料发货日+90天 / 加工发货日+45天(可改) · 对账单业务主管二级审批 · 一张对账单不混含两类合同 · 超发弹窗确认 · 预付款可勾选冲抵。　v1.2(业务 D4):付款申请 FK-→PR- · 发货单 FH- · 对账单 DZ-。　v1.1 改造(按业务反馈):对账单列表/详情按款号检索 · 一单多合同(关联合同移到发货批次明细可点跳·批次加款号列) · 批次批注后退回 · 付款水单截图粘贴 · 分批付款(本次金额/已付/未付自动算) · 新增「无合同付款申请」(费用/现金无票/预付款)。　v1.0 规则：① 对账单=合同单价×已发货数量(门户自动算)，业务审批通过才解锁供应商开票 ② 发票金额必须=对账金额(门户已校验) ③ 付款申请由开票自动生成 ④ 账期取合同结算条款(材料45天/加工30天)，到期高亮 ⑤ 财务编号=供应商+日期(业务答复)</span>
     </p>
   </div>
 
@@ -308,7 +308,7 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
           <tr><td>DZ-20260618-02</td><td>MNA258K203 等3款</td><td>维希亚</td><td>3 批</td><td>¥23,495</td><td>2026-06-18</td><td><span class="status status-reject">已退回</span></td><td class="row-act">查看</td></tr>
         </tbody>
       </table>
-      <div style="font-size:11px;color:var(--gray-5);margin:4px 2px">ℹ v1.1：列表改显<b>款号</b>且可按款号搜索;「关联合同」一张对账单可对应多张合同,故不在列表展示、改在审批详情的<b>发货批次明细</b>中逐批显示并可点击跳转合同。<br>ℹ <b>v1.3「＋ 新建对账单」</b>：业务对<b>无合同的费用</b>(费用/现金无票/预付款)可手动新建一张<b>空白对账单</b>,手填费用明细(类型 / 供应商 / 相关款号 / 金额 / 事由 / 附件,即下方「无合同费用」分组),走对账审批后<b>生成付款申请</b>——与门户推送来的合同对账单走同一条「对账→付款申请」路径。</div>
+      <div style="font-size:11px;color:var(--gray-5);margin:4px 2px">ℹ v1.1：列表改显<b>款号</b>且可按款号搜索;「关联合同」一张对账单可对应多张合同,故不在列表展示、改在审批详情的<b>发货批次明细</b>中逐批显示并可点击跳转合同。<br>ℹ <b>v1.3「＋ 新建对账单」</b>：业务对<b>无合同的费用</b>(费用/现金无票/预付款,用「类型」字段区分、<b>共用同一张</b>空白对账单)可手动新建一张<b>空白对账单</b>,手填<b>无合同费用明细</b>(费用项目/事由 · 供应商 · 相关款号 · 数量 · 单价 · 小计 · 附件,见下方明细表;<b>小计=数量×单价自动算</b>、对账金额=Σ小计),走对账审批后<b>生成付款申请</b>——与门户推送来的合同对账单走同一条「对账→付款申请」路径。<br>ℹ <b>v1.4 双入口并行(业务确认)</b>:无合同费用保留<b>两个入口</b>——①本处「对账单·＋新建空白对账单」(走对账二级审批·留痕,推荐需审批/留痕的费用);②「付款申请·＋新建付款申请(无合同)」(直接发起,零星小额);为防重复建单,系统按 <b>供应商+相关款号+金额+日期</b> 做重复提醒。</div>
       </div>
       <div class="pagination"><span>共 16 条</span><button class="btn btn-s btn-sm">‹</button><button class="btn btn-p btn-sm">1</button><button class="btn btn-s btn-sm">2</button><button class="btn btn-s btn-sm">›</button></div>
 
@@ -338,6 +338,19 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
         </table>
         </div>
       </div>
+      <div class="subtable-wrap" data-anno-target="" id="grp-dz-fee" data-anno-label="对账单·无合同费用明细" data-anchor="a4b" style="position: relative;">
+        <div class="subtable-head"><span class="st-title">▸ 无合同费用明细<span class="anno-mark">v1.4</span><span class="count"> · 空白对账单专用(替代发货批次明细) · 小计=数量×单价自动算;单笔费用可只填一行直接填小计</span></span><button class="btn btn-s btn-sm">＋ 添加费用行</button></div>
+        <div style="overflow-x:auto">
+        <table class="table">
+          <thead><tr><th>费用项目 / 事由</th><th>供应商</th><th>相关款号</th><th>数量</th><th>单价</th><th class="calc">小计</th><th>附件</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr><td>样品快递费</td><td>顺丰</td><td>—</td><td>3 票</td><td>¥28.00</td><td class="calc">¥84</td><td><span style="color:var(--gray-3);cursor:pointer">📎 上传</span></td><td><span style="color:var(--gray-3);cursor:pointer">删</span></td></tr>
+            <tr><td>面料预付定金</td><td>维希亚</td><td>MNA263M525</td><td>—</td><td>—</td><td class="calc">¥5,000</td><td><span style="color:var(--gray-3);cursor:pointer">📎 上传</span></td><td><span style="color:var(--gray-3);cursor:pointer">删</span></td></tr>
+          </tbody>
+          <tfoot><tr><td colspan="5">对账金额合计 = Σ小计</td><td class="calc">¥5,084</td><td colspan="2">—</td></tr></tfoot>
+        </table>
+        </div>
+      </div>
       <div class="approve-bar" data-anno-target="" id="grp-dz-approve" data-anno-label="对账单·审批操作" data-anchor="a5" style="position: relative;">
         <span class="ab-label">✅ 业务审批(二级)：业务员初审 + 业务主管复核无误后</span>
         <span>对账金额 <span class="amt-big">¥3,820</span></span>
@@ -351,7 +364,8 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
           <thead><tr><th style="width:140px">字段 / 操作</th><th style="width:70px">填写人</th><th>操作逻辑 / 业务规则</th></tr></thead>
           <tbody>
             <tr><td><b>对账单号 / 合同 / 供应商 / 金额</b></td><td><span class="by-tag by-sys">系统</span></td><td>门户推送带入，只读;对账金额 = Σ小计(合同单价 × 已审批发货数量)</td></tr>
-            <tr><td><b>＋ 新建空白对账单(无合同)</b><span class="anno-mark">v1.3</span></td><td><span class="by-tag by-mix">系统/业务</span></td><td>★ v1.3:仅<b>对账单号</b>系统自动(DZ-款号-序号),其余<b>全部手动填写</b>(款号 / 合同类型标"无合同·费用" / 供应商 / 提交时间默认今天 / 关联合同可空);<b>对账金额 = Σ小计 自动带入</b>(由下方费用明细各行金额合计,不可手填)</td></tr>
+            <tr><td><b>＋ 新建空白对账单(无合同)</b><span class="anno-mark">v1.3</span><span class="anno-mark">v1.4</span></td><td><span class="by-tag by-mix">系统/业务</span></td><td>★ 仅<b>对账单号</b>系统自动(DZ-款号-序号,<b>无款号时用「费用」占位 → DZ-费用-序号</b>),其余<b>全部手动填写</b>(款号可空 / <b>类型</b>标「无合同·费用 / 现金无票 / 预付款」单字段区分三类·共用一张 / 供应商 / 提交时间默认今天 / 关联合同可空);<b>对账金额 = Σ小计 自动带入</b>(由下方<b>无合同费用明细</b>各行小计=数量×单价合计,不可手填)</td></tr>
+            <tr><td><b>无合同费用明细</b><span class="anno-mark">v1.4</span></td><td><span class="by-tag by-biz">业务</span></td><td>★ v1.4:空白对账单专用(替代发货批次明细);每行 费用项目/事由 · 供应商 · 相关款号(可空) · 数量 · 单价 · 附件;<b>小计 = 数量 × 单价</b> 自动算,<b>单笔费用</b>可只填一行(数量/单价留空、直接填小计金额);合计 = 对账金额</td></tr>
             <tr><td><b>发货批次明细</b><span class="anno-mark">仅含已审批批次</span></td><td><span class="by-tag by-sys">系统</span></td><td>★ 仅纳入已通过发货审批的批次;每行 小计=数量×合同单价;合计=对账金额</td></tr>
             <tr><td><b>款号 / 关联合同(批次内)</b><span class="anno-mark">v1.1</span></td><td><span class="by-tag by-mix">系统/业务</span></td><td>★ v1.1:列表与详情按<b>款号</b>检索;一张对账单可对应<b>多张合同</b>,关联合同与款号在发货批次明细逐批展示,点合同号可跳转对应合同</td></tr>
             <tr><td><b>批次批注 → 退回</b><span class="anno-mark">v1.1</span></td><td><span class="by-tag by-biz">业务</span></td><td>★ v1.1:可对个别发货批次写「✏️批注」后整单退回,批注随退回意见一并通知供应商</td></tr>
@@ -450,6 +464,7 @@ label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
           <div class="field" style="grid-column:span 3"><label>事由 / 附件</label><input class="input" placeholder="付款事由说明;可上传 / 粘贴凭证"></div>
         </div>
       </div>
+      <div style="font-size:11px;color:var(--gray-5);margin:4px 2px">ℹ <b>v1.4</b>:本「付款申请·新建(无合同)」为<b>直接入口</b>(不走对账审批),与「对账单·新建空白对账单」<b>并行保留</b>(业务确认);需对账留痕/二级审批的无合同费用建议走对账单入口,本入口用于<b>零星小额</b>直接付款;系统按 供应商+相关款号+金额+日期 提示重复。</div>
       <div class="field-logic-wrap">
         <div class="flw-head">📋 付款申请 · 字段与付款逻辑</div>
         <table class="field-logic-table">

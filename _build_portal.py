@@ -20,7 +20,7 @@ DOC_FILES = {
     'hcq': os.path.join(UIDIR, '合同串流程问题清单_v1.0.html'),
     'rev': os.path.join(UIDIR, '三模块串流程_修订说明.html'),
     'mn':  os.path.join(BASE, '05-供应商门户设计稿_v2.2.html'),
-    'dz':  os.path.join(BASE, '06-对账付款设计稿_v1.3.html'),
+    'dz':  os.path.join(BASE, '06-对账付款设计稿_v1.4.html'),
     'mnq': os.path.join(BASE, '门户串流程问题清单_v1.0.html'),
     'dzq': os.path.join(BASE, '对账付款串流程问题清单_v1.0.html'),
     'dzq2':os.path.join(BASE, '对账付款_补充确认清单_v1.0.html'),
@@ -196,7 +196,7 @@ iframe#doc{flex:1;width:100%;border:none;background:#fff}
     <div class="it" data-doc="dd" onclick="showDoc('dd')"><span class="ic">📦</span><div>订单 v1.0<span class="tag-ok">已定版</span><small>报价导入 · PO/用料核算</small></div></div>
     <div class="it" data-doc="hc" onclick="showDoc('hc')"><span class="ic">📄</span><div>合同 v1.3<span class="tag-ok">已定稿</span><small>材料合同 · 加工合同 · 列表</small></div></div>
     <div class="it" data-doc="mn" onclick="showDoc('mn')"><span class="ic">📱</span><div>供应商门户 v2.2<span class="tag-ok">已定稿</span><small>盖章→发货→对账→开票</small></div></div>
-    <div class="it" data-doc="dz" onclick="showDoc('dz')"><span class="ic">🧾</span><div>对账付款 v1.3<span class="tag-ok">已定稿</span><small>对账单 · 付款申请</small></div></div>
+    <div class="it" data-doc="dz" onclick="showDoc('dz')"><span class="ic">🧾</span><div>对账付款 v1.4<span class="tag-ok">已定稿</span><small>对账单 · 付款申请</small></div></div>
   </div></div>
   <div class="grp" id="grp-q"><div class="grp-h" onclick="toggleGrp('grp-q')">❓ 全流程串接问题澄清<span class="ar">▾</span></div><div class="items">
     <div class="it" data-q="tri" onclick="showQ('tri')"><span class="ic">✅</span><div>三模块·已澄清问题清单<small>样衣→报价→基础资料</small></div></div>
@@ -227,7 +227,7 @@ iframe#doc{flex:1;width:100%;border:none;background:#fff}
       <div class="card" onclick="showDoc('dd')"><div class="ct">📦 订单 v1.0 <span style="color:var(--teal);font-size:11px">已定版</span></div><div class="cd">从报价一键导入,补 PO/尺码数量搭配、币种/佣金/生产工厂,按用料定额算采购量,向下生成合同。</div></div>
       <div class="card" onclick="showDoc('hc')"><div class="ct">📄 合同 v1.3 <span style="color:var(--teal);font-size:11px">已定稿</span></div><div class="cd">材料合同(原料/辅料购销)+ 生产加工合同(委托加工)+ 列表;含门户进度、审批、补料、电子章 PDF;按合同串流程推荐项定稿。</div></div>
       <div class="card" onclick="showDoc('mn')"><div class="ct">📱 供应商门户 v2.2 <span style="color:var(--teal);font-size:11px">已定稿</span></div><div class="cd">对外端(首期 H5):登录看自己合同 → 🔖盖章→📦发货→🧾对账→💵开票 顺序锁定;发货带合同收货地址、加工厂可见订单明细。</div></div>
-      <div class="card" onclick="showDoc('dz')"><div class="ct">🧾 对账付款 v1.3 <span style="color:var(--teal);font-size:11px">已定稿</span></div><div class="cd">对账单(款号检索·一单多合同·批次锁价·主管二级审批)+ 付款申请(分批付款·水单·账期90/45)+ 无合同付款/预付冲抵。</div></div>
+      <div class="card" onclick="showDoc('dz')"><div class="ct">🧾 对账付款 v1.4 <span style="color:var(--teal);font-size:11px">已定稿</span></div><div class="cd">对账单(款号检索·一单多合同·批次锁价·主管二级审批)+ 付款申请(分批付款·水单·账期90/45)+ 无合同费用走空白对账单(费用明细 数量×单价=小计)、双入口并行、预付冲抵。</div></div>
     </div>
     <div class="sec-title">❓ 全流程串接问题澄清</div>
     <div class="cards">
@@ -254,7 +254,7 @@ var DOCB64={};/*__DOCB64__*/
 /*__QORDER__*/
 /*__QCONTRACT__*/
 var Q_TRI=/*__TRIJSON__*/;
-var DOCMETA={jc:{name:'基础资料设计稿 v1.3'},bj:{name:'客户报价设计稿 v1.3'},yg:{name:'样衣管理设计稿 v1.3'},dd:{name:'订单设计稿 v1.0（已定版）'},hc:{name:'合同设计稿 v1.3（已定稿）'},rev:{name:'三模块·串流程修订说明'},ddq:{name:'订单串流程问题清单 v1.0(可填写版)'},hcq:{name:'合同串流程问题清单 v1.0(可填写版)'},mn:{name:'供应商门户设计稿 v2.2（已定稿）'},dz:{name:'对账付款设计稿 v1.3（已定稿）'},mnq:{name:'门户串流程问题清单 v1.0(可填写版·已定稿)'},dzq:{name:'对账付款串流程问题清单 v1.0(可填写版·已定稿)'},dzq2:{name:'对账付款·补充确认清单 v1.0(可填写版·已定稿)'},rev2:{name:'下游模块·业务反馈修订说明 v2'}};
+var DOCMETA={jc:{name:'基础资料设计稿 v1.3'},bj:{name:'客户报价设计稿 v1.3'},yg:{name:'样衣管理设计稿 v1.3'},dd:{name:'订单设计稿 v1.0（已定版）'},hc:{name:'合同设计稿 v1.3（已定稿）'},rev:{name:'三模块·串流程修订说明'},ddq:{name:'订单串流程问题清单 v1.0(可填写版)'},hcq:{name:'合同串流程问题清单 v1.0(可填写版)'},mn:{name:'供应商门户设计稿 v2.2（已定稿）'},dz:{name:'对账付款设计稿 v1.4（已定稿）'},mnq:{name:'门户串流程问题清单 v1.0(可填写版·已定稿)'},dzq:{name:'对账付款串流程问题清单 v1.0(可填写版·已定稿)'},dzq2:{name:'对账付款·补充确认清单 v1.0(可填写版·已定稿)'},rev2:{name:'下游模块·业务反馈修订说明 v2'}};
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 var blobCache={};
 function blobUrl(key){if(blobCache[key])return blobCache[key];var b=DOCB64[key];if(!b)return '';var bin=atob(b);var bytes=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);var blob=new Blob([bytes],{type:'text/html'});var u=URL.createObjectURL(blob);blobCache[key]=u;return u;}
