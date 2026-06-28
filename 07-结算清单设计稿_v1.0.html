@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>结算清单 · 成本利润核算 · UI 设计稿 v1.0</title>
+<style>
+:root{
+  --indigo:#1E3A5F;--indigo-d:#152A45;--indigo-l:#2C5180;
+  --linen:#F5EDDC;--linen-d:#E8DCC0;--canvas:#FBF8F2;
+  --rust:#D17A40;--rust-d:#B86530;--vermilion:#C04042;
+  --teal:#3E8E7E;--amber:#C8901E;
+  --gray-9:#1F1F22;--gray-7:#37383C;--gray-5:#6F7178;
+  --gray-3:#B5B7BD;--gray-1:#E5E2DA;--gray-0:#F4F1EA;
+  --font:"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;
+  --r:4px;--r-lg:6px;
+  --shadow-sm:0 1px 2px rgba(30,58,95,.05);--shadow:0 2px 8px rgba(30,58,95,.10);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:13px/1.55 var(--font);color:var(--gray-9);background:#EEEAE0}
+a{color:var(--indigo);text-decoration:none}
+
+.topbar{position:fixed;top:0;left:0;right:0;min-height:48px;background:var(--indigo);color:#fff;display:flex;align-items:center;padding:6px 24px;z-index:100;border-bottom:3px solid var(--rust);box-shadow:0 2px 8px rgba(0,0,0,.15);gap:12px;flex-wrap:wrap}
+.topbar .logo{font-size:15px;font-weight:600}
+.topbar .logo small{font-size:11px;color:#C9D6E5;margin-left:8px;font-weight:400}
+.topbar .stat{display:flex;gap:10px;font-size:12px;color:#dde6f0;margin-left:auto}
+.topbar .stat b{color:#fff}
+.topbar .acts{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.t-btn{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.28);padding:5px 11px;border-radius:14px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.t-btn:hover{background:rgba(255,255,255,.24)}
+.t-btn.on{background:var(--rust);border-color:var(--rust)}
+.t-btn.save .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--teal);margin-right:5px;vertical-align:middle}
+.t-btn.save.dirty .dot{background:var(--amber)}
+.t-btn.save.fail .dot{background:var(--vermilion)}
+.mode-tag{font-size:11px;color:#cdd8e6;white-space:nowrap}
+
+.sidenav{position:fixed;top:48px;left:0;bottom:0;width:240px;background:#fff;border-right:1px solid var(--gray-1);overflow-y:auto;padding:14px 0;font-size:13px}
+.sidenav .nav-cat{padding:10px 16px 4px;color:var(--gray-5);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;border-top:1px solid var(--gray-1);margin-top:6px}
+.sidenav a.nav-dj{display:block;padding:8px 16px;color:var(--indigo);font-weight:600;font-size:13px;border-left:3px solid transparent}
+.sidenav a.nav-dj:hover{background:var(--linen);border-left-color:var(--rust)}
+.sidenav a.nav-sub{display:block;padding:5px 16px;color:var(--gray-7);font-size:12.5px;border-left:3px solid transparent}
+.sidenav a.nav-sub:hover{background:var(--canvas);color:var(--indigo);border-left-color:var(--gray-3)}
+
+.main{margin-left:240px;padding:64px 32px 80px;max-width:1280px}
+.dj-block{padding:28px 32px;background:linear-gradient(135deg,var(--indigo) 0%,var(--indigo-l) 100%);color:#fff;border-radius:8px;margin:30px 0 16px}
+.dj-block h1{font-size:22px;margin-bottom:6px;font-weight:600}
+.dj-block h1 small{font-family:"SF Mono",Monaco,monospace;color:#C9D6E5;font-size:14px;font-weight:400;margin-left:8px}
+.dj-block .dj-summary{font-size:13px;color:#D5DDE8;line-height:1.7}
+
+.design-section{margin-bottom:32px}
+.sect-head{display:flex;justify-content:space-between;align-items:flex-start;margin:0 8px 12px;padding-bottom:8px;border-bottom:2px solid var(--gray-1)}
+.sect-head h2{font-size:16px;color:var(--gray-9);font-weight:600;margin-bottom:4px}
+.sect-head .sect-no{display:inline-block;background:var(--rust);color:#fff;padding:1px 8px;border-radius:3px;font-size:13px;margin-right:8px}
+.sect-head .sect-desc{font-size:12px;color:var(--gray-5)}
+
+.biz-notes{background:#FFF7EA;border:1px solid #EDD8A8;border-left:3px solid var(--amber);border-radius:4px;padding:12px 16px;margin:0 8px 14px}
+.biz-notes b{color:#7A5810;font-size:12.5px}
+.biz-notes ul{list-style:none;margin-top:6px}
+.biz-notes li{font-size:12px;color:#5C4307;line-height:1.7;padding:2px 0 2px 18px;position:relative}
+.biz-notes li:before{content:"▸";position:absolute;left:6px;color:var(--amber)}
+
+.design-frame{background:#fff;border:1px solid var(--gray-1);border-radius:8px;padding:16px;box-shadow:var(--shadow-sm)}
+
+.page-toolbar{display:flex;justify-content:space-between;align-items:center;background:#FBF8F2;border:1px solid var(--gray-1);border-radius:6px;padding:8px 14px;margin-bottom:14px;flex-wrap:wrap;gap:6px}
+.tb-left{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tb-right{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.page-title{font-size:14px;color:var(--indigo);font-weight:600}
+
+.btn{display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:4px;font-size:12.5px;cursor:pointer;border:1px solid;line-height:1.5;font-family:inherit}
+.btn-p{background:var(--indigo);color:#fff;border-color:var(--indigo)}
+.btn-c{background:var(--rust);color:#fff;border-color:var(--rust)}
+.btn-s{background:#fff;color:var(--gray-7);border-color:var(--gray-1)}
+.btn-g{background:#fff;color:var(--vermilion);border-color:var(--gray-1)}
+.btn-t{background:transparent;color:var(--indigo);border-color:transparent;padding:3px 8px}
+.btn-ok{background:var(--teal);color:#fff;border-color:var(--teal)}
+.btn-sm{padding:3px 9px;font-size:11.5px}
+.req{color:var(--vermilion);margin-right:3px}
+
+.section-divider{font-size:14px;color:var(--indigo);font-weight:600;padding:14px 12px 8px;margin-top:8px;border-bottom:2px solid var(--linen);background:linear-gradient(90deg,var(--linen) 0%,transparent 60%);border-radius:4px 4px 0 0}
+
+.fieldset{background:#fff;border:1px solid var(--gray-1);border-radius:6px;margin-bottom:12px;overflow:hidden}
+.fieldset-head{background:linear-gradient(135deg,var(--linen) 0%,var(--canvas) 100%);padding:8px 16px;border-bottom:1px solid var(--gray-1);font-size:13px;font-weight:600;color:var(--indigo);display:flex;justify-content:space-between;align-items:center}
+.fieldset-head .count{color:var(--gray-5);font-weight:400;font-size:11px}
+.fieldset-body{padding:14px 18px}
+.fieldset-body.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:4px 28px}
+
+.field{display:flex;align-items:center;gap:8px;margin-bottom:8px;min-height:30px}
+.field label{width:120px;text-align:right;color:var(--gray-7);font-size:12.5px;flex-shrink:0;line-height:1.3;display:flex;align-items:center;justify-content:flex-end;gap:4px}
+.input,.select,.memo{flex:1;background:#fff;border:1px solid var(--gray-1);border-radius:4px;padding:5px 9px;font:12.5px/1.4 var(--font);color:var(--gray-9);min-width:0}
+.input.readonly{background:var(--gray-0);color:var(--gray-5)}
+.input.mini{width:90px;max-width:90px}
+.memo{min-height:48px;font-family:inherit;resize:vertical}
+.file-upload{flex:1;background:var(--gray-0);border:1px dashed var(--gray-3);border-radius:4px;padding:8px 12px;color:var(--gray-5);font-size:12px;text-align:center}
+.by-sys{display:inline-block;font-size:9.5px;padding:0 4px;border-radius:3px;background:#E8F4F0;color:var(--teal);margin-left:4px}
+
+.subtable-wrap{background:#fff;border:1px solid var(--gray-1);border-radius:6px;margin-bottom:12px;overflow:hidden}
+.subtable-head{background:linear-gradient(135deg,#F0E8D2 0%,var(--canvas) 100%);padding:8px 14px;border-bottom:1px solid var(--gray-1);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px}
+.subtable-head .st-title{color:var(--indigo);font-size:13px;font-weight:600}
+.subtable-head .count{color:var(--gray-5);font-weight:400;font-size:11px}
+.table{width:100%;border-collapse:collapse;font-size:12px}
+.table th{background:var(--gray-0);text-align:left;padding:6px 10px;font-weight:600;color:var(--gray-7);border-bottom:1px solid var(--gray-1);white-space:nowrap}
+.table td{padding:5px 10px;color:var(--gray-9);border-bottom:1px solid var(--gray-1)}
+.table tbody tr:hover td{background:var(--linen)}
+.table td.row-act{white-space:nowrap;color:var(--rust);font-size:11px;cursor:pointer}
+.table td.calc{background:#E8F4F0;color:var(--teal);font-weight:600}
+.table tfoot td{background:var(--linen);font-weight:600;color:var(--indigo);border-top:2px solid var(--linen-d)}
+
+.status{display:inline-block;padding:1px 7px;border-radius:9px;font-size:10.5px;font-weight:500}
+.status-pending{background:#E5E7EB;color:#374151}
+.status-doing{background:#FBF1DA;color:#7A5810}
+.status-sent{background:#DBEAFE;color:#1E3A5F}
+.status-done{background:#D1FAE5;color:#065F46}
+.status-reject{background:#FBEAEA;color:var(--vermilion)}
+.status-success{background:#10B981;color:#fff;font-weight:600;box-shadow:0 0 0 1px #059669}
+.status-overdue{background:#FBEAEA;color:var(--vermilion);font-weight:600}
+
+.smart-search-bar{display:flex;gap:8px;align-items:center;background:linear-gradient(135deg,var(--linen) 0%,var(--canvas) 100%);border:1px solid var(--linen-d);border-radius:6px;padding:10px 14px;margin-bottom:10px}
+.smart-search-bar .ss-icon{font-size:16px;color:var(--indigo)}
+.smart-search-bar .ss-input{flex:1;border-color:var(--linen-d);font-size:13px;padding:6px 10px;background:#fff}
+.adv-filter-panel{background:#FBFBFB;border:1px solid var(--gray-1);border-top:3px solid var(--indigo);border-radius:4px;padding:10px 14px 12px;margin-bottom:12px}
+.adv-filter-panel .afp-head{font-size:11.5px;color:var(--indigo);font-weight:600;margin-bottom:8px}
+.adv-filter-panel .afp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px 22px}
+.pagination{margin-top:14px;display:flex;gap:6px;align-items:center;justify-content:flex-end;font-size:12px;color:var(--gray-5);flex-wrap:wrap}
+
+.badge{display:inline-block;padding:1px 7px;border-radius:9px;font-size:10.5px;font-weight:500;border:1px solid}
+.badge-i{background:#EDF1F7;color:var(--indigo);border-color:#D5DDE8}
+.badge-s{background:#E8F4F0;color:var(--teal);border-color:#C8E2D9}
+.badge-w{background:#FBF1DA;color:var(--amber);border-color:#EDD8A8}
+
+.field-logic-wrap{border-top:1px solid var(--gray-1);background:#FCFAF4;padding:0 18px 12px;margin-bottom:14px}
+.field-logic-wrap .flw-head{color:var(--indigo);font-size:12px;font-weight:600;padding:10px 0 6px}
+.field-logic-table{width:100%;border-collapse:collapse;font-size:11.5px;background:#fff;border:1px solid var(--gray-1);border-radius:4px}
+.field-logic-table th{background:#EDF1F7;text-align:left;padding:5px 8px;font-weight:600;color:var(--indigo);border-bottom:1px solid var(--gray-1);font-size:11px}
+.field-logic-table td{padding:5px 8px;color:var(--gray-9);border-bottom:1px solid var(--gray-1);vertical-align:top;line-height:1.6}
+.field-logic-table tbody tr:nth-child(even) td{background:#FBF8F2}
+.field-logic-table .dt-cell{color:var(--teal);font-size:11px;white-space:nowrap}
+.req-tag{display:inline-block;background:#FBEAEA;color:var(--vermilion);font-size:10px;padding:1px 6px;border-radius:8px;font-weight:600}
+.opt-tag{display:inline-block;background:var(--gray-0);color:var(--gray-5);font-size:10px;padding:1px 6px;border-radius:8px}
+.by-tag{display:inline-block;font-size:10px;padding:1px 5px;border-radius:3px}
+.by-tag.by-sys{background:#E8F4F0;color:var(--teal)}
+.by-tag.by-biz{background:#EDF1F7;color:var(--indigo)}
+.by-tag.by-fin{background:#F5E5F5;color:#7A2D7A}
+.anno-mark{display:inline-block;background:var(--rust);color:#fff;font-size:9.5px;padding:1px 5px;border-radius:3px;margin-left:6px;font-weight:600}
+
+.page-logic-panel{background:#fff;border:1px solid var(--indigo);border-radius:6px;margin-top:14px;overflow:hidden}
+.plp-head{background:linear-gradient(135deg,var(--indigo) 0%,var(--indigo-l) 100%);color:#fff;padding:10px 16px;font-size:13px;font-weight:600}
+.plp-body{padding:16px 18px;display:grid;grid-template-columns:1fr;gap:14px}
+.pl-cat h4{color:var(--indigo);font-size:12.5px;font-weight:600;margin-bottom:6px;border-bottom:1px solid var(--linen);padding-bottom:4px}
+.pl-table{width:100%;border-collapse:collapse;font-size:12px;background:var(--canvas);border:1px solid var(--gray-1);border-radius:4px}
+.pl-table th{background:#E8EFF6;text-align:left;padding:5px 8px;font-weight:600;color:var(--indigo);font-size:11px}
+.pl-table td{padding:6px 8px;color:var(--gray-9);border-top:1px solid var(--gray-1);vertical-align:top;line-height:1.65}
+.pl-table td:first-child{font-weight:600;color:var(--indigo);white-space:nowrap}
+.pl-ul{list-style:none;padding:0;margin:0}
+.pl-ul li{padding:5px 10px 5px 22px;background:var(--canvas);border-left:3px solid var(--teal);margin-bottom:4px;border-radius:0 4px 4px 0;font-size:12px;line-height:1.7;position:relative}
+.pl-ul li:before{content:"▸";position:absolute;left:8px;color:var(--teal);font-weight:bold}
+
+.flow-box{font-family:"SF Mono",Consolas,monospace;white-space:pre;overflow-x:auto;background:var(--indigo-d);color:#e8eef5;padding:14px 16px;border-radius:8px;font-size:12px;line-height:1.6;margin:0 8px 14px}
+
+.approve-bar{display:flex;gap:10px;align-items:center;background:#F0F6FF;border:1px solid #D5DDE8;border-radius:6px;padding:10px 14px;margin:6px 0;flex-wrap:wrap}
+.approve-bar .ab-label{font-size:12.5px;color:var(--indigo);font-weight:600;margin-right:auto}
+.amt-big{color:var(--vermilion);font-weight:700;font-size:16px}
+
+/* ===== 评审工具:批注 / 补充需求 / 保存 ===== */
+.anno-icon{display:none;position:absolute;top:-9px;right:-9px;background:var(--rust);color:#fff;width:22px;height:22px;border-radius:50%;font-size:12px;line-height:22px;text-align:center;cursor:pointer;z-index:60;box-shadow:0 2px 5px rgba(0,0,0,.25);border:none;font-family:inherit;padding:0}
+.anno-icon.has{background:var(--vermilion)}
+body.anno-on .anno-icon{display:block}
+body.anno-on [data-anchor]{outline:1px dashed rgba(209,122,64,.4);outline-offset:3px;border-radius:4px}
+body.anno-on [data-anchor]:hover{outline:1px solid var(--rust)}
+.pin{display:inline-block;font-size:11px;background:var(--rust);color:#fff;border-radius:20px;padding:1px 8px;margin-left:6px;cursor:pointer}
+.flash{animation:flash 1.3s ease}
+@keyframes flash{0%,100%{background:transparent}25%{background:var(--linen)}}
+
+textarea,input[type=text],select.req-sel{font-family:inherit;font-size:13px;border:1px solid var(--gray-1);border-radius:5px;padding:7px 9px;background:#fff;color:var(--gray-9);width:100%}
+textarea{resize:vertical;min-height:60px;line-height:1.6}
+label.fl{font-size:12px;color:var(--gray-7);display:block;margin:10px 0 3px}
+
+.req-zone{margin-top:8px}
+.req-group .rgh{font-weight:600;color:var(--indigo);font-size:13px;margin:12px 0 5px;border-bottom:1px dashed var(--gray-3);padding-bottom:4px}
+.req-item{background:#fff;border:1px solid var(--gray-1);border-radius:6px;padding:11px 13px;margin:7px 4px;box-shadow:var(--shadow-sm);position:relative}
+.req-item .rt{font-weight:600;color:var(--gray-9)}
+.req-item .rd{font-size:13px;color:var(--gray-7);margin:4px 0;white-space:pre-wrap}
+.req-item .rm{font-size:11px;color:var(--gray-5);display:flex;gap:8px;flex-wrap:wrap}
+.req-item .ra{position:absolute;top:9px;right:10px;display:flex;gap:6px}
+.req-empty{color:var(--gray-3);font-size:13px;padding:10px 4px}
+
+.mask{position:fixed;inset:0;background:rgba(21,42,69,.46);display:none;z-index:200;align-items:center;justify-content:center;padding:20px}
+.mask.open{display:flex}
+.modal{background:#fff;border-radius:10px;width:520px;max-width:100%;max-height:88vh;overflow:auto;box-shadow:0 24px 60px rgba(0,0,0,.3)}
+.modal-h{padding:13px 18px;border-bottom:1px solid var(--gray-1);font-weight:700;color:var(--indigo-d);display:flex;justify-content:space-between;align-items:center}
+.modal-h .x{cursor:pointer;color:var(--gray-5);font-size:20px}
+.modal-b{padding:16px 18px}
+.modal-f{padding:12px 18px;border-top:1px solid var(--gray-1);display:flex;gap:8px;justify-content:flex-end;background:var(--gray-0)}
+.tgt{font-size:12px;color:var(--gray-5);background:var(--gray-0);border-radius:5px;padding:7px 10px;margin-bottom:8px}
+.anno-li{border:1px solid var(--gray-1);border-radius:5px;padding:8px 10px;margin:6px 0;background:var(--gray-0)}
+.anno-li .al-t{white-space:pre-wrap;font-size:13px}.anno-li .al-m{font-size:11px;color:var(--gray-5);margin-top:4px;display:flex;gap:8px}
+
+.drawer{position:fixed;top:0;right:0;bottom:0;width:400px;max-width:92vw;background:var(--canvas);box-shadow:-4px 0 24px rgba(0,0,0,.18);transform:translateX(100%);transition:transform .22s;z-index:210;display:flex;flex-direction:column}
+.drawer.open{transform:none}
+.drawer-h{padding:13px 16px;background:var(--indigo);color:#fff;font-weight:700;display:flex;justify-content:space-between;align-items:center}
+.drawer-h .x{cursor:pointer;font-size:20px}
+.drawer-tabs{display:flex;border-bottom:1px solid var(--gray-1);background:#fff}
+.drawer-tabs button{flex:1;border:none;background:none;padding:9px 4px;cursor:pointer;font-family:inherit;font-size:12.5px;color:var(--gray-5);border-bottom:2px solid transparent}
+.drawer-tabs button.on{color:var(--indigo);border-bottom-color:var(--rust);font-weight:600}
+.drawer-b{flex:1;overflow:auto;padding:12px 14px}
+.sum-item{background:#fff;border:1px solid var(--gray-1);border-radius:5px;padding:9px 11px;margin:7px 0;cursor:pointer;box-shadow:var(--shadow-sm)}
+.sum-item:hover{border-color:var(--rust)}
+.sum-item .sa{font-size:11px;color:var(--indigo-l);font-weight:600;margin-bottom:3px}
+.sum-item .sb{font-size:13px;white-space:pre-wrap}
+.sum-item .sm{font-size:11px;color:var(--gray-5);margin-top:3px}
+.sum-orphan{border-color:var(--vermilion)!important}
+.sum-h{font-size:12px;font-weight:700;color:var(--gray-5);margin:10px 0 4px}
+.sum-empty{color:var(--gray-3);font-size:13px;padding:10px}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--indigo-d);color:#fff;padding:11px 20px;border-radius:24px;font-size:13px;box-shadow:var(--shadow);z-index:300;max-width:80vw}
+
+@media print{.topbar,.anno-icon,.drawer,.mask,.toast,.pin{display:none!important}}
+</style>
+</head><body>
+<div class="topbar">
+  <div class="logo">🪡 样衣制造管理系统 · 新版 UI 设计稿<small>07 结算清单 · 成本利润核算 · v1.0</small></div>
+  <div class="stat"><span>上游 <b>对账付款</b> + <b>船务出货</b></span><span>下游 <b>毛利/净利核算</b></span></div>
+</div>
+
+<nav class="sidenav">
+  <div class="nav-cat">结算清单</div>
+  <a class="nav-dj" href="#list">📋 结算清单 · 列表</a>
+  <a class="nav-sub" href="#new">＋ 新建 · 搜款号带入</a>
+  <a class="nav-sub" href="#cost">成本明细(对账付款汇总)</a>
+  <a class="nav-sub" href="#unit">成本单价(自动)</a>
+  <a class="nav-sub" href="#profit">收汇 · 毛利对比(财务)</a>
+  <div class="nav-cat">规则与联动</div>
+  <a class="nav-sub" href="#logic">字段与计算逻辑</a>
+  <a class="nav-sub" href="#flow">页面联动 / 数据来源</a>
+</nav>
+
+<div class="main">
+  <div class="dj-block">
+    <h1>结算清单 · 成本利润核算 <small>07 · v1.0</small></h1>
+    <div class="dj-summary">订单履约的<b style="color:#fff">最末端核算</b>:以<b style="color:#fff">款号</b>为口径,把<b style="color:#fff">对账付款</b>里该款全部付款汇总为<b style="color:#fff">总货款(含税/不含税)</b>,把<b style="color:#fff">船务</b>的<b style="color:#fff">出货件数</b>带入,自动算<b style="color:#fff">成本单价</b>;财务录入<b style="color:#fff">收汇金额 + 结算汇率</b>,自动生成<b style="color:#fff">结算金额 → 毛利 → 净利 → 保本汇率</b>的毛利对比。</div>
+  </div>
+
+  <div class="flow-box">⑥对账付款(本款全部付款) ─┐  总货款(含税/不含税)
+                          ├─▶  ⑦结算清单 ──▶ 成本单价 = 总货款 ÷ 出货件数
+   ⑨船务·出货件数 ───────┘                        │
+                                财务录入 收汇金额(USD) × 结算汇率 = 结算金额(RMB)
+                                结算金额 − 总货款(不含税) = 毛利
+                                毛利 − 运杂/快邮/打样/其它 − 财务及管理费7% = 净利</div>
+
+  <div class="biz-notes">
+    <b>💬 业务诉求(原话落地)</b>
+    <ul>
+      <li>新建结算清单,<b>搜款号</b>,带入<b>所有此款相关付款汇总全部金额</b>(来自⑥对账付款,分含税/不含税)和<b>船务部分的出货件数</b>(来自⑨船务),<b>自动生成成本单价</b>。</li>
+      <li>财务部分填入<b>收汇金额 + 汇率</b>,<b>自动生成毛利对比</b>(结算金额 / 毛利 / 财务及管理费7% / 净利 / 保本汇率)。</li>
+      <li>数据口径对齐真实「24918 款 结算单.xlsx」(利润表 + 对账单含税/不含税表)。</li>
+    </ul>
+  </div>
+
+  <!-- ============ A 列表 ============ -->
+  <section id="list" class="design-section">
+    <div class="sect-head">
+      <div><h2><span class="sect-no">A</span> 结算清单 · 列表</h2>
+        <p class="sect-desc">按款号核算成本与利润;一个款号一张结算清单(可重算)</p></div>
+      <div style="padding-top:4px"><span class="badge badge-i">财务台 / 业务台</span></div>
+    </div>
+    <div class="design-frame">
+      <div class="page-toolbar">
+        <div class="tb-left"><span class="page-title">结算清单 · 列表</span><span class="badge badge-w">待收汇 4</span><span class="badge" style="background:#FBEAEA;color:var(--vermilion);border-color:#F0CFCF">亏损预警 1</span></div>
+        <div class="tb-right"><button class="btn btn-c">＋ 新建结算清单</button><button class="btn btn-s">导出</button><button class="btn btn-s">利润汇总</button></div>
+      </div>
+      <div class="smart-search-bar">
+        <span class="ss-icon">🔍</span>
+        <input class="input ss-input" placeholder="搜索:款号 / 结算单号 / 客户">
+        <button class="btn btn-p">搜索</button><button class="btn btn-t">高级筛选 ▾</button>
+      </div>
+      <div style="overflow-x:auto">
+      <table class="table">
+        <thead><tr><th>结算单号</th><th>款号</th><th>出货件数</th><th>总货款(不含税)</th><th>收汇金额</th><th>结算金额</th><th>毛利</th><th>净利</th><th>状态</th><th>操作</th></tr></thead>
+        <tbody>
+          <tr><td>JS-20260628-01</td><td>V27.230.24918</td><td>600</td><td>¥18,264.83</td><td>$2,921.64</td><td>¥19,925.58</td><td style="color:var(--teal);font-weight:600">¥1,660.75</td><td style="color:var(--vermilion);font-weight:600">-¥1,434.04</td><td><span class="status status-overdue">亏损</span></td><td class="row-act">查看</td></tr>
+          <tr><td>JS-20260626-03</td><td>V27.230.24875</td><td>1,200</td><td>¥42,180.00</td><td>$8,650.00</td><td>¥58,996.00</td><td style="color:var(--teal);font-weight:600">¥16,816.00</td><td style="color:var(--teal);font-weight:600">¥12,580.28</td><td><span class="status status-done">已结算</span></td><td class="row-act">查看</td></tr>
+          <tr><td>JS-20260625-02</td><td>V27.230.24902</td><td>800</td><td>¥25,600.00</td><td>—</td><td>—</td><td>—</td><td>—</td><td><span class="status status-doing">待收汇</span></td><td class="row-act">填收汇</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <div class="pagination"><span>共 12 条</span><button class="btn btn-s btn-sm">‹</button><button class="btn btn-p btn-sm">1</button><button class="btn btn-s btn-sm">2</button><button class="btn btn-s btn-sm">›</button></div>
+    </div>
+  </section>
+
+  <!-- ============ B 详情 ============ -->
+  <section id="new" class="design-section">
+    <div class="sect-head">
+      <div><h2><span class="sect-no">B</span> 新建结算清单 · 搜款号带入 (JS-20260628-01)</h2>
+        <p class="sect-desc">款号 V27.230.24918 — 搜款号后自动带入对账付款汇总 + 船务出货件数</p></div>
+      <div style="padding-top:4px"><span class="badge badge-i">业务建单 → 财务收汇</span></div>
+    </div>
+    <div class="design-frame">
+
+      <div class="fieldset">
+        <div class="fieldset-head">基础信息 <span class="count">搜款号带入;出货件数来自船务,只读</span></div>
+        <div class="fieldset-body grid-3">
+          <div class="field"><label>结算单号<span class="by-sys">系统</span></label><input class="input readonly" value="JS-20260628-01" readonly></div>
+          <div class="field"><label>款号 🔍</label><input class="input" value="V27.230.24918"></div>
+          <div class="field"><label>品名<span class="by-sys">系统</span></label><input class="input readonly" value="女式夹克(洞洞PU)" readonly></div>
+          <div class="field"><label>订单数量<span class="by-sys">系统</span></label><input class="input readonly" value="600" readonly></div>
+          <div class="field"><label>出货件数<span class="by-sys">船务</span></label><input class="input readonly" value="600" readonly></div>
+          <div class="field"><label>客户 / 币种<span class="by-sys">系统</span></label><input class="input readonly" value="—— / USD" readonly></div>
+        </div>
+      </div>
+
+      <!-- 成本明细 -->
+      <div class="subtable-wrap" id="cost">
+        <div class="subtable-head"><span class="st-title">▸ 成本明细 · 对账付款汇总<span class="anno-mark">自动带入</span><span class="count"> · 仅汇总该款<b>已付款</b>的对账明细;合计=含税,不含税=含税÷1.13</span></span><button class="btn btn-s btn-sm">刷新付款汇总</button></div>
+        <div style="overflow-x:auto">
+        <table class="table">
+          <thead><tr><th>材料 / 费用</th><th>颜色</th><th>实发数</th><th>单价</th><th class="calc">合计(含税)</th><th class="calc">合计(不含税)</th><th>供应商</th><th>对账单</th><th>付款状态</th></tr></thead>
+          <tbody>
+            <tr><td>洞洞PU 270gsm 100%PU</td><td>深咖</td><td>390</td><td>¥27</td><td class="calc">¥10,530.00</td><td class="calc">¥9,318.58</td><td>太仓锦鸿皮革</td><td>DZ-…918-01</td><td><span class="status status-done">已付</span></td></tr>
+            <tr><td>300T春亚纺</td><td>深咖</td><td>450</td><td>¥3</td><td class="calc">¥1,350.00</td><td class="calc">¥1,194.69</td><td>绍兴赞多纺织</td><td>DZ-…918-01</td><td><span class="status status-done">已付</span></td></tr>
+            <tr><td>30G有胶布衬</td><td>深咖</td><td>80</td><td>¥3.3</td><td class="calc">¥264.00</td><td class="calc">¥233.63</td><td>南京嘉毅达</td><td>DZ-…918-02</td><td><span class="status status-done">已付</span></td></tr>
+            <tr><td>4CM松紧带</td><td>黑色</td><td>520</td><td>¥0.45</td><td class="calc">¥234.00</td><td class="calc">¥207.08</td><td>上海维希亚</td><td>DZ-…918-02</td><td><span class="status status-done">已付</span></td></tr>
+            <tr><td>主标</td><td>—</td><td>600</td><td>¥0.07</td><td class="calc">¥42.00</td><td class="calc">¥37.17</td><td>张家港金利织带</td><td>DZ-…918-03</td><td><span class="status status-done">已付</span></td></tr>
+            <tr><td>洗标</td><td>—</td><td>650</td><td>¥0.05</td><td class="calc">¥32.50</td><td class="calc">¥28.76</td><td>嘉兴古美印刷</td><td>DZ-…918-03</td><td><span class="status status-done">已付</span></td></tr>
+            <tr><td>价格牌</td><td>—</td><td>650</td><td>¥0.095</td><td class="calc">¥90.50</td><td class="calc">¥80.09</td><td>上海摩岩贸易</td><td>DZ-…918-03</td><td><span class="status status-done">已付</span></td></tr>
+            <tr><td>芯片标</td><td>—</td><td>650</td><td>¥0.5</td><td class="calc">¥325.00</td><td class="calc">¥287.61</td><td>艾利(广州)包装</td><td>DZ-…918-04</td><td><span class="status status-done">已付</span></td></tr>
+            <tr><td>胶袋</td><td>—</td><td>660</td><td>¥0.28</td><td class="calc">¥184.80</td><td class="calc">¥163.54</td><td>扬中凯盛塑料</td><td>DZ-…918-04</td><td><span class="status status-done">已付</span></td></tr>
+            <tr><td>货代费用</td><td>—</td><td>600</td><td>¥0.57</td><td class="calc">¥386.46</td><td class="calc">¥342.00</td><td>马士基物流</td><td>DZ-费用-07</td><td><span class="status status-done">已付</span></td></tr>
+            <tr><td>加工费</td><td>—</td><td>600</td><td>¥12</td><td class="calc">¥7,200.00</td><td class="calc">¥6,371.68</td><td>泰州天元制衣</td><td>DZ-…918-05</td><td><span class="status status-done">已付</span></td></tr>
+            <tr style="opacity:.55"><td>箱贴</td><td>—</td><td>125</td><td>¥0.23</td><td>¥28.75</td><td>¥25.44</td><td>上海摩岩贸易</td><td>—</td><td><span class="status status-pending">未付·不计入</span></td></tr>
+          </tbody>
+          <tfoot>
+            <tr><td colspan="4">总货款(已付汇总)</td><td class="calc">¥20,639.26</td><td class="calc">¥18,264.83</td><td colspan="3">不含税总货款 = 大货货款,进利润核算</td></tr>
+          </tfoot>
+        </table>
+        </div>
+      </div>
+
+      <!-- 成本单价 -->
+      <div class="approve-bar" id="unit" style="background:#F1FAF7;border-color:#C8E2D9">
+        <span class="ab-label">🧮 成本单价(自动) = 总货款 ÷ 出货件数(600)</span>
+        <span>含税 <span class="amt-big" id="oUnitT" style="color:var(--teal)">¥34.40</span></span>
+        <span>不含税 <span class="amt-big" id="oUnitU" style="color:var(--teal)">¥30.44</span></span>
+      </div>
+
+      <h3 class="section-divider" id="profit">▣ 财务 — 收汇与毛利对比(填收汇金额 + 汇率,自动算)</h3>
+
+      <div class="fieldset">
+        <div class="fieldset-head">收汇信息 <span class="count">财务填;美金单价 = 发票金额 ÷ 出货件数</span></div>
+        <div class="fieldset-body grid-3">
+          <div class="field"><label><span class="req">*</span>发票金额(USD)</label><input class="input" id="fInv" type="number" value="3012" oninput="recalc()"></div>
+          <div class="field"><label><span class="req">*</span>实际收汇金额(USD)</label><input class="input" id="fRecv" type="number" value="2921.64" oninput="recalc()"></div>
+          <div class="field"><label><span class="req">*</span>结算汇率</label><input class="input" id="fRate" type="number" value="6.82" oninput="recalc()"></div>
+          <div class="field"><label>美金单价<span class="by-sys">自动</span></label><input class="input readonly" id="oUsdUnit" value="$5.02" readonly></div>
+        </div>
+      </div>
+
+      <div class="fieldset">
+        <div class="fieldset-head">其它费用(进净利扣减) <span class="count">财务填;只填数值不带单位</span></div>
+        <div class="fieldset-body grid-3">
+          <div class="field"><label>运杂费</label><input class="input" id="fFreight" type="number" value="0" oninput="recalc()"></div>
+          <div class="field"><label>快邮费(国际+国内)</label><input class="input" id="fExpress" type="number" value="1100" oninput="recalc()"></div>
+          <div class="field"><label>打样费</label><input class="input" id="fSample" type="number" value="600" oninput="recalc()"></div>
+          <div class="field"><label>其它费用</label><input class="input" id="fOther" type="number" value="0" oninput="recalc()"></div>
+        </div>
+      </div>
+
+      <div class="page-logic-panel">
+        <div class="plp-head">📊 毛利对比(自动生成)</div>
+        <div class="plp-body">
+          <table class="pl-table">
+            <thead><tr><th style="width:200px">项目</th><th style="width:160px">金额</th><th>公式 / 来源</th></tr></thead>
+            <tbody>
+              <tr><td>总货款(不含税)</td><td>¥18,264.83</td><td>成本明细 Σ合计(不含税),已付款行</td></tr>
+              <tr><td>结算金额(RMB)</td><td id="oSettle">¥19,925.58</td><td>实际收汇金额 × 结算汇率</td></tr>
+              <tr><td>毛利</td><td id="oGross">¥1,660.75</td><td>结算金额 − 总货款(不含税)</td></tr>
+              <tr><td>财务及管理费 7%</td><td id="oMfee">¥1,394.79</td><td>结算金额 × 7%</td></tr>
+              <tr><td>费用合计(运杂+快邮+打样+其它)</td><td id="oMisc">¥1,700.00</td><td>四项之和</td></tr>
+              <tr><td><b>净利</b></td><td id="oNet" style="color:var(--vermilion);font-weight:700;font-size:14px">-¥1,434.04</td><td>毛利 − 费用合计 − 财务及管理费7%</td></tr>
+              <tr><td>保本汇率(不含税 / 含税)</td><td><span id="oBeU">6.06</span> / <span id="oBeT">6.85</span></td><td>成本单价 ÷ 美金单价;低于此汇率即亏</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============ 字段逻辑 ============ -->
+  <section id="logic" class="design-section">
+    <div class="sect-head"><div><h2><span class="sect-no">C</span> 字段与计算逻辑</h2></div></div>
+    <div class="design-frame">
+      <div class="field-logic-wrap" style="border-top:none">
+        <div class="flw-head">📋 结算清单 · 字段填写人与计算</div>
+        <table class="field-logic-table">
+          <thead><tr><th style="width:150px">字段 / 操作</th><th style="width:70px">来源/填写人</th><th>计算逻辑 / 业务规则</th></tr></thead>
+          <tbody>
+            <tr><td><b>款号(搜)</b></td><td><span class="by-tag by-biz">业务</span></td><td>★ 新建时<b>搜款号</b>;选定后系统拉取该款全部对账付款明细 + 船务出货,带入下方各项</td></tr>
+            <tr><td><b>成本明细</b></td><td><span class="by-tag by-sys">对账付款</span></td><td>★ 自动带入该款<b>已付款</b>的对账明细(材料/供应商/实发数/单价/含税/不含税);<b>未付款行不计入</b>总货款</td></tr>
+            <tr><td><b>总货款(含税/不含税)</b></td><td><span class="by-tag by-sys">系统</span></td><td>Σ合计(含税) / Σ合计(不含税);不含税 = 含税 ÷ 1.13;<b>不含税总货款 = 大货货款</b></td></tr>
+            <tr><td><b>出货件数</b></td><td><span class="by-tag by-sys">船务</span></td><td>★ 来自⑨船务的<b>实际出口数量</b>,只读;无船务数据时提示"待船务出货"</td></tr>
+            <tr><td><b>成本单价</b></td><td><span class="by-tag by-sys">自动</span></td><td>★ 含税 = 总货款含税 ÷ 出货件数;不含税 = 总货款不含税 ÷ 出货件数</td></tr>
+            <tr><td><b>发票/收汇/汇率</b></td><td><span class="by-tag by-fin">财务</span></td><td>财务录入;美金单价 = 发票金额 ÷ 出货件数</td></tr>
+            <tr><td><b>结算金额</b></td><td><span class="by-tag by-sys">自动</span></td><td>实际收汇金额(USD) × 结算汇率</td></tr>
+            <tr><td><b>毛利</b></td><td><span class="by-tag by-sys">自动</span></td><td>结算金额 − 总货款(不含税)</td></tr>
+            <tr><td><b>财务及管理费 7%</b></td><td><span class="by-tag by-sys">自动</span></td><td>结算金额 × 7%(比例可配置)</td></tr>
+            <tr><td><b>净利</b></td><td><span class="by-tag by-sys">自动</span></td><td>毛利 − 运杂费 − 快邮费 − 打样费 − 其它费用 − 财务及管理费7%;<b>负数标红=亏损</b></td></tr>
+            <tr><td><b>保本汇率</b></td><td><span class="by-tag by-sys">自动</span></td><td>成本单价 ÷ 美金单价(含税/不含税各一);结算汇率低于此即亏损</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 联动 ============ -->
+  <section id="flow" class="design-section">
+    <div class="sect-head"><div><h2><span class="sect-no">D</span> 页面联动 / 数据来源</h2></div></div>
+    <div class="design-frame">
+      <div class="page-logic-panel"><div class="plp-head">⚙ 自动事件 / 联动</div><div class="plp-body">
+        <div class="pl-cat"><h4>⚡ 触发与联动</h4><table class="pl-table"><thead><tr><th style="width:200px">时机</th><th>系统做什么</th></tr></thead><tbody>
+          <tr><td>新建结算清单 · 搜款号</td><td>拉取该款全部对账付款明细(已付)汇总总货款(含税/不含税);带入船务出货件数;算成本单价</td></tr>
+          <tr><td>该款新增/变更付款</td><td>结算清单「刷新付款汇总」后总货款、成本单价、毛利对比联动重算</td></tr>
+          <tr><td>船务出货件数回填/修改</td><td>出货件数更新 → 成本单价、保本汇率联动重算</td></tr>
+          <tr><td>财务录入收汇金额 + 汇率</td><td>自动算结算金额 → 毛利 → 财务管理费 → 净利 → 保本汇率,生成毛利对比</td></tr>
+          <tr><td>净利为负</td><td>列表「亏损」红标 + 利润汇总预警</td></tr>
+        </tbody></table></div>
+        <div class="pl-cat"><h4>🔗 数据来源映射</h4><table class="pl-table"><thead><tr><th style="width:200px">结算清单字段</th><th>来源模块</th></tr></thead><tbody>
+          <tr><td>成本明细 / 总货款</td><td>⑥对账付款 · 对账单/付款申请(按款号汇总,仅已付款)</td></tr>
+          <tr><td>出货件数(实际出口数量)</td><td>⑨船务 · 出货 (暂缓启动时可手填,标"船务待对接")</td></tr>
+          <tr><td>订单数量 / 品名 / 客户 / 币种</td><td>③订单 / ①基础资料</td></tr>
+          <tr><td>发票/收汇/汇率/其它费用</td><td>财务录入(本模块)</td></tr>
+        </tbody></table></div>
+        <div class="pl-cat"><h4>✅ 校验 / 权限</h4><ul class="pl-ul">
+          <li>仅汇总<b>已付款</b>的对账明细;存在未付款明细时提示"该款尚有 N 笔未付,成本可能不全"</li>
+          <li>出货件数为 0 / 缺失时不计算成本单价,提示"待船务出货"</li>
+          <li>收汇金额、汇率必填才出毛利对比;只填数值不带单位</li>
+          <li>权限:业务可建单/搜款号带入;财务录收汇与费用、出毛利;成本明细只读(改需回对账付款)</li>
+          <li>一个款号一张结算清单,可重算;成本/收汇变更留痕</li>
+        </ul></div>
+      </div></div>
+    </div>
+  </section>
+</div>
+
+<script>
+function num(id){var e=document.getElementById(id);var v=parseFloat(e&&e.value);return isNaN(v)?0:v;}
+function fmt(n){return n.toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function recalc(){
+  var costTaxed=20639.26, costUntaxed=18264.83, qty=600;
+  var inv=num('fInv'), recv=num('fRecv'), rate=num('fRate');
+  var settle=recv*rate;
+  var gross=settle-costUntaxed;
+  var mfee=settle*0.07;
+  var misc=num('fFreight')+num('fExpress')+num('fSample')+num('fOther');
+  var net=gross-misc-mfee;
+  var usdUnit=qty?inv/qty:0;
+  var beU=usdUnit?(costUntaxed/qty)/usdUnit:0;
+  var beT=usdUnit?(costTaxed/qty)/usdUnit:0;
+  document.getElementById('oUnitT').textContent='¥'+fmt(costTaxed/qty);
+  document.getElementById('oUnitU').textContent='¥'+fmt(costUntaxed/qty);
+  document.getElementById('oUsdUnit').value='$'+fmt(usdUnit);
+  document.getElementById('oSettle').textContent='¥'+fmt(settle);
+  document.getElementById('oGross').textContent='¥'+fmt(gross);
+  document.getElementById('oMfee').textContent='¥'+fmt(mfee);
+  document.getElementById('oMisc').textContent='¥'+fmt(misc);
+  var nb=document.getElementById('oNet');
+  nb.textContent=(net<0?'-¥':'¥')+fmt(Math.abs(net));
+  nb.style.color=net<0?'var(--vermilion)':'var(--teal)';
+  document.getElementById('oBeU').textContent=beU.toFixed(2);
+  document.getElementById('oBeT').textContent=beT.toFixed(2);
+}
+document.addEventListener('DOMContentLoaded',recalc);
+</script>
+
+</body></html>
