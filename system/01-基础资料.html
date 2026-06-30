@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>基础资料 - I9服装制造管理系统</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#FBF8F2;color:#1F1F22;font-size:14px}
+:root{--indigo:#1E3A5F;--indigo-d:#152A45;--indigo-l:#2C5180;--linen:#F5EDDC;--linen-d:#E8DCC0;--canvas:#FBF8F2;--rust:#D17A40;--rust-d:#B86530;--vermilion:#C04042;--teal:#3E8E7E;--amber:#C8901E;--gray-9:#1F1F22;--gray-7:#37383C;--gray-5:#6F7178;--gray-3:#B5B7BD;--gray-1:#E5E2DA;--gray-0:#F4F1EA;--r:4px;--r-lg:8px}
+.sidebar{position:fixed;top:0;left:0;width:200px;height:100vh;background:var(--indigo);overflow-y:auto;z-index:100}
+.logo{padding:18px 16px 14px;font-size:15px;font-weight:700;color:#fff;border-bottom:1px solid rgba(255,255,255,.1);line-height:1.3}
+.logo small{display:block;font-size:11px;font-weight:400;opacity:.6;margin-top:3px}
+.nav-gl{padding:10px 16px 3px;font-size:10px;font-weight:600;color:rgba(255,255,255,.35);letter-spacing:.1em;text-transform:uppercase}
+.nav-a{display:flex;align-items:center;padding:9px 16px;color:rgba(255,255,255,.75);text-decoration:none;font-size:13px;gap:6px;transition:all .15s;position:relative}
+.nav-a:hover{background:rgba(255,255,255,.08);color:#fff}
+.nav-a.act{background:rgba(255,255,255,.14);color:#fff;font-weight:600}
+.nav-a.act::after{content:'';position:absolute;right:0;top:20%;height:60%;width:3px;background:var(--rust);border-radius:2px 0 0 2px}
+.main{margin-left:200px;min-height:100vh}
+.topbar{background:#fff;border-bottom:1px solid var(--gray-1);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+.page-title{font-size:17px;font-weight:700;color:var(--gray-9)}
+.breadcrumb{font-size:12px;color:var(--gray-5);margin-top:2px}
+.content{padding:20px 24px}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:var(--r);font-size:13px;font-family:inherit;cursor:pointer;border:none;line-height:1;transition:all .15s;white-space:nowrap}
+.btn-p{background:var(--indigo);color:#fff}.btn-p:hover{background:var(--indigo-d)}
+.btn-c{background:var(--rust);color:#fff}.btn-c:hover{background:var(--rust-d)}
+.btn-s{background:#fff;border:1px solid var(--gray-1);color:var(--gray-7)}.btn-s:hover{background:var(--gray-0)}
+.btn-g{background:#fff;border:1px solid #f5c6c6;color:var(--vermilion)}.btn-g:hover{background:#fff5f5}
+.btn-sm{padding:5px 10px;font-size:12px}
+.toolbar{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.spacer{flex:1}
+.srch{padding:7px 12px;border:1px solid var(--gray-1);border-radius:var(--r);font-size:13px;width:220px;outline:none;font-family:inherit}
+.srch:focus{border-color:var(--indigo)}
+.tabs{display:flex;border-bottom:2px solid var(--gray-1);margin-bottom:18px}
+.tab{padding:9px 18px;font-size:14px;color:var(--gray-5);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;user-select:none}
+.tab.act{color:var(--indigo);border-bottom-color:var(--indigo);font-weight:600}
+.tab:hover:not(.act){color:var(--gray-7)}
+.tw{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);overflow:hidden}
+table{width:100%;border-collapse:collapse}
+th{background:var(--gray-0);font-size:12px;font-weight:600;color:var(--gray-5);padding:9px 14px;text-align:left;border-bottom:1px solid var(--gray-1);white-space:nowrap}
+td{padding:10px 14px;font-size:13px;color:var(--gray-7);border-bottom:1px solid #f0ede6;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#fafaf8}
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.bs{background:#e8f5e9;color:#2e7d32}
+.be{background:#fde7e7;color:#c62828}
+.bw{background:#fff8e1;color:#f57f17}
+.br{background:#e3f2fd;color:#1565c0}
+.bi{background:#f3e5f5;color:#6a1b9a}
+.bg{background:var(--gray-0);color:var(--gray-5)}
+.pg{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:#fff;border-top:1px solid var(--gray-1);font-size:12px;color:var(--gray-5)}
+.pgb{display:flex;gap:4px}
+.pgbtn{padding:4px 10px;border:1px solid var(--gray-1);background:#fff;border-radius:var(--r);cursor:pointer;font-size:12px;font-family:inherit}
+.pgbtn.act{background:var(--indigo);color:#fff;border-color:var(--indigo)}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:none;align-items:center;justify-content:center;padding:20px}
+.overlay.open{display:flex}
+.modal{background:#fff;border-radius:var(--r-lg);width:560px;max-width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,.18)}
+.mh{padding:15px 20px;border-bottom:1px solid var(--gray-1);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#fff;z-index:1}
+.mh h2{font-size:15px;font-weight:700;color:var(--gray-9)}
+.mc{background:none;border:none;font-size:20px;cursor:pointer;color:var(--gray-5);line-height:1;padding:4px;border-radius:var(--r)}
+.mc:hover{background:var(--gray-0)}
+.mb{padding:20px}
+.mf{padding:12px 20px;border-top:1px solid var(--gray-1);display:flex;justify-content:flex-end;gap:8px}
+.frow{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-bottom:14px}
+.fg{display:flex;flex-direction:column;gap:4px}
+label{font-size:12px;font-weight:600;color:var(--gray-7)}
+.req{color:var(--vermilion)}
+.fc{padding:7px 10px;border:1px solid var(--gray-1);border-radius:var(--r);font-size:13px;font-family:inherit;outline:none;color:var(--gray-9);background:#fff;width:100%}
+.fc:focus{border-color:var(--indigo)}
+.fc[readonly]{background:var(--gray-0);color:var(--gray-5)}
+.span2{grid-column:span 2}
+.text-muted{color:var(--gray-5);font-size:12px}
+.link{color:var(--indigo);cursor:pointer;text-decoration:none}.link:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<nav class="sidebar">
+  <div class="logo">I9 服装制造<small>管理系统 v1.0</small></div>
+  <div class="nav-gl">基础数据</div>
+  <a href="01-基础资料.html" class="nav-a act">📋 基础资料</a>
+  <div class="nav-gl">生产前</div>
+  <a href="02-样衣管理.html" class="nav-a">👗 样衣管理</a>
+  <a href="02-客户报价.html" class="nav-a">💰 客户报价</a>
+  <a href="03-订单.html" class="nav-a">📦 订单管理</a>
+  <div class="nav-gl">合同履行</div>
+  <a href="04-合同.html" class="nav-a">📄 合同管理</a>
+  <a href="05-供应商门户.html" class="nav-a">🏭 供应商门户</a>
+  <div class="nav-gl">财务结算</div>
+  <a href="06-对账付款.html" class="nav-a">💳 对账付款</a>
+  <a href="07-结算清单.html" class="nav-a">📊 结算清单</a>
+</nav>
+
+<div class="main">
+  <div class="topbar">
+    <div>
+      <div class="page-title">基础资料管理</div>
+      <div class="breadcrumb">I9服装 / 基础资料</div>
+    </div>
+    <div class="text-muted">共管理 5 家工厂 · 5 位客户</div>
+  </div>
+  <div class="content">
+    <div class="tabs">
+      <div class="tab act" onclick="switchTab('factory',this)">工厂资料</div>
+      <div class="tab" onclick="switchTab('customer',this)">客户资料</div>
+    </div>
+
+    <!-- 工厂资料 -->
+    <div id="panel-factory">
+      <div class="toolbar">
+        <button class="btn btn-p" onclick="openModal('m-factory-new')">+ 新建工厂</button>
+        <button class="btn btn-s">↑ 导入Excel</button>
+        <button class="btn btn-s">↓ 导出</button>
+        <div class="spacer"></div>
+        <input class="srch" placeholder="搜索工厂名称/编号" oninput="filterTable('t-factory',this.value)">
+      </div>
+      <div class="tw">
+        <table id="t-factory">
+          <thead>
+            <tr>
+              <th>工厂编号</th>
+              <th>工厂名称</th>
+              <th>联系人</th>
+              <th>联系电话</th>
+              <th>工厂地址</th>
+              <th>开户银行</th>
+              <th>状态</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span style="font-family:monospace;font-size:12px;background:var(--gray-0);padding:2px 6px;border-radius:3px;color:var(--indigo);font-weight:600">CN001</span></td>
+              <td><a class="link" onclick="openModal('m-factory-edit')">苏州腾飞制衣厂</a></td>
+              <td>张伟</td><td>138-0013-8001</td>
+              <td>江苏省苏州市吴江区震泽路88号</td>
+              <td>中国工商银行苏州支行</td>
+              <td><span class="badge bs">启用</span></td>
+              <td><button class="btn btn-s btn-sm" onclick="openModal('m-factory-edit')">编辑</button> <button class="btn btn-g btn-sm" onclick="toggleStatus(this,'factory')">停用</button></td>
+            </tr>
+            <tr>
+              <td><span style="font-family:monospace;font-size:12px;background:var(--gray-0);padding:2px 6px;border-radius:3px;color:var(--indigo);font-weight:600">CN002</span></td>
+              <td><a class="link">广州美嘉服装加工厂</a></td>
+              <td>李红</td><td>139-0013-9002</td>
+              <td>广东省广州市番禺区大石街工业园</td>
+              <td>中国建设银行广州番禺支行</td>
+              <td><span class="badge bs">启用</span></td>
+              <td><button class="btn btn-s btn-sm">编辑</button> <button class="btn btn-g btn-sm" onclick="toggleStatus(this,'factory')">停用</button></td>
+            </tr>
+            <tr>
+              <td><span style="font-family:monospace;font-size:12px;background:var(--gray-0);padding:2px 6px;border-radius:3px;color:var(--indigo);font-weight:600">CN003</span></td>
+              <td><a class="link">杭州丝绸坊工艺厂</a></td>
+              <td>王建国</td><td>137-0013-7003</td>
+              <td>浙江省杭州市余杭区仓前街道</td>
+              <td>农业银行杭州余杭支行</td>
+              <td><span class="badge bs">启用</span></td>
+              <td><button class="btn btn-s btn-sm">编辑</button> <button class="btn btn-g btn-sm" onclick="toggleStatus(this,'factory')">停用</button></td>
+            </tr>
+            <tr>
+              <td><span style="font-family:monospace;font-size:12px;background:var(--gray-0);padding:2px 6px;border-radius:3px;color:var(--indigo);font-weight:600">CN004</span></td>
+              <td><a class="link">佛山锦绣制衣公司</a></td>
+              <td>陈小明</td><td>136-0013-6004</td>
+              <td>广东省佛山市南海区狮山镇</td>
+              <td>中国银行佛山南海支行</td>
+              <td><span class="badge be">停用</span></td>
+              <td><button class="btn btn-s btn-sm">编辑</button> <button class="btn btn-s btn-sm" onclick="toggleStatus(this,'factory-off')">启用</button></td>
+            </tr>
+            <tr>
+              <td><span style="font-family:monospace;font-size:12px;background:var(--gray-0);padding:2px 6px;border-radius:3px;color:var(--indigo);font-weight:600">CN005</span></td>
+              <td><a class="link">无锡纺织印染厂</a></td>
+              <td>刘芳</td><td>135-0013-5005</td>
+              <td>江苏省无锡市新吴区硕放街道</td>
+              <td>招商银行无锡分行</td>
+              <td><span class="badge bs">启用</span></td>
+              <td><button class="btn btn-s btn-sm">编辑</button> <button class="btn btn-g btn-sm" onclick="toggleStatus(this,'factory')">停用</button></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="pg">
+          <span>共 5 条 · 每页 20 条</span>
+          <div class="pgb"><button class="pgbtn act">1</button></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 客户资料 -->
+    <div id="panel-customer" style="display:none">
+      <div class="toolbar">
+        <button class="btn btn-p" onclick="openModal('m-customer-new')">+ 新建客户</button>
+        <button class="btn btn-s">↑ 导入Excel</button>
+        <button class="btn btn-s">↓ 导出</button>
+        <div class="spacer"></div>
+        <input class="srch" placeholder="搜索客户名称/编号" oninput="filterTable('t-customer',this.value)">
+      </div>
+      <div class="tw">
+        <table id="t-customer">
+          <thead>
+            <tr>
+              <th>客户编号</th>
+              <th>客户名称</th>
+              <th>联系人</th>
+              <th>联系方式</th>
+              <th>所在地区</th>
+              <th>客户等级</th>
+              <th>状态</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span style="font-family:monospace;font-size:12px;background:var(--gray-0);padding:2px 6px;border-radius:3px;color:var(--indigo);font-weight:600">S001</span></td>
+              <td><a class="link">香港华美时装有限公司</a></td>
+              <td>周经理</td><td>+852-2345-6789</td><td>中国香港</td>
+              <td><span class="badge bs">A级</span></td>
+              <td><span class="badge bs">启用</span></td>
+              <td><button class="btn btn-s btn-sm">编辑</button> <button class="btn btn-g btn-sm" onclick="toggleStatus(this,'customer')">停用</button></td>
+            </tr>
+            <tr>
+              <td><span style="font-family:monospace;font-size:12px;background:var(--gray-0);padding:2px 6px;border-radius:3px;color:var(--indigo);font-weight:600">S002</span></td>
+              <td><a class="link">上海雅诗服饰有限公司</a></td>
+              <td>赵总</td><td>131-0013-1001</td><td>上海市</td>
+              <td><span class="badge bw">B级</span></td>
+              <td><span class="badge bs">启用</span></td>
+              <td><button class="btn btn-s btn-sm">编辑</button> <button class="btn btn-g btn-sm" onclick="toggleStatus(this,'customer')">停用</button></td>
+            </tr>
+            <tr>
+              <td><span style="font-family:monospace;font-size:12px;background:var(--gray-0);padding:2px 6px;border-radius:3px;color:var(--indigo);font-weight:600">S003</span></td>
+              <td><a class="link">FASHION HOUSE LTD</a></td>
+              <td>Michael Wang</td><td>+1-323-456-7890</td><td>美国洛杉矶</td>
+              <td><span class="badge bs">A级</span></td>
+              <td><span class="badge bs">启用</span></td>
+              <td><button class="btn btn-s btn-sm">编辑</button> <button class="btn btn-g btn-sm" onclick="toggleStatus(this,'customer')">停用</button></td>
+            </tr>
+            <tr>
+              <td><span style="font-family:monospace;font-size:12px;background:var(--gray-0);padding:2px 6px;border-radius:3px;color:var(--indigo);font-weight:600">S004</span></td>
+              <td><a class="link">北京华联时装集团</a></td>
+              <td>孙丽华</td><td>132-0013-2002</td><td>北京市</td>
+              <td><span class="badge bw">B级</span></td>
+              <td><span class="badge bs">启用</span></td>
+              <td><button class="btn btn-s btn-sm">编辑</button> <button class="btn btn-g btn-sm" onclick="toggleStatus(this,'customer')">停用</button></td>
+            </tr>
+            <tr>
+              <td><span style="font-family:monospace;font-size:12px;background:var(--gray-0);padding:2px 6px;border-radius:3px;color:var(--indigo);font-weight:600">S005</span></td>
+              <td><a class="link">欧莱时装(深圳)有限公司</a></td>
+              <td>钱总监</td><td>133-0013-3003</td><td>广东省深圳市</td>
+              <td><span class="badge bg">C级</span></td>
+              <td><span class="badge be">停用</span></td>
+              <td><button class="btn btn-s btn-sm">编辑</button> <button class="btn btn-s btn-sm" onclick="toggleStatus(this,'customer-off')">启用</button></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="pg">
+          <span>共 5 条 · 每页 20 条</span>
+          <div class="pgb"><button class="pgbtn act">1</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 新建工厂 -->
+<div class="overlay" id="m-factory-new">
+  <div class="modal">
+    <div class="mh"><h2>新建工厂</h2><button class="mc" onclick="closeModal('m-factory-new')">×</button></div>
+    <div class="mb">
+      <div class="frow">
+        <div class="fg"><label>工厂编号</label><input class="fc" value="CN006" readonly></div>
+        <div class="fg"><label>工厂名称 <span class="req">*</span></label><input class="fc" placeholder="请输入工厂全称"></div>
+        <div class="fg"><label>联系人</label><input class="fc" placeholder="姓名"></div>
+        <div class="fg"><label>联系电话</label><input class="fc" placeholder="手机号"></div>
+      </div>
+      <div class="frow">
+        <div class="fg span2"><label>工厂地址</label><input class="fc" placeholder="省市区详细地址"></div>
+        <div class="fg"><label>开户银行</label><input class="fc" placeholder="开户行全称"></div>
+        <div class="fg"><label>银行账号</label><input class="fc" placeholder="账号"></div>
+        <div class="fg"><label>税号</label><input class="fc" placeholder="纳税人识别号"></div>
+        <div class="fg"><label>传真</label><input class="fc" placeholder="传真号"></div>
+      </div>
+      <div class="frow">
+        <div class="fg span2"><label>备注</label><textarea class="fc" rows="2" placeholder="其他说明"></textarea></div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-s" onclick="closeModal('m-factory-new')">取消</button>
+      <button class="btn btn-p" onclick="saveNew('工厂','m-factory-new')">确认保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 编辑工厂 -->
+<div class="overlay" id="m-factory-edit">
+  <div class="modal">
+    <div class="mh"><h2>编辑工厂 — CN001</h2><button class="mc" onclick="closeModal('m-factory-edit')">×</button></div>
+    <div class="mb">
+      <div class="frow">
+        <div class="fg"><label>工厂编号</label><input class="fc" value="CN001" readonly></div>
+        <div class="fg"><label>工厂名称 <span class="req">*</span></label><input class="fc" value="苏州腾飞制衣厂"></div>
+        <div class="fg"><label>联系人</label><input class="fc" value="张伟"></div>
+        <div class="fg"><label>联系电话</label><input class="fc" value="138-0013-8001"></div>
+      </div>
+      <div class="frow">
+        <div class="fg span2"><label>工厂地址</label><input class="fc" value="江苏省苏州市吴江区震泽路88号"></div>
+        <div class="fg"><label>开户银行</label><input class="fc" value="中国工商银行苏州支行"></div>
+        <div class="fg"><label>银行账号</label><input class="fc" value="1234 5678 9012 3456"></div>
+        <div class="fg"><label>税号</label><input class="fc" value="91320500MA1XXXX00X"></div>
+        <div class="fg"><label>传真</label><input class="fc" value="0512-88888888"></div>
+      </div>
+      <div class="frow">
+        <div class="fg span2"><label>备注</label><textarea class="fc" rows="2">专注棉麻面料女装加工，年产能60万件</textarea></div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-s" onclick="closeModal('m-factory-edit')">取消</button>
+      <button class="btn btn-p" onclick="saveNew('工厂信息','m-factory-edit')">保存修改</button>
+    </div>
+  </div>
+</div>
+
+<!-- 新建客户 -->
+<div class="overlay" id="m-customer-new">
+  <div class="modal">
+    <div class="mh"><h2>新建客户</h2><button class="mc" onclick="closeModal('m-customer-new')">×</button></div>
+    <div class="mb">
+      <div class="frow">
+        <div class="fg"><label>客户编号</label><input class="fc" value="S006" readonly></div>
+        <div class="fg"><label>客户名称 <span class="req">*</span></label><input class="fc" placeholder="请输入客户全称"></div>
+        <div class="fg"><label>联系人</label><input class="fc" placeholder="姓名/职位"></div>
+        <div class="fg"><label>联系方式</label><input class="fc" placeholder="电话/微信"></div>
+      </div>
+      <div class="frow">
+        <div class="fg"><label>所在地区</label><input class="fc" placeholder="国家/省市"></div>
+        <div class="fg"><label>客户等级</label>
+          <select class="fc">
+            <option>A级 — 核心客户</option>
+            <option>B级 — 重要客户</option>
+            <option>C级 — 普通客户</option>
+          </select>
+        </div>
+        <div class="fg"><label>结算币种</label>
+          <select class="fc"><option>人民币(CNY)</option><option>美元(USD)</option><option>港元(HKD)</option><option>欧元(EUR)</option></select>
+        </div>
+        <div class="fg"><label>付款方式</label>
+          <select class="fc"><option>T/T电汇</option><option>L/C信用证</option><option>D/P付款交单</option><option>月结</option></select>
+        </div>
+      </div>
+      <div class="frow">
+        <div class="fg span2"><label>备注</label><textarea class="fc" rows="2" placeholder="其他说明"></textarea></div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-s" onclick="closeModal('m-customer-new')">取消</button>
+      <button class="btn btn-p" onclick="saveNew('客户','m-customer-new')">确认保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function switchTab(tab, el) {
+  document.querySelectorAll('.tabs .tab').forEach(t => t.classList.remove('act'))
+  el.classList.add('act')
+  document.getElementById('panel-factory').style.display = tab === 'factory' ? '' : 'none'
+  document.getElementById('panel-customer').style.display = tab === 'customer' ? '' : 'none'
+}
+function openModal(id) { document.getElementById(id).classList.add('open') }
+function closeModal(id) { document.getElementById(id).classList.remove('open') }
+function filterTable(id, q) {
+  document.querySelectorAll('#' + id + ' tbody tr').forEach(tr => {
+    tr.style.display = tr.textContent.toLowerCase().includes(q.toLowerCase()) ? '' : 'none'
+  })
+}
+function toggleStatus(btn, type) {
+  const row = btn.closest('tr')
+  const badge = row.querySelector('td:nth-child(7) .badge')
+  if (type === 'factory' || type === 'customer') {
+    badge.className = 'badge be'
+    badge.textContent = '停用'
+    btn.className = 'btn btn-s btn-sm'
+    btn.textContent = '启用'
+    btn.onclick = function(){ toggleStatus(this, type === 'factory' ? 'factory-off' : 'customer-off') }
+  } else {
+    badge.className = 'badge bs'
+    badge.textContent = '启用'
+    btn.className = 'btn btn-g btn-sm'
+    btn.textContent = '停用'
+    btn.onclick = function(){ toggleStatus(this, type === 'factory-off' ? 'factory' : 'customer') }
+  }
+}
+function saveNew(name, modalId) {
+  closeModal(modalId)
+  const toast = document.createElement('div')
+  toast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#1E3A5F;color:#fff;padding:12px 20px;border-radius:8px;font-size:13px;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.2)'
+  toast.textContent = name + '信息已保存成功'
+  document.body.appendChild(toast)
+  setTimeout(() => toast.remove(), 2500)
+}
+document.querySelectorAll('.overlay').forEach(o => {
+  o.addEventListener('click', e => { if(e.target === o) o.classList.remove('open') })
+})
+</script>
+</body>
+</html>

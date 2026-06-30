@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>供应商门户 - I9服装制造管理系统</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#FBF8F2;color:#1F1F22;font-size:14px}
+:root{--indigo:#1E3A5F;--indigo-d:#152A45;--indigo-l:#2C5180;--linen:#F5EDDC;--linen-d:#E8DCC0;--canvas:#FBF8F2;--rust:#D17A40;--rust-d:#B86530;--vermilion:#C04042;--teal:#3E8E7E;--amber:#C8901E;--gray-9:#1F1F22;--gray-7:#37383C;--gray-5:#6F7178;--gray-3:#B5B7BD;--gray-1:#E5E2DA;--gray-0:#F4F1EA;--r:4px;--r-lg:8px}
+
+/* ===== 管理后台视图 ===== */
+.sidebar{position:fixed;top:0;left:0;width:200px;height:100vh;background:var(--indigo);overflow-y:auto;z-index:100}
+.logo{padding:18px 16px 14px;font-size:15px;font-weight:700;color:#fff;border-bottom:1px solid rgba(255,255,255,.1);line-height:1.3}
+.logo small{display:block;font-size:11px;font-weight:400;opacity:.6;margin-top:3px}
+.nav-gl{padding:10px 16px 3px;font-size:10px;font-weight:600;color:rgba(255,255,255,.35);letter-spacing:.1em;text-transform:uppercase}
+.nav-a{display:flex;align-items:center;padding:9px 16px;color:rgba(255,255,255,.75);text-decoration:none;font-size:13px;gap:6px;transition:all .15s;position:relative}
+.nav-a:hover{background:rgba(255,255,255,.08);color:#fff}
+.nav-a.act{background:rgba(255,255,255,.14);color:#fff;font-weight:600}
+.nav-a.act::after{content:'';position:absolute;right:0;top:20%;height:60%;width:3px;background:var(--rust);border-radius:2px 0 0 2px}
+.admin-main{margin-left:200px;min-height:100vh}
+.topbar{background:#fff;border-bottom:1px solid var(--gray-1);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+.page-title{font-size:17px;font-weight:700;color:var(--gray-9)}
+.breadcrumb{font-size:12px;color:var(--gray-5);margin-top:2px}
+.content{padding:20px 24px}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:var(--r);font-size:13px;font-family:inherit;cursor:pointer;border:none;line-height:1;transition:all .15s;white-space:nowrap}
+.btn-p{background:var(--indigo);color:#fff}.btn-p:hover{background:var(--indigo-d)}
+.btn-c{background:var(--rust);color:#fff}.btn-c:hover{background:var(--rust-d)}
+.btn-s{background:#fff;border:1px solid var(--gray-1);color:var(--gray-7)}.btn-s:hover{background:var(--gray-0)}
+.btn-sm{padding:5px 10px;font-size:12px}
+.toolbar{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.spacer{flex:1}
+.srch{padding:7px 12px;border:1px solid var(--gray-1);border-radius:var(--r);font-size:13px;width:220px;outline:none;font-family:inherit}
+.srch:focus{border-color:var(--indigo)}
+.tabs{display:flex;border-bottom:2px solid var(--gray-1);margin-bottom:18px}
+.tab{padding:9px 18px;font-size:14px;color:var(--gray-5);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;user-select:none}
+.tab.act{color:var(--indigo);border-bottom-color:var(--indigo);font-weight:600}
+.tab:hover:not(.act){color:var(--gray-7)}
+.tw{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);overflow:hidden}
+table{width:100%;border-collapse:collapse}
+th{background:var(--gray-0);font-size:12px;font-weight:600;color:var(--gray-5);padding:9px 14px;text-align:left;border-bottom:1px solid var(--gray-1);white-space:nowrap}
+td{padding:10px 14px;font-size:13px;color:var(--gray-7);border-bottom:1px solid #f0ede6;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#fafaf8}
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.bs{background:#e8f5e9;color:#2e7d32}
+.be{background:#fde7e7;color:#c62828}
+.bw{background:#fff8e1;color:#f57f17}
+.br{background:#e3f2fd;color:#1565c0}
+.bi{background:#f3e5f5;color:#6a1b9a}
+.bg{background:var(--gray-0);color:var(--gray-5)}
+.pg{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:#fff;border-top:1px solid var(--gray-1);font-size:12px;color:var(--gray-5)}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+.stat-card{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);padding:16px 18px}
+.stat-label{font-size:12px;color:var(--gray-5);margin-bottom:4px}
+.stat-value{font-size:26px;font-weight:700;color:var(--indigo);line-height:1}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:none;align-items:center;justify-content:center;padding:16px}
+.overlay.open{display:flex}
+.modal{background:#fff;border-radius:var(--r-lg);width:560px;max-width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,.18)}
+.mh{padding:14px 20px;border-bottom:1px solid var(--gray-1);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#fff;z-index:1}
+.mh h2{font-size:15px;font-weight:700;color:var(--gray-9)}
+.mc{background:none;border:none;font-size:20px;cursor:pointer;color:var(--gray-5);line-height:1;padding:4px;border-radius:var(--r)}
+.mc:hover{background:var(--gray-0)}
+.mb{padding:18px 20px}
+.mf{padding:12px 20px;border-top:1px solid var(--gray-1);display:flex;justify-content:flex-end;gap:8px}
+.frow{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:12px}
+.fg{display:flex;flex-direction:column;gap:4px}
+label{font-size:12px;font-weight:600;color:var(--gray-7)}
+.req{color:var(--vermilion)}
+.fc{padding:7px 10px;border:1px solid var(--gray-1);border-radius:var(--r);font-size:13px;font-family:inherit;outline:none;color:var(--gray-9);background:#fff;width:100%}
+.fc:focus{border-color:var(--indigo)}
+.fc[readonly]{background:var(--gray-0);color:var(--gray-5)}
+.span2{grid-column:span 2}
+.tag-no{font-family:monospace;font-size:12px;background:var(--gray-0);padding:2px 6px;border-radius:3px;color:var(--indigo);font-weight:600}
+.fw7{font-weight:700}
+.text-muted{color:var(--gray-5);font-size:12px}
+.link{color:var(--indigo);cursor:pointer;text-decoration:none}.link:hover{text-decoration:underline}
+.fieldset{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);margin-bottom:14px;overflow:hidden}
+.fh{background:linear-gradient(135deg,#F5EDDC,#FBF8F2);padding:10px 16px;border-bottom:1px solid #E8DCC0;display:flex;align-items:center;justify-content:space-between}
+.fh h3{font-size:13px;font-weight:700;color:var(--indigo)}
+.fb{padding:14px 16px}
+
+/* ===== H5 供应商门户视图 ===== */
+.portal-wrap{display:none;flex-direction:column;min-height:100vh;background:#f5f5f5}
+.portal-header{background:var(--indigo);color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between}
+.portal-title{font-size:16px;font-weight:700}
+.portal-user{font-size:12px;opacity:.8}
+.portal-content{flex:1;padding:12px 14px;max-width:480px;margin:0 auto;width:100%}
+.portal-card{background:#fff;border-radius:10px;margin-bottom:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.portal-card-head{padding:12px 14px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;justify-content:space-between}
+.portal-card-head h3{font-size:14px;font-weight:700;color:var(--gray-9)}
+.portal-card-body{padding:12px 14px}
+.portal-info-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f5f5f5;font-size:13px}
+.portal-info-row:last-child{border-bottom:none}
+.portal-info-label{color:var(--gray-5)}
+.portal-info-value{color:var(--gray-7);font-weight:500;text-align:right;flex:1;margin-left:12px}
+.portal-steps{display:flex;align-items:flex-start;padding:16px 14px;background:#fff;border-radius:10px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.pstep{flex:1;text-align:center;position:relative;padding:0 2px}
+.pstep+.pstep::before{content:'';position:absolute;left:calc(-50% + 14px);right:calc(50% + 14px);top:13px;height:2px;background:#e0e0e0}
+.pstep.done+.pstep::before{background:var(--indigo)}
+.pstep-dot{width:28px;height:28px;border-radius:50%;background:#e0e0e0;border:2px solid #e0e0e0;display:flex;align-items:center;justify-content:center;margin:0 auto 5px;font-size:11px;font-weight:700;color:#999;position:relative;z-index:1}
+.pstep.done .pstep-dot{background:var(--indigo);border-color:var(--indigo);color:#fff}
+.pstep.act .pstep-dot{background:var(--rust);border-color:var(--rust);color:#fff}
+.pstep-label{font-size:10px;color:#999;line-height:1.3}
+.pstep.done .pstep-label{color:var(--indigo);font-weight:600}
+.pstep.act .pstep-label{color:var(--rust);font-weight:600}
+.portal-btn{width:100%;padding:12px;border-radius:8px;font-size:14px;font-family:inherit;font-weight:600;cursor:pointer;border:none;margin-bottom:8px;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .15s}
+.portal-btn-p{background:var(--indigo);color:#fff}
+.portal-btn-p:hover{background:var(--indigo-d)}
+.portal-btn-c{background:var(--rust);color:#fff}
+.portal-btn-c:hover{background:var(--rust-d)}
+.portal-btn-s{background:#fff;border:1px solid #ddd;color:var(--gray-7)}
+.portal-btn-disabled{background:#e0e0e0;color:#999;cursor:not-allowed}
+.portal-locked-tip{font-size:12px;color:#999;text-align:center;padding:4px 0 8px;display:flex;align-items:center;justify-content:center;gap:4px}
+.portal-tab-bar{display:flex;background:#fff;border-bottom:1px solid #eee;margin-bottom:12px}
+.portal-tab{flex:1;padding:10px 8px;text-align:center;font-size:13px;color:#999;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+.portal-tab.act{color:var(--indigo);border-bottom-color:var(--indigo);font-weight:600}
+.portal-list-item{background:#fff;border-radius:10px;padding:12px 14px;margin-bottom:8px;box-shadow:0 1px 4px rgba(0,0,0,.06);cursor:pointer;transition:all .15s}
+.portal-list-item:hover{box-shadow:0 2px 8px rgba(0,0,0,.1)}
+.portal-list-title{font-size:14px;font-weight:600;color:var(--gray-9);margin-bottom:4px;display:flex;align-items:center;justify-content:space-between}
+.portal-list-sub{font-size:12px;color:var(--gray-5);display:flex;gap:12px;flex-wrap:wrap}
+.portal-bottom-nav{background:#fff;border-top:1px solid #eee;display:flex;position:fixed;bottom:0;left:0;right:0;max-width:480px;margin:0 auto}
+.pnav{flex:1;padding:10px 8px;text-align:center;font-size:11px;color:#999;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px}
+.pnav.act{color:var(--indigo)}
+.pnav-icon{font-size:20px}
+
+/* Login page */
+.portal-login{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(160deg,#1E3A5F,#2C5180);padding:24px}
+.login-box{background:#fff;border-radius:16px;padding:32px 28px;width:100%;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,.2)}
+.login-logo{text-align:center;margin-bottom:24px}
+.login-logo h1{font-size:22px;font-weight:700;color:var(--indigo)}
+.login-logo p{font-size:13px;color:var(--gray-5);margin-top:4px}
+.login-field{margin-bottom:16px}
+.login-field label{display:block;font-size:12px;font-weight:600;color:var(--gray-7);margin-bottom:5px}
+.login-field input{width:100%;padding:10px 12px;border:1px solid var(--gray-1);border-radius:8px;font-size:14px;font-family:inherit;outline:none;color:var(--gray-9)}
+.login-field input:focus{border-color:var(--indigo);box-shadow:0 0 0 3px rgba(30,58,95,.1)}
+.login-btn{width:100%;padding:12px;background:var(--indigo);color:#fff;border:none;border-radius:8px;font-size:15px;font-family:inherit;font-weight:600;cursor:pointer;margin-top:8px}
+.login-btn:hover{background:var(--indigo-d)}
+</style>
+</head>
+<body>
+
+<!-- ===== 管理后台：供应商门户管理 ===== -->
+<div id="admin-view">
+<nav class="sidebar">
+  <div class="logo">I9 服装制造<small>管理系统 v1.0</small></div>
+  <div class="nav-gl">基础数据</div>
+  <a href="01-基础资料.html" class="nav-a">📋 基础资料</a>
+  <div class="nav-gl">生产前</div>
+  <a href="02-样衣管理.html" class="nav-a">👗 样衣管理</a>
+  <a href="02-客户报价.html" class="nav-a">💰 客户报价</a>
+  <a href="03-订单.html" class="nav-a">📦 订单管理</a>
+  <div class="nav-gl">合同履行</div>
+  <a href="04-合同.html" class="nav-a">📄 合同管理</a>
+  <a href="05-供应商门户.html" class="nav-a act">🏭 供应商门户</a>
+  <div class="nav-gl">财务结算</div>
+  <a href="06-对账付款.html" class="nav-a">💳 对账付款</a>
+  <a href="07-结算清单.html" class="nav-a">📊 结算清单</a>
+</nav>
+
+<div class="admin-main">
+  <div class="topbar">
+    <div>
+      <div class="page-title">供应商门户管理</div>
+      <div class="breadcrumb">I9服装 / 合同履行 / 供应商门户</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-s" onclick="showPortalPreview()">👁 预览H5门户</button>
+      <button class="btn btn-p" onclick="openModal('m-add-account')">+ 新建供应商账号</button>
+    </div>
+  </div>
+  <div class="content">
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label">活跃供应商</div>
+        <div class="stat-value">5</div>
+        <div class="stat-sub">已开通门户账号</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">待处理合同</div>
+        <div class="stat-value" style="color:var(--rust)">3</div>
+        <div class="stat-sub">等待供应商操作</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">待盖章</div>
+        <div class="stat-value" style="color:var(--amber)">2</div>
+        <div class="stat-sub">合同已推送，等待确认</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">本月对账</div>
+        <div class="stat-value" style="color:var(--teal)">4</div>
+        <div class="stat-sub">对账单已处理</div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab act" onclick="switchAdminTab('contracts',this)">门户合同追踪</div>
+      <div class="tab" onclick="switchAdminTab('accounts',this)">供应商账号</div>
+    </div>
+
+    <!-- 门户合同追踪 -->
+    <div id="panel-contracts">
+      <div class="toolbar">
+        <div style="display:flex;gap:6px">
+          <button style="padding:5px 12px;border-radius:10px;font-size:12px;cursor:pointer;border:1px solid var(--gray-1);background:var(--indigo);color:#fff;font-family:inherit">全部</button>
+          <button style="padding:5px 12px;border-radius:10px;font-size:12px;cursor:pointer;border:1px solid var(--gray-1);background:#fff;color:var(--gray-5);font-family:inherit">待盖章</button>
+          <button style="padding:5px 12px;border-radius:10px;font-size:12px;cursor:pointer;border:1px solid var(--gray-1);background:#fff;color:var(--gray-5);font-family:inherit">发货中</button>
+          <button style="padding:5px 12px;border-radius:10px;font-size:12px;cursor:pointer;border:1px solid var(--gray-1);background:#fff;color:var(--gray-5);font-family:inherit">对账中</button>
+        </div>
+        <div class="spacer"></div>
+        <input class="srch" placeholder="搜索合同/供应商">
+      </div>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>合同编号</th>
+              <th>供应商</th>
+              <th>合同类型</th>
+              <th>合同金额</th>
+              <th>推送时间</th>
+              <th>盖章</th>
+              <th>发货</th>
+              <th>对账</th>
+              <th>开票</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="tag-no">HT-20240121-001</span></td>
+              <td>无锡纺织印染厂</td>
+              <td><span class="badge bi">材料合同</span></td>
+              <td class="fw7">¥105,840</td>
+              <td>01-21 10:30</td>
+              <td><span class="badge bs">✓ 已盖章</span></td>
+              <td><span class="badge bw">发货中</span></td>
+              <td><span class="badge bg">待发起</span></td>
+              <td><span class="badge bg">待开票</span></td>
+              <td><button class="btn btn-s btn-sm">查看详情</button></td>
+            </tr>
+            <tr>
+              <td><span class="tag-no">HT-20240121-002</span></td>
+              <td>苏州腾飞制衣厂</td>
+              <td><span class="badge bw">加工合同</span></td>
+              <td class="fw7">¥72,000</td>
+              <td>01-21 11:15</td>
+              <td><span class="badge bs">✓ 已盖章</span></td>
+              <td><span class="badge br">待发货</span></td>
+              <td><span class="badge bg">待发起</span></td>
+              <td><span class="badge bg">待开票</span></td>
+              <td><button class="btn btn-s btn-sm">查看详情</button></td>
+            </tr>
+            <tr>
+              <td><span class="tag-no">HT-20240121-003</span></td>
+              <td>广州美嘉服装加工厂</td>
+              <td><span class="badge bi">材料合同</span></td>
+              <td class="fw7">¥63,000</td>
+              <td>01-21 14:00</td>
+              <td><span class="badge be">待盖章</span></td>
+              <td><span class="badge bg">未开始</span></td>
+              <td><span class="badge bg">待发起</span></td>
+              <td><span class="badge bg">待开票</span></td>
+              <td><button class="btn btn-c btn-sm">催促盖章</button></td>
+            </tr>
+            <tr>
+              <td><span class="tag-no">HT-20240118-002</span></td>
+              <td>苏州腾飞制衣厂</td>
+              <td><span class="badge bw">加工合同</span></td>
+              <td class="fw7">¥60,000</td>
+              <td>01-19 09:00</td>
+              <td><span class="badge be">待盖章</span></td>
+              <td><span class="badge bg">未开始</span></td>
+              <td><span class="badge bg">待发起</span></td>
+              <td><span class="badge bg">待开票</span></td>
+              <td><button class="btn btn-c btn-sm">催促盖章</button></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="pg"><span>共 4 条</span></div>
+      </div>
+    </div>
+
+    <!-- 供应商账号 -->
+    <div id="panel-accounts" style="display:none">
+      <div class="toolbar">
+        <div class="spacer"></div>
+        <input class="srch" placeholder="搜索供应商名称/账号">
+      </div>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr><th>供应商</th><th>工厂编号</th><th>登录账号</th><th>联系人</th><th>开通时间</th><th>最后登录</th><th>状态</th><th>操作</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>苏州腾飞制衣厂</td><td><span class="tag-no">CN001</span></td>
+              <td style="font-family:monospace">cn001@i9portal</td>
+              <td>张伟</td><td>2024-01-10</td><td>2024-01-21 16:30</td>
+              <td><span class="badge bs">正常</span></td>
+              <td><button class="btn btn-s btn-sm">重置密码</button></td>
+            </tr>
+            <tr>
+              <td>无锡纺织印染厂</td><td><span class="tag-no">CN005</span></td>
+              <td style="font-family:monospace">cn005@i9portal</td>
+              <td>刘芳</td><td>2024-01-10</td><td>2024-01-22 10:15</td>
+              <td><span class="badge bs">正常</span></td>
+              <td><button class="btn btn-s btn-sm">重置密码</button></td>
+            </tr>
+            <tr>
+              <td>广州美嘉服装加工厂</td><td><span class="tag-no">CN002</span></td>
+              <td style="font-family:monospace">cn002@i9portal</td>
+              <td>李红</td><td>2024-01-15</td><td>2024-01-20 09:00</td>
+              <td><span class="badge bs">正常</span></td>
+              <td><button class="btn btn-s btn-sm">重置密码</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ===== 供应商 H5 门户预览（登录页 + 主界面） ===== -->
+<div id="portal-login-view" style="display:none">
+  <div class="portal-login">
+    <div class="login-box">
+      <div class="login-logo">
+        <h1>I9 供应商门户</h1>
+        <p>Supplier Portal · 服装制造协同平台</p>
+      </div>
+      <div class="login-field">
+        <label>登录账号</label>
+        <input type="text" placeholder="请输入供应商账号" value="cn001@i9portal">
+      </div>
+      <div class="login-field">
+        <label>登录密码</label>
+        <input type="password" placeholder="请输入密码" value="••••••••">
+      </div>
+      <button class="login-btn" onclick="showPortalMain()">登 录</button>
+      <p style="text-align:center;font-size:12px;color:var(--gray-5);margin-top:16px">账号密码由采购方提供 · 如有问题请联系对接业务员</p>
+    </div>
+    <p style="color:rgba(255,255,255,.5);font-size:12px;margin-top:20px">仅支持网页端访问(H5) · v1.0</p>
+    <button class="btn btn-s btn-sm" style="margin-top:12px;background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.2);color:#fff" onclick="closePortal()">← 返回管理后台</button>
+  </div>
+</div>
+
+<div id="portal-main-view" style="display:none">
+  <div class="portal-wrap" style="display:flex">
+    <div class="portal-header">
+      <div>
+        <div class="portal-title">苏州腾飞制衣厂</div>
+        <div class="portal-user">账号：cn001@i9portal</div>
+      </div>
+      <button onclick="closePortal()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;padding:5px 10px;border-radius:5px;font-size:12px;cursor:pointer;font-family:inherit">退出</button>
+    </div>
+
+    <div class="portal-content" style="padding-bottom:70px">
+      <!-- 当前处理步骤 -->
+      <div style="padding:12px 0 6px;font-size:13px;font-weight:600;color:var(--gray-7)">📋 待处理事项</div>
+
+      <!-- 合同流程卡片 -->
+      <div class="portal-card">
+        <div class="portal-card-head">
+          <div>
+            <h3>HT-20240121-002 · 加工合同</h3>
+            <div style="font-size:12px;color:var(--gray-5);margin-top:2px">春季款女士连衣裙 · ¥72,000</div>
+          </div>
+          <span class="badge bw" style="font-size:10px">发货中</span>
+        </div>
+        <div class="portal-card-body">
+          <!-- 4步流程 -->
+          <div class="portal-steps" style="padding:10px 6px;margin-bottom:0;border-radius:0;box-shadow:none;border-bottom:1px solid #f0f0f0">
+            <div class="pstep done">
+              <div class="pstep-dot">✓</div>
+              <div class="pstep-label">确认<br>盖章</div>
+            </div>
+            <div class="pstep act">
+              <div class="pstep-dot">2</div>
+              <div class="pstep-label">登记<br>发货</div>
+            </div>
+            <div class="pstep">
+              <div class="pstep-dot">3</div>
+              <div class="pstep-label">确认<br>对账</div>
+            </div>
+            <div class="pstep">
+              <div class="pstep-dot">4</div>
+              <div class="pstep-label">上传<br>发票</div>
+            </div>
+          </div>
+
+          <!-- 当前步骤操作 -->
+          <div style="padding:12px 0 4px">
+            <div class="portal-info-row">
+              <span class="portal-info-label">关联订单</span>
+              <span class="portal-info-value" style="color:var(--indigo)">O-20240120-001 → 查看明细</span>
+            </div>
+            <div class="portal-info-row">
+              <span class="portal-info-label">加工数量</span>
+              <span class="portal-info-value">4,000 件</span>
+            </div>
+            <div class="portal-info-row">
+              <span class="portal-info-label">已发货</span>
+              <span class="portal-info-value">2,000 件 / 1批</span>
+            </div>
+            <div class="portal-info-row">
+              <span class="portal-info-label">待发货</span>
+              <span class="portal-info-value" style="color:var(--rust)">2,000 件</span>
+            </div>
+          </div>
+          <button class="portal-btn portal-btn-c" onclick="showDeliveryForm()">📦 登记发货</button>
+          <button class="portal-btn portal-btn-s" onclick="showContractDetail()">查看合同详情及订单明细</button>
+        </div>
+      </div>
+
+      <!-- 另一个合同：等待对账确认 -->
+      <div class="portal-card">
+        <div class="portal-card-head">
+          <div>
+            <h3>HT-20240121-001 · 材料合同</h3>
+            <div style="font-size:12px;color:var(--gray-5);margin-top:2px">棉麻混纺面料 · ¥105,840</div>
+          </div>
+          <span class="badge bs" style="font-size:10px">对账中</span>
+        </div>
+        <div class="portal-card-body">
+          <div class="portal-steps" style="padding:10px 6px;margin-bottom:0;border-radius:0;box-shadow:none;border-bottom:1px solid #f0f0f0">
+            <div class="pstep done"><div class="pstep-dot">✓</div><div class="pstep-label">确认盖章</div></div>
+            <div class="pstep done"><div class="pstep-dot">✓</div><div class="pstep-label">登记发货</div></div>
+            <div class="pstep act"><div class="pstep-dot">3</div><div class="pstep-label">确认对账</div></div>
+            <div class="pstep"><div class="pstep-dot">4</div><div class="pstep-label">上传发票</div></div>
+          </div>
+          <div style="padding:12px 0 4px">
+            <div class="portal-info-row">
+              <span class="portal-info-label">对账单号</span>
+              <span class="portal-info-value" style="color:var(--indigo)">DZ-20240122-001</span>
+            </div>
+            <div class="portal-info-row">
+              <span class="portal-info-label">对账金额</span>
+              <span class="portal-info-value fw7">¥ 105,840</span>
+            </div>
+            <div class="portal-info-row">
+              <span class="portal-info-label">对账发起方</span>
+              <span class="portal-info-value">I9采购方 · 2024-01-22</span>
+            </div>
+          </div>
+          <button class="portal-btn portal-btn-p" onclick="confirmReconcile()">✓ 确认对账单</button>
+          <button class="portal-btn portal-btn-s">有异议，联系采购方</button>
+          <div class="portal-locked-tip">🔒 步骤3完成后，才可上传发票</div>
+        </div>
+      </div>
+
+      <div style="padding:8px 0 4px;font-size:13px;font-weight:600;color:var(--gray-7)">📜 历史合同</div>
+      <div class="portal-list-item" onclick="showContractDetail()">
+        <div class="portal-list-title">
+          <span>HT-20240110-001 · 材料合同</span>
+          <span class="badge bs" style="font-size:10px">已完结</span>
+        </div>
+        <div class="portal-list-sub">
+          <span>羊毛混纺面料</span>
+          <span>¥198,000</span>
+          <span>2024-01-10</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="portal-bottom-nav">
+      <div class="pnav act">
+        <div class="pnav-icon">📋</div>
+        <div>合同</div>
+      </div>
+      <div class="pnav">
+        <div class="pnav-icon">📦</div>
+        <div>发货</div>
+      </div>
+      <div class="pnav">
+        <div class="pnav-icon">💰</div>
+        <div>对账</div>
+      </div>
+      <div class="pnav">
+        <div class="pnav-icon">🧾</div>
+        <div>发票</div>
+      </div>
+      <div class="pnav">
+        <div class="pnav-icon">👤</div>
+        <div>我的</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 新建账号 modal -->
+<div class="overlay" id="m-add-account">
+  <div class="modal">
+    <div class="mh"><h2>新建供应商账号</h2><button class="mc" onclick="closeModal('m-add-account')">×</button></div>
+    <div class="mb">
+      <div class="frow">
+        <div class="fg"><label>绑定供应商 <span class="req">*</span></label>
+          <select class="fc"><option>请选择供应商</option><option>杭州丝绸坊工艺厂(CN003)</option><option>佛山锦绣制衣公司(CN004)</option></select>
+        </div>
+        <div class="fg"><label>联系人</label><input class="fc" placeholder="账号使用人姓名"></div>
+        <div class="fg span2"><label>登录账号</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input class="fc" value="cn003@i9portal" readonly>
+            <button class="btn btn-s btn-sm">自动生成</button>
+          </div>
+        </div>
+        <div class="fg"><label>初始密码</label><input class="fc" value="I9@2024!" placeholder="初始密码"></div>
+        <div class="fg"><label>手机号</label><input class="fc" placeholder="用于接收通知短信"></div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-s" onclick="closeModal('m-add-account')">取消</button>
+      <button class="btn btn-p" onclick="createAccount()">创建账号</button>
+    </div>
+  </div>
+</div>
+
+<!-- 登记发货 modal -->
+<div class="overlay" id="m-delivery">
+  <div class="modal" style="width:100%;max-width:480px">
+    <div class="mh"><h2>登记发货</h2><button class="mc" onclick="closeModal('m-delivery')">×</button></div>
+    <div class="mb">
+      <div style="background:#e3f2fd;border:1px solid #90caf9;border-radius:var(--r);padding:10px 12px;font-size:12px;color:#1565c0;margin-bottom:14px">
+        📦 合同 HT-20240121-002 · 待发货 2,000 件
+      </div>
+      <div class="frow">
+        <div class="fg"><label>本次发货数量 <span class="req">*</span></label><input class="fc" placeholder="件数"></div>
+        <div class="fg"><label>发货日期 <span class="req">*</span></label><input class="fc" type="date"></div>
+        <div class="fg span2"><label>物流方式</label>
+          <select class="fc"><option>自送(送到指定地点)</option><option>快递</option><option>整车物流</option></select>
+        </div>
+        <div class="fg"><label>快递单号/车牌</label><input class="fc" placeholder="可选"></div>
+        <div class="fg"><label>联系司机</label><input class="fc" placeholder="电话"></div>
+        <div class="fg span2"><label>发货备注</label><textarea class="fc" rows="2" placeholder="如：分两个包装箱，箱1含S/M码..."></textarea></div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-s" onclick="closeModal('m-delivery')">取消</button>
+      <button class="btn btn-c" onclick="submitDelivery()">确认登记发货</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function switchAdminTab(tab, el) {
+  document.querySelectorAll('.tabs .tab').forEach(t => t.classList.remove('act'))
+  el.classList.add('act')
+  ;['contracts','accounts'].forEach(t => {
+    const p = document.getElementById('panel-'+t)
+    if(p) p.style.display = t === tab ? '' : 'none'
+  })
+}
+function openModal(id) { document.getElementById(id).classList.add('open') }
+function closeModal(id) { document.getElementById(id).classList.remove('open') }
+function showPortalPreview() {
+  document.getElementById('admin-view').style.display = 'none'
+  document.getElementById('portal-login-view').style.display = ''
+}
+function showPortalMain() {
+  document.getElementById('portal-login-view').style.display = 'none'
+  document.getElementById('portal-main-view').style.display = ''
+}
+function closePortal() {
+  document.getElementById('portal-login-view').style.display = 'none'
+  document.getElementById('portal-main-view').style.display = 'none'
+  document.getElementById('admin-view').style.display = ''
+}
+function showDeliveryForm() { openModal('m-delivery') }
+function showContractDetail() { showToast('查看合同及订单明细（含材料清单、尺寸表、数量搭配）') }
+function confirmReconcile() { showToast('已确认对账单 DZ-20240122-001，请进行下一步：上传发票') }
+function submitDelivery() {
+  closeModal('m-delivery')
+  showToast('发货信息已登记，采购方将收到通知')
+}
+function createAccount() {
+  closeModal('m-add-account')
+  showToast('供应商账号已创建，初始密码已发送至联系人手机')
+}
+function showToast(msg) {
+  const t = document.createElement('div')
+  t.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#1E3A5F;color:#fff;padding:12px 20px;border-radius:8px;font-size:13px;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.2);max-width:320px'
+  t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 3000)
+}
+document.querySelectorAll('.overlay').forEach(o => {
+  o.addEventListener('click', e => { if(e.target === o) o.classList.remove('open') })
+})
+</script>
+</body>
+</html>
