@@ -1,12 +1,7 @@
 import { Controller, Post, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
-import { IsString, MinLength } from 'class-validator';
 import { AuthService } from './auth.service';
-
-class LoginDto {
-  @IsString() username: string;
-  @IsString() @MinLength(6) password: string;
-}
+import { LoginDto, PortalLoginDto } from './dto/login.dto';
 
 @ApiTags('认证')
 @Controller('auth')
@@ -21,7 +16,7 @@ export class AuthController {
 
   @Post('portal/login')
   @ApiOperation({ summary: '供应商门户登录' })
-  portalLogin(@Body() dto: LoginDto) {
+  portalLogin(@Body() dto: PortalLoginDto) {
     return this.authService.loginSupplier(dto.username, dto.password);
   }
 }

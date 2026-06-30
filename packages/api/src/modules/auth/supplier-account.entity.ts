@@ -2,23 +2,23 @@ import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateCol
 
 @Entity('supplier_account')
 export class SupplierAccount {
-  @PrimaryGeneratedColumn()
+  @PrimaryGeneratedColumn({ type: 'bigint' })
   id: number;
 
-  @Column()
-  factory_id: number;
-
   @Column({ length: 50, unique: true })
-  login_name: string;
+  account: string;
 
   @Column({ length: 255 })
-  password_hash: string;
+  password: string;
 
-  @Column({ tinyint: true, default: 1 } as any)
-  enabled: number;
+  @Column({ type: 'bigint' })
+  factory_id: number;
 
-  @Column({ tinyint: true, default: 0 } as any)
-  deleted: number;
+  @Column({ type: 'tinyint', default: 1 })
+  status: number;
+
+  @Column({ type: 'datetime', nullable: true })
+  last_login_at: Date;
 
   @CreateDateColumn()
   created_at: Date;

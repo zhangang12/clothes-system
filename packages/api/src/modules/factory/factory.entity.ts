@@ -3,25 +3,28 @@ import { FactoryType } from '@i9/types';
 
 @Entity('factory')
 export class Factory {
-  @PrimaryGeneratedColumn()
+  @PrimaryGeneratedColumn({ type: 'bigint' })
   id: number;
 
-  @Column({ length: 20, unique: true })
+  @Column({ length: 10, unique: true })
   factory_no: string;
 
   @Column({ length: 100 })
   name: string;
 
-  @Column({ type: 'enum', enum: FactoryType, default: FactoryType.BOTH })
+  @Column({ length: 50, nullable: true })
+  short_name: string;
+
+  @Column({ type: 'enum', enum: FactoryType, default: FactoryType.MATERIAL })
   type: FactoryType;
 
-  @Column({ length: 20, nullable: true })
-  contact_person: string;
+  @Column({ length: 50, nullable: true })
+  contact_name: string;
 
   @Column({ length: 20, nullable: true })
   contact_phone: string;
 
-  @Column({ length: 255, nullable: true })
+  @Column({ length: 200, nullable: true })
   address: string;
 
   @Column({ length: 100, nullable: true })
@@ -31,9 +34,18 @@ export class Factory {
   bank_account: string;
 
   @Column({ length: 20, nullable: true })
-  tax_id: string;
+  tax_no: string;
 
-  @Column({ tinyint: true, default: 0 } as any)
+  @Column({ type: 'tinyint', default: 1 })
+  status: number;
+
+  @Column({ type: 'text', nullable: true })
+  remark: string;
+
+  @Column({ type: 'bigint', nullable: true })
+  created_by: number;
+
+  @Column({ type: 'tinyint', default: 0 })
   deleted: number;
 
   @CreateDateColumn()

@@ -3,23 +3,23 @@ import { UserRole } from '@i9/types';
 
 @Entity('sys_user')
 export class SysUser {
-  @PrimaryGeneratedColumn()
+  @PrimaryGeneratedColumn({ type: 'bigint' })
   id: number;
 
   @Column({ length: 50, unique: true })
   username: string;
 
   @Column({ length: 255 })
-  password_hash: string;
-
-  @Column({ type: 'enum', enum: UserRole, default: UserRole.BUSINESS })
-  role: UserRole;
+  password: string;
 
   @Column({ length: 50 })
   real_name: string;
 
-  @Column({ tinyint: true, default: 0 } as any)
-  deleted: number;
+  @Column({ type: 'enum', enum: UserRole, default: UserRole.BUSINESS })
+  role: UserRole;
+
+  @Column({ type: 'tinyint', default: 1 })
+  status: number;
 
   @CreateDateColumn()
   created_at: Date;
