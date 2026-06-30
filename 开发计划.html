@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>I9 服装制造管理系统 — 开发计划</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#FBF8F2;color:#1F1F22;font-size:14px;line-height:1.6}
+:root{
+  --indigo:#1E3A5F;--indigo-d:#152A45;--indigo-l:#2C5180;
+  --linen:#F5EDDC;--linen-d:#E8DCC0;
+  --rust:#D17A40;--vermilion:#C04042;--teal:#3E8E7E;--amber:#C8901E;
+  --gray-9:#1F1F22;--gray-7:#37383C;--gray-5:#6F7178;
+  --gray-3:#B5B7BD;--gray-1:#E5E2DA;--gray-0:#F4F1EA;
+  --r:4px;--r-lg:8px
+}
+.layout{display:flex;min-height:100vh}
+.sidebar{width:220px;background:var(--indigo);color:#fff;flex-shrink:0;position:sticky;top:0;height:100vh;overflow-y:auto}
+.sidebar .logo{padding:20px 16px 12px;font-size:15px;font-weight:700;border-bottom:1px solid rgba(255,255,255,.1)}
+.sidebar .logo small{display:block;font-size:11px;font-weight:400;opacity:.6;margin-top:2px}
+.nav-gl{padding:14px 16px 4px;font-size:10px;opacity:.5;letter-spacing:.06em;text-transform:uppercase}
+.nav-a{display:block;padding:7px 16px;color:rgba(255,255,255,.75);border-left:3px solid transparent;font-size:12px;cursor:pointer;transition:.15s}
+.nav-a:hover{background:rgba(255,255,255,.07);color:#fff}
+.nav-a.act{background:rgba(255,255,255,.12);color:#fff;border-left-color:var(--rust)}
+.main{flex:1;overflow:auto}
+.topbar{background:#fff;border-bottom:1px solid var(--gray-1);padding:0 24px;display:flex;align-items:center;height:52px;gap:12px;position:sticky;top:0;z-index:10}
+.topbar h1{font-size:16px;font-weight:600;color:var(--indigo)}
+.badge{font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600}
+.badge-wip{background:#ede9fe;color:#4c1d95}
+.badge-done{background:#dcfce7;color:#166534}
+.badge-pending{background:var(--linen);color:var(--rust)}
+.content{padding:24px;max-width:1100px}
+
+/* Progress overview */
+.overview{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:28px}
+.ov-card{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);padding:14px;text-align:center}
+.ov-card .big{font-size:26px;font-weight:700;color:var(--indigo)}
+.ov-card .lbl{font-size:11px;color:var(--gray-5);margin-top:2px}
+.progress-bar{height:8px;background:var(--gray-1);border-radius:4px;overflow:hidden;margin-top:6px}
+.progress-fill{height:100%;border-radius:4px;transition:.4s}
+
+/* Phase card */
+.phase{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);margin-bottom:20px;overflow:hidden}
+.phase-head{padding:14px 20px;display:flex;align-items:center;gap:12px;cursor:pointer;user-select:none}
+.phase-head:hover{background:var(--gray-0)}
+.ph-num{width:32px;height:32px;border-radius:50%;background:var(--indigo);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0}
+.ph-title{font-size:15px;font-weight:700;color:var(--indigo);flex:1}
+.ph-meta{font-size:12px;color:var(--gray-5)}
+.ph-toggle{color:var(--gray-3);transition:.2s;font-size:18px}
+.phase.open .ph-toggle{transform:rotate(90deg)}
+.phase-body{display:none;padding:0 20px 16px;border-top:1px solid var(--gray-0)}
+.phase.open .phase-body{display:block}
+
+/* Task list */
+.task-list{margin-top:12px}
+.task-item{display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:var(--r);margin-bottom:4px;transition:.15s}
+.task-item:hover{background:var(--gray-0)}
+.task-cb{width:18px;height:18px;border:2px solid var(--gray-3);border-radius:4px;flex-shrink:0;margin-top:1px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.15s}
+.task-cb.done{background:var(--teal);border-color:var(--teal);color:#fff}
+.task-cb.wip{background:var(--amber);border-color:var(--amber);color:#fff}
+.task-info{flex:1}
+.task-title{font-size:13px;font-weight:500;color:var(--gray-9)}
+.task-title.done-text{text-decoration:line-through;color:var(--gray-3)}
+.task-desc{font-size:12px;color:var(--gray-5);margin-top:2px}
+.task-tags{display:flex;gap:5px;margin-top:4px;flex-wrap:wrap}
+.tag{font-size:10px;padding:1px 7px;border-radius:8px;font-weight:600}
+.t-fe{background:#ede9fe;color:#4c1d95}
+.t-be{background:#d1fae5;color:#065f46}
+.t-db{background:#fce7f3;color:#9d174d}
+.t-h5{background:#e0f2fe;color:#0c4a6e}
+.t-test{background:#fef3c7;color:#92400e}
+.t-infra{background:#f0fdf4;color:#14532d}
+.est-tag{font-size:10px;padding:1px 7px;border-radius:8px;background:var(--linen);color:var(--rust);font-weight:600}
+
+/* AC list */
+.ac-box{background:var(--linen);border-radius:var(--r);padding:10px 14px;margin-top:8px}
+.ac-box .ac-title{font-size:11px;font-weight:700;color:var(--indigo);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em}
+.ac-item{display:flex;align-items:flex-start;gap:7px;font-size:12px;color:var(--gray-7);margin-bottom:4px}
+.ac-item:last-child{margin-bottom:0}
+.ac-dot{width:5px;height:5px;border-radius:50%;background:var(--rust);flex-shrink:0;margin-top:5px}
+
+/* Section divider */
+.section-lbl{font-size:11px;font-weight:700;color:var(--gray-5);text-transform:uppercase;letter-spacing:.08em;padding:10px 0 4px;border-bottom:1px solid var(--gray-0);margin-bottom:8px}
+
+/* Risk / notes */
+.note{border-radius:var(--r);padding:10px 14px;font-size:12px;margin-top:10px}
+.note-w{background:#fffbeb;border-left:3px solid #f59e0b;color:#92400e}
+.note-i{background:#eff6ff;border-left:3px solid #3b82f6;color:#1e40af}
+.note-e{background:#fef2f2;border-left:3px solid #ef4444;color:#991b1b}
+
+/* Timeline */
+.timeline-row{display:flex;gap:0;overflow-x:auto;padding-bottom:8px;margin-bottom:24px}
+.tl-col{min-width:180px;padding:0 8px;border-left:2px solid var(--gray-1);flex-shrink:0}
+.tl-col:first-child{border-left:2px solid var(--indigo)}
+.tl-week{font-size:11px;color:var(--gray-5);margin-bottom:6px}
+.tl-item{font-size:12px;padding:4px 8px;border-radius:4px;margin-bottom:4px;background:var(--linen);color:var(--indigo)}
+.tl-item.done{background:#dcfce7;color:#166534}
+.tl-item.wip{background:#ede9fe;color:#4c1d95}
+
+table{width:100%;border-collapse:collapse;font-size:12px;margin:8px 0}
+th{background:var(--linen);color:var(--gray-7);font-weight:600;padding:7px 10px;text-align:left;border-bottom:1px solid var(--linen-d)}
+td{padding:7px 10px;border-bottom:1px solid var(--gray-0);vertical-align:top}
+tr:last-child td{border-bottom:none}
+.tbl-wrap{border:1px solid var(--gray-1);border-radius:var(--r-lg);overflow:hidden;margin:8px 0 16px}
+code{background:#f1f5f9;color:#334155;padding:1px 5px;border-radius:3px;font-size:11px;font-family:"SF Mono",Consolas,monospace}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+  <div class="logo">I9 服装制造<small>开发计划 v1.0</small></div>
+  <div class="nav-gl">概览</div>
+  <a class="nav-a act" onclick="scroll2('overview')">📊 整体进度</a>
+  <a class="nav-a" onclick="scroll2('timeline')">📅 时间线</a>
+  <a class="nav-a" onclick="scroll2('stack')">🔧 技术栈</a>
+  <a class="nav-a" onclick="scroll2('test-strategy')">🧪 测试策略</a>
+  <div class="nav-gl">阶段</div>
+  <a class="nav-a" onclick="scroll2('p0')">P0 基础设施</a>
+  <a class="nav-a" onclick="scroll2('p1')">P1 鉴权+基础资料</a>
+  <a class="nav-a" onclick="scroll2('p2')">P2 样衣+报价</a>
+  <a class="nav-a" onclick="scroll2('p3')">P3 订单</a>
+  <a class="nav-a" onclick="scroll2('p4')">P4 合同</a>
+  <a class="nav-a" onclick="scroll2('p5')">P5 供应商门户</a>
+  <a class="nav-a" onclick="scroll2('p6')">P6 对账付款</a>
+  <a class="nav-a" onclick="scroll2('p7')">P7 结算清单</a>
+  <a class="nav-a" onclick="scroll2('p8')">P8 测试&QA</a>
+</nav>
+<div class="main">
+  <div class="topbar">
+    <h1>I9 服装制造管理系统 — 开发计划</h1>
+    <span class="badge badge-wip" id="global-status">进行中</span>
+    <span style="font-size:12px;color:var(--gray-5)" id="global-progress">0 / 0 完成</span>
+  </div>
+  <div class="content">
+
+    <!-- Overview -->
+    <div id="overview" style="scroll-margin-top:60px">
+      <div class="overview">
+        <div class="ov-card">
+          <div class="big" id="ov-total">0</div><div class="lbl">总任务数</div>
+          <div class="progress-bar"><div class="progress-fill" id="ov-bar" style="background:var(--indigo)"></div></div>
+        </div>
+        <div class="ov-card"><div class="big" style="color:var(--teal)" id="ov-done">0</div><div class="lbl">已完成</div></div>
+        <div class="ov-card"><div class="big" style="color:var(--amber)" id="ov-wip">0</div><div class="lbl">进行中</div></div>
+        <div class="ov-card"><div class="big" style="color:var(--gray-3)" id="ov-pending">0</div><div class="lbl">待开始</div></div>
+        <div class="ov-card"><div class="big" id="ov-days">110</div><div class="lbl">总估算天数</div></div>
+        <div class="ov-card"><div class="big">8</div><div class="lbl">开发阶段</div></div>
+      </div>
+    </div>
+
+    <!-- Timeline -->
+    <div id="timeline" style="scroll-margin-top:60px;margin-bottom:4px">
+      <div style="font-size:15px;font-weight:700;color:var(--indigo);margin-bottom:12px">开发时间线</div>
+      <div class="timeline-row">
+        <div class="tl-col">
+          <div class="tl-week">Week 1–2</div>
+          <div class="tl-item wip">P0 基础设施</div>
+          <div class="tl-item wip">Monorepo搭建</div>
+          <div class="tl-item wip">数据库DDL</div>
+        </div>
+        <div class="tl-col">
+          <div class="tl-week">Week 3–4</div>
+          <div class="tl-item">P1 鉴权体系</div>
+          <div class="tl-item">工厂/客户CRUD</div>
+          <div class="tl-item">前端基础页面</div>
+        </div>
+        <div class="tl-col">
+          <div class="tl-week">Week 5–7</div>
+          <div class="tl-item">P2 样衣管理</div>
+          <div class="tl-item">P2 客户报价</div>
+          <div class="tl-item">损耗计算测试</div>
+        </div>
+        <div class="tl-col">
+          <div class="tl-week">Week 8–9</div>
+          <div class="tl-item">P3 订单管理</div>
+          <div class="tl-item">尺码矩阵</div>
+          <div class="tl-item">用料核算</div>
+        </div>
+        <div class="tl-col">
+          <div class="tl-week">Week 10–12</div>
+          <div class="tl-item">P4 合同管理</div>
+          <div class="tl-item">快照锁定</div>
+          <div class="tl-item">门户推送</div>
+        </div>
+        <div class="tl-col">
+          <div class="tl-week">Week 13–14</div>
+          <div class="tl-item">P5 供应商门户</div>
+          <div class="tl-item">H5 Vant</div>
+          <div class="tl-item">4步顺序流</div>
+        </div>
+        <div class="tl-col">
+          <div class="tl-week">Week 15–17</div>
+          <div class="tl-item">P6 对账付款</div>
+          <div class="tl-item">超付拦截</div>
+          <div class="tl-item">审批流</div>
+        </div>
+        <div class="tl-col">
+          <div class="tl-week">Week 18–19</div>
+          <div class="tl-item">P7 结算清单</div>
+          <div class="tl-item">利润双视图</div>
+          <div class="tl-item">退税计算</div>
+        </div>
+        <div class="tl-col">
+          <div class="tl-week">Week 20</div>
+          <div class="tl-item">P8 QA测试</div>
+          <div class="tl-item">E2E Playwright</div>
+          <div class="tl-item">业务逻辑审查</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tech Stack -->
+    <div id="stack" style="scroll-margin-top:60px;margin-bottom:24px">
+      <div style="font-size:15px;font-weight:700;color:var(--indigo);margin-bottom:10px">技术栈</div>
+      <div class="tbl-wrap">
+        <table>
+          <tr><th>层</th><th>技术</th><th>版本</th><th>用途</th></tr>
+          <tr><td>管理前端</td><td>Vue 3 + Vite + Element Plus</td><td>Vue 3.5 / EP 2.x</td><td>PC管理后台 1440px+</td></tr>
+          <tr><td>H5门户</td><td>Vue 3 + Vite + Vant 4</td><td>Vant 4.x</td><td>供应商H5门户 375px+</td></tr>
+          <tr><td>状态管理</td><td>Pinia</td><td>2.x</td><td>两端共用</td></tr>
+          <tr><td>后端</td><td>NestJS + TypeScript</td><td>NestJS 10 / Node 20</td><td>REST API</td></tr>
+          <tr><td>ORM</td><td>TypeORM</td><td>0.3.x</td><td>Entity + Migration</td></tr>
+          <tr><td>数据库</td><td>MySQL 8.0</td><td>8.0.x</td><td>主业务数据</td></tr>
+          <tr><td>缓存</td><td>Redis 7</td><td>7.x</td><td>Session / 编号序列</td></tr>
+          <tr><td>文件</td><td>ECS 数据盘 /data/uploads</td><td>—</td><td>合同/发票/水单</td></tr>
+          <tr><td>后端测试</td><td>Jest + Supertest</td><td>Jest 29</td><td>单元+API集成测试</td></tr>
+          <tr><td>前端测试</td><td>Vitest + Vue Test Utils</td><td>Vitest 1.x</td><td>组件+业务逻辑单元测试</td></tr>
+          <tr><td>E2E</td><td>Playwright</td><td>1.x</td><td>全流程端到端测试</td></tr>
+          <tr><td>包管理</td><td>pnpm workspace (monorepo)</td><td>pnpm 9</td><td>共享 types 包</td></tr>
+          <tr><td>CI</td><td>GitHub Actions</td><td>—</td><td>lint + test + build</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- Test Strategy -->
+    <div id="test-strategy" style="scroll-margin-top:60px;margin-bottom:28px">
+      <div style="font-size:15px;font-weight:700;color:var(--indigo);margin-bottom:10px">测试策略</div>
+      <div class="tbl-wrap">
+        <table>
+          <tr><th>层次</th><th>框架</th><th>覆盖范围</th><th>目标覆盖率</th></tr>
+          <tr><td>业务逻辑单元</td><td>Jest</td><td>损耗计算、成本公式、超付拦截、账期计算、退税公式</td><td>100%（核心规则）</td></tr>
+          <tr><td>后端API</td><td>Supertest</td><td>所有REST接口的正常路径+边界+错误路径</td><td>≥80%</td></tr>
+          <tr><td>前端组件</td><td>Vitest+VTU</td><td>动态表格、状态机UI、金额格式化、报错提示</td><td>≥70%</td></tr>
+          <tr><td>E2E全流程</td><td>Playwright</td><td>8条核心流程（见下）</td><td>全部通过</td></tr>
+          <tr><td>业务逻辑审查</td><td>人工核对</td><td>逐条对比设计稿确认问题清单</td><td>100%</td></tr>
+        </table>
+      </div>
+      <div style="font-size:13px;font-weight:600;color:var(--gray-7);margin-bottom:8px">E2E 核心测试流程</div>
+      <div class="tbl-wrap">
+        <table>
+          <tr><th>#</th><th>流程名</th><th>覆盖场景</th></tr>
+          <tr><td>E2E-01</td><td>完整业务流</td><td>新建工厂→样衣→报价→订单→合同→门户盖章→发货→对账→付款→结算</td></tr>
+          <tr><td>E2E-02</td><td>损耗计算</td><td>全局损耗率批量更新、单行覆盖、公式精度验证</td></tr>
+          <tr><td>E2E-03</td><td>快照锁定</td><td>盖章后修改合同单价→验证下游对账单仍用快照价</td></tr>
+          <tr><td>E2E-04</td><td>门户4步顺序</td><td>跳步操作被阻止、顺序完成解锁下一步</td></tr>
+          <tr><td>E2E-05</td><td>超付拦截</td><td>申请金额>余额→提交被阻止、精确到分</td></tr>
+          <tr><td>E2E-06</td><td>发票误差校验</td><td>误差≤0.01通过、>0.01拦截</td></tr>
+          <tr><td>E2E-07</td><td>利润双视图</td><td>切换含/不含退税→数值正确变化</td></tr>
+          <tr><td>E2E-08</td><td>无合同费用</td><td>DZ-NC-双入口、PR-NC-直付路径</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- ===== PHASE 0 ===== -->
+    <div class="phase open" id="p0">
+      <div class="phase-head" onclick="togglePhase('p0')">
+        <div class="ph-num">0</div>
+        <div class="ph-title">基础设施搭建</div>
+        <span class="badge badge-wip">进行中</span>
+        <span class="ph-meta">预计 10 天</span>
+        <span class="ph-toggle">›</span>
+      </div>
+      <div class="phase-body">
+        <div class="note note-i">本阶段完成后提交一次 Phase-0 commit，后续各模块每完成一个提交一次。</div>
+        <div class="task-list">
+
+          <div class="section-lbl">项目结构</div>
+
+          <div class="task-item" id="t-p0-01">
+            <div class="task-cb" onclick="toggle('t-p0-01')"></div>
+            <div class="task-info">
+              <div class="task-title">pnpm workspace monorepo 初始化</div>
+              <div class="task-desc">根目录 package.json + pnpm-workspace.yaml，4个 packages：types / api / web / portal</div>
+              <div class="task-tags"><span class="tag t-infra">基础设施</span><span class="est-tag">0.5天</span></div>
+            </div>
+          </div>
+
+          <div class="task-item" id="t-p0-02">
+            <div class="task-cb" onclick="toggle('t-p0-02')"></div>
+            <div class="task-info">
+              <div class="task-title">docker-compose.yml（MySQL 8 + Redis 7）</div>
+              <div class="task-desc">本地开发环境一键启动，含 volumes 持久化、健康检查、端口映射</div>
+              <div class="task-tags"><span class="tag t-infra">基础设施</span><span class="est-tag">0.5天</span></div>
+            </div>
+          </div>
+
+          <div class="task-item" id="t-p0-03">
+            <div class="task-cb" onclick="toggle('t-p0-03')"></div>
+            <div class="task-info">
+              <div class="task-title">数据库 DDL 全表脚本</div>
+              <div class="task-desc">infra/mysql/init.sql — 所有表定义，含索引、注释、字符集 utf8mb4；TypeORM migration 同步</div>
+              <div class="task-tags"><span class="tag t-db">数据库</span><span class="est-tag">2天</span></div>
+              <div class="ac-box">
+                <div class="ac-title">验收标准</div>
+                <div class="ac-item"><span class="ac-dot"></span>docker-compose up 后 init.sql 自动执行，所有表创建成功</div>
+                <div class="ac-item"><span class="ac-dot"></span>金额字段均为 DECIMAL(15,4)</div>
+                <div class="ac-item"><span class="ac-dot"></span>编号字段有 UNIQUE 索引</div>
+                <div class="ac-item"><span class="ac-dot"></span>逻辑删除字段 <code>deleted TINYINT DEFAULT 0</code> 全覆盖</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-lbl">后端骨架</div>
+
+          <div class="task-item" id="t-p0-04">
+            <div class="task-cb" onclick="toggle('t-p0-04')"></div>
+            <div class="task-info">
+              <div class="task-title">NestJS 项目初始化（packages/api）</div>
+              <div class="task-desc">nest new、TypeORM DataSource、ConfigModule、全局异常过滤器、统一响应拦截器、Swagger文档</div>
+              <div class="task-tags"><span class="tag t-be">后端</span><span class="est-tag">1天</span></div>
+            </div>
+          </div>
+
+          <div class="task-item" id="t-p0-05">
+            <div class="task-cb" onclick="toggle('t-p0-05')"></div>
+            <div class="task-info">
+              <div class="task-title">Redis 模块集成（编号序列服务）</div>
+              <div class="task-desc">ioredis 连接、NumberingService：<code>seq:{prefix}:{YYYYMMDD} INCR</code>，封装为可注入 Service</div>
+              <div class="task-tags"><span class="tag t-be">后端</span><span class="est-tag">0.5天</span></div>
+              <div class="ac-box">
+                <div class="ac-title">验收标准</div>
+                <div class="ac-item"><span class="ac-dot"></span>并发100次请求，序号无重复</div>
+                <div class="ac-item"><span class="ac-dot"></span>次日序号重置为 001</div>
+                <div class="ac-item"><span class="ac-dot"></span>Jest 单元测试覆盖边界场景</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="task-item" id="t-p0-06">
+            <div class="task-cb" onclick="toggle('t-p0-06')"></div>
+            <div class="task-info">
+              <div class="task-title">文件上传 Service（本地 /data/uploads）</div>
+              <div class="task-desc">Multer 配置，支持 PDF/图片，文件分目录存储（contracts/invoices/slips），返回相对路径</div>
+              <div class="task-tags"><span class="tag t-be">后端</span><span class="est-tag">0.5天</span></div>
+            </div>
+          </div>
+
+          <div class="section-lbl">前端骨架</div>
+
+          <div class="task-item" id="t-p0-07">
+            <div class="task-cb" onclick="toggle('t-p0-07')"></div>
+            <div class="task-info">
+              <div class="task-title">管理后台 Vue3 项目（packages/web）</div>
+              <div class="task-desc">Vite + Vue3 + Element Plus + Pinia + Vue Router，含设计系统 CSS 变量、通用布局（侧边栏+顶栏）、Axios 拦截器</div>
+              <div class="task-tags"><span class="tag t-fe">前端</span><span class="est-tag">1.5天</span></div>
+            </div>
+          </div>
+
+          <div class="task-item" id="t-p0-08">
+            <div class="task-cb" onclick="toggle('t-p0-08')"></div>
+            <div class="task-info">
+              <div class="task-title">供应商门户 Vue3 H5 项目（packages/portal）</div>
+              <div class="task-desc">Vite + Vue3 + Vant4，移动端 viewport meta，独立路由，Axios 独立实例（/portal/v1）</div>
+              <div class="task-tags"><span class="tag t-h5">H5</span><span class="est-tag">1天</span></div>
+            </div>
+          </div>
+
+          <div class="task-item" id="t-p0-09">
+            <div class="task-cb" onclick="toggle('t-p0-09')"></div>
+            <div class="task-info">
+              <div class="task-title">共享 TypeScript 类型包（packages/types）</div>
+              <div class="task-desc">所有 DTO、枚举、接口类型统一定义，前后端共享，web 和 portal 均 import</div>
+              <div class="task-tags"><span class="tag t-fe">前端</span><span class="tag t-be">后端</span><span class="est-tag">0.5天</span></div>
+            </div>
+          </div>
+
+          <div class="task-item" id="t-p0-10">
+            <div class="task-cb" onclick="toggle('t-p0-10')"></div>
+            <div class="task-info">
+              <div class="task-title">Nginx 配置（开发+生产）</div>
+              <div class="task-desc">infra/nginx.conf：/ → web、/portal → portal H5、/api → NestJS :3000，X-Accel-Redirect 文件鉴权</div>
+              <div class="task-tags"><span class="tag t-infra">基础设施</span><span class="est-tag">0.5天</span></div>
+            </div>
+          </div>
+
+          <div class="task-item" id="t-p0-11">
+            <div class="task-cb" onclick="toggle('t-p0-11')"></div>
+            <div class="task-info">
+              <div class="task-title">GitHub Actions CI 配置</div>
+              <div class="task-desc">.github/workflows/ci.yml：lint + type-check + backend test + frontend test，PR 触发</div>
+              <div class="task-tags"><span class="tag t-infra">基础设施</span><span class="tag t-test">测试</span><span class="est-tag">0.5天</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PHASE 1 ===== -->
+    <div class="phase" id="p1">
+      <div class="phase-head" onclick="togglePhase('p1')">
+        <div class="ph-num">1</div>
+        <div class="ph-title">鉴权体系 + 基础资料模块</div>
+        <span class="badge badge-pending">待开始</span>
+        <span class="ph-meta">预计 8 天</span>
+        <span class="ph-toggle">›</span>
+      </div>
+      <div class="phase-body">
+        <div class="task-list">
+
+          <div class="section-lbl">鉴权</div>
+          <div class="task-item" id="t-p1-01">
+            <div class="task-cb" onclick="toggle('t-p1-01')"></div>
+            <div class="task-info">
+              <div class="task-title">JWT 登录 + 4角色 RBAC（ADMIN/BUSINESS/FINANCE/PATTERNMAKER）</div>
+              <div class="task-desc">POST /api/v1/auth/login，@Roles() 装饰器 + Guard，token 含角色信息</div>
+              <div class="task-tags"><span class="tag t-be">后端</span><span class="tag t-test">测试</span><span class="est-tag">1.5天</span></div>
+            </div>
+          </div>
+          <div class="task-item" id="t-p1-02">
+            <div class="task-cb" onclick="toggle('t-p1-02')"></div>
+            <div class="task-info">
+              <div class="task-title">供应商门户独立鉴权（/portal/v1/auth）</div>
+              <div class="task-desc">独立 token 体系，所有门户接口自动注入 supplierId 过滤，禁止越权</div>
+              <div class="task-tags"><span class="tag t-be">后端</span><span class="tag t-test">测试</span><span class="est-tag">1天</span></div>
+              <div class="ac-box">
+                <div class="ac-title">验收标准</div>
+                <div class="ac-item"><span class="ac-dot"></span>供应商A token 查询只返回A的合同</div>
+                <div class="ac-item"><span class="ac-dot"></span>越权访问返回 403</div>
+                <div class="ac-item"><span class="ac-dot"></span>token 过期返回 401</div>
+              </div>
+            </div>
+          </div>
+          <div class="task-item" id="t-p1-03">
+            <div class="task-cb" onclick="toggle('t-p1-03')"></div>
+            <div class="task-info">
+              <div class="task-title">登录页（管理后台 + H5门户）</div>
+              <div class="task-desc">两套登录页 UI，token 存 localStorage，Axios 请求头自动注入</div>
+              <div class="task-tags"><span class="tag t-fe">前端</span><span class="tag t-h5">H5</span><span class="est-tag">1天</span></div>
+            </div>
+          </div>
+
+          <div class="section-lbl">基础资料后端</div>
+          <div class="task-item" id="t-p1-04">
+            <div class="task-cb" onclick="toggle('t-p1-04')"></div>
+            <div class="task-info">
+              <div class="task-title">工厂管理 API（CRUD + 启停）</div>
+              <div class="task-desc">GET/POST/PATCH /factories，CN自动编号，下游引用保护（停用时检查活跃合同）</div>
+              <div class="task-tags"><span class="tag t-be">后端</span><span class="tag t-test">测试</span><span class="est-tag">1天</span></div>
+            </div>
+          </div>
+          <div class="task-item" id="t-p1-05">
+            <div class="task-cb" onclick="toggle('t-p1-05')"></div>
+            <div class="task-info">
+              <div class="task-title">客户管理 API（CRUD + 启停）</div>
+              <div class="task-desc">GET/POST/PATCH /customers，S自动编号，等级A/B/C、币种、付款方式字段</div>
+              <div class="task-tags"><span class="tag t-be">后端</span><span class="tag t-test">测试</span><span class="est-tag">1天</span></div>
+            </div>
+          </div>
+
+          <div class="section-lbl">基础资料前端</div>
+          <div class="task-item" id="t-p1-06">
+            <div class="task-cb" onclick="toggle('t-p1-06')"></div>
+            <div class="task-info">
+              <div class="task-title">基础资料页面（工厂/客户双Tab）</div>
+              <div class="task-desc">列表、搜索过滤、新建/编辑弹窗、启停操作，对齐设计稿 UI</div>
+              <div class="task-tags"><span class="tag t-fe">前端</span><span class="est-tag">1.5天</span></div>
+              <div class="ac-box">
+                <div class="ac-title">业务逻辑验收</div>
+                <div class="ac-item"><span class="ac-dot"></span>新建自动生成 CN/S 编号</div>
+                <div class="ac-item"><span class="ac-dot"></span>停用后在新建合同工厂下拉中不可选</div>
+                <div class="ac-item"><span class="ac-dot"></span>有活跃合同时停用弹出阻止提示</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PHASE 2 ===== -->
+    <div class="phase" id="p2">
+      <div class="phase-head" onclick="togglePhase('p2')">
+        <div class="ph-num">2</div>
+        <div class="ph-title">样衣管理 + 客户报价</div>
+        <span class="badge badge-pending">待开始</span>
+        <span class="ph-meta">预计 14 天</span>
+        <span class="ph-toggle">›</span>
+      </div>
+      <div class="phase-body">
+        <div class="task-list">
+          <div class="section-lbl">样衣管理</div>
+          <div class="task-item" id="t-p2-01"><div class="task-cb" onclick="toggle('t-p2-01')"></div><div class="task-info"><div class="task-title">样衣状态机 API（5状态流转 + 版次追踪）</div><div class="task-desc">S-编号生成；PENDING→PATTERN→DONE→CONFIRMED/REJECTED；驳回 version+1；历史版次表</div><div class="task-tags"><span class="tag t-be">后端</span><span class="tag t-test">测试</span><span class="est-tag">2天</span></div><div class="ac-box"><div class="ac-title">业务规则验收</div><div class="ac-item"><span class="ac-dot"></span>已确认状态不能再驳回</div><div class="ac-item"><span class="ac-dot"></span>驳回后 version 字段自增</div><div class="ac-item"><span class="ac-dot"></span>历史版次含每次驳回原因</div></div></div></div>
+          <div class="task-item" id="t-p2-02"><div class="task-cb" onclick="toggle('t-p2-02')"></div><div class="task-info"><div class="task-title">样衣前端（业务视图 + 版师视图）</div><div class="task-desc">双视图切换、5步进度可视化、指派弹窗、驳回表单、历史版次折叠表</div><div class="task-tags"><span class="tag t-fe">前端</span><span class="est-tag">2天</span></div></div></div>
+
+          <div class="section-lbl">客户报价</div>
+          <div class="task-item" id="t-p2-03"><div class="task-cb" onclick="toggle('t-p2-03')"></div><div class="task-info"><div class="task-title">损耗计算服务（核心业务规则）</div><div class="task-desc">LossCalcService：含损单价 = 原价÷(1-损耗率%)；100% Jest 单元测试覆盖</div><div class="task-tags"><span class="tag t-be">后端</span><span class="tag t-test">测试</span><span class="est-tag">1天</span></div><div class="ac-box"><div class="ac-title">测试用例</div><div class="ac-item"><span class="ac-dot"></span>损耗率 0%、5%、10%、15%、99.99% 精度验证</div><div class="ac-item"><span class="ac-dot"></span>损耗率 100% 抛出业务异常</div><div class="ac-item"><span class="ac-dot"></span>全局损耗率批量更新所有行</div></div></div></div>
+          <div class="task-item" id="t-p2-04"><div class="task-cb" onclick="toggle('t-p2-04')"></div><div class="task-info"><div class="task-title">报价 CRUD API（草稿→发出→确认→转合同）</div><div class="task-desc">Q-编号；发出后字段锁定；转合同返回合同预填数据；费用明细快照存储</div><div class="task-tags"><span class="tag t-be">后端</span><span class="tag t-test">测试</span><span class="est-tag">2天</span></div></div></div>
+          <div class="task-item" id="t-p2-05"><div class="task-cb" onclick="toggle('t-p2-05')"></div><div class="task-info"><div class="task-title">报价前端（动态费用表 + 汇总栏）</div><div class="task-desc">动态增删行、全局损耗率批量重算、实时汇总栏、发出锁定、转合同跳转</div><div class="task-tags"><span class="tag t-fe">前端</span><span class="est-tag">2.5天</span></div><div class="ac-box"><div class="ac-title">UI验收</div><div class="ac-item"><span class="ac-dot"></span>含损单价公式在前端实时展示，与后端计算结果一致</div><div class="ac-item"><span class="ac-dot"></span>发出后所有输入框 disabled</div><div class="ac-item"><span class="ac-dot"></span>毛利率可手动输入反推单件报价</div></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PHASE 3 ===== -->
+    <div class="phase" id="p3">
+      <div class="phase-head" onclick="togglePhase('p3')">
+        <div class="ph-num">3</div>
+        <div class="ph-title">订单管理</div>
+        <span class="badge badge-pending">待开始</span>
+        <span class="ph-meta">预计 10 天</span>
+        <span class="ph-toggle">›</span>
+      </div>
+      <div class="phase-body">
+        <div class="task-list">
+          <div class="task-item" id="t-p3-01"><div class="task-cb" onclick="toggle('t-p3-01')"></div><div class="task-info"><div class="task-title">订单基本信息 API</div><div class="task-desc">O-编号、PO号唯一、关联客户/报价、状态机 DRAFT→CONFIRMED→PRODUCING→SHIPPED→DONE</div><div class="task-tags"><span class="tag t-be">后端</span><span class="tag t-test">测试</span><span class="est-tag">1.5天</span></div></div></div>
+          <div class="task-item" id="t-p3-02"><div class="task-cb" onclick="toggle('t-p3-02')"></div><div class="task-info"><div class="task-title">尺码矩阵存储与 API</div><div class="task-desc">颜色×尺码 JSON 存储，行/列合计服务端计算，件数汇总校验</div><div class="task-tags"><span class="tag t-be">后端</span><span class="tag t-db">数据库</span><span class="tag t-test">测试</span><span class="est-tag">2天</span></div></div></div>
+          <div class="task-item" id="t-p3-03"><div class="task-cb" onclick="toggle('t-p3-03')"></div><div class="task-info"><div class="task-title">用料核算 API</div><div class="task-desc">从报价费用项复制（独立副本），净用量/损耗率/含损用量/总采购量/预算；修改不影响原报价</div><div class="task-tags"><span class="tag t-be">后端</span><span class="tag t-test">测试</span><span class="est-tag">1.5天</span></div></div></div>
+          <div class="task-item" id="t-p3-04"><div class="task-cb" onclick="toggle('t-p3-04')"></div><div class="task-info"><div class="task-title">出货记录 API</div><div class="task-desc">多批次出货登记，件数累计不超总件数校验，出货后可触发对账</div><div class="task-tags"><span class="tag t-be">后端</span><span class="tag t-test">测试</span><span class="est-tag">1天</span></div></div></div>
+          <div class="task-item" id="t-p3-05"><div class="task-cb" onclick="toggle('t-p3-05')"></div><div class="task-info"><div class="task-title">订单前端（4 Tab 详情页）</div><div class="task-desc">基本信息/尺码矩阵/用料核算/出货记录；颜色×尺码动态表格；出货后引导提示</div><div class="task-tags"><span class="tag t-fe">前端</span><span class="est-tag">3天</span></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PHASE 4 ===== -->
+    <div class="phase" id="p4">
+      <div class="phase-head" onclick="togglePhase('p4')">
+        <div class="ph-num">4</div>
+        <div class="ph-title">合同管理</div>
+        <span class="badge badge-pending">待开始</span>
+        <span class="ph-meta">预计 12 天</span>
+        <span class="ph-toggle">›</span>
+      </div>
+      <div class="phase-body">
+        <div class="task-list">
+          <div class="task-item" id="t-p4-01"><div class="task-cb" onclick="toggle('t-p4-01')"></div><div class="task-info"><div class="task-title">合同三类型 CRUD API（材料/加工/补料）</div><div class="task-desc">HT-编号；账期自动计算（材料+45天/加工+30天）；付款比例之和=100%校验</div><div class="task-tags"><span class="tag t-be">后端</span><span class="tag t-test">测试</span><span class="est-tag">2天</span></div></div></div>
+          <div class="task-item" id="t-p4-02"><div class="task-cb" onclick="toggle('t-p4-02')"></div><div class="task-info"><div class="task-title">快照锁定机制（盖章后字段不可改）</div><div class="task-desc">盖章时将材料清单+单价写入 contract_snapshot JSON列；后续接口只读快照；Jest 专项测试</div><div class="task-tags"><span class="tag t-be">后端</span><span class="tag t-test">测试</span><span class="est-tag">1.5天</span></div><div class="ac-box"><div class="ac-title">关键验收</div><div class="ac-item"><span class="ac-dot"></span>盖章后修改合同材料单价，快照值不变</div><div class="ac-item"><span class="ac-dot"></span>对账单创建时引用快照价格</div><div class="ac-item"><span class="ac-dot"></span>已盖章合同任何字段 PATCH 返回 422</div></div></div></div>
+          <div class="task-item" id="t-p4-03"><div class="task-cb" onclick="toggle('t-p4-03')"></div><div class="task-info"><div class="task-title">门户推送 5 步状态机 API</div><div class="task-desc">DRAFT→PUSHED→STAMPED→SHIPPING→RECONCILED；每步记录操作时间；门户操作日志表</div><div class="task-tags"><span class="tag t-be">后端</span><span class="tag t-test">测试</span><span class="est-tag">1.5天</span></div></div></div>
+          <div class="task-item" id="t-p4-04"><div class="task-cb" onclick="toggle('t-p4-04')"></div><div class="task-info"><div class="task-title">合同管理前端（三 Tab + 门户推送流）</div><div class="task-desc">材料/加工/补料三列表；详情含5步进度条、材料快照展示、操作日志</div><div class="task-tags"><span class="tag t-fe">前端</span><span class="est-tag">3天</span></div></div></div>
+          <div class="task-item" id="t-p4-05"><div class="task-cb" onclick="toggle('t-p4-05')"></div><div class="task-info"><div class="task-title">账期与付款条款业务逻辑单元测试</div><div class="task-desc">材料+45/加工+30天计算精度，条款比例校验，边界（0%、100%）测试</div><div class="task-tags"><span class="tag t-test">测试</span><span class="est-tag">1天</span></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PHASE 5 ===== -->
+    <div class="phase" id="p5">
+      <div class="phase-head" onclick="togglePhase('p5')">
+        <div class="ph-num">5</div>
+        <div class="ph-title">供应商门户</div>
+        <span class="badge badge-pending">待开始</span>
+        <span class="ph-meta">预计 10 天</span>
+        <span class="ph-toggle">›</span>
+      </div>
+      <div class="phase-body">
+        <div class="task-list">
+          <div class="task-item" id="t-p5-01"><div class="task-cb" onclick="toggle('t-p5-01')"></div><div class="task-info"><div class="task-title">门户4步流 API（强制顺序校验）</div><div class="task-desc">stamp/ship/reconcile/invoice 4个接口；前置步骤未完成返回 422；步骤完成时间戳</div><div class="task-tags"><span class="tag t-be">后端</span><span class="tag t-test">测试</span><span class="est-tag">2天</span></div><div class="ac-box"><div class="ac-title">业务规则验收</div><div class="ac-item"><span class="ac-dot"></span>直接调用 ship API（未盖章）→ 422</div><div class="ac-item"><span class="ac-dot"></span>盖章后调用 ship → 200</div><div class="ac-item"><span class="ac-dot"></span>重复盖章 → 422</div></div></div></div>
+          <div class="task-item" id="t-p5-02"><div class="task-cb" onclick="toggle('t-p5-02')"></div><div class="task-info"><div class="task-title">H5 门户前端（Vant4 + 4步卡片流）</div><div class="task-desc">登录页、合同列表、4步卡片（未完成前一步禁用）、发货弹窗、发票上传</div><div class="task-tags"><span class="tag t-h5">H5</span><span class="est-tag">3天</span></div></div></div>
+          <div class="task-item" id="t-p5-03"><div class="task-cb" onclick="toggle('t-p5-03')"></div><div class="task-info"><div class="task-title">供应商账号管理（后台 + API）</div><div class="task-desc">新建账号、关联工厂、重置密码（随机密码展示一次）、禁用账号</div><div class="task-tags"><span class="tag t-be">后端</span><span class="tag t-fe">前端</span><span class="est-tag">2天</span></div></div></div>
+          <div class="task-item" id="t-p5-04"><div class="task-cb" onclick="toggle('t-p5-04')"></div><div class="task-info"><div class="task-title">合同进度看板（后台视图）</div><div class="task-desc">所有合同的4步进度状态总览，按供应商/步骤状态筛选</div><div class="task-tags"><span class="tag t-fe">前端</span><span class="est-tag">1.5天</span></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PHASE 6 ===== -->
+    <div class="phase" id="p6">
+      <div class="phase-head" onclick="togglePhase('p6')">
+        <div class="ph-num">6</div>
+        <div class="ph-title">对账付款</div>
+        <span class="badge badge-pending">待开始</span>
+        <span class="ph-meta">预计 14 天</span>
+        <span class="ph-toggle">›</span>
+      </div>
+      <div class="phase-body">
+        <div class="task-list">
+          <div class="task-item" id="t-p6-01"><div class="task-cb" onclick="toggle('t-p6-01')"></div><div class="task-info"><div class="task-title">对账单 API（发货快照 + 发票误差校验）</div><div class="task-desc">DZ-编号；单价引用合同快照；发票金额误差 |invoice - reconcile| ≤ ¥0.01 校验服务</div><div class="task-tags"><span class="tag t-be">后端</span><span class="tag t-test">测试</span><span class="est-tag">2.5天</span></div><div class="ac-box"><div class="ac-title">精度测试用例</div><div class="ac-item"><span class="ac-dot"></span>误差 0.00 → 通过</div><div class="ac-item"><span class="ac-dot"></span>误差 0.01 → 通过</div><div class="ac-item"><span class="ac-dot"></span>误差 0.011 → 拦截</div></div></div></div>
+          <div class="task-item" id="t-p6-02"><div class="task-cb" onclick="toggle('t-p6-02')"></div><div class="task-info"><div class="task-title">超付拦截服务（核心财务规则）</div><div class="task-desc">OverpaymentGuard：实付 > (合同金额 - 已审批金额) → 422，精确到分；100% Jest覆盖</div><div class="task-tags"><span class="tag t-be">后端</span><span class="tag t-test">测试</span><span class="est-tag">1天</span></div></div></div>
+          <div class="task-item" id="t-p6-03"><div class="task-cb" onclick="toggle('t-p6-03')"></div><div class="task-info"><div class="task-title">付款申请 API（单级审批流）</div><div class="task-desc">PR-编号；DRAFT→PENDING→APPROVED→PAID；仅 FINANCE/ADMIN 可审批；驳回需填原因</div><div class="task-tags"><span class="tag t-be">后端</span><span class="tag t-test">测试</span><span class="est-tag">2天</span></div></div></div>
+          <div class="task-item" id="t-p6-04"><div class="task-cb" onclick="toggle('t-p6-04')"></div><div class="task-info"><div class="task-title">预付款冲抵逻辑 API</div><div class="task-desc">预付款余额实时计算；付款申请勾选冲抵时扣减预付余额；历史冲抵记录</div><div class="task-tags"><span class="tag t-be">后端</span><span class="tag t-test">测试</span><span class="est-tag">1.5天</span></div></div></div>
+          <div class="task-item" id="t-p6-05"><div class="task-cb" onclick="toggle('t-p6-05')"></div><div class="task-info"><div class="task-title">无合同费用双入口 API（DZ-NC- / PR-NC-）</div><div class="task-desc">两种编号前缀；支持直接付款不走对账；列表区分展示</div><div class="task-tags"><span class="tag t-be">后端</span><span class="est-tag">1天</span></div></div></div>
+          <div class="task-item" id="t-p6-06"><div class="task-cb" onclick="toggle('t-p6-06')"></div><div class="task-info"><div class="task-title">对账付款前端（4 Tab + 水单粘贴）</div><div class="task-desc">对账单/付款申请/预付款/无合同费用；Ctrl+V 剪贴板图片粘贴；超付实时提示；审批流程 UI</div><div class="task-tags"><span class="tag t-fe">前端</span><span class="est-tag">3天</span></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PHASE 7 ===== -->
+    <div class="phase" id="p7">
+      <div class="phase-head" onclick="togglePhase('p7')">
+        <div class="ph-num">7</div>
+        <div class="ph-title">结算清单</div>
+        <span class="badge badge-pending">待开始</span>
+        <span class="ph-meta">预计 10 天</span>
+        <span class="ph-toggle">›</span>
+      </div>
+      <div class="phase-body">
+        <div class="task-list">
+          <div class="task-item" id="t-p7-01"><div class="task-cb" onclick="toggle('t-p7-01')"></div><div class="task-info"><div class="task-title">成本计算服务（有票/无票）</div><div class="task-desc">CostCalcService：有票=发票÷(1+税率)；无票=付款全额；成本单价=总成本÷出货件数；100% Jest</div><div class="task-tags"><span class="tag t-be">后端</span><span class="tag t-test">测试</span><span class="est-tag">1.5天</span></div><div class="ac-box"><div class="ac-title">测试用例</div><div class="ac-item"><span class="ac-dot"></span>有票13%税率精度验证</div><div class="ac-item"><span class="ac-dot"></span>有票9%税率精度验证</div><div class="ac-item"><span class="ac-dot"></span>无票全额含税场景</div><div class="ac-item"><span class="ac-dot"></span>成本单价 = 总成本 ÷ 出货件数（整除/不整除）</div></div></div></div>
+          <div class="task-item" id="t-p7-02"><div class="task-cb" onclick="toggle('t-p7-02')"></div><div class="task-info"><div class="task-title">退税计算服务</div><div class="task-desc">TaxRefundService：退税 = 含税面料采购额×(退税率-增值税率差)；税率配置可维护</div><div class="task-tags"><span class="tag t-be">后端</span><span class="tag t-test">测试</span><span class="est-tag">1天</span></div></div></div>
+          <div class="task-item" id="t-p7-03"><div class="task-cb" onclick="toggle('t-p7-03')"></div><div class="task-info"><div class="task-title">结算清单 CRUD API（草稿→确认）</div><div class="task-desc">JS-编号；出货后业务可建草稿(待结算)；收汇后财务确认(已结算)；确认后字段锁定</div><div class="task-tags"><span class="tag t-be">后端</span><span class="tag t-test">测试</span><span class="est-tag">2天</span></div></div></div>
+          <div class="task-item" id="t-p7-04"><div class="task-cb" onclick="toggle('t-p7-04')"></div><div class="task-info"><div class="task-title">利润双视图 API（含/不含退税）</div><div class="task-desc">同一接口返回两组数值：with_refund 和 without_refund；前端切换无需重新请求</div><div class="task-tags"><span class="tag t-be">后端</span><span class="est-tag">0.5天</span></div></div></div>
+          <div class="task-item" id="t-p7-05"><div class="task-cb" onclick="toggle('t-p7-05')"></div><div class="task-info"><div class="task-title">收汇记录 API</div><div class="task-desc">多批次收汇：日期/金额/汇率/实收人民币；汇总与总货款对比展示</div><div class="task-tags"><span class="tag t-be">后端</span><span class="est-tag">1天</span></div></div></div>
+          <div class="task-item" id="t-p7-06"><div class="task-cb" onclick="toggle('t-p7-06')"></div><div class="task-info"><div class="task-title">结算清单前端（双视图切换 + 利润汇总栏）</div><div class="task-desc">列表+详情；含/不含退税切换；成本明细；出货明细；收汇记录</div><div class="task-tags"><span class="tag t-fe">前端</span><span class="est-tag">2.5天</span></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PHASE 8 ===== -->
+    <div class="phase" id="p8">
+      <div class="phase-head" onclick="togglePhase('p8')">
+        <div class="ph-num">8</div>
+        <div class="ph-title">全流程测试 + 业务逻辑审查</div>
+        <span class="badge badge-pending">待开始</span>
+        <span class="ph-meta">预计 10 天</span>
+        <span class="ph-toggle">›</span>
+      </div>
+      <div class="phase-body">
+        <div class="task-list">
+          <div class="task-item" id="t-p8-01"><div class="task-cb" onclick="toggle('t-p8-01')"></div><div class="task-info"><div class="task-title">Playwright E2E — 8条核心流程测试</div><div class="task-desc">E2E-01~08 全流程自动化，CI 集成，失败截图存档</div><div class="task-tags"><span class="tag t-test">测试</span><span class="est-tag">4天</span></div></div></div>
+          <div class="task-item" id="t-p8-02"><div class="task-cb" onclick="toggle('t-p8-02')"></div><div class="task-info"><div class="task-title">业务逻辑逐条审查（对比设计稿确认清单）</div><div class="task-desc">逐条核对所有确认问题清单 rec:0 的推荐项，形成审查报告，差异立即修复</div><div class="task-tags"><span class="tag t-test">测试</span><span class="est-tag">2天</span></div></div></div>
+          <div class="task-item" id="t-p8-03"><div class="task-cb" onclick="toggle('t-p8-03')"></div><div class="task-info"><div class="task-title">前端 Vitest 组件测试汇总</div><div class="task-desc">动态表格、状态徽章、金额格式化、报错 Toast 等关键组件，覆盖率报告</div><div class="task-tags"><span class="tag t-test">测试</span><span class="tag t-fe">前端</span><span class="est-tag">2天</span></div></div></div>
+          <div class="task-item" id="t-p8-04"><div class="task-cb" onclick="toggle('t-p8-04')"></div><div class="task-info"><div class="task-title">性能基准 + 生产部署验证</div><div class="task-desc">关键接口响应时间基准；docker build 验证；Nginx 配置验证；首屏加载时间</div><div class="task-tags"><span class="tag t-infra">基础设施</span><span class="est-tag">2天</span></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align:center;padding:32px 0;color:var(--gray-5);font-size:12px">
+      I9 开发计划 v1.0 · 最后更新于 <span id="update-time"></span>
+    </div>
+
+  </div>
+</div>
+</div>
+
+<script>
+// Task state storage
+const STATE = JSON.parse(localStorage.getItem('i9-plan-state') || '{}');
+
+function save(){localStorage.setItem('i9-plan-state',JSON.stringify(STATE))}
+
+function toggle(id){
+  const el = document.getElementById(id);
+  const cb = el.querySelector('.task-cb');
+  const title = el.querySelector('.task-title');
+  if(!STATE[id]) STATE[id]='done';
+  else delete STATE[id];
+  save();
+  render(id);
+  updateCounts();
+}
+
+function render(id){
+  const el = document.getElementById(id);
+  if(!el) return;
+  const cb = el.querySelector('.task-cb');
+  const title = el.querySelector('.task-title');
+  if(STATE[id]==='done'){
+    cb.classList.add('done'); cb.textContent='✓';
+    title.classList.add('done-text');
+  } else {
+    cb.classList.remove('done','wip'); cb.textContent='';
+    title.classList.remove('done-text');
+  }
+}
+
+function updateCounts(){
+  const all = document.querySelectorAll('.task-item');
+  const done = document.querySelectorAll('.task-cb.done').length;
+  const total = all.length;
+  const pct = total?Math.round(done/total*100):0;
+  document.getElementById('ov-total').textContent=total;
+  document.getElementById('ov-done').textContent=done;
+  document.getElementById('ov-pending').textContent=total-done;
+  document.getElementById('ov-wip').textContent=0;
+  document.getElementById('ov-bar').style.width=pct+'%';
+  document.getElementById('global-progress').textContent=`${done} / ${total} 完成 (${pct}%)`;
+  document.getElementById('update-time').textContent=new Date().toLocaleString('zh-CN');
+}
+
+function togglePhase(id){
+  document.getElementById(id).classList.toggle('open');
+}
+
+function scroll2(id){
+  const el = document.getElementById(id);
+  if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+// Init
+Object.keys(STATE).forEach(render);
+updateCounts();
+document.getElementById('update-time').textContent=new Date().toLocaleString('zh-CN');
+</script>
+</body>
+</html>

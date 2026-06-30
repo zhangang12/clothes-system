@@ -1,0 +1,14 @@
+{
+  "name": "@i9/types",
+  "version": "1.0.0",
+  "description": "I9系统共享 TypeScript 类型定义",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc --emitDeclarationOnly",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}
