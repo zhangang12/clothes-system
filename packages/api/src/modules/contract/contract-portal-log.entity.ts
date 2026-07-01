@@ -1,21 +1,28 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
-import { ContractPortalStatus } from '@i9/types';
+
+export enum PortalOperatorType {
+  INTERNAL = 'INTERNAL',
+  SUPPLIER = 'SUPPLIER',
+}
 
 @Entity('contract_portal_log')
 export class ContractPortalLog {
-  @PrimaryGeneratedColumn()
+  @PrimaryGeneratedColumn({ type: 'bigint' })
   id: number;
 
-  @Column()
+  @Column({ type: 'bigint' })
   contract_id: number;
 
-  @Column({ type: 'enum', enum: ContractPortalStatus })
-  action: ContractPortalStatus;
+  @Column({ length: 50 })
+  action: string;
 
-  @Column({ nullable: true })
-  operator_id: number;
+  @Column({ length: 100 })
+  operator: string;
 
-  @Column({ length: 255, nullable: true })
+  @Column({ type: 'enum', enum: PortalOperatorType, default: PortalOperatorType.INTERNAL })
+  operator_type: PortalOperatorType;
+
+  @Column({ type: 'text', nullable: true })
   remark: string;
 
   @CreateDateColumn()
