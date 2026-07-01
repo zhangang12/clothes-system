@@ -13,7 +13,7 @@ import { NumberingService, REDIS_CLIENT } from './numbering.service';
         new Redis({
           host: config.get('REDIS_HOST', 'localhost'),
           port: config.get<number>('REDIS_PORT', 6379),
-          password: config.get('REDIS_PASS', ''),
+          password: config.get('REDIS_PASSWORD', ''),
           db: 0,
           lazyConnect: false,
         }),

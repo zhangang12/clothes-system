@@ -27,11 +27,14 @@ export class NumberingService {
     const d = date ?? new Date();
     const ymd = this.formatDate(d);
     const key = `seq:${prefix}:${ymd}`;
-    const seq = await this.redis.incr(key);
-    // 首次创建时设 24 小时 TTL，避免无限增长
-    if (seq === 1) {
-      await this.redis.expire(key, 86400 * 2);
-    }
+    // Atomic INCR + conditional EXPIRE in one Lua round-trip
+    const seq = await this.redis.eval(
+      `local v = redis.call('INCR', KEYS[1])
+       if v == 1 then redis.call('EXPIRE', KEYS[1], 172800) end
+       return v`,
+      1,
+      key,
+    ) as number;
     return `${prefix}${ymd}${String(seq).padStart(5, '0')}`;
   }
 

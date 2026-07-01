@@ -13,10 +13,14 @@ import { SupplierAccount } from './supplier-account.entity';
     TypeOrmModule.forFeature([SysUser, SupplierAccount]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: (config: ConfigService) => ({
-        secret: config.get('JWT_SECRET', 'dev-secret-change-in-prod'),
-        signOptions: { expiresIn: config.get('JWT_EXPIRES', '8h') },
-      }),
+      useFactory: (config: ConfigService) => {
+        const secret = config.get<string>('JWT_SECRET');
+        if (!secret) throw new Error('JWT_SECRET env var is required');
+        return {
+          secret,
+          signOptions: { expiresIn: config.get('JWT_EXPIRES', '8h') },
+        };
+      },
       inject: [ConfigService],
     }),
   ],

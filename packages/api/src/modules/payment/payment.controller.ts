@@ -10,6 +10,7 @@ import { UserRole, PaymentApprovalStatus } from '@i9/types';
 import { PaymentService } from './payment.service';
 import { CreatePrepaymentDto } from './dto/create-prepayment.dto';
 import { CreatePaymentRequestDto } from './dto/create-payment-request.dto';
+import { MarkPaidDto } from './dto/mark-paid.dto';
 
 @ApiTags('付款管理')
 @ApiBearerAuth()
@@ -37,6 +38,7 @@ export class PaymentController {
   }
 
   @Get('prepayments/balance')
+  @Roles(UserRole.ADMIN, UserRole.FINANCE)
   @ApiOperation({ summary: '查询工厂预付款余额' })
   getPrepayBalance(@Query('factory_id', ParseIntPipe) factoryId: number) {
     return this.service.getAvailablePrepayBalance(factoryId);
@@ -91,10 +93,10 @@ export class PaymentController {
   @ApiOperation({ summary: '标记已付款（APPROVED→PAID），上传水单' })
   markPaid(
     @Param('id', ParseIntPipe) id: number,
-    @Body('slip_url') slipUrl: string,
+    @Body() dto: MarkPaidDto,
     @Request() req: any,
   ) {
-    return this.service.markPaid(id, slipUrl, req.user.id);
+    return this.service.markPaid(id, dto.slip_url, req.user.id);
   }
 
   @Delete('requests/:id')

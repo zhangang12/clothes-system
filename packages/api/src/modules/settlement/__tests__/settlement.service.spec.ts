@@ -22,6 +22,13 @@ const makeSettlement = (overrides = {}): any => ({
   ...overrides,
 });
 
+const makeManager = (findOneResult?: any, findResult: any[] = []) => ({
+  create: jest.fn().mockImplementation((_, v) => v),
+  save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
+  findOne: jest.fn().mockResolvedValue(findOneResult),
+  find: jest.fn().mockResolvedValue(findResult),
+});
+
 const mockRepo = {
   create: jest.fn().mockImplementation((v) => v),
   save: jest.fn().mockImplementation((v) => Promise.resolve({ ...v, id: v.id ?? 1 })),
@@ -38,12 +45,9 @@ const mockReceiptRepo = {
   save: jest.fn().mockImplementation((v) => Promise.resolve(v)),
   find: jest.fn().mockResolvedValue([]),
 };
-const mockRedis = { incr: jest.fn().mockResolvedValue(1), expire: jest.fn() };
+const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn().mockResolvedValue(1) };
 const mockDataSource = {
-  transaction: jest.fn().mockImplementation((cb) => cb({
-    create: jest.fn().mockImplementation((_, v) => v),
-    save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
-  })),
+  transaction: jest.fn().mockImplementation((cb) => cb(makeManager())),
 };
 
 describe('SettlementService', () => {
@@ -51,6 +55,7 @@ describe('SettlementService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockDataSource.transaction.mockImplementation((cb) => cb(makeManager()));
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SettlementService,
@@ -76,10 +81,7 @@ describe('SettlementService', () => {
         { cost_name: '加工费', amount: 2000 },
       ],
     };
-    const manager = {
-      create: jest.fn().mockImplementation((_, v) => v),
-      save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
-    };
+    const manager = makeManager();
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.create(dto as any, 1);
     // First save call is the settlement, net_profit should be 10000-6000=4000
@@ -91,10 +93,7 @@ describe('SettlementService', () => {
   // UT-SLT-02: create with no costs → total_cost=0, net_profit=revenue
   it('UT-SLT-02 create with no costs sets total_cost=0 and net_profit=revenue', async () => {
     const dto = { order_id: 10, revenue: 5000 };
-    const manager = {
-      create: jest.fn().mockImplementation((_, v) => v),
-      save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
-    };
+    const manager = makeManager();
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.create(dto as any, 1);
     expect(manager.save.mock.calls[0][1]).toMatchObject({ total_cost: 0, net_profit: 5000 });
@@ -103,8 +102,9 @@ describe('SettlementService', () => {
   // UT-SLT-03: confirm transitions DRAFT → CONFIRMED
   it('UT-SLT-03 confirm transitions DRAFT→CONFIRMED', async () => {
     const s = makeSettlement({ status: SettlementStatus.DRAFT });
-    mockRepo.findOne.mockResolvedValue(s);
-    mockRepo.save.mockResolvedValue({ ...s, status: SettlementStatus.CONFIRMED });
+    const manager = makeManager(s);
+    manager.save.mockResolvedValue({ ...s, status: SettlementStatus.CONFIRMED });
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     const result = await service.confirm(1);
     expect(result.status).toBe(SettlementStatus.CONFIRMED);
   });
@@ -112,31 +112,29 @@ describe('SettlementService', () => {
   // UT-SLT-04: confirm throws if already CONFIRMED
   it('UT-SLT-04 confirm throws BadRequest if already CONFIRMED', async () => {
     const s = makeSettlement({ status: SettlementStatus.CONFIRMED });
-    mockRepo.findOne.mockResolvedValue(s);
+    const manager = makeManager(s);
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await expect(service.confirm(1)).rejects.toThrow(BadRequestException);
   });
 
   // UT-SLT-05: addCost throws if not DRAFT
   it('UT-SLT-05 addCost throws BadRequest if not DRAFT', async () => {
     const s = makeSettlement({ status: SettlementStatus.CONFIRMED });
-    mockRepo.findOne.mockResolvedValue(s);
+    const manager = makeManager(s);
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await expect(service.addCost(1, { cost_name: '运费', amount: 100 })).rejects.toThrow(BadRequestException);
   });
 
   // UT-SLT-06: addCost recalculates net_profit
   it('UT-SLT-06 addCost recalculates net_profit after adding cost', async () => {
     const s = makeSettlement({ revenue: 10000, total_cost: 6000, net_profit: 4000 });
-    mockRepo.findOne
-      .mockResolvedValueOnce(s)   // guard check
-      .mockResolvedValueOnce(s);  // recalculate
-    mockCostRepo.find.mockResolvedValue([
-      { amount: 4000 }, { amount: 2000 }, { amount: 500 }, // new cost added = 6500
-    ]);
+    const existingCosts = [{ amount: 4000 }, { amount: 2000 }, { amount: 500 }];
+    const manager = makeManager(s, existingCosts);
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.addCost(1, { cost_name: '运费', amount: 500 });
     // After recalc: total_cost=6500, net_profit=3500
-    expect(mockRepo.save).toHaveBeenCalledWith(expect.objectContaining({
-      total_cost: 6500, net_profit: 3500,
-    }));
+    const saveCall = manager.save.mock.calls.find((c: any[]) => c[0] === Settlement);
+    expect(saveCall[1]).toMatchObject({ total_cost: 6500, net_profit: 3500 });
   });
 
   // UT-SLT-07: remove throws if not DRAFT

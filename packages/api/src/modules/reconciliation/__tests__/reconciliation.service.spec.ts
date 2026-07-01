@@ -20,6 +20,12 @@ const makeReconciliation = (overrides = {}) => ({
   ...overrides,
 });
 
+const makeManager = (findOneResult?: any) => ({
+  create: jest.fn().mockImplementation((_, v) => v),
+  save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
+  findOne: jest.fn().mockResolvedValue(findOneResult),
+});
+
 const mockReconciliationRepo = {
   create: jest.fn().mockImplementation((v) => v),
   save: jest.fn().mockImplementation((v) => Promise.resolve(v)),
@@ -31,12 +37,9 @@ const mockShipmentRepo = {
   save: jest.fn().mockResolvedValue([]),
   find: jest.fn().mockResolvedValue([]),
 };
-const mockRedis = { incr: jest.fn().mockResolvedValue(1), expire: jest.fn() };
+const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn().mockResolvedValue(1) };
 const mockDataSource = {
-  transaction: jest.fn().mockImplementation((cb) => cb({
-    create: jest.fn().mockImplementation((_, v) => v),
-    save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
-  })),
+  transaction: jest.fn().mockImplementation((cb) => cb(makeManager())),
 };
 
 describe('ReconciliationService', () => {
@@ -44,6 +47,7 @@ describe('ReconciliationService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockDataSource.transaction.mockImplementation((cb) => cb(makeManager()));
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ReconciliationService,
@@ -69,13 +73,9 @@ describe('ReconciliationService', () => {
         { shipment_id: 2, item_name: '面料B', snapshot_unit_price: 20, qty: 100 },
       ],
     };
+    const manager = makeManager();
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.create(dto as any, 1);
-    const txn = mockDataSource.transaction.mock.calls[0][0];
-    const manager = {
-      create: jest.fn().mockImplementation((_, v) => v),
-      save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
-    };
-    await txn(manager);
     // total_amount = 10*200 + 20*100 = 2000 + 2000 = 4000
     expect(manager.save.mock.calls[0][1]).toMatchObject({ total_amount: 4000 });
   });
@@ -89,10 +89,7 @@ describe('ReconciliationService', () => {
       invoice_no: 'INV-001',
       shipments: [{ shipment_id: 1, item_name: '面料A', snapshot_unit_price: 10, qty: 100 }],
     };
-    const manager = {
-      create: jest.fn().mockImplementation((_, v) => v),
-      save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
-    };
+    const manager = makeManager();
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.create(dto as any, 1);
     expect(manager.save.mock.calls[0][1]).toMatchObject({ has_invoice: 1, invoice_no: 'INV-001' });
@@ -106,10 +103,7 @@ describe('ReconciliationService', () => {
       tax_rate: 13,
       shipments: [{ shipment_id: 1, item_name: '面料A', snapshot_unit_price: 100, qty: 10 }],
     };
-    const manager = {
-      create: jest.fn().mockImplementation((_, v) => v),
-      save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
-    };
+    const manager = makeManager();
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.create(dto as any, 1);
     // total = 100*10 = 1000, tax = 1000 * 13% = 130
@@ -119,8 +113,9 @@ describe('ReconciliationService', () => {
   // UT-REC-04: confirm transitions DRAFT → CONFIRMED
   it('UT-REC-04 confirm transitions DRAFT→CONFIRMED', async () => {
     const rec = makeReconciliation({ status: ReconciliationStatus.DRAFT });
-    mockReconciliationRepo.findOne.mockResolvedValue(rec);
-    mockReconciliationRepo.save.mockResolvedValue({ ...rec, status: ReconciliationStatus.CONFIRMED });
+    const manager = makeManager(rec);
+    manager.save.mockResolvedValue({ ...rec, status: ReconciliationStatus.CONFIRMED });
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
 
     const result = await service.confirm(1);
     expect(result.status).toBe(ReconciliationStatus.CONFIRMED);
@@ -129,7 +124,8 @@ describe('ReconciliationService', () => {
   // UT-REC-05: confirm throws if already confirmed
   it('UT-REC-05 confirm throws BadRequestException if already CONFIRMED', async () => {
     const rec = makeReconciliation({ status: ReconciliationStatus.CONFIRMED });
-    mockReconciliationRepo.findOne.mockResolvedValue(rec);
+    const manager = makeManager(rec);
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await expect(service.confirm(1)).rejects.toThrow(BadRequestException);
   });
 

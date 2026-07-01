@@ -90,22 +90,34 @@ export class SettlementService {
   }
 
   async addCost(id: number, dto: AddCostDto): Promise<Settlement> {
-    const settlement = await this.repo.findOne({ where: { id, deleted: 0 } });
-    if (!settlement) throw new NotFoundException(`结算单 #${id} 不存在`);
-    if (settlement.status !== SettlementStatus.DRAFT) {
-      throw new BadRequestException('只有草稿状态才可添加费用');
-    }
+    return this.dataSource.transaction(async (manager) => {
+      const settlement = await manager.findOne(Settlement, {
+        where: { id, deleted: 0 },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!settlement) throw new NotFoundException(`结算单 #${id} 不存在`);
+      if (settlement.status !== SettlementStatus.DRAFT) {
+        throw new BadRequestException('只有草稿状态才可添加费用');
+      }
 
-    await this.costRepo.save(
-      this.costRepo.create({
-        settlement_id: id,
-        cost_name: dto.cost_name,
-        amount: +dto.amount.toFixed(4),
-        has_invoice: dto.has_invoice ?? 1,
-      }),
-    );
+      await manager.save(
+        SettlementCost,
+        manager.create(SettlementCost, {
+          settlement_id: id,
+          cost_name: dto.cost_name,
+          amount: +dto.amount.toFixed(4),
+          has_invoice: dto.has_invoice ?? 1,
+        }),
+      );
 
-    return this._recalculate(id);
+      const costs = await manager.find(SettlementCost, { where: { settlement_id: id } });
+      const totalCost = costs.reduce((sum, c) => sum + +c.amount, 0);
+      const netProfit = +(+settlement.revenue - totalCost).toFixed(4);
+      settlement.total_cost = +totalCost.toFixed(4);
+      settlement.net_profit = netProfit;
+      settlement.net_profit_ex_refund = netProfit;
+      return manager.save(Settlement, settlement);
+    });
   }
 
   async addReceipt(id: number, dto: AddReceiptDto): Promise<void> {
@@ -122,14 +134,19 @@ export class SettlementService {
   }
 
   async confirm(id: number): Promise<Settlement> {
-    const settlement = await this.repo.findOne({ where: { id, deleted: 0 } });
-    if (!settlement) throw new NotFoundException(`结算单 #${id} 不存在`);
-    if (settlement.status !== SettlementStatus.DRAFT) {
-      throw new BadRequestException('只有草稿状态才可确认');
-    }
-    settlement.status = SettlementStatus.CONFIRMED;
-    settlement.confirmed_at = new Date();
-    return this.repo.save(settlement);
+    return this.dataSource.transaction(async (manager) => {
+      const settlement = await manager.findOne(Settlement, {
+        where: { id, deleted: 0 },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!settlement) throw new NotFoundException(`结算单 #${id} 不存在`);
+      if (settlement.status !== SettlementStatus.DRAFT) {
+        throw new BadRequestException('只有草稿状态才可确认');
+      }
+      settlement.status = SettlementStatus.CONFIRMED;
+      settlement.confirmed_at = new Date();
+      return manager.save(Settlement, settlement);
+    });
   }
 
   async remove(id: number): Promise<void> {
@@ -142,14 +159,4 @@ export class SettlementService {
     await this.repo.save(settlement);
   }
 
-  private async _recalculate(id: number): Promise<Settlement> {
-    const settlement = await this.repo.findOne({ where: { id } });
-    const costs = await this.costRepo.find({ where: { settlement_id: id } });
-    const totalCost = costs.reduce((sum, c) => sum + +c.amount, 0);
-    const netProfit = +(+settlement.revenue - totalCost).toFixed(4);
-    settlement.total_cost = +totalCost.toFixed(4);
-    settlement.net_profit = netProfit;
-    settlement.net_profit_ex_refund = netProfit;
-    return this.repo.save(settlement);
-  }
 }

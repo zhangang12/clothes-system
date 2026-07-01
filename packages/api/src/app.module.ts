@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { databaseConfig } from './config/database.config';
 import { AuthModule } from './modules/auth/auth.module';
 import { FactoryModule } from './modules/factory/factory.module';
@@ -23,6 +24,12 @@ import { FileModule } from './common/services/file.module';
       isGlobal: true,
       envFilePath: ['.env.local', '.env'],
     }),
+
+    // 限流（登录接口 10次/min，其余 300次/min）
+    ThrottlerModule.forRoot([
+      { name: 'login', ttl: 60000, limit: 10 },
+      { name: 'global', ttl: 60000, limit: 300 },
+    ]),
 
     // 数据库
     TypeOrmModule.forRootAsync({

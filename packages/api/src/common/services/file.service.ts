@@ -39,8 +39,7 @@ export class FileService implements OnModuleInit {
             String(today.getFullYear()),
             String(today.getMonth() + 1).padStart(2, '0'),
           );
-          fs.mkdirSync(dir, { recursive: true });
-          cb(null, dir);
+          fs.mkdir(dir, { recursive: true }, (err) => cb(err ?? null, dir));
         },
         filename: (_req, file, cb) => {
           const ext = path.extname(file.originalname);
