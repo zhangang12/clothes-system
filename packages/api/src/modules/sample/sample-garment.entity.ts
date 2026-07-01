@@ -3,22 +3,46 @@ import { SampleStatus } from '@i9/types';
 
 @Entity('sample_garment')
 export class SampleGarment {
-  @PrimaryGeneratedColumn()
+  @PrimaryGeneratedColumn({ type: 'bigint' })
   id: number;
 
-  @Column()
+  @Column({ length: 20, unique: true })
+  sample_no: string;
+
+  @Column({ type: 'bigint' })
   customer_id: number;
 
   @Column({ length: 100 })
   style_name: string;
 
-  @Column({ length: 50, nullable: true })
-  style_no: string;
+  @Column({ length: 20, nullable: true })
+  season: string;
 
-  @Column({ type: 'enum', enum: SampleStatus, default: SampleStatus.DRAFT })
+  @Column({ length: 50, nullable: true })
+  category: string;
+
+  @Column({ type: 'text', nullable: true })
+  process_req: string;
+
+  @Column({ type: 'bigint', nullable: true })
+  patternmaker_id: number;
+
+  @Column({ type: 'int', default: 1 })
+  version: number;
+
+  @Column({ type: 'enum', enum: SampleStatus, default: SampleStatus.PENDING })
   status: SampleStatus;
 
-  @Column({ tinyint: true, default: 0 } as any)
+  @Column({ type: 'text', nullable: true })
+  reject_reason: string;
+
+  @Column({ type: 'datetime', nullable: true })
+  confirmed_at: Date;
+
+  @Column({ type: 'bigint' })
+  created_by: number;
+
+  @Column({ type: 'tinyint', default: 0 })
   deleted: number;
 
   @CreateDateColumn()

@@ -1,28 +1,34 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+
+export enum SampleAction {
+  SUBMIT = 'SUBMIT',
+  REJECT = 'REJECT',
+  CONFIRM = 'CONFIRM',
+}
 
 @Entity('sample_version')
 export class SampleVersion {
-  @PrimaryGeneratedColumn()
+  @PrimaryGeneratedColumn({ type: 'bigint' })
   id: number;
 
-  @Column()
-  garment_id: number;
+  @Column({ type: 'bigint' })
+  sample_id: number;
 
-  @Column({ default: 1 })
+  @Column({ type: 'int' })
   version: number;
 
-  @Column({ length: 255, nullable: true })
+  @Column({ type: 'enum', enum: SampleAction })
+  action: SampleAction;
+
+  @Column({ type: 'bigint' })
+  operator_id: number;
+
+  @Column({ type: 'text', nullable: true })
   remark: string;
 
   @Column({ type: 'json', nullable: true })
   attachments: string[];
 
-  @Column({ tinyint: true, default: 0 } as any)
-  deleted: number;
-
   @CreateDateColumn()
   created_at: Date;
-
-  @UpdateDateColumn()
-  updated_at: Date;
 }
