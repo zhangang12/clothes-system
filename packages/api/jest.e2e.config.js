@@ -14,4 +14,10 @@ module.exports = {
   },
   globalSetup: './test/setup.ts',
   globalTeardown: './test/teardown.ts',
+  // Global setup bootstraps a real NestJS app + DB; give each test suite plenty of time.
+  testTimeout: 30000,
+  // Run spec files sequentially: they share a single DB and app instance.
+  maxWorkers: 1,
+  // Close the NestJS app (DB + Redis) cleanly after all suites finish.
+  setupFilesAfterEnv: ['./test/jest-setup-after-env.ts'],
 };
