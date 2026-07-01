@@ -2,10 +2,15 @@ import { Test } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcrypt';
 import { AuthService } from '../auth.service';
 import { SysUser } from '../sys-user.entity';
 import { SupplierAccount } from '../supplier-account.entity';
+
+// Mock bcrypt to avoid native binding issues in CI
+jest.mock('bcrypt', () => ({
+  hash: jest.fn().mockImplementation((plain) => Promise.resolve(`hashed:${plain}`)),
+  compare: jest.fn().mockImplementation((plain, hash) => Promise.resolve(hash === `hashed:${plain}`)),
+}));
 
 const mockUserRepo = { findOne: jest.fn() };
 const mockSupplierRepo = { findOne: jest.fn(), update: jest.fn() };
@@ -29,9 +34,8 @@ describe('AuthService', () => {
 
   describe('loginAdmin()', () => {
     it('UT-AUTH-01: returns token and role on valid credentials', async () => {
-      const hash = await bcrypt.hash('password123', 10);
       mockUserRepo.findOne.mockResolvedValue({
-        id: 1, username: 'admin', password: hash, role: 'ADMIN', real_name: '管理员', status: 1,
+        id: 1, username: 'admin', password: 'hashed:password123', role: 'ADMIN', real_name: '管理员', status: 1,
       });
       const result = await service.loginAdmin('admin', 'password123');
       expect(result.access_token).toBe('mock-token');
@@ -46,23 +50,21 @@ describe('AuthService', () => {
 
     it('UT-AUTH-03: throws UnauthorizedException if user status is 0 (disabled)', async () => {
       mockUserRepo.findOne.mockResolvedValue({
-        id: 1, username: 'admin', password: 'hash', status: 0,
+        id: 1, username: 'admin', password: 'hashed:pass', status: 0,
       });
       await expect(service.loginAdmin('admin', 'pass')).rejects.toThrow(UnauthorizedException);
     });
 
     it('UT-AUTH-04: throws UnauthorizedException on wrong password', async () => {
-      const hash = await bcrypt.hash('correct', 10);
       mockUserRepo.findOne.mockResolvedValue({
-        id: 1, username: 'admin', password: hash, status: 1,
+        id: 1, username: 'admin', password: 'hashed:correct', status: 1,
       });
       await expect(service.loginAdmin('admin', 'wrong')).rejects.toThrow(UnauthorizedException);
     });
 
     it('UT-AUTH-05: JWT payload includes correct type=admin', async () => {
-      const hash = await bcrypt.hash('pass', 10);
       mockUserRepo.findOne.mockResolvedValue({
-        id: 2, username: 'user', password: hash, role: 'BUSINESS', real_name: '业务员', status: 1,
+        id: 2, username: 'user', password: 'hashed:pass', role: 'BUSINESS', real_name: '业务员', status: 1,
       });
       await service.loginAdmin('user', 'pass');
       expect(mockJwt.sign).toHaveBeenCalledWith(expect.objectContaining({ type: 'admin', sub: 2 }));
@@ -71,9 +73,8 @@ describe('AuthService', () => {
 
   describe('loginSupplier()', () => {
     it('UT-AUTH-06: returns token and factory_id on valid credentials', async () => {
-      const hash = await bcrypt.hash('sup123', 10);
       mockSupplierRepo.findOne.mockResolvedValue({
-        id: 10, account: 'factory_a', password: hash, status: 1, factory_id: 5,
+        id: 10, account: 'factory_a', password: 'hashed:sup123', status: 1, factory_id: 5,
       });
       mockSupplierRepo.update.mockResolvedValue({});
       const result = await service.loginSupplier('factory_a', 'sup123');
@@ -88,15 +89,14 @@ describe('AuthService', () => {
 
     it('UT-AUTH-08: throws UnauthorizedException if supplier disabled', async () => {
       mockSupplierRepo.findOne.mockResolvedValue({
-        id: 1, account: 'sup', password: 'hash', status: 0, factory_id: 1,
+        id: 1, account: 'sup', password: 'hashed:pass', status: 0, factory_id: 1,
       });
       await expect(service.loginSupplier('sup', 'pass')).rejects.toThrow(UnauthorizedException);
     });
 
     it('UT-AUTH-09: updates last_login_at after successful login', async () => {
-      const hash = await bcrypt.hash('pass', 10);
       mockSupplierRepo.findOne.mockResolvedValue({
-        id: 3, account: 'sup', password: hash, status: 1, factory_id: 2,
+        id: 3, account: 'sup', password: 'hashed:pass', status: 1, factory_id: 2,
       });
       mockSupplierRepo.update.mockResolvedValue({});
       await service.loginSupplier('sup', 'pass');
@@ -104,9 +104,8 @@ describe('AuthService', () => {
     });
 
     it('UT-AUTH-10: JWT payload includes type=supplier and factory_id', async () => {
-      const hash = await bcrypt.hash('pass', 10);
       mockSupplierRepo.findOne.mockResolvedValue({
-        id: 4, account: 'sup2', password: hash, status: 1, factory_id: 7,
+        id: 4, account: 'sup2', password: 'hashed:pass', status: 1, factory_id: 7,
       });
       mockSupplierRepo.update.mockResolvedValue({});
       await service.loginSupplier('sup2', 'pass');
@@ -120,6 +119,7 @@ describe('AuthService', () => {
   describe('hashPassword()', () => {
     it('UT-AUTH-11: returns bcrypt hash verifiable by compare', async () => {
       const hash = await service.hashPassword('mySecret');
+      const bcrypt = require('bcrypt');
       const valid = await bcrypt.compare('mySecret', hash);
       expect(valid).toBe(true);
     });
