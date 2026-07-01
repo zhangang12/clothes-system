@@ -27,7 +27,16 @@ export class Settlement {
   @Column({ type: 'decimal', precision: 15, scale: 4, default: 0 })
   net_profit_ex_refund: number;
 
-  @Column({ tinyint: true, default: 0 } as any)
+  @Column({ nullable: true })
+  description?: string;
+
+  @Column({ nullable: true })
+  created_by?: number;
+
+  @Column({ nullable: true, type: 'datetime' })
+  confirmed_at?: Date;
+
+  @Column({ type: 'tinyint', default: 0 })
   deleted: number;
 
   @CreateDateColumn()

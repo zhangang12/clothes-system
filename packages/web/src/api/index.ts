@@ -39,3 +39,4 @@ export * from './order';
 export * from './contract';
 export * from './reconciliation';
 export * from './payment';
+export * from './settlement';

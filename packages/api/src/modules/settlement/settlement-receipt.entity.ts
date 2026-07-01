@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
 
 @Entity('settlement_receipt')
 export class SettlementReceipt {
@@ -15,5 +15,8 @@ export class SettlementReceipt {
   receipt_date: Date;
 
   @Column({ length: 255, nullable: true })
-  remark: string;
+  remark?: string;
+
+  @CreateDateColumn()
+  created_at: Date;
 }
