@@ -196,7 +196,7 @@ function openCreate() {
 function openEdit(row: Factory) {
   editId.value = row.id;
   Object.assign(form, {
-    name: row.name, short_name: row.short_name ?? '', type: row.type,
+    name: row.name, short_name: row.shortName ?? '', type: row.type,
     contact_name: (row as any).contact_name ?? '', contact_phone: (row as any).contact_phone ?? '',
     address: (row as any).address ?? '', tax_no: (row as any).tax_no ?? '',
     bank_name: (row as any).bank_name ?? '', bank_account: (row as any).bank_account ?? '',

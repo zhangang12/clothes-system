@@ -149,7 +149,7 @@ describe('LoginView', () => {
     const btn = wrapper.find('button[type="submit"]');
     const isInLoadingState =
       btn.classes().some((c) => c.includes('loading')) ||
-      btn.element.disabled ||
+      (btn.element as HTMLButtonElement).disabled ||
       btn.attributes('aria-disabled') === 'true';
 
     expect(isInLoadingState).toBe(true);

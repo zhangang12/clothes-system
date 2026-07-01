@@ -82,8 +82,8 @@ export const ElSelectStub = {
   methods: {
     onChange(e: Event) {
       const val = (e.target as HTMLSelectElement).value;
-      this.$emit('update:modelValue', val);
-      this.$emit('change', val);
+      (this as any).$emit('update:modelValue', val);
+      (this as any).$emit('change', val);
     },
   },
   template: `<select class="el-select-stub" @change="onChange"><slot /></select>`,

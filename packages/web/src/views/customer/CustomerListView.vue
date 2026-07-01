@@ -223,13 +223,13 @@ function openEdit(row: Customer) {
   editId.value = row.id;
   Object.assign(form, {
     name: row.name,
-    short_name: row.short_name ?? '',
+    short_name: row.shortName ?? '',
     grade: row.grade,
     currency: row.currency ?? 'USD',
-    payment_method: row.payment_method ?? '',
+    payment_method: row.paymentMethod ?? '',
     country: row.country ?? '',
-    contact_name: row.contact_name ?? '',
-    contact_email: row.contact_email ?? '',
+    contact_name: row.contactName ?? '',
+    contact_email: row.contactEmail ?? '',
     remark: (row as any).remark ?? '',
   });
   dialogVisible.value = true;
