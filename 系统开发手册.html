@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>I9 服装制造管理系统 — 系统开发手册 v1.0</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#FBF8F2;color:#1F1F22;font-size:14px;line-height:1.6}
+:root{
+  --indigo:#1E3A5F;--indigo-d:#152A45;--indigo-l:#2C5180;
+  --linen:#F5EDDC;--linen-d:#E8DCC0;--canvas:#FBF8F2;
+  --rust:#D17A40;--rust-d:#B86530;
+  --vermilion:#C04042;--teal:#3E8E7E;--amber:#C8901E;
+  --gray-9:#1F1F22;--gray-7:#37383C;--gray-5:#6F7178;
+  --gray-3:#B5B7BD;--gray-1:#E5E2DA;--gray-0:#F4F1EA;
+  --r:4px;--r-lg:8px
+}
+a{color:var(--indigo);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* Layout */
+.layout{display:flex;min-height:100vh}
+.sidebar{width:240px;background:var(--indigo);color:#fff;flex-shrink:0;position:sticky;top:0;height:100vh;overflow-y:auto}
+.sidebar .logo{padding:20px 16px 12px;font-size:15px;font-weight:700;border-bottom:1px solid rgba(255,255,255,.1)}
+.sidebar .logo small{display:block;font-size:11px;font-weight:400;opacity:.6;margin-top:2px}
+.nav-gl{padding:16px 16px 4px;font-size:11px;opacity:.5;letter-spacing:.06em;text-transform:uppercase}
+.nav-a{display:block;padding:8px 16px;color:rgba(255,255,255,.75);border-left:3px solid transparent;transition:.15s;font-size:13px;cursor:pointer}
+.nav-a:hover{background:rgba(255,255,255,.07);color:#fff;text-decoration:none}
+.nav-a.act{background:rgba(255,255,255,.12);color:#fff;border-left-color:var(--rust)}
+.main{flex:1;overflow:auto}
+.topbar{background:#fff;border-bottom:1px solid var(--gray-1);padding:0 24px;display:flex;align-items:center;height:52px;gap:12px;position:sticky;top:0;z-index:10}
+.topbar h1{font-size:16px;font-weight:600;color:var(--indigo)}
+.topbar .ver{font-size:11px;background:var(--linen);color:var(--rust);padding:2px 8px;border-radius:10px}
+.content{padding:24px}
+
+/* Section */
+.section{margin-bottom:40px;scroll-margin-top:70px}
+.section-title{font-size:20px;font-weight:700;color:var(--indigo);padding-bottom:10px;border-bottom:2px solid var(--linen-d);margin-bottom:20px}
+.sub-title{font-size:16px;font-weight:600;color:var(--gray-7);margin:24px 0 12px}
+.sub2-title{font-size:14px;font-weight:600;color:var(--gray-7);margin:16px 0 8px}
+
+/* Cards */
+.card{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);padding:20px;margin-bottom:16px}
+.card-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:16px}
+.info-card{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);padding:16px}
+.info-card .label{font-size:11px;color:var(--gray-5);margin-bottom:4px}
+.info-card .val{font-size:22px;font-weight:700;color:var(--indigo)}
+.info-card .desc{font-size:12px;color:var(--gray-5);margin-top:4px}
+
+/* Table */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--linen);color:var(--gray-7);font-weight:600;padding:9px 12px;text-align:left;border-bottom:1px solid var(--linen-d)}
+td{padding:9px 12px;border-bottom:1px solid var(--gray-0);vertical-align:top}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--gray-0)}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--gray-1);border-radius:var(--r-lg)}
+
+/* Tags */
+.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:500}
+.tag-p1{background:#fee2e2;color:#991b1b}
+.tag-p2{background:#fef3c7;color:#92400e}
+.tag-p3{background:#e0f2fe;color:#0c4a6e}
+.tag-done{background:#dcfce7;color:#166534}
+.tag-wip{background:#ede9fe;color:#4c1d95}
+
+/* Code */
+pre{background:#1e293b;color:#e2e8f0;padding:16px;border-radius:var(--r-lg);overflow-x:auto;font-size:12px;font-family:"SF Mono",Consolas,monospace;margin:8px 0 16px}
+code{background:#f1f5f9;color:#334155;padding:1px 5px;border-radius:3px;font-size:12px;font-family:"SF Mono",Consolas,monospace}
+
+/* Flow */
+.flow-row{display:flex;align-items:center;gap:0;flex-wrap:wrap;margin:12px 0}
+.flow-step{background:var(--indigo);color:#fff;padding:8px 14px;font-size:12px;font-weight:600;border-radius:var(--r);white-space:nowrap}
+.flow-arrow{color:var(--gray-3);font-size:18px;padding:0 4px}
+.flow-step.alt{background:var(--rust)}
+.flow-step.teal{background:var(--teal)}
+.flow-step.gray{background:var(--gray-5)}
+
+/* Alert */
+.alert{border-radius:var(--r-lg);padding:12px 16px;margin:12px 0;font-size:13px}
+.alert-i{background:#eff6ff;border-left:3px solid #3b82f6;color:#1e40af}
+.alert-w{background:#fffbeb;border-left:3px solid #f59e0b;color:#92400e}
+.alert-e{background:#fef2f2;border-left:3px solid #ef4444;color:#991b1b}
+.alert-s{background:#f0fdf4;border-left:3px solid #22c55e;color:#166534}
+
+/* Module chips */
+.mod-chip{display:inline-block;background:var(--linen);color:var(--indigo);border:1px solid var(--linen-d);border-radius:10px;padding:2px 10px;font-size:12px;font-weight:600;margin:2px}
+
+/* Rule box */
+.rule-box{background:var(--linen);border:1px solid var(--linen-d);border-radius:var(--r-lg);padding:14px 18px;margin:8px 0}
+.rule-box ul{padding-left:18px}
+.rule-box li{margin-bottom:4px;font-size:13px}
+
+/* Architecture diagram (text-based) */
+.arch{background:#1e293b;color:#94a3b8;padding:20px;border-radius:var(--r-lg);font-family:"SF Mono",Consolas,monospace;font-size:12px;line-height:1.8;overflow-x:auto}
+.arch .hl{color:#e2e8f0;font-weight:bold}
+.arch .g{color:#4ade80}
+.arch .y{color:#fbbf24}
+.arch .b{color:#60a5fa}
+.arch .r{color:#f87171}
+
+/* TOC */
+.toc{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);padding:20px;margin-bottom:24px}
+.toc h3{font-size:14px;font-weight:700;color:var(--indigo);margin-bottom:12px}
+.toc ol{padding-left:20px}
+.toc li{margin-bottom:4px;font-size:13px}
+.toc a{color:var(--indigo)}
+
+/* Number badge */
+.num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;background:var(--indigo);color:#fff;border-radius:50%;font-size:11px;font-weight:700;flex-shrink:0;margin-right:6px}
+
+/* Timeline */
+.timeline{position:relative;padding-left:28px}
+.timeline::before{content:'';position:absolute;left:8px;top:0;bottom:0;width:2px;background:var(--gray-1)}
+.tl-item{position:relative;margin-bottom:16px}
+.tl-dot{position:absolute;left:-24px;top:3px;width:10px;height:10px;border-radius:50%;background:var(--indigo)}
+.tl-item.alt .tl-dot{background:var(--rust)}
+
+/* Priority badges */
+.p1,.p2,.p3{font-size:11px;padding:2px 7px;border-radius:8px;font-weight:600}
+.p1{background:#fee2e2;color:#991b1b}
+.p2{background:#fef3c7;color:#92400e}
+.p3{background:#dbeafe;color:#1e40af}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="logo">I9 服装制造<small>系统开发手册 v1.0</small></div>
+  <div class="nav-gl">概览</div>
+  <a class="nav-a act" onclick="goto('overview')">📖 系统概述</a>
+  <a class="nav-a" onclick="goto('arch')">🏗 架构设计</a>
+  <a class="nav-a" onclick="goto('datamodel')">🗄 数据模型</a>
+  <div class="nav-gl">模块规格</div>
+  <a class="nav-a" onclick="goto('m01')">01 基础资料</a>
+  <a class="nav-a" onclick="goto('m02a')">02A 样衣管理</a>
+  <a class="nav-a" onclick="goto('m02b')">02B 客户报价</a>
+  <a class="nav-a" onclick="goto('m03')">03 订单管理</a>
+  <a class="nav-a" onclick="goto('m04')">04 合同管理</a>
+  <a class="nav-a" onclick="goto('m05')">05 供应商门户</a>
+  <a class="nav-a" onclick="goto('m06')">06 对账付款</a>
+  <a class="nav-a" onclick="goto('m07')">07 结算清单</a>
+  <div class="nav-gl">技术规范</div>
+  <a class="nav-a" onclick="goto('api')">🔌 接口规范</a>
+  <a class="nav-a" onclick="goto('rules')">📐 业务规则</a>
+  <a class="nav-a" onclick="goto('ui')">🎨 UI规范</a>
+  <a class="nav-a" onclick="goto('deploy')">🚀 部署方案</a>
+</nav>
+
+<!-- Main -->
+<div class="main">
+  <div class="topbar">
+    <h1>I9 服装制造管理系统 — 系统开发手册</h1>
+    <span class="ver">v1.0  2024-01</span>
+  </div>
+  <div class="content">
+
+    <!-- TOC -->
+    <div class="toc">
+      <h3>目录</h3>
+      <ol>
+        <li><a onclick="goto('overview')">系统概述与目标</a></li>
+        <li><a onclick="goto('arch')">整体架构设计</a></li>
+        <li><a onclick="goto('datamodel')">核心数据模型</a></li>
+        <li><a onclick="goto('m01')">模块规格 01–07</a></li>
+        <li><a onclick="goto('api')">API 接口规范</a></li>
+        <li><a onclick="goto('rules')">核心业务规则</a></li>
+        <li><a onclick="goto('ui')">UI设计规范</a></li>
+        <li><a onclick="goto('deploy')">部署方案</a></li>
+      </ol>
+    </div>
+
+    <!-- 1. Overview -->
+    <div class="section" id="overview">
+      <div class="section-title">1. 系统概述与目标</div>
+
+      <div class="card-row">
+        <div class="info-card"><div class="label">系统代号</div><div class="val">I9</div><div class="desc">服装制造管理系统</div></div>
+        <div class="info-card"><div class="label">模块数量</div><div class="val">9</div><div class="desc">完整全流程覆盖</div></div>
+        <div class="info-card"><div class="label">目标用户</div><div class="val">3类</div><div class="desc">业务/财务/供应商</div></div>
+        <div class="info-card"><div class="label">技术栈</div><div class="val">Web</div><div class="desc">前后端分离 + H5门户</div></div>
+      </div>
+
+      <div class="card">
+        <div class="sub-title">系统定位</div>
+        <p style="margin-bottom:10px">I9 服装制造管理系统，面向外贸服装制造企业，覆盖从样衣开发、客户报价、订单管理、合同执行、供应商协同、对账付款到最终结算的完整业务链条。系统以"快照锁定"和"流程串联"为核心设计原则，确保数据一致性与可审计性。</p>
+        <div class="sub2-title">核心价值</div>
+        <ul style="padding-left:18px;font-size:13px">
+          <li>全流程数字化：打通样衣→报价→订单→合同→发货→对账→结算七个环节</li>
+          <li>供应商协同：H5门户支持供应商自助完成盖章、发货、对账、发票上传</li>
+          <li>财务精确：快照机制确保每笔费用溯源，超付拦截，多维利润分析</li>
+          <li>数据不丢失：无物理删除，全状态流转，历史可查</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="sub-title">全流程架构</div>
+        <div class="flow-row">
+          <div class="flow-step">📋 基础资料<br><small style="font-weight:400">工厂/客户主档</small></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step">👗 样衣管理<br><small>S-编号</small></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step">💰 客户报价<br><small>Q-编号</small></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step">📦 订单管理<br><small>O-编号</small></div>
+        </div>
+        <div class="flow-row" style="margin-top:4px">
+          <div class="flow-arrow" style="padding-left:0">↓</div>
+        </div>
+        <div class="flow-row">
+          <div class="flow-step alt">📄 合同管理<br><small>HT-编号</small></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step teal">🏭 供应商门户<br><small>H5协同</small></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step alt">💳 对账付款<br><small>DZ-/PR-编号</small></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step">📊 结算清单<br><small>JS-编号</small></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Architecture -->
+    <div class="section" id="arch">
+      <div class="section-title">2. 整体架构设计</div>
+
+      <div class="card">
+        <div class="sub-title">技术架构</div>
+        <div class="arch">
+<span class="hl">┌─────────────────────────────────────────────────────────────┐</span>
+<span class="hl">│                    前端层 (Frontend)                        │</span>
+<span class="hl">├─────────────────────────┬───────────────────────────────────┤</span>
+│  <span class="g">管理后台 (Web SPA)</span>     │  <span class="y">供应商门户 (H5 Web)</span>              │
+│  Vue 3 + Element Plus   │  Vue 3 + Vant / H5适配            │
+│  PC端 1440px+           │  移动端 375-768px                  │
+<span class="hl">├─────────────────────────┴───────────────────────────────────┤</span>
+<span class="hl">│                    网关层 (API Gateway)                     │</span>
+│  Nginx 反向代理 · 鉴权中间件 · 限流 · CORS                  │
+<span class="hl">├─────────────────────────────────────────────────────────────┤</span>
+<span class="hl">│                   业务服务层 (Backend)                      │</span>
+│  <span class="b">Spring Boot 3 / Node.js (可选)</span>                         │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐       │
+│  │基础资料  │ │样衣报价  │ │订单合同  │ │财务结算  │       │
+│  │Service   │ │Service   │ │Service   │ │Service   │       │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘       │
+│  ┌──────────┐ ┌──────────┐                                  │
+│  │门户协同  │ │通知推送  │                                  │
+│  │Service   │ │Service   │                                  │
+│  └──────────┘ └──────────┘                                  │
+<span class="hl">├─────────────────────────────────────────────────────────────┤</span>
+<span class="hl">│                     数据层 (Data)                           │</span>
+│  <span class="r">MySQL 8.0+</span>  ·  Redis 7 (缓存/Session)  ·  OSS (附件)     │
+<span class="hl">└─────────────────────────────────────────────────────────────┘</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sub-title">模块依赖关系</div>
+        <div class="arch">
+  01-基础资料 ──────────────────────────────────────┐
+       │                                             │
+       ▼                                             │
+  02A-样衣  ──→  02B-报价 ──→  03-订单              │
+                                   │                 │
+                    ┌──────────────┘                 │
+                    ▼                                 ▼
+               04-合同  ←── (引用工厂/客户主档) ───────┘
+                    │
+                    ▼
+               05-供应商门户 (H5异步协同)
+                    │ (登记发货后)
+                    ▼
+               06-对账付款
+                    │ (已收汇后)
+                    ▼
+               07-结算清单
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sub-title">前端技术选型</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>分类</th><th>技术</th><th>说明</th></tr>
+            <tr><td>框架</td><td><code>Vue 3 + Composition API</code></td><td>响应式，组合式逻辑复用</td></tr>
+            <tr><td>UI组件库</td><td><code>Element Plus (PC) / Vant (H5)</code></td><td>PC端管理后台 / 供应商门户分别使用</td></tr>
+            <tr><td>状态管理</td><td><code>Pinia</code></td><td>轻量、TypeScript友好</td></tr>
+            <tr><td>路由</td><td><code>Vue Router 4</code></td><td>懒加载，权限守卫</td></tr>
+            <tr><td>HTTP</td><td><code>Axios</code></td><td>拦截器统一处理 token、错误码</td></tr>
+            <tr><td>构建</td><td><code>Vite 5</code></td><td>快速HMR，按模块分包</td></tr>
+            <tr><td>打印/PDF</td><td><code>html2canvas + jsPDF</code></td><td>合同/结算单导出</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sub-title">后端技术选型</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>分类</th><th>技术</th><th>说明</th></tr>
+            <tr><td>框架</td><td><code>Spring Boot 3.2</code></td><td>Java 21, 虚拟线程可选</td></tr>
+            <tr><td>ORM</td><td><code>MyBatis-Plus</code></td><td>逻辑删除、分页、自动填充创建时间</td></tr>
+            <tr><td>数据库</td><td><code>MySQL 8.0</code></td><td>JSON字段、窗口函数</td></tr>
+            <tr><td>缓存</td><td><code>Redis 7</code></td><td>Session、编号序列、热点数据</td></tr>
+            <tr><td>文件存储</td><td><code>阿里云 OSS / MinIO</code></td><td>合同附件、发票、水单</td></tr>
+            <tr><td>鉴权</td><td><code>Sa-Token / JWT</code></td><td>内部用户 + 供应商门户双租户</td></tr>
+            <tr><td>文档</td><td><code>SpringDoc (OpenAPI 3)</code></td><td>自动生成API文档</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sub-title">安全设计</div>
+        <div class="rule-box">
+          <ul>
+            <li><b>双租户鉴权</b>：内部员工账号（RBAC角色：业务/财务/管理员）vs 供应商门户账号（独立账号体系）</li>
+            <li><b>接口权限</b>：财务专属接口（付款审批、结算确认）需 FINANCE 角色，供应商接口只能访问自己关联合同</li>
+            <li><b>数据隔离</b>：供应商门户查询自动加 supplier_id 过滤，禁止跨供应商查询</li>
+            <li><b>防重提交</b>：付款申请、审批等关键操作加分布式锁（Redis SETNX）</li>
+            <li><b>文件安全</b>：OSS 临时签名URL，30分钟有效，禁止直接暴露存储桶</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Data Model -->
+    <div class="section" id="datamodel">
+      <div class="section-title">3. 核心数据模型</div>
+
+      <div class="card">
+        <div class="sub-title">编号规则</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>模块</th><th>格式</th><th>示例</th><th>生成规则</th></tr>
+            <tr><td>工厂</td><td><code>CN{3位序号}</code></td><td>CN001</td><td>全局递增，不回收</td></tr>
+            <tr><td>客户</td><td><code>S{3位序号}</code></td><td>S001</td><td>全局递增，不回收</td></tr>
+            <tr><td>样衣</td><td><code>S-YYYYMMDD-{3位}</code></td><td>S-20240115-001</td><td>按日期重置序号</td></tr>
+            <tr><td>报价</td><td><code>Q-YYYYMMDD-{3位}</code></td><td>Q-20240115-001</td><td>按日期重置序号</td></tr>
+            <tr><td>订单</td><td><code>O-YYYYMMDD-{3位}</code></td><td>O-20240115-001</td><td>按日期重置序号</td></tr>
+            <tr><td>合同</td><td><code>HT-YYYYMMDD-{3位}</code></td><td>HT-20240115-001</td><td>按日期重置序号</td></tr>
+            <tr><td>对账单</td><td><code>DZ-YYYYMMDD-{3位}</code></td><td>DZ-20240115-001</td><td>按日期重置序号</td></tr>
+            <tr><td>付款申请</td><td><code>PR-YYYYMMDD-{3位}</code></td><td>PR-20240115-001</td><td>按日期重置序号</td></tr>
+            <tr><td>结算单</td><td><code>JS-YYYYMMDD-{3位}</code></td><td>JS-20240115-001</td><td>按日期重置序号</td></tr>
+            <tr><td>无合同对账</td><td><code>DZ-NC-YYYYMMDD-{3位}</code></td><td>DZ-NC-20240115-001</td><td>特殊前缀区分</td></tr>
+            <tr><td>无合同付款</td><td><code>PR-NC-YYYYMMDD-{3位}</code></td><td>PR-NC-20240115-001</td><td>特殊前缀区分</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sub-title">核心表设计</div>
+
+        <div class="sub2-title">factory（工厂主档）</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>字段</th><th>类型</th><th>说明</th></tr>
+            <tr><td>id</td><td>BIGINT PK</td><td>主键</td></tr>
+            <tr><td>factory_no</td><td>VARCHAR(10)</td><td>工厂编号 CN001</td></tr>
+            <tr><td>name</td><td>VARCHAR(100)</td><td>工厂名称</td></tr>
+            <tr><td>type</td><td>ENUM</td><td>MATERIAL/PROCESS/BOTH</td></tr>
+            <tr><td>contact_name</td><td>VARCHAR(50)</td><td>联系人</td></tr>
+            <tr><td>contact_phone</td><td>VARCHAR(20)</td><td>联系电话</td></tr>
+            <tr><td>bank_name</td><td>VARCHAR(100)</td><td>开户银行</td></tr>
+            <tr><td>bank_account</td><td>VARCHAR(30)</td><td>银行账号</td></tr>
+            <tr><td>tax_no</td><td>VARCHAR(20)</td><td>税号（开具发票用）</td></tr>
+            <tr><td>status</td><td>TINYINT</td><td>1=启用 0=停用</td></tr>
+            <tr><td>created_at / updated_at</td><td>DATETIME</td><td>时间戳，自动填充</td></tr>
+            <tr><td>deleted</td><td>TINYINT</td><td>逻辑删除标志（仅内部）</td></tr>
+          </table>
+        </div>
+
+        <div class="sub2-title">customer（客户主档）</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>字段</th><th>类型</th><th>说明</th></tr>
+            <tr><td>id / customer_no</td><td>BIGINT / VARCHAR</td><td>S001格式</td></tr>
+            <tr><td>name / short_name</td><td>VARCHAR</td><td>全称/简称</td></tr>
+            <tr><td>grade</td><td>ENUM</td><td>A/B/C</td></tr>
+            <tr><td>currency</td><td>VARCHAR(5)</td><td>USD/EUR/GBP等</td></tr>
+            <tr><td>payment_method</td><td>VARCHAR(50)</td><td>T/T, L/C等</td></tr>
+            <tr><td>country</td><td>VARCHAR(50)</td><td>国家</td></tr>
+            <tr><td>status</td><td>TINYINT</td><td>1=启用</td></tr>
+          </table>
+        </div>
+
+        <div class="sub2-title">sample_garment（样衣）</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>字段</th><th>类型</th><th>说明</th></tr>
+            <tr><td>id / sample_no</td><td>BIGINT / VARCHAR</td><td>S-YYYYMMDD-001</td></tr>
+            <tr><td>customer_id</td><td>BIGINT FK</td><td>关联客户</td></tr>
+            <tr><td>style_name / season</td><td>VARCHAR</td><td>款式/季节</td></tr>
+            <tr><td>patternmaker_id</td><td>BIGINT FK</td><td>指派版师（user表）</td></tr>
+            <tr><td>status</td><td>ENUM</td><td>PENDING/PATTERN/DONE/CONFIRMED/REJECTED</td></tr>
+            <tr><td>version</td><td>INT</td><td>当前版次（驳回后+1）</td></tr>
+            <tr><td>reject_reason</td><td>TEXT</td><td>驳回原因</td></tr>
+            <tr><td>created_by</td><td>BIGINT</td><td>创建业务员</td></tr>
+          </table>
+        </div>
+
+        <div class="sub2-title">quotation（客户报价）</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>字段</th><th>类型</th><th>说明</th></tr>
+            <tr><td>id / quote_no</td><td>BIGINT / VARCHAR</td><td>Q-编号</td></tr>
+            <tr><td>customer_id / sample_id</td><td>BIGINT FK</td><td>关联客户/样衣</td></tr>
+            <tr><td>global_loss_rate</td><td>DECIMAL(5,2)</td><td>全局损耗率%</td></tr>
+            <tr><td>unit_price / currency</td><td>DECIMAL / VARCHAR</td><td>报价/币种</td></tr>
+            <tr><td>status</td><td>ENUM</td><td>DRAFT/SENT/CONFIRMED/TO_CONTRACT</td></tr>
+          </table>
+        </div>
+        <div class="sub2-title">quotation_item（报价费用明细 — 快照表）</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>字段</th><th>说明</th></tr>
+            <tr><td>quote_id / item_name / unit / usage / unit_price / loss_rate / loss_price / total_usage / subtotal</td><td>每行费用项目完整快照</td></tr>
+          </table>
+        </div>
+
+        <div class="sub2-title">order_main（订单）</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>字段</th><th>类型</th><th>说明</th></tr>
+            <tr><td>order_no</td><td>VARCHAR</td><td>O-编号</td></tr>
+            <tr><td>customer_po</td><td>VARCHAR</td><td>客户PO号</td></tr>
+            <tr><td>customer_id / quote_id</td><td>BIGINT FK</td><td>关联</td></tr>
+            <tr><td>delivery_date / qty_total</td><td>DATE / INT</td><td>交期/总件数</td></tr>
+            <tr><td>status</td><td>ENUM</td><td>DRAFT/CONFIRMED/PRODUCING/SHIPPED/DONE</td></tr>
+          </table>
+        </div>
+
+        <div class="sub2-title">contract（合同）</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>字段</th><th>类型</th><th>说明</th></tr>
+            <tr><td>contract_no</td><td>VARCHAR</td><td>HT-编号</td></tr>
+            <tr><td>type</td><td>ENUM</td><td>MATERIAL/PROCESS/SUPPLEMENT</td></tr>
+            <tr><td>factory_id / order_id</td><td>BIGINT FK</td><td>关联</td></tr>
+            <tr><td>account_period_days</td><td>INT</td><td>45(材料)/30(加工)天</td></tr>
+            <tr><td>deposit_ratio / mid_ratio / final_ratio</td><td>DECIMAL(5,2)</td><td>定金/中期/尾款比例</td></tr>
+            <tr><td>portal_status</td><td>ENUM</td><td>PUSHED/STAMPED/SHIPPED/RECONCILED</td></tr>
+            <tr><td>stamp_at / stamp_by</td><td>DATETIME / VARCHAR</td><td>盖章时间/人（门户操作快照）</td></tr>
+          </table>
+        </div>
+
+        <div class="sub2-title">reconciliation（对账单）</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>字段</th><th>说明</th></tr>
+            <tr><td>reconcile_no (DZ-) / contract_id / total_amount / tax_amount / invoice_no / status</td><td>含税/不含税、发票校验误差≤¥0.01</td></tr>
+          </table>
+        </div>
+
+        <div class="sub2-title">payment_request（付款申请）</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>字段</th><th>说明</th></tr>
+            <tr><td>pr_no (PR-) / reconcile_id / amount / prepay_offset / slip_url / approval_status / approved_by / approved_at</td><td>单级审批，水单OSS链接，超付校验</td></tr>
+          </table>
+        </div>
+
+        <div class="sub2-title">settlement（结算清单）</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>字段</th><th>说明</th></tr>
+            <tr><td>js_no (JS-) / order_id / shipped_qty / revenue / cost_total / profit / tax_refund / net_profit / status</td><td>待结算/已结算，含/不含退税双视图</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sub-title">快照机制说明</div>
+        <div class="alert alert-w">
+          <b>核心原则</b>：下游单据创建时，锁定上游关键数值为快照副本。后续上游修改不影响已创建的下游单据。
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>快照时机</th><th>锁定内容</th><th>锁定原因</th></tr>
+            <tr><td>报价→合同</td><td>费用明细、单价、损耗率</td><td>合同金额已确定</td></tr>
+            <tr><td>供应商盖章</td><td>合同材料清单、单价</td><td>盖章即合同生效，不可改</td></tr>
+            <tr><td>对账单创建</td><td>发货时合同单价</td><td>对账依据不可追溯修改</td></tr>
+            <tr><td>结算确认</td><td>总货款、总成本、退税计算</td><td>财务记账依据</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. Module Specs -->
+    <div class="section" id="m01">
+      <div class="section-title">4. 模块规格</div>
+
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <span class="num">01</span>
+          <span style="font-size:16px;font-weight:700;color:var(--indigo)">基础资料管理</span>
+          <span class="mod-chip">工厂主档</span><span class="mod-chip">客户主档</span>
+        </div>
+        <div class="sub2-title">功能清单</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>功能</th><th>说明</th><th>优先级</th></tr>
+            <tr><td>工厂档案管理</td><td>新建/编辑/启用/停用，CN自动编号，含银行账号、税号</td><td><span class="p1">P1</span></td></tr>
+            <tr><td>客户档案管理</td><td>新建/编辑/启用/停用，S自动编号，含等级、币种</td><td><span class="p1">P1</span></td></tr>
+            <tr><td>搜索/筛选</td><td>按名称/编号/状态实时过滤</td><td><span class="p1">P1</span></td></tr>
+            <tr><td>无物理删除</td><td>只能停用，不能删除已有业务数据的主档</td><td><span class="p1">P1</span></td></tr>
+          </table>
+        </div>
+        <div class="sub2-title">特殊规则</div>
+        <div class="rule-box">
+          <ul>
+            <li>停用不删除：停用后不可选为新单据的合作方，但历史数据保留</li>
+            <li>工厂类型：材料商/加工厂/两者均有，决定可签合同类型</li>
+            <li>客户等级(A/B/C)：影响报价模板推荐（暂无硬性约束）</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card" id="m02a">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <span class="num">02A</span>
+          <span style="font-size:16px;font-weight:700;color:var(--indigo)">样衣管理</span>
+          <span class="mod-chip">S-编号</span><span class="mod-chip">版师工作台</span>
+        </div>
+        <div class="sub2-title">状态机</div>
+        <div class="flow-row">
+          <div class="flow-step gray">待打版</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step">打版中</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step teal">打版完成</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step alt">已确认</div>
+        </div>
+        <div style="margin:4px 0 12px 0;font-size:12px;color:var(--gray-5)">打版完成 → 业务驳回 → 打版中（version+1）</div>
+        <div class="sub2-title">功能清单</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>功能</th><th>角色</th><th>说明</th></tr>
+            <tr><td>新建样衣需求</td><td>业务</td><td>选客户，填款式/季节/工艺要求</td></tr>
+            <tr><td>指派版师</td><td>业务/管理员</td><td>从版师列表选择，状态→打版中</td></tr>
+            <tr><td>提交完成</td><td>版师</td><td>上传版型文件（附件），状态→打版完成</td></tr>
+            <tr><td>确认/驳回</td><td>业务</td><td>驳回需填原因，version+1，重新进入打版中</td></tr>
+            <tr><td>版师视图</td><td>版师</td><td>只看分配给自己的任务，专注工作台</td></tr>
+            <tr><td>历史版次</td><td>全员</td><td>查看每次驳回原因和重做记录</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" id="m02b">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <span class="num">02B</span>
+          <span style="font-size:16px;font-weight:700;color:var(--indigo)">客户报价</span>
+          <span class="mod-chip">Q-编号</span><span class="mod-chip">损耗计算</span>
+        </div>
+        <div class="sub2-title">核心计算逻辑</div>
+        <div class="alert alert-i">
+          <b>含损单价</b> = 原单价 ÷ (1 - 损耗率%) <br>
+          <b>小计</b> = 含损单价 × 总用量（含损）<br>
+          <b>全局损耗率</b>：修改后批量重算所有行，可单行覆盖
+        </div>
+        <div class="sub2-title">功能清单</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>功能</th><th>说明</th></tr>
+            <tr><td>费用明细表</td><td>动态增减行：费用项目/单位/用量/单价/损耗率/含损单价/总用量/小计</td></tr>
+            <tr><td>汇总栏</td><td>材料成本/毛利率/单件报价/总额，实时计算</td></tr>
+            <tr><td>保存草稿/发出报价</td><td>DRAFT→SENT，发出后锁定，不可修改</td></tr>
+            <tr><td>客户确认</td><td>SENT→CONFIRMED，可手动记录</td></tr>
+            <tr><td>转合同</td><td>CONFIRMED→TO_CONTRACT，跳转至04-合同并预填信息</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" id="m03">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <span class="num">03</span>
+          <span style="font-size:16px;font-weight:700;color:var(--indigo)">订单管理</span>
+          <span class="mod-chip">O-编号</span><span class="mod-chip">尺码矩阵</span>
+        </div>
+        <div class="sub2-title">四大子模块</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>Tab</th><th>内容</th><th>说明</th></tr>
+            <tr><td>基本信息</td><td>订单头部信息</td><td>PO号、客户、交期、总件数、关联报价</td></tr>
+            <tr><td>尺码搭配</td><td>颜色×尺码矩阵</td><td>可动态添加颜色/尺码列，每格可编辑件数</td></tr>
+            <tr><td>用料核算</td><td>每种面料的用量预算</td><td>净用量/损耗率/含损用量/件数/总采购量/预算，引用报价费用项</td></tr>
+            <tr><td>出货记录</td><td>分批出货记录</td><td>出货日期/件数/箱数，用于触发对账</td></tr>
+          </table>
+        </div>
+        <div class="alert alert-w">出货记录登记后，系统提示"出货后才可发起供应商对账"，引导操作流程</div>
+      </div>
+
+      <div class="card" id="m04">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <span class="num">04</span>
+          <span style="font-size:16px;font-weight:700;color:var(--indigo)">合同管理</span>
+          <span class="mod-chip">HT-编号</span><span class="mod-chip">门户推送</span>
+        </div>
+        <div class="sub2-title">合同类型规则</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>类型</th><th>账期</th><th>特殊说明</th></tr>
+            <tr><td>材料合同</td><td>最后发货日+45天</td><td>包含材料清单（材料/规格/单位/单价/数量/金额）</td></tr>
+            <tr><td>加工合同</td><td>最后发货日+30天</td><td>推送门户后，加工厂可在门户查看订单明细（尺码表、数量搭配）</td></tr>
+            <tr><td>补料合同</td><td>继承主合同账期</td><td>挂载在材料合同下，用于追加材料</td></tr>
+          </table>
+        </div>
+        <div class="sub2-title">门户推送5步流</div>
+        <div class="flow-row">
+          <div class="flow-step gray">创建合同</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step">推送门户</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step alt">供应商盖章</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step teal">执行发货</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step">完成对账</div>
+        </div>
+        <div class="sub2-title">付款条款</div>
+        <div class="rule-box">
+          <ul>
+            <li>定金比例/中期款比例/尾款比例，默认 30% / 40% / 30%，三者之和须等于100%</li>
+            <li>盖章后锁定：合同材料清单和单价快照为"已盖章锁定"，不可修改</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card" id="m05">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <span class="num">05</span>
+          <span style="font-size:16px;font-weight:700;color:var(--indigo)">供应商门户</span>
+          <span class="mod-chip">H5 Web</span><span class="mod-chip">4步协同</span>
+        </div>
+        <div class="sub2-title">H5门户4步流（强制顺序）</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>步骤</th><th>操作</th><th>锁定条件</th><th>触发后续</th></tr>
+            <tr><td><span class="num" style="background:var(--teal)">1</span> 确认盖章</td><td>查看合同→确认盖章</td><td>推送后可操作</td><td>解锁步骤2</td></tr>
+            <tr><td><span class="num" style="background:var(--amber)">2</span> 登记发货</td><td>填发货单：日期/件数/箱数/快递单号</td><td>步骤1完成后</td><td>解锁步骤3</td></tr>
+            <tr><td><span class="num" style="background:var(--rust)">3</span> 确认对账</td><td>查看对账单→确认金额</td><td>步骤2完成后</td><td>解锁步骤4</td></tr>
+            <tr><td><span class="num" style="background:var(--indigo)">4</span> 上传发票</td><td>上传发票文件（PDF/图片）</td><td>步骤3完成后</td><td>财务收票</td></tr>
+          </table>
+        </div>
+        <div class="sub2-title">管理员功能</div>
+        <div class="rule-box">
+          <ul>
+            <li>供应商账号管理：新建账号、重置密码（系统生成随机密码）</li>
+            <li>合同追踪看板：查看所有合同的4步进度状态</li>
+            <li>账号格式：纯字母数字，登录URL为系统固定H5地址</li>
+            <li>账号说明：账号密码由采购方提供给供应商，仅支持网页端访问</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card" id="m06">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <span class="num">06</span>
+          <span style="font-size:16px;font-weight:700;color:var(--indigo)">对账付款</span>
+          <span class="mod-chip">DZ-编号</span><span class="mod-chip">PR-编号</span>
+        </div>
+        <div class="sub2-title">4个Tab功能</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>Tab</th><th>核心功能</th><th>关键规则</th></tr>
+            <tr><td>对账单</td><td>查看/创建对账，含发货快照、发票校验</td><td>发票金额误差≤¥0.01才能通过校验</td></tr>
+            <tr><td>付款申请</td><td>基于对账单发起付款，上传水单</td><td>超付拦截：实付不得超过余额；单级业务审批</td></tr>
+            <tr><td>预付款</td><td>管理定金/预付款，冲抵后续付款</td><td>已冲抵金额、余额实时展示</td></tr>
+            <tr><td>无合同费用</td><td>非合同类费用（运费等）</td><td>两路入口：新建对账单 或 直接付款申请</td></tr>
+          </table>
+        </div>
+        <div class="sub2-title">付款申请关键规则</div>
+        <div class="rule-box">
+          <ul>
+            <li><b>超付拦截</b>：系统自动计算"应付余额"，输入金额超额时弹出阻止提示，不可继续提交</li>
+            <li><b>预付款冲抵</b>：勾选"使用预付款冲抵"后自动从预付余额中扣减</li>
+            <li><b>水单上传</b>：支持Ctrl+V粘贴截图（剪贴板图片自动转文件），也支持文件选择</li>
+            <li><b>单级审批</b>：业务提交→财务/管理员审批→已付款，无多级</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card" id="m07">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <span class="num">07</span>
+          <span style="font-size:16px;font-weight:700;color:var(--indigo)">结算清单</span>
+          <span class="mod-chip">JS-编号</span><span class="mod-chip">利润分析</span>
+        </div>
+        <div class="sub2-title">成本计算规则</div>
+        <div class="alert alert-i">
+          <b>有票（含增值税发票）</b>：成本 = 发票金额 ÷ (1 + 实际税率)（不含税价）<br>
+          <b>无票</b>：成本 = 付款金额全额（含税全额）<br>
+          <b>成本单价</b> = 总成本 ÷ 出货件数
+        </div>
+        <div class="sub2-title">利润双视图</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>视图</th><th>净利公式</th><th>用途</th></tr>
+            <tr><td>含退税利润</td><td>净利 = 货款 - 成本 + 退税金额</td><td>含出口退税后实际利润</td></tr>
+            <tr><td>不含退税利润</td><td>净利 = 货款 - 成本</td><td>货款到账前的毛利估算</td></tr>
+          </table>
+        </div>
+        <div class="sub2-title">退税计算</div>
+        <div class="alert alert-i">
+          退税金额 = 含税面料采购额 × (出口退税率 - 增值税率差)
+        </div>
+        <div class="sub2-title">结算时机</div>
+        <div class="rule-box">
+          <ul>
+            <li><b>待结算</b>：出货后，业务可创建草稿结算单（待收汇状态）</li>
+            <li><b>已结算</b>：收汇后，财务确认结算，生成毛利记录</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. API -->
+    <div class="section" id="api">
+      <div class="section-title">5. API 接口规范</div>
+
+      <div class="card">
+        <div class="sub-title">通用规范</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>项目</th><th>规范</th></tr>
+            <tr><td>Base URL</td><td><code>/api/v1</code></td></tr>
+            <tr><td>认证</td><td>Bearer Token in Header: <code>Authorization: Bearer {token}</code></td></tr>
+            <tr><td>Content-Type</td><td><code>application/json</code>（文件上传用 multipart/form-data）</td></tr>
+            <tr><td>响应格式</td><td><code>{"code": 0, "msg": "ok", "data": {...}, "total": 100}</code></td></tr>
+            <tr><td>错误码</td><td>0=成功, 401=未登录, 403=无权限, 1001=参数错误, 1002=业务异常</td></tr>
+            <tr><td>分页</td><td>Query: <code>page=1&size=20</code>，响应含 total</td></tr>
+            <tr><td>时间格式</td><td>ISO 8601: <code>2024-01-15T08:30:00+08:00</code></td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sub-title">主要接口列表</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>模块</th><th>Method</th><th>Path</th><th>说明</th></tr>
+            <tr><td rowspan="3">基础资料</td><td>GET</td><td><code>/factories</code></td><td>工厂列表（支持筛选）</td></tr>
+            <tr><td>POST</td><td><code>/factories</code></td><td>新建工厂</td></tr>
+            <tr><td>PATCH</td><td><code>/factories/{id}/status</code></td><td>启用/停用</td></tr>
+            <tr><td rowspan="3">样衣</td><td>GET</td><td><code>/samples</code></td><td>样衣列表</td></tr>
+            <tr><td>POST</td><td><code>/samples/{id}/assign</code></td><td>指派版师</td></tr>
+            <tr><td>POST</td><td><code>/samples/{id}/submit</code></td><td>版师提交完成</td></tr>
+            <tr><td rowspan="3">报价</td><td>GET</td><td><code>/quotes</code></td><td>报价列表</td></tr>
+            <tr><td>POST</td><td><code>/quotes/{id}/send</code></td><td>发出报价（锁定）</td></tr>
+            <tr><td>POST</td><td><code>/quotes/{id}/to-contract</code></td><td>转合同</td></tr>
+            <tr><td rowspan="3">合同</td><td>POST</td><td><code>/contracts/{id}/push-portal</code></td><td>推送供应商门户</td></tr>
+            <tr><td>GET</td><td><code>/contracts/{id}/portal-log</code></td><td>门户操作日志</td></tr>
+            <tr><td>PATCH</td><td><code>/contracts/{id}/stamp</code></td><td>供应商盖章（门户接口）</td></tr>
+            <tr><td rowspan="2">对账付款</td><td>POST</td><td><code>/payment-requests</code></td><td>新建付款申请（含超付校验）</td></tr>
+            <tr><td>POST</td><td><code>/payment-requests/{id}/approve</code></td><td>审批付款</td></tr>
+            <tr><td rowspan="2">结算</td><td>POST</td><td><code>/settlements</code></td><td>新建结算单</td></tr>
+            <tr><td>POST</td><td><code>/settlements/{id}/confirm</code></td><td>确认结算（财务操作）</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sub-title">供应商门户专用接口</div>
+        <div class="alert alert-w">门户接口使用独立token，Base Path: <code>/portal/v1</code>，自动过滤本供应商数据</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>Method</th><th>Path</th><th>说明</th></tr>
+            <tr><td>POST</td><td><code>/portal/v1/auth/login</code></td><td>账号密码登录</td></tr>
+            <tr><td>GET</td><td><code>/portal/v1/contracts</code></td><td>我的合同列表（含4步进度）</td></tr>
+            <tr><td>POST</td><td><code>/portal/v1/contracts/{id}/stamp</code></td><td>步骤1：盖章确认</td></tr>
+            <tr><td>POST</td><td><code>/portal/v1/contracts/{id}/ship</code></td><td>步骤2：登记发货</td></tr>
+            <tr><td>POST</td><td><code>/portal/v1/contracts/{id}/reconcile</code></td><td>步骤3：确认对账</td></tr>
+            <tr><td>POST</td><td><code>/portal/v1/contracts/{id}/invoice</code></td><td>步骤4：上传发票</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. Business Rules -->
+    <div class="section" id="rules">
+      <div class="section-title">6. 核心业务规则</div>
+
+      <div class="card">
+        <div class="sub-title">财务计算规则</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>规则名</th><th>公式/约束</th></tr>
+            <tr><td>含损单价</td><td><code>含损单价 = 原单价 ÷ (1 - 损耗率%)</code></td></tr>
+            <tr><td>成本（有票）</td><td><code>成本 = 发票金额 ÷ (1 + 税率)，即不含税价</code></td></tr>
+            <tr><td>成本（无票）</td><td><code>成本 = 付款全额（含税）</code></td></tr>
+            <tr><td>成本单价</td><td><code>成本单价 = 总成本 ÷ 出货件数</code></td></tr>
+            <tr><td>退税金额</td><td><code>退税 = 含税面料采购额 × (退税率 - 增值税率差)</code></td></tr>
+            <tr><td>含退税净利</td><td><code>净利 = 总货款 - 总成本 + 退税金额</code></td></tr>
+            <tr><td>不含退税净利</td><td><code>净利 = 总货款 - 总成本</code></td></tr>
+            <tr><td>发票校验</td><td><code>|发票金额 - 对账金额| ≤ ¥0.01</code></td></tr>
+            <tr><td>超付拦截</td><td><code>申请金额 > (合同金额 - 已付金额) → 阻止提交</code></td></tr>
+            <tr><td>付款条款验证</td><td><code>定金% + 中期% + 尾款% = 100%</code></td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sub-title">账期规则</div>
+        <div class="rule-box">
+          <ul>
+            <li><b>材料合同</b>：账期 = 最后发货日 + 45天</li>
+            <li><b>加工合同</b>：账期 = 最后发货日 + 30天</li>
+            <li>账期字段在合同创建时由系统自动计算，也可手动修改</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sub-title">状态流转规则（不可逆）</div>
+        <div class="alert alert-e">除驳回外，所有状态只能正向流转，不可后退。已确认/已盖章状态的数据，核心字段不可修改。</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>单据</th><th>状态流转</th><th>不可逆节点</th></tr>
+            <tr><td>报价</td><td>草稿→已发出→已确认→转合同</td><td>已发出后锁定</td></tr>
+            <tr><td>合同</td><td>草稿→已推送→已盖章→执行中→已完成</td><td>已盖章后锁定</td></tr>
+            <tr><td>付款申请</td><td>草稿→待审批→已审批→已付款</td><td>已审批后锁定</td></tr>
+            <tr><td>结算单</td><td>待结算→已结算</td><td>确认结算后锁定</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sub-title">数据一致性规则</div>
+        <div class="rule-box">
+          <ul>
+            <li><b>无物理删除</b>：所有主档（工厂/客户）和单据只能停用/作废，不能物理删除</li>
+            <li><b>下游引用保护</b>：有未完成下游单据的主档不可停用</li>
+            <li><b>编号唯一性</b>：同日期序号用Redis INCR保证并发安全</li>
+            <li><b>金额精度</b>：所有金额字段存储为 DECIMAL(15,4)，展示时四舍五入到2位</li>
+            <li><b>汇率快照</b>：对账/结算时锁定当日汇率（如有外币）</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- 7. UI Spec -->
+    <div class="section" id="ui">
+      <div class="section-title">7. UI 设计规范</div>
+
+      <div class="card">
+        <div class="sub-title">色彩系统</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+          <div style="text-align:center">
+            <div style="width:60px;height:60px;background:#1E3A5F;border-radius:8px;margin:0 auto 4px"></div>
+            <div style="font-size:11px;color:var(--gray-5)">靛蓝 #1E3A5F<br>主色</div>
+          </div>
+          <div style="text-align:center">
+            <div style="width:60px;height:60px;background:#F5EDDC;border-radius:8px;margin:0 auto 4px;border:1px solid #e0d0b0"></div>
+            <div style="font-size:11px;color:var(--gray-5)">亚麻 #F5EDDC<br>背景色</div>
+          </div>
+          <div style="text-align:center">
+            <div style="width:60px;height:60px;background:#D17A40;border-radius:8px;margin:0 auto 4px"></div>
+            <div style="font-size:11px;color:var(--gray-5)">锈红 #D17A40<br>强调色</div>
+          </div>
+          <div style="text-align:center">
+            <div style="width:60px;height:60px;background:#C04042;border-radius:8px;margin:0 auto 4px"></div>
+            <div style="font-size:11px;color:var(--gray-5)">朱红 #C04042<br>错误/警告</div>
+          </div>
+          <div style="text-align:center">
+            <div style="width:60px;height:60px;background:#3E8E7E;border-radius:8px;margin:0 auto 4px"></div>
+            <div style="font-size:11px;color:var(--gray-5)">青碧 #3E8E7E<br>成功/完成</div>
+          </div>
+          <div style="text-align:center">
+            <div style="width:60px;height:60px;background:#C8901E;border-radius:8px;margin:0 auto 4px"></div>
+            <div style="font-size:11px;color:var(--gray-5)">琥珀 #C8901E<br>进行中/待处理</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sub-title">间距/圆角系统</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>变量</th><th>值</th><th>使用场景</th></tr>
+            <tr><td><code>--r</code></td><td>4px</td><td>按钮、输入框、标签</td></tr>
+            <tr><td><code>--r-lg</code></td><td>8px</td><td>卡片、弹窗、面板</td></tr>
+            <tr><td>间距基础单位</td><td>4px</td><td>内外边距均为4的倍数</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sub-title">组件规范</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>组件</th><th>规范</th></tr>
+            <tr><td>侧边栏</td><td>宽240px，固定定位，靛蓝背景，当前页面高亮+锈红左边框</td></tr>
+            <tr><td>顶栏</td><td>高52px，白色，固定定位，z-index:10，含页面标题</td></tr>
+            <tr><td>按钮-主要</td><td>靛蓝背景，白色文字，hover深色，禁用态灰色</td></tr>
+            <tr><td>按钮-次要</td><td>白底靛蓝边框，hover亚麻背景</td></tr>
+            <tr><td>按钮-危险</td><td>朱红色，仅用于不可逆操作确认</td></tr>
+            <tr><td>表格</td><td>表头亚麻色，奇偶行hover显示灰底，分页器靛蓝</td></tr>
+            <tr><td>弹窗</td><td>最大宽度640px，圆角8px，遮罩rgba(0,0,0,.4)</td></tr>
+            <tr><td>Toast通知</td><td>右上角，自动3s消失，成功/错误/信息三种样式</td></tr>
+            <tr><td>状态标签</td><td>圆角胶囊，颜色对应状态语义（见色彩系统）</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 8. Deploy -->
+    <div class="section" id="deploy">
+      <div class="section-title">8. 部署方案</div>
+
+      <div class="card">
+        <div class="sub-title">推荐架构（小型生产环境）</div>
+        <div class="arch">
+Internet → Nginx (SSL终止 + 反向代理)
+       ├── /          → 管理后台 (静态资源 dist/)
+       ├── /portal    → 供应商门户 (静态资源 portal-dist/)
+       └── /api/v1    → Spring Boot 服务 :8080
+                              ├── MySQL 8.0  (主从或单机)
+                              ├── Redis 7    (单机或Sentinel)
+                              └── OSS        (阿里云/MinIO)
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sub-title">环境说明</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>环境</th><th>数据库</th><th>说明</th></tr>
+            <tr><td>开发(dev)</td><td>本地MySQL + Redis</td><td>前后端各自独立启动，CORS宽松</td></tr>
+            <tr><td>测试(test)</td><td>独立测试库</td><td>集成测试，数据可清空</td></tr>
+            <tr><td>生产(prod)</td><td>云数据库 RDS</td><td>SSL, 每日备份, 只读副本</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sub-title">关键配置项</div>
+        <pre>
+# application.yml
+spring:
+  datasource:
+    url: jdbc:mysql://host:3306/i9_clothes?useSSL=true
+    username: ${DB_USER}
+    password: ${DB_PASS}
+  redis:
+    host: ${REDIS_HOST}
+    password: ${REDIS_PASS}
+
+oss:
+  endpoint: oss-cn-hangzhou.aliyuncs.com
+  bucket: i9-clothes-files
+  access-key: ${OSS_AK}
+  secret-key: ${OSS_SK}
+
+jwt:
+  secret: ${JWT_SECRET}     # ≥32位随机字符串
+  expire: 86400             # 1天（秒）
+        </pre>
+      </div>
+
+      <div class="card">
+        <div class="sub-title">初始数据</div>
+        <div class="rule-box">
+          <ul>
+            <li>系统初始化：创建超级管理员账号（admin），密码强制首次修改</li>
+            <li>内置角色：ADMIN（管理员）/ BUSINESS（业务员）/ FINANCE（财务）/ PATTERNMAKER（版师）</li>
+            <li>供应商账号通过管理后台创建，不支持自注册</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align:center;padding:32px 0;color:var(--gray-5);font-size:12px">
+      I9 服装制造管理系统开发手册 v1.0 · 基于 UI 设计稿分析生成 · 2024-01
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+</div><!-- /layout -->
+
+<script>
+function goto(id){
+  const el = document.getElementById(id);
+  if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
+  document.querySelectorAll('.nav-a').forEach(a=>a.classList.remove('act'));
+}
+</script>
+</body>
+</html>

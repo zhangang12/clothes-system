@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>I9 服装制造管理系统 — 研发待办</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#FBF8F2;color:#1F1F22;font-size:14px;line-height:1.6}
+:root{
+  --indigo:#1E3A5F;--indigo-d:#152A45;--indigo-l:#2C5180;
+  --linen:#F5EDDC;--linen-d:#E8DCC0;--canvas:#FBF8F2;
+  --rust:#D17A40;--rust-d:#B86530;
+  --vermilion:#C04042;--teal:#3E8E7E;--amber:#C8901E;
+  --gray-9:#1F1F22;--gray-7:#37383C;--gray-5:#6F7178;
+  --gray-3:#B5B7BD;--gray-1:#E5E2DA;--gray-0:#F4F1EA;
+  --r:4px;--r-lg:8px
+}
+
+/* Layout */
+.layout{display:flex;min-height:100vh}
+.sidebar{width:240px;background:var(--indigo);color:#fff;flex-shrink:0;position:sticky;top:0;height:100vh;overflow-y:auto}
+.sidebar .logo{padding:20px 16px 12px;font-size:15px;font-weight:700;border-bottom:1px solid rgba(255,255,255,.1)}
+.sidebar .logo small{display:block;font-size:11px;font-weight:400;opacity:.6;margin-top:2px}
+.nav-gl{padding:16px 16px 4px;font-size:11px;opacity:.5;letter-spacing:.06em;text-transform:uppercase}
+.nav-a{display:block;padding:8px 16px;color:rgba(255,255,255,.75);border-left:3px solid transparent;transition:.15s;font-size:13px;cursor:pointer}
+.nav-a:hover{background:rgba(255,255,255,.07);color:#fff}
+.nav-a.act{background:rgba(255,255,255,.12);color:#fff;border-left-color:var(--rust)}
+.main{flex:1;overflow:auto}
+.topbar{background:#fff;border-bottom:1px solid var(--gray-1);padding:0 24px;display:flex;align-items:center;height:52px;gap:12px;position:sticky;top:0;z-index:10}
+.topbar h1{font-size:16px;font-weight:600;color:var(--indigo)}
+.content{padding:24px}
+
+/* Stats */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:24px}
+.stat-card{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);padding:16px}
+.stat-card .num{font-size:28px;font-weight:700;color:var(--indigo)}
+.stat-card .label{font-size:12px;color:var(--gray-5);margin-top:4px}
+
+/* Filters */
+.filter-bar{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);padding:12px 16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:20px}
+.filter-chip{padding:5px 14px;border-radius:20px;border:1px solid var(--gray-1);font-size:12px;font-weight:500;cursor:pointer;background:#fff;color:var(--gray-7);transition:.15s}
+.filter-chip:hover,.filter-chip.on{background:var(--indigo);color:#fff;border-color:var(--indigo)}
+.filter-sep{color:var(--gray-3);font-size:12px}
+input[type=text]{border:1px solid var(--gray-1);border-radius:var(--r);padding:6px 10px;font-size:13px;width:180px;outline:none}
+input[type=text]:focus{border-color:var(--indigo)}
+
+/* Kanban */
+.kanban{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:32px}
+.col{background:var(--gray-0);border-radius:var(--r-lg);padding:12px}
+.col-head{display:flex;align-items:center;gap:8px;margin-bottom:12px;font-weight:600;font-size:13px}
+.col-cnt{background:#fff;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:700;color:var(--gray-5)}
+
+/* Task card */
+.task-card{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);padding:12px;margin-bottom:8px;cursor:pointer;transition:.12s}
+.task-card:hover{border-color:var(--indigo);box-shadow:0 2px 8px rgba(30,58,95,.08)}
+.task-card .tc-id{font-size:10px;color:var(--gray-3);font-family:monospace}
+.task-card .tc-title{font-size:13px;font-weight:600;color:var(--gray-9);margin:4px 0 6px;line-height:1.35}
+.task-card .tc-meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.task-card .tc-desc{font-size:12px;color:var(--gray-5);margin-bottom:8px;line-height:1.4}
+
+/* Tags */
+.tag{display:inline-block;font-size:10px;padding:2px 7px;border-radius:8px;font-weight:600;white-space:nowrap}
+.p1{background:#fee2e2;color:#991b1b}
+.p2{background:#fef3c7;color:#92400e}
+.p3{background:#dbeafe;color:#1e40af}
+.p4{background:#f3f4f6;color:#374151}
+.t-f{background:#ede9fe;color:#4c1d95} /* 前端 */
+.t-b{background:#d1fae5;color:#065f46} /* 后端 */
+.t-db{background:#fce7f3;color:#9d174d} /* 数据库 */
+.t-h5{background:#e0f2fe;color:#0c4a6e} /* H5 */
+.t-infra{background:#f0fdf4;color:#14532d} /* 基础设施 */
+.est{background:var(--linen);color:var(--indigo);font-size:10px;padding:2px 7px;border-radius:8px;font-weight:600}
+.tag-mod{font-size:10px;padding:2px 6px;border-radius:4px;background:var(--linen);color:var(--rust);font-weight:600}
+
+/* Module sprint sections */
+.sprint{margin-bottom:40px}
+.sprint-head{display:flex;align-items:center;gap:12px;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid var(--linen-d)}
+.sprint-num{width:32px;height:32px;background:var(--indigo);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0}
+.sprint-title{font-size:18px;font-weight:700;color:var(--indigo)}
+.sprint-meta{font-size:12px;color:var(--gray-5)}
+
+/* Table view */
+.tbl-section{margin-bottom:32px}
+.section-title{font-size:16px;font-weight:700;color:var(--indigo);margin-bottom:12px}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--gray-1);border-radius:var(--r-lg);margin-bottom:24px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--linen);color:var(--gray-7);font-weight:600;padding:9px 12px;text-align:left;border-bottom:1px solid var(--linen-d)}
+td{padding:9px 12px;border-bottom:1px solid var(--gray-0);vertical-align:top}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--gray-0)}
+
+/* Progress */
+.progress-bar{height:6px;background:var(--gray-1);border-radius:3px;overflow:hidden;margin-top:4px}
+.progress-fill{height:100%;background:var(--indigo);border-radius:3px;transition:.3s}
+
+/* View toggle */
+.view-toggle{display:flex;gap:0;background:var(--gray-0);border-radius:var(--r);padding:2px;margin-left:auto}
+.vt-btn{padding:5px 14px;border-radius:3px;font-size:12px;font-weight:500;cursor:pointer;color:var(--gray-5);border:none;background:none;transition:.15s}
+.vt-btn.on{background:#fff;color:var(--indigo);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+
+/* Priority dot */
+.pdot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px;flex-shrink:0}
+.pdot-p1{background:#ef4444}
+.pdot-p2{background:#f59e0b}
+.pdot-p3{background:#3b82f6}
+.pdot-p4{background:#9ca3af}
+
+/* Sprint roadmap */
+.road{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:32px}
+.road-col{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);padding:16px}
+.road-col h3{font-size:13px;font-weight:700;color:var(--indigo);margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.road-item{font-size:12px;padding:5px 8px;background:var(--linen);border-radius:4px;margin-bottom:6px;color:var(--gray-7)}
+.road-item.done{background:#dcfce7;color:#166534;text-decoration:line-through;opacity:.7}
+.road-item.wip{background:#ede9fe;color:#4c1d95}
+
+/* Detail panel */
+.detail-panel{display:none;position:fixed;right:0;top:0;bottom:0;width:440px;background:#fff;box-shadow:-4px 0 20px rgba(0,0,0,.12);z-index:100;overflow-y:auto;padding:24px}
+.detail-panel.open{display:block}
+.dp-close{position:absolute;top:16px;right:16px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--gray-0);cursor:pointer;font-size:16px;border:none}
+.dp-close:hover{background:var(--gray-1)}
+.dp-id{font-size:11px;color:var(--gray-3);font-family:monospace;margin-bottom:6px}
+.dp-title{font-size:18px;font-weight:700;color:var(--indigo);margin-bottom:12px;line-height:1.3}
+.dp-meta{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.dp-section{margin-bottom:16px}
+.dp-section h4{font-size:12px;font-weight:700;color:var(--gray-5);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+.dp-section p,.dp-section li{font-size:13px;color:var(--gray-7);line-height:1.6}
+.dp-section ul{padding-left:18px}
+.dp-ac{display:flex;flex-direction:column;gap:6px}
+.dp-ac-item{display:flex;align-items:flex-start;gap:8px;font-size:12px;padding:6px 8px;border-radius:4px;background:var(--linen)}
+.dp-ac-item input[type=checkbox]{margin-top:2px;flex-shrink:0}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="logo">I9 服装制造<small>研发待办 v1.0</small></div>
+  <div class="nav-gl">视图</div>
+  <a class="nav-a act" onclick="switchView('kanban')">📋 看板视图</a>
+  <a class="nav-a" onclick="switchView('table')">📊 列表视图</a>
+  <a class="nav-a" onclick="switchView('sprint')">🗓 迭代规划</a>
+  <div class="nav-gl">模块</div>
+  <a class="nav-a" onclick="filterMod('all')">全部模块</a>
+  <a class="nav-a" onclick="filterMod('基础')">01 基础资料</a>
+  <a class="nav-a" onclick="filterMod('样衣')">02A 样衣管理</a>
+  <a class="nav-a" onclick="filterMod('报价')">02B 客户报价</a>
+  <a class="nav-a" onclick="filterMod('订单')">03 订单管理</a>
+  <a class="nav-a" onclick="filterMod('合同')">04 合同管理</a>
+  <a class="nav-a" onclick="filterMod('门户')">05 供应商门户</a>
+  <a class="nav-a" onclick="filterMod('对账')">06 对账付款</a>
+  <a class="nav-a" onclick="filterMod('结算')">07 结算清单</a>
+  <a class="nav-a" onclick="filterMod('基础设施')">基础设施</a>
+  <div class="nav-gl">优先级</div>
+  <a class="nav-a" onclick="filterPri('P1')"><span class="pdot pdot-p1"></span> P1 紧急</a>
+  <a class="nav-a" onclick="filterPri('P2')"><span class="pdot pdot-p2"></span> P2 重要</a>
+  <a class="nav-a" onclick="filterPri('P3')"><span class="pdot pdot-p3"></span> P3 普通</a>
+</nav>
+
+<!-- Main -->
+<div class="main">
+  <div class="topbar">
+    <h1>研发待办 · I9 服装制造管理系统</h1>
+    <input type="text" id="searchInput" placeholder="搜索待办..." oninput="doSearch()">
+    <div class="view-toggle">
+      <button class="vt-btn on" onclick="switchView('kanban')">看板</button>
+      <button class="vt-btn" onclick="switchView('table')">列表</button>
+      <button class="vt-btn" onclick="switchView('sprint')">迭代</button>
+    </div>
+  </div>
+  <div class="content">
+
+    <!-- Stats -->
+    <div class="stats">
+      <div class="stat-card"><div class="num" id="cnt-total">0</div><div class="label">总待办数</div></div>
+      <div class="stat-card"><div class="num" style="color:var(--vermilion)" id="cnt-p1">0</div><div class="label">P1 紧急</div></div>
+      <div class="stat-card"><div class="num" style="color:var(--amber)" id="cnt-p2">0</div><div class="label">P2 重要</div></div>
+      <div class="stat-card"><div class="num" style="color:var(--indigo-l)" id="cnt-p3">0</div><div class="label">P3 普通</div></div>
+      <div class="stat-card"><div class="num" style="color:var(--teal)" id="cnt-done">0</div><div class="label">已完成原型</div></div>
+      <div class="stat-card"><div class="num" id="cnt-pts">0</div><div class="label">总估算天数</div></div>
+    </div>
+
+    <!-- Kanban View -->
+    <div id="view-kanban">
+      <div class="filter-bar">
+        <span style="font-size:12px;color:var(--gray-5)">优先级</span>
+        <div class="filter-chip on" onclick="toggleFilter(this,'pri','全部')">全部</div>
+        <div class="filter-chip" onclick="toggleFilter(this,'pri','P1')"><span class="pdot pdot-p1"></span>P1</div>
+        <div class="filter-chip" onclick="toggleFilter(this,'pri','P2')"><span class="pdot pdot-p2"></span>P2</div>
+        <div class="filter-chip" onclick="toggleFilter(this,'pri','P3')"><span class="pdot pdot-p3"></span>P3</div>
+        <div class="filter-sep">|</div>
+        <span style="font-size:12px;color:var(--gray-5)">类型</span>
+        <div class="filter-chip on" onclick="toggleFilter(this,'type','全部')">全部</div>
+        <div class="filter-chip" onclick="toggleFilter(this,'type','前端')"><span class="tag t-f">前端</span></div>
+        <div class="filter-chip" onclick="toggleFilter(this,'type','后端')"><span class="tag t-b">后端</span></div>
+        <div class="filter-chip" onclick="toggleFilter(this,'type','H5')"><span class="tag t-h5">H5</span></div>
+        <div class="filter-chip" onclick="toggleFilter(this,'type','数据库')"><span class="tag t-db">DB</span></div>
+      </div>
+      <div class="kanban" id="kanban-board"><!-- JS rendered --></div>
+    </div>
+
+    <!-- Table View -->
+    <div id="view-table" style="display:none">
+      <div class="tbl-wrap">
+        <table id="task-table">
+          <thead>
+            <tr>
+              <th>ID</th><th>标题</th><th>模块</th><th>优先级</th><th>类型</th><th>估算</th><th>状态</th><th>验收标准</th>
+            </tr>
+          </thead>
+          <tbody id="task-tbody"><!-- JS rendered --></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Sprint View -->
+    <div id="view-sprint" style="display:none">
+      <div class="section-title">迭代规划（推荐4周一迭代）</div>
+      <div class="road">
+        <div class="road-col">
+          <h3>🏗 Sprint 1（第1-4周）<br><small style="font-weight:400;font-size:11px">基础框架+主档</small></h3>
+          <div class="road-item wip">项目脚手架搭建</div>
+          <div class="road-item wip">数据库设计&建表</div>
+          <div class="road-item wip">鉴权体系（JWT+角色）</div>
+          <div class="road-item wip">01-工厂/客户CRUD</div>
+          <div class="road-item wip">通用组件库</div>
+          <div class="road-item wip">OSS文件服务对接</div>
+        </div>
+        <div class="road-col">
+          <h3>🎨 Sprint 2（第5-8周）<br><small style="font-weight:400;font-size:11px">生产前流程</small></h3>
+          <div class="road-item">02A-样衣管理全流程</div>
+          <div class="road-item">02B-报价&损耗计算</div>
+          <div class="road-item">03-订单+尺码矩阵</div>
+          <div class="road-item">版师工作台</div>
+          <div class="road-item">文件附件上传</div>
+        </div>
+        <div class="road-col">
+          <h3>📄 Sprint 3（第9-12周）<br><small style="font-weight:400;font-size:11px">合同&门户协同</small></h3>
+          <div class="road-item">04-合同三类型</div>
+          <div class="road-item">快照锁定机制</div>
+          <div class="road-item">05-H5供应商门户</div>
+          <div class="road-item">门户4步流强制顺序</div>
+          <div class="road-item">供应商账号管理</div>
+          <div class="road-item">门户推送通知</div>
+        </div>
+        <div class="road-col">
+          <h3>💳 Sprint 4（第13-16周）<br><small style="font-weight:400;font-size:11px">财务结算</small></h3>
+          <div class="road-item">06-对账4 Tab</div>
+          <div class="road-item">超付拦截逻辑</div>
+          <div class="road-item">水单Ctrl+V粘贴</div>
+          <div class="road-item">07-结算清单</div>
+          <div class="road-item">退税/利润双视图</div>
+          <div class="road-item">数据导出(Excel/PDF)</div>
+        </div>
+      </div>
+
+      <div class="section-title">Sprint 进度</div>
+      <div class="tbl-wrap">
+        <table>
+          <tr><th>迭代</th><th>周期</th><th>重点</th><th>总工作量</th><th>进度</th></tr>
+          <tr>
+            <td><b>Sprint 1</b></td>
+            <td>第1-4周</td>
+            <td>基础架构、主档管理</td>
+            <td>20天</td>
+            <td><div style="font-size:12px;color:var(--teal)">🟢 原型完成</div><div class="progress-bar"><div class="progress-fill" style="width:100%;background:var(--teal)"></div></div></td>
+          </tr>
+          <tr>
+            <td><b>Sprint 2</b></td>
+            <td>第5-8周</td>
+            <td>样衣、报价、订单</td>
+            <td>28天</td>
+            <td><div style="font-size:12px;color:var(--teal)">🟢 原型完成</div><div class="progress-bar"><div class="progress-fill" style="width:100%;background:var(--teal)"></div></div></td>
+          </tr>
+          <tr>
+            <td><b>Sprint 3</b></td>
+            <td>第9-12周</td>
+            <td>合同、供应商门户</td>
+            <td>32天</td>
+            <td><div style="font-size:12px;color:var(--teal)">🟢 原型完成</div><div class="progress-bar"><div class="progress-fill" style="width:100%;background:var(--teal)"></div></div></td>
+          </tr>
+          <tr>
+            <td><b>Sprint 4</b></td>
+            <td>第13-16周</td>
+            <td>对账、付款、结算</td>
+            <td>30天</td>
+            <td><div style="font-size:12px;color:var(--teal)">🟢 原型完成</div><div class="progress-bar"><div class="progress-fill" style="width:100%;background:var(--teal)"></div></div></td>
+          </tr>
+          <tr>
+            <td><b>Sprint 5</b></td>
+            <td>第17-20周</td>
+            <td>集成测试、性能优化、上线准备</td>
+            <td>20天</td>
+            <td><div style="font-size:12px;color:var(--amber)">🟡 待开始</div><div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div></td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<!-- Detail Panel -->
+<div class="detail-panel" id="detailPanel">
+  <button class="dp-close" onclick="closeDetail()">✕</button>
+  <div id="dp-content"></div>
+</div>
+
+<script>
+// ============================================================
+// Task data
+// ============================================================
+const TASKS = [
+  // Infrastructure
+  {id:'INF-001',title:'项目脚手架搭建（前端+后端）',mod:'基础设施',pri:'P1',type:['前端','后端'],est:3,status:'原型完成',
+   desc:'初始化Vue3+Vite前端项目和Spring Boot后端项目，配置ESLint、Prettier、Maven、代码规范。',
+   ac:['前端:npm run dev启动正常','后端:Spring Boot启动正常','CORS配置正确','代码风格检查通过']},
+  {id:'INF-002',title:'数据库设计与DDL脚本',mod:'基础设施',pri:'P1',type:['数据库'],est:3,status:'原型完成',
+   desc:'设计全部9个模块的数据库表，编写DDL脚本，包含索引、外键、注释。',
+   ac:['所有表创建成功','外键约束正确','索引覆盖查询场景','DDL脚本版本管理']},
+  {id:'INF-003',title:'JWT鉴权体系与RBAC角色',mod:'基础设施',pri:'P1',type:['后端'],est:2,status:'原型完成',
+   desc:'实现JWT生成/验证，4种角色(ADMIN/BUSINESS/FINANCE/PATTERNMAKER)，接口权限注解。',
+   ac:['登录返回token','token过期401','无权限403','角色隔离测试通过']},
+  {id:'INF-004',title:'供应商门户独立鉴权',mod:'基础设施',pri:'P1',type:['后端'],est:2,status:'待开发',
+   desc:'供应商portal独立token体系，自动过滤本供应商数据，防止越权访问。',
+   ac:['供应商只能看自己合同','越权访问返回403','账号密码登录正常']},
+  {id:'INF-005',title:'OSS/MinIO文件服务集成',mod:'基础设施',pri:'P1',type:['后端'],est:2,status:'待开发',
+   desc:'集成OSS文件存储，支持合同附件、发票、水单上传，临时签名URL30分钟有效。',
+   ac:['文件上传成功','签名URL可访问','30分钟后签名URL失效','文件删除接口']},
+  {id:'INF-006',title:'Redis编号序列服务',mod:'基础设施',pri:'P1',type:['后端'],est:1,status:'待开发',
+   desc:'用Redis INCR实现各类单据的日期序号生成（S-YYYYMMDD-001），保证并发唯一。',
+   ac:['同日期序号不重复','并发100请求无重复','次日重置为001']},
+  {id:'INF-007',title:'通用分页/搜索/筛选框架',mod:'基础设施',pri:'P2',type:['后端','前端'],est:2,status:'待开发',
+   desc:'后端统一分页响应格式，前端封装分页组件+筛选hook，所有列表页复用。',
+   ac:['前端分页翻页正常','筛选参数传递正确','后端返回total字段']},
+  {id:'INF-008',title:'操作日志系统',mod:'基础设施',pri:'P2',type:['后端'],est:1,status:'待开发',
+   desc:'对关键操作（盖章、付款审批、状态变更）记录操作人、时间、前后值，用AOP注解实现。',
+   ac:['操作日志可查询','包含操作前后值对比','按模块/用户筛选']},
+
+  // M01 基础资料
+  {id:'M01-001',title:'工厂主档CRUD + 自动编号',mod:'基础',pri:'P1',type:['前端','后端'],est:3,status:'原型完成',
+   desc:'工厂列表、新建编辑弹窗、CN自动编号、银行账号税号字段、启用/停用。',
+   ac:['新建自动生成CN编号','停用后不可选为合同供应商','无物理删除','搜索过滤正常']},
+  {id:'M01-002',title:'客户主档CRUD + 等级管理',mod:'基础',pri:'P1',type:['前端','后端'],est:3,status:'原型完成',
+   desc:'客户列表、S自动编号、等级A/B/C、币种、付款方式、启用/停用。',
+   ac:['新建自动生成S编号','等级徽章显示正确','停用后不影响历史单据']},
+  {id:'M01-003',title:'下游引用保护（停用校验）',mod:'基础',pri:'P2',type:['后端'],est:1,status:'待开发',
+   desc:'停用工厂/客户时，检查是否有未完成的关联单据，有则阻止并给出提示。',
+   ac:['有未完成合同时停用报错','无关联时可停用','错误提示列出关联单据数']},
+
+  // M02A 样衣
+  {id:'M02A-001',title:'样衣需求新建与指派版师',mod:'样衣',pri:'P1',type:['前端','后端'],est:3,status:'原型完成',
+   desc:'新建样衣表单、S-编号自动生成、指派版师弹窗（版师列表来源user表）。',
+   ac:['S-编号按日期序号生成','版师列表仅显示PATTERNMAKER角色','指派后状态→打版中']},
+  {id:'M02A-002',title:'版师工作台（版师视图）',mod:'样衣',pri:'P1',type:['前端','后端'],est:2,status:'原型完成',
+   desc:'版师登录后只看自己的任务列表，可提交完成（附件上传），状态→打版完成。',
+   ac:['版师只看自己任务','提交需上传附件','提交后状态变化','可看历史版次']},
+  {id:'M02A-003',title:'确认/驳回流程与版次追踪',mod:'样衣',pri:'P1',type:['前端','后端'],est:2,status:'原型完成',
+   desc:'业务确认或驳回（需填原因），驳回后version+1重新打版，保留完整版次历史。',
+   ac:['驳回必填原因','驳回后version字段+1','历史版次可查看每次原因','已确认不可再驳回']},
+  {id:'M02A-004',title:'样衣详情5步流可视化',mod:'样衣',pri:'P2',type:['前端'],est:1,status:'原型完成',
+   desc:'详情弹窗中显示5步进度条（待打版→打版中→打版完成→已确认/已驳回）。',
+   ac:['步骤高亮当前状态','已完成步骤有勾选','驳回态有特殊显示']},
+
+  // M02B 报价
+  {id:'M02B-001',title:'报价单费用明细表（动态行）',mod:'报价',pri:'P1',type:['前端','后端'],est:4,status:'原型完成',
+   desc:'费用明细支持动态增删行，字段：费用项目/单位/用量/单价/损耗率/含损单价/总用量/小计。实时计算含损单价和小计。',
+   ac:['含损单价=原价÷(1-损耗率%)','小计=含损单价×总用量','删行后重新汇总','全局损耗率批量更新']},
+  {id:'M02B-002',title:'全局损耗率批量重算',mod:'报价',pri:'P1',type:['前端'],est:1,status:'原型完成',
+   desc:'修改全局损耗率后点击"重新计算"，批量更新所有行的损耗率和含损单价（单行独立覆盖不影响）。',
+   ac:['批量更新所有行','单行已覆盖的不被批量修改（可选逻辑）','计算精度正确']},
+  {id:'M02B-003',title:'报价汇总栏实时计算',mod:'报价',pri:'P1',type:['前端'],est:1,status:'原型完成',
+   desc:'汇总栏展示材料成本合计、设定毛利率、单件报价、总额（件数×单件报价）。',
+   ac:['所有字段实时联动','毛利率可手动输入反推单价','货币符号与客户币种一致']},
+  {id:'M02B-004',title:'报价状态流转（草稿→发出→确认→转合同）',mod:'报价',pri:'P1',type:['前端','后端'],est:2,status:'原型完成',
+   desc:'发出报价后锁定费用明细，不可修改。客户确认后可转合同（跳转04-合同并预填）。',
+   ac:['发出后明细字段只读','转合同携带报价数据到合同新建','状态单向流转不可撤回']},
+
+  // M03 订单
+  {id:'M03-001',title:'订单基本信息CRUD',mod:'订单',pri:'P1',type:['前端','后端'],est:3,status:'原型完成',
+   desc:'O-编号、客户PO号、关联客户/报价、交货期、总件数、业务员字段。',
+   ac:['O-编号自动生成','关联报价后预填数据','PO号唯一校验']},
+  {id:'M03-002',title:'尺码配色矩阵',mod:'订单',pri:'P1',type:['前端','后端'],est:4,status:'原型完成',
+   desc:'颜色×尺码二维矩阵，支持动态添加颜色行和尺码列，每格可编辑件数，行/列自动合计。',
+   ac:['动态添加颜色和尺码','每格件数可编辑','行合计和列合计自动计算','总件数与订单头匹配']},
+  {id:'M03-003',title:'用料核算Tab',mod:'订单',pri:'P1',type:['前端','后端'],est:3,status:'原型完成',
+   desc:'从报价费用项引入材料，展示净用量/损耗率/含损用量/件数/总采购量/单价/预算，支持编辑。',
+   ac:['引用报价费用项数据','修改不影响原报价数据（订单独立副本）','预算=总采购量×单价']},
+  {id:'M03-004',title:'出货记录Tab',mod:'订单',pri:'P1',type:['前端','后端'],est:2,status:'原型完成',
+   desc:'分批出货记录：出货日期/件数/箱数/快递单号，每批可删除。出货后出现引导提示。',
+   ac:['可多批次记录','每批件数之和不超过订单总件数','出货后显示"可发起供应商对账"提示']},
+
+  // M04 合同
+  {id:'M04-001',title:'合同三类型新建（材料/加工/补料）',mod:'合同',pri:'P1',type:['前端','后端'],est:5,status:'原型完成',
+   desc:'三种合同类型，材料合同含材料清单、加工合同关联尺码明细，补料合同挂载在材料合同下。',
+   ac:['材料合同材料行动态增删','加工合同可查看关联订单明细','补料合同选择父合同']},
+  {id:'M04-002',title:'账期自动计算',mod:'合同',pri:'P1',type:['前端','后端'],est:1,status:'原型完成',
+   desc:'材料合同账期=最后发货日+45天，加工合同=最后发货日+30天，自动计算并可手动修改。',
+   ac:['自动填入正确天数','手动修改后保存','最后发货日变更时提示重新计算']},
+  {id:'M04-003',title:'付款条款（定金/中期/尾款比例）',mod:'合同',pri:'P1',type:['前端'],est:1,status:'原型完成',
+   desc:'三个比例字段，实时验证三者之和必须=100%，默认30/40/30。',
+   ac:['默认值30/40/30','三者之和≠100%时阻止保存','校验提示清晰']},
+  {id:'M04-004',title:'门户推送与5步流状态追踪',mod:'合同',pri:'P1',type:['前端','后端'],est:3,status:'原型完成',
+   desc:'推送门户按钮，推送后记录时间，展示5步进度（创建→推送→盖章→发货→对账），含操作日志。',
+   ac:['推送后状态更新','操作日志记录时间和操作人','未推送时按钮可见','已盖章后显示锁定标识']},
+  {id:'M04-005',title:'盖章快照锁定机制',mod:'合同',pri:'P1',type:['后端'],est:2,status:'原型完成',
+   desc:'供应商盖章后，合同材料清单和单价字段写入快照副本，原字段标记为已锁定。',
+   ac:['盖章后字段不可编辑','快照数据独立存储','下游对账引用快照价格']},
+
+  // M05 门户
+  {id:'M05-001',title:'H5供应商门户登录页',mod:'门户',pri:'P1',type:['H5'],est:1,status:'原型完成',
+   desc:'账号密码登录，移动端适配，提示"账号由采购方提供，仅支持网页H5访问"。',
+   ac:['移动端375px正常显示','登录失败有提示','记住密码选项','密码显示/隐藏切换']},
+  {id:'M05-002',title:'H5门户4步流界面与步骤锁定',mod:'门户',pri:'P1',type:['H5','后端'],est:4,status:'原型完成',
+   desc:'展示当前合同4步卡片，前一步完成才解锁下一步，各步操作弹窗，完成后显示时间。',
+   ac:['未完成前一步时按钮灰色','步骤完成后显示完成时间','盖章需二次确认','发货需填完整信息']},
+  {id:'M05-003',title:'供应商账号管理（后台）',mod:'门户',pri:'P1',type:['前端','后端'],est:2,status:'原型完成',
+   desc:'管理员在后台新建供应商账号、关联工厂、重置密码（系统生成随机密码并展示一次）。',
+   ac:['新建账号系统生成初始密码','重置密码仅展示一次','账号可禁用','关联对应工厂']},
+  {id:'M05-004',title:'合同进度看板（管理员视图）',mod:'门户',pri:'P2',type:['前端','后端'],est:2,status:'原型完成',
+   desc:'在管理后台展示所有合同的4步进度状态，支持按供应商/状态筛选。',
+   ac:['实时4步状态','支持筛选','点击跳转合同详情']},
+
+  // M06 对账付款
+  {id:'M06-001',title:'对账单CRUD + 发货快照',mod:'对账',pri:'P1',type:['前端','后端'],est:4,status:'原型完成',
+   desc:'基于合同发货记录创建对账单，单价使用发货时的合同快照价格，不随后续修改变化。',
+   ac:['单价来源快照','发票金额校验误差≤¥0.01','对账单关联正确合同']},
+  {id:'M06-002',title:'付款申请 + 超付拦截',mod:'对账',pri:'P1',type:['前端','后端'],est:3,status:'原型完成',
+   desc:'申请金额实时与"应付余额"比对，超付时阻止提交并显示错误提示，不可绕过。',
+   ac:['应付余额=合同金额-已申请','超付时表单不可提交','提示含可用余额数字']},
+  {id:'M06-003',title:'水单Ctrl+V粘贴上传',mod:'对账',pri:'P1',type:['前端'],est:1,status:'原型完成',
+   desc:'在付款申请弹窗中，监听paste事件，自动将剪贴板图片转为文件并预览，支持普通文件选择。',
+   ac:['Ctrl+V粘贴图片成功','图片有预览','可删除重新粘贴','同时支持文件选择器']},
+  {id:'M06-004',title:'单级审批流',mod:'对账',pri:'P1',type:['前端','后端'],est:2,status:'原型完成',
+   desc:'业务提交付款申请→财务/管理员审批→已付款，单级无多级，审批驳回需填原因。',
+   ac:['审批通过后金额计入已付','驳回需填原因','审批动作有通知（站内）','只有FINANCE/ADMIN可审批']},
+  {id:'M06-005',title:'预付款Tab + 冲抵逻辑',mod:'对账',pri:'P1',type:['前端','后端'],est:2,status:'原型完成',
+   desc:'预付款独立管理，付款申请时可勾选冲抵，系统自动从预付余额扣减，展示已冲抵/余额。',
+   ac:['预付款余额实时更新','冲抵后预付余额减少','付款申请可见预付可用额','历史冲抵记录可查']},
+  {id:'M06-006',title:'无合同费用双入口',mod:'对账',pri:'P1',type:['前端','后端'],est:2,status:'原型完成',
+   desc:'无合同费用支持两路入口：新建对账单（DZ-NC-）或直接新建付款申请（PR-NC-），两者均可选择。',
+   ac:['DZ-NC-和PR-NC-编号正确','可直接付款不走对账','列表分类展示']},
+  {id:'M06-007',title:'发票上传与校验',mod:'对账',pri:'P2',type:['前端','后端'],est:2,status:'待开发',
+   desc:'发票文件上传（PDF/图片），金额与对账单比对，误差>¥0.01时警告，支持手动确认。',
+   ac:['文件上传正常','误差自动计算','>¥0.01有警告','警告后可手动确认通过']},
+
+  // M07 结算
+  {id:'M07-001',title:'结算清单新建（草稿+确认）',mod:'结算',pri:'P1',type:['前端','后端'],est:3,status:'原型完成',
+   desc:'业务出货后建草稿(待结算)，收汇后财务确认结算(已结算)，两步操作。',
+   ac:['草稿阶段可修改','确认后不可修改','确认结算需FINANCE角色','待结算和已结算列表分开']},
+  {id:'M07-002',title:'成本计算（有票/无票）',mod:'结算',pri:'P1',type:['前端','后端'],est:2,status:'原型完成',
+   desc:'有票：成本=发票÷(1+税率)；无票：成本=付款全额。成本单价=总成本÷出货件数。',
+   ac:['有票和无票分开计算','成本单价公式正确','税率从合同/系统配置取']},
+  {id:'M07-003',title:'利润双视图切换',mod:'结算',pri:'P1',type:['前端'],est:1,status:'原型完成',
+   desc:'列表和详情均有"含退税利润/不含退税利润"切换按钮，切换时毛利/净利数值同步更新。',
+   ac:['切换即时生效','含退税=货款-成本+退税','不含退税=货款-成本','视图状态持久化(本次会话)']},
+  {id:'M07-004',title:'退税金额计算',mod:'结算',pri:'P1',type:['前端','后端'],est:1,status:'原型完成',
+   desc:'退税=含税面料采购额×(出口退税率-增值税率差)，退税率和税率在系统配置中维护。',
+   ac:['公式正确','税率可配置','退税金额展示到两位小数','明细中显示计算依据']},
+  {id:'M07-005',title:'结算收汇记录',mod:'结算',pri:'P1',type:['前端','后端'],est:2,status:'原型完成',
+   desc:'记录每笔收汇：日期/金额/汇率/实收人民币，多次收汇汇总展示，与总货款比对。',
+   ac:['多批次收汇记录','实收总额与货款比对','汇率字段可填']},
+  {id:'M07-006',title:'结算清单导出(Excel/PDF)',mod:'结算',pri:'P2',type:['前端'],est:2,status:'待开发',
+   desc:'支持单张结算单导出PDF，多选导出Excel（含利润汇总），格式美观可直接对外发送。',
+   ac:['PDF格式包含公司信息','Excel多行数据','含退税/不含退税双表头']},
+
+  // Enhanced features
+  {id:'ENH-001',title:'系统配置中心（税率/退税率）',mod:'基础设施',pri:'P2',type:['前端','后端'],est:2,status:'待开发',
+   desc:'系统配置页：增值税率、出口退税率、默认付款条款比例等，ADMIN角色可修改。',
+   ac:['配置修改即生效','历史配置快照（结算单建立时锁定）','ADMIN权限限制']},
+  {id:'ENH-002',title:'站内消息通知',mod:'基础设施',pri:'P2',type:['前端','后端'],est:3,status:'待开发',
+   desc:'关键事件发站内通知：样衣驳回通知版师、付款审批通知财务、供应商盖章通知业务等。',
+   ac:['实时推送（WebSocket或轮询）','通知有已读/未读','可跳转到对应单据']},
+  {id:'ENH-003',title:'数据导出（Excel批量）',mod:'基础设施',pri:'P3',type:['前端','后端'],est:2,status:'待开发',
+   desc:'列表页支持Excel导出：工厂列表、客户列表、订单列表、结算汇总等。',
+   ac:['导出包含筛选后的数据','列宽自动适应','文件名含日期']},
+  {id:'ENH-004',title:'Dashboard首页数据看板',mod:'基础设施',pri:'P3',type:['前端','后端'],est:3,status:'待开发',
+   desc:'登录后首页：进行中的订单数、待审批付款数、本月结算金额、样衣待确认数等关键指标。',
+   ac:['数据实时（或5min缓存）','按角色展示不同指标','图表可交互']},
+];
+
+// ============================================================
+// State
+// ============================================================
+let activeView = 'kanban';
+let filterPriority = '全部';
+let filterType = '全部';
+let filterMod_ = 'all';
+let searchQ = '';
+
+function getFiltered(){
+  return TASKS.filter(t=>{
+    if(filterPriority!=='全部' && t.pri!==filterPriority) return false;
+    if(filterType!=='全部' && !t.type.includes(filterType)) return false;
+    if(filterMod_!=='all' && !t.mod.includes(filterMod_)) return false;
+    if(searchQ && !t.title.includes(searchQ) && !t.id.includes(searchQ) && !t.desc.includes(searchQ)) return false;
+    return true;
+  });
+}
+
+// ============================================================
+// Kanban
+// ============================================================
+const COLS = [
+  {key:'原型完成',label:'✅ 原型完成',color:'var(--teal)'},
+  {key:'待开发',label:'📋 待开发',color:'var(--amber)'},
+  {key:'开发中',label:'⚡ 开发中',color:'var(--indigo)'},
+  {key:'测试中',label:'🧪 测试中',color:'var(--rust)'},
+];
+
+function renderKanban(){
+  const filtered = getFiltered();
+  const board = document.getElementById('kanban-board');
+  board.innerHTML = COLS.map(col=>{
+    const items = filtered.filter(t=>t.status===col.key);
+    return `<div class="col">
+      <div class="col-head" style="color:${col.color}">${col.label}<span class="col-cnt">${items.length}</span></div>
+      ${items.map(t=>taskCard(t)).join('')}
+    </div>`;
+  }).join('');
+}
+
+function taskCard(t){
+  const priClass = {P1:'p1',P2:'p2',P3:'p3',P4:'p4'}[t.pri]||'p3';
+  const typeHtml = t.type.map(tp=>`<span class="tag t-${{'前端':'f','后端':'b','H5':'h5','数据库':'db','基础设施':'infra'}[tp]||'f'}">${tp}</span>`).join('');
+  return `<div class="task-card" onclick="openDetail('${t.id}')">
+    <div class="tc-id">${t.id}</div>
+    <div class="tc-title">${t.title}</div>
+    <div class="tc-desc">${t.desc.slice(0,50)}…</div>
+    <div class="tc-meta">
+      <span class="tag ${priClass}">${t.pri}</span>
+      ${typeHtml}
+      <span class="tag-mod">${t.mod}</span>
+      <span class="est">${t.est}天</span>
+    </div>
+  </div>`;
+}
+
+// ============================================================
+// Table
+// ============================================================
+function renderTable(){
+  const filtered = getFiltered();
+  const tbody = document.getElementById('task-tbody');
+  tbody.innerHTML = filtered.map(t=>{
+    const priClass = {P1:'p1',P2:'p2',P3:'p3'}[t.pri]||'p3';
+    const typeHtml = t.type.map(tp=>`<span class="tag t-${{'前端':'f','后端':'b','H5':'h5','数据库':'db','基础设施':'infra'}[tp]||'f'}" style="margin:1px">${tp}</span>`).join('');
+    const statusColor = t.status==='原型完成'?'var(--teal)':t.status==='开发中'?'var(--indigo)':'var(--amber)';
+    return `<tr onclick="openDetail('${t.id}')" style="cursor:pointer">
+      <td><code style="font-size:11px">${t.id}</code></td>
+      <td style="font-weight:500">${t.title}</td>
+      <td><span class="tag-mod">${t.mod}</span></td>
+      <td><span class="tag ${priClass}">${t.pri}</span></td>
+      <td>${typeHtml}</td>
+      <td><span class="est">${t.est}天</span></td>
+      <td><span style="color:${statusColor};font-size:12px;font-weight:600">${t.status}</span></td>
+      <td style="font-size:12px;color:var(--gray-5)">${t.ac?t.ac[0]+'…':''}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ============================================================
+// Detail
+// ============================================================
+function openDetail(id){
+  const t = TASKS.find(x=>x.id===id);
+  if(!t) return;
+  const priClass = {P1:'p1',P2:'p2',P3:'p3'}[t.pri]||'p3';
+  const typeHtml = t.type.map(tp=>`<span class="tag t-${{'前端':'f','后端':'b','H5':'h5','数据库':'db','基础设施':'infra'}[tp]||'f'}">${tp}</span>`).join(' ');
+  const acHtml = t.ac ? t.ac.map(a=>`<div class="dp-ac-item"><input type="checkbox"> <span>${a}</span></div>`).join('') : '';
+  document.getElementById('dp-content').innerHTML = `
+    <div class="dp-id">${t.id}</div>
+    <div class="dp-title">${t.title}</div>
+    <div class="dp-meta">
+      <span class="tag ${priClass}">${t.pri}</span>
+      ${typeHtml}
+      <span class="tag-mod">${t.mod}</span>
+      <span class="est">${t.est}天</span>
+      <span style="color:${t.status==='原型完成'?'var(--teal)':'var(--amber)'};font-size:12px;font-weight:600">${t.status}</span>
+    </div>
+    <div class="dp-section">
+      <h4>描述</h4>
+      <p>${t.desc}</p>
+    </div>
+    <div class="dp-section">
+      <h4>验收标准</h4>
+      <div class="dp-ac">${acHtml}</div>
+    </div>
+  `;
+  document.getElementById('detailPanel').classList.add('open');
+}
+function closeDetail(){
+  document.getElementById('detailPanel').classList.remove('open');
+}
+
+// ============================================================
+// View switching
+// ============================================================
+function switchView(v){
+  activeView = v;
+  ['kanban','table','sprint'].forEach(id=>{
+    document.getElementById('view-'+id).style.display = id===v?'block':'none';
+  });
+  document.querySelectorAll('.vt-btn').forEach((b,i)=>{
+    b.classList.toggle('on', ['kanban','table','sprint'][i]===v);
+  });
+  if(v==='kanban') renderKanban();
+  if(v==='table') renderTable();
+}
+
+// ============================================================
+// Filters
+// ============================================================
+function toggleFilter(el, group, val){
+  if(group==='pri') filterPriority=val;
+  if(group==='type') filterType=val;
+  el.closest('.filter-bar').querySelectorAll('.filter-chip').forEach(c=>{
+    if(c.dataset.group===group||!c.dataset.group) c.classList.remove('on');
+  });
+  el.classList.add('on');
+  renderKanban(); renderTable();
+}
+function filterPri(v){ filterPriority=v; render(); }
+function filterMod(v){ filterMod_=v; render(); }
+function doSearch(){ searchQ=document.getElementById('searchInput').value; render(); }
+function render(){ if(activeView==='kanban') renderKanban(); else if(activeView==='table') renderTable(); }
+
+// ============================================================
+// Stats
+// ============================================================
+function updateStats(){
+  const all = TASKS;
+  document.getElementById('cnt-total').textContent = all.length;
+  document.getElementById('cnt-p1').textContent = all.filter(t=>t.pri==='P1').length;
+  document.getElementById('cnt-p2').textContent = all.filter(t=>t.pri==='P2').length;
+  document.getElementById('cnt-p3').textContent = all.filter(t=>t.pri==='P3').length;
+  document.getElementById('cnt-done').textContent = all.filter(t=>t.status==='原型完成').length;
+  document.getElementById('cnt-pts').textContent = all.reduce((s,t)=>s+t.est,0);
+}
+
+// ============================================================
+// Init
+// ============================================================
+updateStats();
+renderKanban();
+document.addEventListener('click',e=>{
+  if(!e.target.closest('#detailPanel') && !e.target.closest('.task-card') && !e.target.closest('tr[onclick]')){
+    closeDetail();
+  }
+});
+</script>
+</body>
+</html>

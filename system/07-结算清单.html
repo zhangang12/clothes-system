@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>结算清单 - I9服装制造管理系统</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#FBF8F2;color:#1F1F22;font-size:14px}
+:root{--indigo:#1E3A5F;--indigo-d:#152A45;--indigo-l:#2C5180;--linen:#F5EDDC;--linen-d:#E8DCC0;--canvas:#FBF8F2;--rust:#D17A40;--rust-d:#B86530;--vermilion:#C04042;--teal:#3E8E7E;--amber:#C8901E;--gray-9:#1F1F22;--gray-7:#37383C;--gray-5:#6F7178;--gray-3:#B5B7BD;--gray-1:#E5E2DA;--gray-0:#F4F1EA;--r:4px;--r-lg:8px}
+.sidebar{position:fixed;top:0;left:0;width:200px;height:100vh;background:var(--indigo);overflow-y:auto;z-index:100}
+.logo{padding:18px 16px 14px;font-size:15px;font-weight:700;color:#fff;border-bottom:1px solid rgba(255,255,255,.1);line-height:1.3}
+.logo small{display:block;font-size:11px;font-weight:400;opacity:.6;margin-top:3px}
+.nav-gl{padding:10px 16px 3px;font-size:10px;font-weight:600;color:rgba(255,255,255,.35);letter-spacing:.1em;text-transform:uppercase}
+.nav-a{display:flex;align-items:center;padding:9px 16px;color:rgba(255,255,255,.75);text-decoration:none;font-size:13px;gap:6px;transition:all .15s;position:relative}
+.nav-a:hover{background:rgba(255,255,255,.08);color:#fff}
+.nav-a.act{background:rgba(255,255,255,.14);color:#fff;font-weight:600}
+.nav-a.act::after{content:'';position:absolute;right:0;top:20%;height:60%;width:3px;background:var(--rust);border-radius:2px 0 0 2px}
+.main{margin-left:200px;min-height:100vh}
+.topbar{background:#fff;border-bottom:1px solid var(--gray-1);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+.page-title{font-size:17px;font-weight:700;color:var(--gray-9)}
+.breadcrumb{font-size:12px;color:var(--gray-5);margin-top:2px}
+.content{padding:20px 24px}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:var(--r);font-size:13px;font-family:inherit;cursor:pointer;border:none;line-height:1;transition:all .15s;white-space:nowrap}
+.btn-p{background:var(--indigo);color:#fff}.btn-p:hover{background:var(--indigo-d)}
+.btn-c{background:var(--rust);color:#fff}.btn-c:hover{background:var(--rust-d)}
+.btn-s{background:#fff;border:1px solid var(--gray-1);color:var(--gray-7)}.btn-s:hover{background:var(--gray-0)}
+.btn-g{background:#fff;border:1px solid #f5c6c6;color:var(--vermilion)}.btn-g:hover{background:#fff5f5}
+.btn-sm{padding:5px 10px;font-size:12px}
+.toolbar{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.spacer{flex:1}
+.srch{padding:7px 12px;border:1px solid var(--gray-1);border-radius:var(--r);font-size:13px;width:220px;outline:none;font-family:inherit}
+.srch:focus{border-color:var(--indigo)}
+.filter-bar{display:flex;gap:6px}
+.fbtn{padding:5px 12px;border-radius:10px;font-size:12px;cursor:pointer;border:1px solid var(--gray-1);background:#fff;color:var(--gray-5);font-family:inherit;transition:all .15s}
+.fbtn.act{background:var(--indigo);color:#fff;border-color:var(--indigo)}
+.tw{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);overflow:hidden}
+table{width:100%;border-collapse:collapse}
+th{background:var(--gray-0);font-size:12px;font-weight:600;color:var(--gray-5);padding:9px 14px;text-align:left;border-bottom:1px solid var(--gray-1);white-space:nowrap}
+td{padding:10px 14px;font-size:13px;color:var(--gray-7);border-bottom:1px solid #f0ede6;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#fafaf8}
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.bs{background:#e8f5e9;color:#2e7d32}
+.be{background:#fde7e7;color:#c62828}
+.bw{background:#fff8e1;color:#f57f17}
+.br{background:#e3f2fd;color:#1565c0}
+.bi{background:#f3e5f5;color:#6a1b9a}
+.bg{background:var(--gray-0);color:var(--gray-5)}
+.pg{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:#fff;border-top:1px solid var(--gray-1);font-size:12px;color:var(--gray-5)}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+.stat-card{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);padding:16px 18px}
+.stat-label{font-size:12px;color:var(--gray-5);margin-bottom:4px}
+.stat-value{font-size:24px;font-weight:700;color:var(--indigo);line-height:1}
+.stat-sub{font-size:11px;color:var(--gray-3);margin-top:4px}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:none;align-items:center;justify-content:center;padding:16px}
+.overlay.open{display:flex}
+.modal{background:#fff;border-radius:var(--r-lg);width:960px;max-width:100%;max-height:92vh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,.18)}
+.mh{padding:14px 20px;border-bottom:1px solid var(--gray-1);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#fff;z-index:1}
+.mh h2{font-size:15px;font-weight:700;color:var(--gray-9)}
+.mh-right{display:flex;align-items:center;gap:8px}
+.mc{background:none;border:none;font-size:20px;cursor:pointer;color:var(--gray-5);line-height:1;padding:4px;border-radius:var(--r)}
+.mc:hover{background:var(--gray-0)}
+.mb{padding:18px 20px}
+.mf{padding:12px 20px;border-top:1px solid var(--gray-1);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.frow{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:12px}
+.fg{display:flex;flex-direction:column;gap:4px}
+label{font-size:12px;font-weight:600;color:var(--gray-7)}
+.req{color:var(--vermilion)}
+.fc{padding:7px 10px;border:1px solid var(--gray-1);border-radius:var(--r);font-size:13px;font-family:inherit;outline:none;color:var(--gray-9);background:#fff;width:100%}
+.fc:focus{border-color:var(--indigo)}
+.fc[readonly]{background:var(--gray-0);color:var(--gray-5)}
+.span2{grid-column:span 2}
+.fieldset{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);margin-bottom:14px;overflow:hidden}
+.fh{background:linear-gradient(135deg,#F5EDDC,#FBF8F2);padding:10px 16px;border-bottom:1px solid #E8DCC0;display:flex;align-items:center;justify-content:space-between}
+.fh h3{font-size:13px;font-weight:700;color:var(--indigo)}
+.fb{padding:14px 16px}
+.subtw{border:1px solid var(--gray-1);border-radius:var(--r);overflow:hidden}
+.subtw table th{background:var(--gray-0);padding:7px 10px;font-size:11px;font-weight:600;color:var(--gray-5)}
+.subtw table td{padding:7px 10px;font-size:12px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+.profit-bar{border-radius:var(--r-lg);padding:16px 20px;display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin:14px 0}
+.profit-bar-main{background:linear-gradient(135deg,#1E3A5F,#2C5180)}
+.profit-bar-sub{background:linear-gradient(135deg,#3E8E7E,#4da090)}
+.pi{text-align:center;color:#fff}
+.pi-label{font-size:11px;opacity:.7}
+.pi-value{font-size:20px;font-weight:700;margin-top:3px}
+.pi-sub{font-size:11px;opacity:.6;margin-top:2px}
+.text-muted{color:var(--gray-5);font-size:12px}
+.link{color:var(--indigo);cursor:pointer;text-decoration:none}.link:hover{text-decoration:underline}
+.tag-no{font-family:monospace;font-size:12px;background:var(--gray-0);padding:2px 6px;border-radius:3px;color:var(--indigo);font-weight:600}
+.fw7{font-weight:700}
+.text-green{color:#2e7d32}
+.text-red{color:var(--vermilion)}
+.text-indigo{color:var(--indigo)}
+.alert{padding:10px 14px;border-radius:var(--r);font-size:13px;margin-bottom:12px}
+.alert-i{background:#e3f2fd;border:1px solid #90caf9;color:#1565c0}
+.alert-w{background:#fff8e1;border:1px solid #ffe082;color:#f57f17}
+.tabs-inner{display:flex;border-bottom:1px solid var(--gray-1);margin-bottom:14px}
+.tab-inner{padding:7px 14px;font-size:13px;color:var(--gray-5);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s}
+.tab-inner.act{color:var(--indigo);border-bottom-color:var(--indigo);font-weight:600}
+.profit-toggle{display:flex;gap:0;background:var(--gray-0);border-radius:var(--r);overflow:hidden;width:fit-content}
+.pt-btn{padding:5px 12px;font-size:12px;cursor:pointer;border:none;background:transparent;font-family:inherit;color:var(--gray-5);transition:all .15s}
+.pt-btn.act{background:var(--indigo);color:#fff}
+</style>
+</head>
+<body>
+<nav class="sidebar">
+  <div class="logo">I9 服装制造<small>管理系统 v1.0</small></div>
+  <div class="nav-gl">基础数据</div>
+  <a href="01-基础资料.html" class="nav-a">📋 基础资料</a>
+  <div class="nav-gl">生产前</div>
+  <a href="02-样衣管理.html" class="nav-a">👗 样衣管理</a>
+  <a href="02-客户报价.html" class="nav-a">💰 客户报价</a>
+  <a href="03-订单.html" class="nav-a">📦 订单管理</a>
+  <div class="nav-gl">合同履行</div>
+  <a href="04-合同.html" class="nav-a">📄 合同管理</a>
+  <a href="05-供应商门户.html" class="nav-a">🏭 供应商门户</a>
+  <div class="nav-gl">财务结算</div>
+  <a href="06-对账付款.html" class="nav-a">💳 对账付款</a>
+  <a href="07-结算清单.html" class="nav-a act">📊 结算清单</a>
+</nav>
+
+<div class="main">
+  <div class="topbar">
+    <div>
+      <div class="page-title">结算清单</div>
+      <div class="breadcrumb">I9服装 / 财务结算 / 结算清单</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <div class="profit-toggle">
+        <button class="pt-btn act" onclick="toggleProfit('withTax',this)">含退税利润</button>
+        <button class="pt-btn" onclick="toggleProfit('noTax',this)">不含退税利润</button>
+      </div>
+      <button class="btn btn-p" onclick="openModal('m-new')">+ 新建结算清单</button>
+    </div>
+  </div>
+  <div class="content">
+
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label">待结算</div>
+        <div class="stat-value" style="color:var(--rust)">2</div>
+        <div class="stat-sub">已出货，待收汇</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">本月已结算</div>
+        <div class="stat-value" style="color:var(--teal)">3</div>
+        <div class="stat-sub">收汇完成</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">本月总货款</div>
+        <div class="stat-value">¥657万</div>
+        <div class="stat-sub">CNY等值</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">综合毛利率</div>
+        <div class="stat-value" style="color:var(--teal)" id="gross-rate">18.6%</div>
+        <div class="stat-sub" id="profit-tip">含退税利润口径</div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <div class="filter-bar">
+        <button class="fbtn act" onclick="filterF(this,'all')">全部</button>
+        <button class="fbtn" onclick="filterF(this,'待结算')">待结算</button>
+        <button class="fbtn" onclick="filterF(this,'已结算')">已结算</button>
+        <button class="fbtn" onclick="filterF(this,'亏损')">亏损预警</button>
+      </div>
+      <div class="spacer"></div>
+      <input class="srch" placeholder="搜索结算单/款号/客户" oninput="filterTable('t-main',this.value)">
+      <button class="btn btn-s btn-sm">↓ 导出Excel</button>
+    </div>
+
+    <div class="tw">
+      <table id="t-main">
+        <thead>
+          <tr>
+            <th>结算单号</th>
+            <th>款号/订单</th>
+            <th>客户</th>
+            <th>出货件数</th>
+            <th>总货款</th>
+            <th>总成本</th>
+            <th>成本单价</th>
+            <th>毛利</th>
+            <th>毛利率</th>
+            <th>退税金额</th>
+            <th>净利</th>
+            <th>状态</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="tag-no">JS-20240122-01</span></td>
+            <td><span style="font-family:monospace;font-size:12px">O-20240120-001</span></td>
+            <td>香港华美时装</td>
+            <td class="fw7">3,800 件</td>
+            <td class="fw7">¥ 240,000</td>
+            <td>¥ 193,200</td>
+            <td>¥50.84/件</td>
+            <td class="fw7 text-green">¥ 46,800</td>
+            <td class="fw7 text-green">19.5%</td>
+            <td class="text-green">¥ 7,440</td>
+            <td class="fw7 text-green">¥ 54,240</td>
+            <td><span class="badge bs">已结算</span></td>
+            <td>
+              <button class="btn btn-s btn-sm" onclick="openDetail('JS-20240122-01')">查看</button>
+              <button class="btn btn-s btn-sm">↓ 导出</button>
+            </td>
+          </tr>
+          <tr>
+            <td><span class="tag-no">JS-20240118-01</span></td>
+            <td><span style="font-family:monospace;font-size:12px">O-20240115-001</span></td>
+            <td>北京华联时装</td>
+            <td class="fw7">3,000 件</td>
+            <td class="fw7">¥ 135,000</td>
+            <td>¥ 114,300</td>
+            <td>¥38.10/件</td>
+            <td class="fw7 text-green">¥ 20,700</td>
+            <td class="fw7 text-green">15.3%</td>
+            <td class="text-green">¥ 3,100</td>
+            <td class="fw7 text-green">¥ 23,800</td>
+            <td><span class="badge bw">待结算</span></td>
+            <td>
+              <button class="btn btn-s btn-sm" onclick="openDetail('JS-20240118-01')">查看</button>
+              <button class="btn btn-p btn-sm" onclick="confirmSettle()">确认收汇</button>
+            </td>
+          </tr>
+          <tr>
+            <td><span class="tag-no">JS-20231225-01</span></td>
+            <td><span style="font-family:monospace;font-size:12px">O-20231220-001</span></td>
+            <td>欧莱时装(深圳)</td>
+            <td class="fw7">5,800 件</td>
+            <td class="fw7">¥ 312,000</td>
+            <td>¥ 264,000</td>
+            <td>¥45.52/件</td>
+            <td class="fw7 text-green">¥ 48,000</td>
+            <td class="fw7 text-green">15.4%</td>
+            <td class="text-green">¥ 6,000</td>
+            <td class="fw7 text-green">¥ 54,000</td>
+            <td><span class="badge bs">已结算</span></td>
+            <td>
+              <button class="btn btn-s btn-sm" onclick="openDetail('JS-20231225-01')">查看</button>
+              <button class="btn btn-s btn-sm">↓ 导出</button>
+            </td>
+          </tr>
+          <tr>
+            <td><span class="tag-no">JS-20240110-01</span></td>
+            <td><span style="font-family:monospace;font-size:12px">O-20240110-001</span></td>
+            <td>FASHION HOUSE LTD</td>
+            <td class="fw7">—</td>
+            <td class="fw7">$ 48,000</td>
+            <td>—</td>
+            <td>—</td>
+            <td class="text-muted">—</td>
+            <td class="text-muted">—</td>
+            <td class="text-muted">—</td>
+            <td class="text-muted">—</td>
+            <td><span class="badge br">待出货</span></td>
+            <td>
+              <button class="btn btn-s btn-sm">草稿</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="pg"><span>共 4 条 · 每页 20 条</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- 结算清单详情 -->
+<div class="overlay" id="m-detail">
+  <div class="modal">
+    <div class="mh">
+      <div style="display:flex;align-items:center;gap:10px">
+        <h2 id="d-no">JS-20240122-01</h2>
+        <span class="badge bs" id="d-status">已结算</span>
+      </div>
+      <div class="mh-right">
+        <div class="profit-toggle">
+          <button class="pt-btn act" onclick="toggleDetailProfit('with',this)">含退税</button>
+          <button class="pt-btn" onclick="toggleDetailProfit('no',this)">不含退税</button>
+        </div>
+        <button class="btn btn-s btn-sm">↓ 导出PDF</button>
+        <button class="mc" onclick="closeModal('m-detail')">×</button>
+      </div>
+    </div>
+    <div class="mb">
+
+      <!-- 利润汇总 -->
+      <div class="profit-bar profit-bar-main">
+        <div class="pi">
+          <div class="pi-label">总货款</div>
+          <div class="pi-value">¥240,000</div>
+          <div class="pi-sub">CNY</div>
+        </div>
+        <div class="pi">
+          <div class="pi-label">总成本</div>
+          <div class="pi-value">¥193,200</div>
+          <div class="pi-sub">材料+加工</div>
+        </div>
+        <div class="pi">
+          <div class="pi-label">毛利</div>
+          <div class="pi-value" style="color:#7fc97f">¥46,800</div>
+          <div class="pi-sub">毛利率 19.5%</div>
+        </div>
+        <div class="pi">
+          <div class="pi-label" id="d-taxlabel">出口退税</div>
+          <div class="pi-value" style="color:#7fc97f" id="d-taxval">¥7,440</div>
+          <div class="pi-sub" id="d-taxrate">退税率 13%×0.75</div>
+        </div>
+        <div class="pi">
+          <div class="pi-label">净利润</div>
+          <div class="pi-value" style="color:#a8e6a8;font-size:24px" id="d-netlabel">¥54,240</div>
+          <div class="pi-sub" id="d-netrate">净利率 22.6%</div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div>
+          <!-- 基本信息 -->
+          <div class="fieldset">
+            <div class="fh"><h3>结算基本信息</h3></div>
+            <div class="fb">
+              <div class="frow" style="grid-template-columns:1fr 1fr">
+                <div class="fg"><label>结算单号</label><input class="fc" value="JS-20240122-01" readonly></div>
+                <div class="fg"><label>关联订单</label><input class="fc" value="O-20240120-001" readonly></div>
+                <div class="fg"><label>客户</label><input class="fc" value="香港华美时装有限公司" readonly></div>
+                <div class="fg"><label>结算主键</label><input class="fc" value="款号 × 客户" readonly></div>
+                <div class="fg"><label>出货件数</label><input class="fc" value="3,800 件" readonly style="color:var(--indigo);font-weight:700"></div>
+                <div class="fg"><label>总货款</label><input class="fc" value="¥ 240,000" readonly style="color:var(--indigo);font-weight:700"></div>
+                <div class="fg"><label>成本单价</label><input class="fc" value="¥50.84/件" readonly style="color:var(--rust)"></div>
+                <div class="fg"><label>结算时机</label><input class="fc" value="出货后" readonly></div>
+                <div class="fg"><label>收汇日期</label><input class="fc" value="2024-01-22" readonly></div>
+                <div class="fg"><label>结算状态</label><input class="fc" value="已结算(收汇完成)" readonly style="color:#2e7d32"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 成本明细 -->
+          <div class="fieldset">
+            <div class="fh"><h3>成本明细</h3><span class="text-muted">成本单价 = 总成本 ÷ 出货件数</span></div>
+            <div class="fb" style="padding:0">
+              <div class="subtw">
+                <table>
+                  <thead><tr><th>成本项目</th><th>合同编号</th><th>金额</th><th>有票/无票</th><th>税率</th><th>成本口径</th></tr></thead>
+                  <tbody>
+                    <tr>
+                      <td>棉麻面料+里布</td>
+                      <td><span class="tag-no" style="font-size:10px">HT-20240121-001</span></td>
+                      <td>¥105,840</td>
+                      <td><span class="badge bs" style="font-size:10px">有票</span></td>
+                      <td>13%</td>
+                      <td>¥93,664 (不含税)</td>
+                    </tr>
+                    <tr>
+                      <td>加工费</td>
+                      <td><span class="tag-no" style="font-size:10px">HT-20240121-002</span></td>
+                      <td>¥72,000</td>
+                      <td><span class="badge bs" style="font-size:10px">有票</span></td>
+                      <td>6%</td>
+                      <td>¥67,925 (不含税)</td>
+                    </tr>
+                    <tr>
+                      <td>补料费</td>
+                      <td><span class="tag-no" style="font-size:10px">HT-20240125-BL001</span></td>
+                      <td>¥33,600</td>
+                      <td><span class="badge bw" style="font-size:10px">无票</span></td>
+                      <td>—</td>
+                      <td>¥33,600 (全额含税)</td>
+                    </tr>
+                    <tr style="background:var(--gray-0);font-weight:700">
+                      <td colspan="5">总成本合计</td>
+                      <td>¥195,189</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <!-- 退税核算 -->
+          <div class="fieldset">
+            <div class="fh"><h3>出口退税核算</h3></div>
+            <div class="fb">
+              <div class="frow" style="grid-template-columns:1fr 1fr">
+                <div class="fg"><label>出口退税率</label><input class="fc" value="13%" readonly></div>
+                <div class="fg"><label>综合退税率</label><input class="fc" value="9.75%" readonly></div>
+                <div class="fg"><label>含税采购额</label><input class="fc" value="¥ 105,840" readonly></div>
+                <div class="fg"><label>退税金额</label><input class="fc" value="¥ 7,440" readonly style="color:#2e7d32;font-weight:700"></div>
+              </div>
+              <div style="font-size:12px;color:var(--gray-5);margin-top:8px;padding:8px;background:var(--gray-0);border-radius:var(--r)">
+                📌 退税计算：含税面料采购额 × (出口退税率 - 增值税率差)；无票成本不计退税
+              </div>
+            </div>
+          </div>
+
+          <!-- 出货明细 -->
+          <div class="fieldset">
+            <div class="fh"><h3>出货明细</h3><span class="text-muted">按实际出货件数结算</span></div>
+            <div class="fb" style="padding:0">
+              <div class="subtw">
+                <table>
+                  <thead><tr><th>批次</th><th>出货日期</th><th>件数</th><th>发货方式</th><th>目的港</th></tr></thead>
+                  <tbody>
+                    <tr><td>第1批</td><td>2024-01-10</td><td>2,000件</td><td>整柜海运</td><td>香港葵涌</td></tr>
+                    <tr><td>第2批</td><td>2024-01-18</td><td>1,800件</td><td>整柜海运</td><td>香港葵涌</td></tr>
+                    <tr style="background:var(--gray-0);font-weight:700"><td colspan="2">合计</td><td>3,800件</td><td colspan="2">—</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- 收汇记录 -->
+          <div class="fieldset">
+            <div class="fh"><h3>收汇记录</h3></div>
+            <div class="fb" style="padding:0">
+              <div class="subtw">
+                <table>
+                  <thead><tr><th>收汇日期</th><th>金额</th><th>币种</th><th>汇率</th><th>CNY等值</th></tr></thead>
+                  <tbody>
+                    <tr><td>2024-01-22</td><td>240,000</td><td>CNY</td><td>1.00</td><td>¥240,000</td></tr>
+                    <tr style="background:var(--gray-0);font-weight:700"><td>合计</td><td>240,000</td><td>—</td><td>—</td><td>¥240,000</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="mf">
+      <div class="text-muted">创建于 2024-01-22 · 财务：李财务</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-s" onclick="closeModal('m-detail')">关闭</button>
+        <button class="btn btn-s">↓ 导出完整报告</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 新建结算清单 -->
+<div class="overlay" id="m-new">
+  <div class="modal" style="width:720px">
+    <div class="mh"><h2>新建结算清单</h2><button class="mc" onclick="closeModal('m-new')">×</button></div>
+    <div class="mb">
+      <div class="alert alert-i">📌 出货后业务可建结算清单（状态：待结算）；收汇后财务出毛利确认（状态：已结算）</div>
+      <div class="fieldset">
+        <div class="fh"><h3>基本信息</h3></div>
+        <div class="fb">
+          <div class="frow">
+            <div class="fg"><label>结算单号</label><input class="fc" value="JS-20240123-01" readonly></div>
+            <div class="fg"><label>关联订单 <span class="req">*</span></label>
+              <select class="fc"><option>请选择已出货订单</option><option>O-20240118-001 北京华联/秋季外套</option><option>O-20240110-001 FASHION HOUSE/棉衣</option></select>
+            </div>
+            <div class="fg"><label>结算主键</label>
+              <select class="fc"><option>款号 × 客户（默认）</option><option>款号 × 订单</option></select>
+            </div>
+            <div class="fg"><label>总货款</label><input class="fc" placeholder="自动从订单带入"></div>
+            <div class="fg"><label>出货件数</label><input class="fc" placeholder="实际出货件数，来自出货记录"></div>
+            <div class="fg"><label>退税率(%)</label><input class="fc" value="13" placeholder="出口退税率"></div>
+          </div>
+        </div>
+      </div>
+      <div class="fieldset">
+        <div class="fh"><h3>收汇信息（收汇后填写）</h3></div>
+        <div class="fb">
+          <div class="frow">
+            <div class="fg"><label>收汇日期</label><input class="fc" type="date" placeholder="实际收汇日期"></div>
+            <div class="fg"><label>收汇金额</label><input class="fc" placeholder="0.00"></div>
+            <div class="fg"><label>收汇币种</label>
+              <select class="fc"><option>人民币(CNY)</option><option>美元(USD)</option><option>港元(HKD)</option></select>
+            </div>
+            <div class="fg"><label>汇率</label><input class="fc" value="1.00" placeholder="收汇汇率"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="mf">
+      <div class="text-muted">保存草稿后，在详情页可关联成本合同、录入出货批次</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-s" onclick="closeModal('m-new')">取消</button>
+        <button class="btn btn-s" onclick="saveDraft()">存草稿(待结算)</button>
+        <button class="btn btn-p" onclick="saveSettle()">确认结算(已收汇)</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function openModal(id) { document.getElementById(id).classList.add('open') }
+function closeModal(id) { document.getElementById(id).classList.remove('open') }
+function openDetail(no) {
+  document.getElementById('d-no').textContent = no
+  openModal('m-detail')
+}
+function filterTable(id, q) {
+  document.querySelectorAll('#'+id+' tbody tr').forEach(tr => {
+    tr.style.display = tr.textContent.toLowerCase().includes(q.toLowerCase()) ? '' : 'none'
+  })
+}
+function filterF(btn, status) {
+  document.querySelectorAll('.filter-bar .fbtn').forEach(b => b.classList.remove('act'))
+  btn.classList.add('act')
+  document.querySelectorAll('#t-main tbody tr').forEach(tr => {
+    if(status === 'all') { tr.style.display=''; return }
+    if(status === '亏损') { tr.style.display = tr.querySelector('.text-red') ? '' : 'none'; return }
+    const badge = tr.querySelector('.badge')
+    tr.style.display = badge && badge.textContent === status ? '' : 'none'
+  })
+}
+function toggleProfit(mode, btn) {
+  btn.closest('.profit-toggle').querySelectorAll('.pt-btn').forEach(b => b.classList.remove('act'))
+  btn.classList.add('act')
+  const rateEl = document.getElementById('gross-rate')
+  const tipEl = document.getElementById('profit-tip')
+  if(mode === 'withTax') {
+    if(rateEl) rateEl.textContent = '18.6%'
+    if(tipEl) tipEl.textContent = '含退税利润口径'
+  } else {
+    if(rateEl) rateEl.textContent = '15.8%'
+    if(tipEl) tipEl.textContent = '不含退税利润口径'
+  }
+}
+function toggleDetailProfit(mode, btn) {
+  btn.closest('.profit-toggle').querySelectorAll('.pt-btn').forEach(b => b.classList.remove('act'))
+  btn.classList.add('act')
+  const taxlabel = document.getElementById('d-taxlabel')
+  const taxval = document.getElementById('d-taxval')
+  const taxrate = document.getElementById('d-taxrate')
+  const netlabel = document.getElementById('d-netlabel')
+  const netrate = document.getElementById('d-netrate')
+  if(mode === 'no') {
+    if(taxlabel) taxlabel.textContent = '出口退税'
+    if(taxval) taxval.textContent = '¥ 0'
+    if(taxrate) taxrate.textContent = '不计退税'
+    if(netlabel) netlabel.textContent = '¥46,800'
+    if(netrate) netrate.textContent = '净利率 19.5%'
+  } else {
+    if(taxlabel) taxlabel.textContent = '出口退税'
+    if(taxval) taxval.textContent = '¥7,440'
+    if(taxrate) taxrate.textContent = '退税率 13%×0.75'
+    if(netlabel) netlabel.textContent = '¥54,240'
+    if(netrate) netrate.textContent = '净利率 22.6%'
+  }
+}
+function confirmSettle() {
+  showToast('已确认收汇，结算清单状态更新为"已结算"')
+}
+function saveDraft() { closeModal('m-new'); showToast('结算清单草稿已保存，状态：待结算') }
+function saveSettle() { closeModal('m-new'); showToast('结算清单 JS-20240123-01 已确认结算') }
+function showToast(msg) {
+  const t = document.createElement('div')
+  t.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#1E3A5F;color:#fff;padding:12px 20px;border-radius:8px;font-size:13px;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.2);max-width:320px'
+  t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 2800)
+}
+document.querySelectorAll('.overlay').forEach(o => {
+  o.addEventListener('click', e => { if(e.target === o) o.classList.remove('open') })
+})
+</script>
+</body>
+</html>

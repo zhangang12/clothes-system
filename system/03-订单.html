@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>订单管理 - I9服装制造管理系统</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#FBF8F2;color:#1F1F22;font-size:14px}
+:root{--indigo:#1E3A5F;--indigo-d:#152A45;--indigo-l:#2C5180;--linen:#F5EDDC;--linen-d:#E8DCC0;--canvas:#FBF8F2;--rust:#D17A40;--rust-d:#B86530;--vermilion:#C04042;--teal:#3E8E7E;--amber:#C8901E;--gray-9:#1F1F22;--gray-7:#37383C;--gray-5:#6F7178;--gray-3:#B5B7BD;--gray-1:#E5E2DA;--gray-0:#F4F1EA;--r:4px;--r-lg:8px}
+.sidebar{position:fixed;top:0;left:0;width:200px;height:100vh;background:var(--indigo);overflow-y:auto;z-index:100}
+.logo{padding:18px 16px 14px;font-size:15px;font-weight:700;color:#fff;border-bottom:1px solid rgba(255,255,255,.1);line-height:1.3}
+.logo small{display:block;font-size:11px;font-weight:400;opacity:.6;margin-top:3px}
+.nav-gl{padding:10px 16px 3px;font-size:10px;font-weight:600;color:rgba(255,255,255,.35);letter-spacing:.1em;text-transform:uppercase}
+.nav-a{display:flex;align-items:center;padding:9px 16px;color:rgba(255,255,255,.75);text-decoration:none;font-size:13px;gap:6px;transition:all .15s;position:relative}
+.nav-a:hover{background:rgba(255,255,255,.08);color:#fff}
+.nav-a.act{background:rgba(255,255,255,.14);color:#fff;font-weight:600}
+.nav-a.act::after{content:'';position:absolute;right:0;top:20%;height:60%;width:3px;background:var(--rust);border-radius:2px 0 0 2px}
+.main{margin-left:200px;min-height:100vh}
+.topbar{background:#fff;border-bottom:1px solid var(--gray-1);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+.page-title{font-size:17px;font-weight:700;color:var(--gray-9)}
+.breadcrumb{font-size:12px;color:var(--gray-5);margin-top:2px}
+.content{padding:20px 24px}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:var(--r);font-size:13px;font-family:inherit;cursor:pointer;border:none;line-height:1;transition:all .15s;white-space:nowrap}
+.btn-p{background:var(--indigo);color:#fff}.btn-p:hover{background:var(--indigo-d)}
+.btn-c{background:var(--rust);color:#fff}.btn-c:hover{background:var(--rust-d)}
+.btn-s{background:#fff;border:1px solid var(--gray-1);color:var(--gray-7)}.btn-s:hover{background:var(--gray-0)}
+.btn-g{background:#fff;border:1px solid #f5c6c6;color:var(--vermilion)}.btn-g:hover{background:#fff5f5}
+.btn-sm{padding:5px 10px;font-size:12px}
+.toolbar{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.spacer{flex:1}
+.srch{padding:7px 12px;border:1px solid var(--gray-1);border-radius:var(--r);font-size:13px;width:220px;outline:none;font-family:inherit}
+.srch:focus{border-color:var(--indigo)}
+.filter-bar{display:flex;gap:6px}
+.fbtn{padding:5px 12px;border-radius:10px;font-size:12px;cursor:pointer;border:1px solid var(--gray-1);background:#fff;color:var(--gray-5);font-family:inherit;transition:all .15s}
+.fbtn.act{background:var(--indigo);color:#fff;border-color:var(--indigo)}
+.tw{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);overflow:hidden}
+table{width:100%;border-collapse:collapse}
+th{background:var(--gray-0);font-size:12px;font-weight:600;color:var(--gray-5);padding:9px 14px;text-align:left;border-bottom:1px solid var(--gray-1);white-space:nowrap}
+td{padding:10px 14px;font-size:13px;color:var(--gray-7);border-bottom:1px solid #f0ede6;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#fafaf8}
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.bs{background:#e8f5e9;color:#2e7d32}
+.be{background:#fde7e7;color:#c62828}
+.bw{background:#fff8e1;color:#f57f17}
+.br{background:#e3f2fd;color:#1565c0}
+.bi{background:#f3e5f5;color:#6a1b9a}
+.bg{background:var(--gray-0);color:var(--gray-5)}
+.pg{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:#fff;border-top:1px solid var(--gray-1);font-size:12px;color:var(--gray-5)}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+.stat-card{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);padding:16px 18px}
+.stat-label{font-size:12px;color:var(--gray-5);margin-bottom:4px}
+.stat-value{font-size:26px;font-weight:700;color:var(--indigo);line-height:1}
+.stat-sub{font-size:11px;color:var(--gray-3);margin-top:4px}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:none;align-items:center;justify-content:center;padding:16px}
+.overlay.open{display:flex}
+.modal{background:#fff;border-radius:var(--r-lg);width:960px;max-width:100%;max-height:92vh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,.18)}
+.mh{padding:14px 20px;border-bottom:1px solid var(--gray-1);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#fff;z-index:1}
+.mh h2{font-size:15px;font-weight:700;color:var(--gray-9)}
+.mh-right{display:flex;align-items:center;gap:8px}
+.mc{background:none;border:none;font-size:20px;cursor:pointer;color:var(--gray-5);line-height:1;padding:4px;border-radius:var(--r)}
+.mc:hover{background:var(--gray-0)}
+.mb{padding:18px 20px}
+.mf{padding:12px 20px;border-top:1px solid var(--gray-1);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.frow{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:12px}
+.fg{display:flex;flex-direction:column;gap:4px}
+label{font-size:12px;font-weight:600;color:var(--gray-7)}
+.req{color:var(--vermilion)}
+.fc{padding:7px 10px;border:1px solid var(--gray-1);border-radius:var(--r);font-size:13px;font-family:inherit;outline:none;color:var(--gray-9);background:#fff;width:100%}
+.fc:focus{border-color:var(--indigo)}
+.fc[readonly]{background:var(--gray-0);color:var(--gray-5)}
+.span2{grid-column:span 2}
+.span3{grid-column:span 3}
+.fieldset{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);margin-bottom:14px;overflow:hidden}
+.fh{background:linear-gradient(135deg,#F5EDDC,#FBF8F2);padding:10px 16px;border-bottom:1px solid #E8DCC0;display:flex;align-items:center;justify-content:space-between}
+.fh h3{font-size:13px;font-weight:700;color:var(--indigo)}
+.fb{padding:14px 16px}
+.subtw{border:1px solid var(--gray-1);border-radius:var(--r);overflow:hidden}
+.subtw table th{background:var(--gray-0);padding:7px 10px;font-size:11px;font-weight:600;color:var(--gray-5)}
+.subtw table td{padding:7px 10px;font-size:12px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.tabs-inner{display:flex;border-bottom:1px solid var(--gray-1);margin-bottom:14px}
+.tab-inner{padding:7px 14px;font-size:13px;color:var(--gray-5);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s}
+.tab-inner.act{color:var(--indigo);border-bottom-color:var(--indigo);font-weight:600}
+.text-muted{color:var(--gray-5);font-size:12px}
+.link{color:var(--indigo);cursor:pointer;text-decoration:none}.link:hover{text-decoration:underline}
+.tag-no{font-family:monospace;font-size:12px;background:var(--gray-0);padding:2px 6px;border-radius:3px;color:var(--indigo);font-weight:600}
+.fw7{font-weight:700}
+.size-matrix{border-collapse:collapse;width:100%}
+.size-matrix th,.size-matrix td{border:1px solid var(--gray-1);padding:6px 10px;font-size:12px;text-align:center}
+.size-matrix th{background:var(--gray-0);font-weight:600;color:var(--gray-5)}
+.size-matrix td input{border:none;text-align:center;width:60px;font-size:12px;font-family:inherit;outline:none;background:transparent}
+.size-matrix td input:focus{background:#e3f2fd}
+</style>
+</head>
+<body>
+<nav class="sidebar">
+  <div class="logo">I9 服装制造<small>管理系统 v1.0</small></div>
+  <div class="nav-gl">基础数据</div>
+  <a href="01-基础资料.html" class="nav-a">📋 基础资料</a>
+  <div class="nav-gl">生产前</div>
+  <a href="02-样衣管理.html" class="nav-a">👗 样衣管理</a>
+  <a href="02-客户报价.html" class="nav-a">💰 客户报价</a>
+  <a href="03-订单.html" class="nav-a act">📦 订单管理</a>
+  <div class="nav-gl">合同履行</div>
+  <a href="04-合同.html" class="nav-a">📄 合同管理</a>
+  <a href="05-供应商门户.html" class="nav-a">🏭 供应商门户</a>
+  <div class="nav-gl">财务结算</div>
+  <a href="06-对账付款.html" class="nav-a">💳 对账付款</a>
+  <a href="07-结算清单.html" class="nav-a">📊 结算清单</a>
+</nav>
+
+<div class="main">
+  <div class="topbar">
+    <div>
+      <div class="page-title">订单管理</div>
+      <div class="breadcrumb">I9服装 / 订单管理</div>
+    </div>
+    <button class="btn btn-p" onclick="openModal('m-new')">+ 新建订单</button>
+  </div>
+  <div class="content">
+
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label">进行中订单</div>
+        <div class="stat-value" style="color:var(--rust)">8</div>
+        <div class="stat-sub">生产中 5 · 备料 3</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">本月新增</div>
+        <div class="stat-value">4</div>
+        <div class="stat-sub">同比 +33%</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">本月出货</div>
+        <div class="stat-value" style="color:var(--teal)">3</div>
+        <div class="stat-sub">共 18,500 件</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">在产总量</div>
+        <div class="stat-value">42,000</div>
+        <div class="stat-sub">件，预计 3 月完工</div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <div class="filter-bar">
+        <button class="fbtn act" onclick="filterF('all',this)">全部</button>
+        <button class="fbtn" onclick="filterF('草稿',this)">草稿</button>
+        <button class="fbtn" onclick="filterF('备料中',this)">备料中</button>
+        <button class="fbtn" onclick="filterF('生产中',this)">生产中</button>
+        <button class="fbtn" onclick="filterF('已出货',this)">已出货</button>
+        <button class="fbtn" onclick="filterF('已完成',this)">已完成</button>
+      </div>
+      <div class="spacer"></div>
+      <input class="srch" placeholder="搜索订单号/PO号/客户" oninput="filterTable('t-main',this.value)">
+      <button class="btn btn-s btn-sm">↓ 导出</button>
+    </div>
+
+    <div class="tw">
+      <table id="t-main">
+        <thead>
+          <tr>
+            <th>订单编号</th>
+            <th>客户PO号</th>
+            <th>客户</th>
+            <th>款式名称</th>
+            <th>订单数量</th>
+            <th>订单金额</th>
+            <th>交期</th>
+            <th>状态</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="tag-no">O-20240120-001</span></td>
+            <td><span style="font-family:monospace;font-size:12px;color:var(--gray-7)">PO-HK-2024-0083</span></td>
+            <td>香港华美时装</td>
+            <td>春季款女士连衣裙</td>
+            <td class="fw7">4,000 件</td>
+            <td class="fw7">¥ 240,000</td>
+            <td>2024-04-30</td>
+            <td><span class="badge bw">生产中</span></td>
+            <td>
+              <button class="btn btn-s btn-sm" onclick="openDetail('O-20240120-001')">查看</button>
+              <a href="04-合同.html" class="btn btn-s btn-sm">关联合同</a>
+            </td>
+          </tr>
+          <tr>
+            <td><span class="tag-no">O-20240118-001</span></td>
+            <td><span style="font-family:monospace;font-size:12px;color:var(--gray-7)">YS-2024-Q1-016</span></td>
+            <td>上海雅诗服饰</td>
+            <td>夏季款男士T恤</td>
+            <td class="fw7">5,000 件</td>
+            <td class="fw7">¥ 87,500</td>
+            <td>2024-05-31</td>
+            <td><span class="badge br">备料中</span></td>
+            <td>
+              <button class="btn btn-s btn-sm" onclick="openDetail('O-20240118-001')">查看</button>
+              <button class="btn btn-c btn-sm">下达生产</button>
+            </td>
+          </tr>
+          <tr>
+            <td><span class="tag-no">O-20240115-001</span></td>
+            <td><span style="font-family:monospace;font-size:12px;color:var(--gray-7)">BJ-HL-20240115</span></td>
+            <td>北京华联时装</td>
+            <td>秋季款女士外套</td>
+            <td class="fw7">3,000 件</td>
+            <td class="fw7">¥ 135,000</td>
+            <td>2024-03-31</td>
+            <td><span class="badge bw">生产中</span></td>
+            <td>
+              <button class="btn btn-s btn-sm" onclick="openDetail('O-20240115-001')">查看</button>
+              <button class="btn btn-p btn-sm">记录出货</button>
+            </td>
+          </tr>
+          <tr>
+            <td><span class="tag-no">O-20240110-001</span></td>
+            <td><span style="font-family:monospace;font-size:12px;color:var(--gray-7)">FH-2024-PO-001</span></td>
+            <td>FASHION HOUSE LTD</td>
+            <td>冬季款儿童棉衣</td>
+            <td class="fw7">2,000 件</td>
+            <td class="fw7">$ 48,000</td>
+            <td>2024-06-30</td>
+            <td><span class="badge bg">草稿</span></td>
+            <td>
+              <button class="btn btn-s btn-sm" onclick="openDetail('O-20240110-001')">编辑</button>
+              <button class="btn btn-p btn-sm">确认下单</button>
+              <button class="btn btn-g btn-sm">删除</button>
+            </td>
+          </tr>
+          <tr>
+            <td><span class="tag-no">O-20231220-001</span></td>
+            <td><span style="font-family:monospace;font-size:12px;color:var(--gray-7)">OU-2023-DEC-05</span></td>
+            <td>欧莱时装(深圳)</td>
+            <td>冬季款女士毛衣</td>
+            <td class="fw7">6,000 件</td>
+            <td class="fw7">¥ 312,000</td>
+            <td>2024-02-28</td>
+            <td><span class="badge bs">已出货</span></td>
+            <td>
+              <button class="btn btn-s btn-sm" onclick="openDetail('O-20231220-001')">查看</button>
+              <a href="07-结算清单.html" class="btn btn-s btn-sm">查看结算</a>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="pg">
+        <span>共 5 条 · 每页 20 条</span>
+        <div style="display:flex;gap:4px"><button style="padding:4px 10px;border:1px solid var(--gray-1);background:#fff;border-radius:4px;cursor:pointer;font-size:12px;background:var(--indigo);color:#fff">1</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 订单详情 -->
+<div class="overlay" id="m-detail">
+  <div class="modal">
+    <div class="mh">
+      <div style="display:flex;align-items:center;gap:10px">
+        <h2 id="d-no">O-20240120-001</h2>
+        <span class="badge bw" id="d-status">生产中</span>
+      </div>
+      <div class="mh-right">
+        <button class="btn btn-p btn-sm" onclick="showToast('出货记录已添加')">+ 出货记录</button>
+        <button class="btn btn-s btn-sm">↓ 导出</button>
+        <button class="mc" onclick="closeModal('m-detail')">×</button>
+      </div>
+    </div>
+    <div class="mb">
+      <div class="tabs-inner" id="d-tabs">
+        <div class="tab-inner act" onclick="switchDTab('info',this)">基本信息</div>
+        <div class="tab-inner" onclick="switchDTab('size',this)">尺码搭配</div>
+        <div class="tab-inner" onclick="switchDTab('material',this)">用料核算</div>
+        <div class="tab-inner" onclick="switchDTab('shipping',this)">出货记录</div>
+      </div>
+
+      <!-- 基本信息 -->
+      <div id="d-info">
+        <div class="grid-2">
+          <div>
+            <div class="fieldset">
+              <div class="fh"><h3>订单信息</h3></div>
+              <div class="fb">
+                <div class="frow" style="grid-template-columns:1fr 1fr">
+                  <div class="fg"><label>订单编号</label><input class="fc" value="O-20240120-001" readonly></div>
+                  <div class="fg"><label>客户PO号</label><input class="fc" value="PO-HK-2024-0083" readonly></div>
+                  <div class="fg"><label>关联客户</label><input class="fc" value="香港华美时装有限公司" readonly></div>
+                  <div class="fg"><label>关联报价单</label><input class="fc" value="Q-20240110-001" readonly></div>
+                  <div class="fg"><label>订单日期</label><input class="fc" value="2024-01-20" readonly></div>
+                  <div class="fg"><label>要求交期</label><input class="fc" value="2024-04-30" readonly></div>
+                  <div class="fg"><label>合同金额</label><input class="fc" value="¥ 240,000" readonly></div>
+                  <div class="fg"><label>结算币种</label><input class="fc" value="人民币(CNY)" readonly></div>
+                </div>
+              </div>
+            </div>
+            <div class="fieldset">
+              <div class="fh"><h3>款式信息</h3></div>
+              <div class="fb">
+                <div class="frow" style="grid-template-columns:1fr 1fr">
+                  <div class="fg"><label>款式名称</label><input class="fc" value="春季款女士连衣裙" readonly></div>
+                  <div class="fg"><label>关联样衣</label><input class="fc" value="S-20240117-001" readonly></div>
+                  <div class="fg"><label>颜色/印花</label><input class="fc" value="米白/花卉印花" readonly></div>
+                  <div class="fg"><label>面料成分</label><input class="fc" value="棉麻混纺 55/45" readonly></div>
+                  <div class="fg span2"><label>特殊工艺</label><input class="fc" value="绣花logo，领口手工蕾丝" readonly></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="fieldset">
+              <div class="fh"><h3>生产安排</h3></div>
+              <div class="fb">
+                <div class="frow" style="grid-template-columns:1fr 1fr">
+                  <div class="fg"><label>生产工厂</label><input class="fc" value="苏州腾飞制衣厂(CN001)" readonly></div>
+                  <div class="fg"><label>开始生产</label><input class="fc" value="2024-02-01" readonly></div>
+                  <div class="fg"><label>计划完工</label><input class="fc" value="2024-04-20" readonly></div>
+                  <div class="fg"><label>负责跟单</label><input class="fc" value="王小明" readonly></div>
+                  <div class="fg span2"><label>生产备注</label><textarea class="fc" rows="2" readonly>分两批次生产，第一批S/M各1000件先交</textarea></div>
+                </div>
+              </div>
+            </div>
+            <div class="fieldset">
+              <div class="fh"><h3>合同关联</h3></div>
+              <div class="fb">
+                <div class="subtw">
+                  <table><thead><tr><th>合同编号</th><th>合同类型</th><th>供应商</th><th>合同金额</th><th>状态</th></tr></thead>
+                    <tbody>
+                      <tr><td><span class="tag-no" style="font-size:11px">HT-20240121-001</span></td><td>材料合同</td><td>无锡纺织印染厂</td><td>¥ 105,840</td><td><span class="badge bs" style="font-size:10px">执行中</span></td></tr>
+                      <tr><td><span class="tag-no" style="font-size:11px">HT-20240121-002</span></td><td>加工合同</td><td>苏州腾飞制衣厂</td><td>¥ 72,000</td><td><span class="badge bs" style="font-size:10px">执行中</span></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div style="margin-top:8px;display:flex;gap:8px">
+                  <button class="btn btn-p btn-sm" onclick="toContract()">+ 新建材料合同</button>
+                  <button class="btn btn-s btn-sm" onclick="toContract()">+ 新建加工合同</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 尺码搭配 -->
+      <div id="d-size" style="display:none">
+        <div class="fieldset">
+          <div class="fh"><h3>尺码搭配表</h3><span class="text-muted">总数量：4,000 件</span></div>
+          <div class="fb">
+            <table class="size-matrix">
+              <thead>
+                <tr>
+                  <th>颜色/款式</th>
+                  <th>XS</th><th>S</th><th>M</th><th>L</th><th>XL</th>
+                  <th>小计</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="font-weight:600">米白/花卉印花</td>
+                  <td><input value="200"></td>
+                  <td><input value="600"></td>
+                  <td><input value="1200"></td>
+                  <td><input value="800"></td>
+                  <td><input value="200"></td>
+                  <td style="font-weight:600;background:var(--gray-0)">3,000</td>
+                </tr>
+                <tr>
+                  <td style="font-weight:600">浅粉/花卉印花</td>
+                  <td><input value="100"></td>
+                  <td><input value="200"></td>
+                  <td><input value="400"></td>
+                  <td><input value="200"></td>
+                  <td><input value="100"></td>
+                  <td style="font-weight:600;background:var(--gray-0)">1,000</td>
+                </tr>
+                <tr style="background:var(--gray-0)">
+                  <td style="font-weight:700">合计</td>
+                  <td style="font-weight:700">300</td>
+                  <td style="font-weight:700">800</td>
+                  <td style="font-weight:700">1,600</td>
+                  <td style="font-weight:700">1,000</td>
+                  <td style="font-weight:700">300</td>
+                  <td style="font-weight:700">4,000</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 用料核算 -->
+      <div id="d-material" style="display:none">
+        <div class="fieldset">
+          <div class="fh"><h3>用料核算</h3><span class="text-muted">自动按损耗率计算实际采购量</span></div>
+          <div class="fb" style="padding:0">
+            <div class="subtw">
+              <table>
+                <thead>
+                  <tr>
+                    <th>材料名称</th><th>规格</th><th>单位</th><th>净用量/件</th>
+                    <th>损耗率</th><th>含损用量/件</th><th>订单件数</th>
+                    <th>总采购量</th><th>单价</th><th>预算金额</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>棉麻混纺面料</td><td>幅宽145cm</td><td>米</td>
+                    <td>2.50</td><td>8%</td><td>2.70</td><td>4,000</td>
+                    <td class="fw7">10,800 米</td><td>¥28.00/米</td><td class="fw7">¥302,400</td>
+                  </tr>
+                  <tr>
+                    <td>里布(涤纶)</td><td>幅宽150cm</td><td>米</td>
+                    <td>1.20</td><td>5%</td><td>1.26</td><td>4,000</td>
+                    <td class="fw7">5,040 米</td><td>¥12.00/米</td><td class="fw7">¥60,480</td>
+                  </tr>
+                  <tr>
+                    <td>隐形拉链</td><td>40cm</td><td>条</td>
+                    <td>1</td><td>2%</td><td>1.02</td><td>4,000</td>
+                    <td class="fw7">4,080 条</td><td>¥2.50/条</td><td class="fw7">¥10,200</td>
+                  </tr>
+                  <tr>
+                    <td>吊牌/洗水标</td><td>—</td><td>套</td>
+                    <td>1</td><td>0%</td><td>1.00</td><td>4,000</td>
+                    <td class="fw7">4,000 套</td><td>¥0.80/套</td><td class="fw7">¥3,200</td>
+                  </tr>
+                  <tr style="background:var(--gray-0);font-weight:700">
+                    <td colspan="9">材料合计预算</td>
+                    <td class="fw7" style="color:var(--indigo)">¥376,280</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 出货记录 -->
+      <div id="d-shipping" style="display:none">
+        <div class="fieldset">
+          <div class="fh"><h3>出货记录</h3>
+            <div style="display:flex;gap:6px;align-items:center">
+              <span class="text-muted">已出货：0 件 / 4,000 件</span>
+              <button class="btn btn-p btn-sm" onclick="showToast('出货记录已保存')">+ 添加出货</button>
+            </div>
+          </div>
+          <div class="fb" style="padding:0">
+            <div class="subtw">
+              <table>
+                <thead>
+                  <tr><th>发货批次</th><th>发货编号</th><th>发货日期</th><th>发货数量</th><th>快递/船运信息</th><th>状态</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td colspan="6" style="text-align:center;color:var(--gray-5);padding:24px">暂无出货记录</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:var(--r);padding:10px 14px;font-size:13px;color:#f57f17;margin-top:8px">
+          ⚠ 出货后才可在"对账付款"模块发起供应商对账
+        </div>
+      </div>
+    </div>
+    <div class="mf">
+      <div class="text-muted">创建于 2024-01-20 · 跟单：王小明</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-s" onclick="closeModal('m-detail')">关闭</button>
+        <button class="btn btn-p" onclick="toContract()">→ 新建关联合同</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 新建订单 -->
+<div class="overlay" id="m-new">
+  <div class="modal">
+    <div class="mh"><h2>新建订单</h2><button class="mc" onclick="closeModal('m-new')">×</button></div>
+    <div class="mb">
+      <div class="fieldset">
+        <div class="fh"><h3>基本信息</h3></div>
+        <div class="fb">
+          <div class="frow">
+            <div class="fg"><label>订单编号</label><input class="fc" value="O-20240121-001" readonly></div>
+            <div class="fg"><label>关联客户 <span class="req">*</span></label>
+              <select class="fc"><option>请选择客户</option><option>香港华美时装有限公司</option><option>上海雅诗服饰有限公司</option><option>FASHION HOUSE LTD</option><option>北京华联时装集团</option></select>
+            </div>
+            <div class="fg"><label>客户PO号</label><input class="fc" placeholder="客户系统订单号"></div>
+            <div class="fg"><label>关联报价单</label>
+              <select class="fc"><option>可选，选择报价单</option><option>Q-20240119-002 上海雅诗服饰</option></select>
+            </div>
+            <div class="fg"><label>款式名称 <span class="req">*</span></label><input class="fc" placeholder="款式名称"></div>
+            <div class="fg"><label>要求交期 <span class="req">*</span></label><input class="fc" type="date"></div>
+            <div class="fg"><label>订单金额</label><input class="fc" placeholder="¥ 0.00"></div>
+            <div class="fg"><label>币种</label>
+              <select class="fc"><option>人民币(CNY)</option><option>美元(USD)</option><option>港元(HKD)</option></select>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="fieldset">
+        <div class="fh"><h3>款式信息</h3></div>
+        <div class="fb">
+          <div class="frow">
+            <div class="fg"><label>颜色/印花</label><input class="fc" placeholder="如：藏蓝/格纹"></div>
+            <div class="fg"><label>面料成分</label><input class="fc" placeholder="如：100%棉"></div>
+            <div class="fg span2"><label>特殊工艺</label><input class="fc" placeholder="版型、印花、绣花等特殊要求"></div>
+          </div>
+        </div>
+      </div>
+      <div class="fieldset">
+        <div class="fh"><h3>生产安排</h3></div>
+        <div class="fb">
+          <div class="frow">
+            <div class="fg"><label>生产工厂</label>
+              <select class="fc"><option>请选择工厂</option><option>苏州腾飞制衣厂(CN001)</option><option>广州美嘉服装加工厂(CN002)</option><option>杭州丝绸坊工艺厂(CN003)</option></select>
+            </div>
+            <div class="fg"><label>负责跟单</label><input class="fc" placeholder="跟单员姓名"></div>
+            <div class="fg"><label>备注</label><input class="fc" placeholder="其他备注"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="mf">
+      <div class="text-muted">创建后可在详情页录入尺码搭配和用料核算</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-s" onclick="closeModal('m-new')">取消</button>
+        <button class="btn btn-s" onclick="saveDraft()">存草稿</button>
+        <button class="btn btn-p" onclick="saveOrder()">确认创建</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function openModal(id) { document.getElementById(id).classList.add('open') }
+function closeModal(id) { document.getElementById(id).classList.remove('open') }
+function openDetail(no) { document.getElementById('d-no').textContent = no; openModal('m-detail') }
+function filterTable(id, q) {
+  document.querySelectorAll('#'+id+' tbody tr').forEach(tr => {
+    tr.style.display = tr.textContent.toLowerCase().includes(q.toLowerCase()) ? '' : 'none'
+  })
+}
+function filterF(status, btn) {
+  document.querySelectorAll('.filter-bar .fbtn').forEach(b => b.classList.remove('act'))
+  btn.classList.add('act')
+  document.querySelectorAll('#t-main tbody tr').forEach(tr => {
+    if (status === 'all') { tr.style.display=''; return }
+    const badge = tr.querySelector('.badge')
+    tr.style.display = badge && badge.textContent === status ? '' : 'none'
+  })
+}
+function switchDTab(tab, el) {
+  document.querySelectorAll('#d-tabs .tab-inner').forEach(t => t.classList.remove('act'))
+  el.classList.add('act')
+  ;['info','size','material','shipping'].forEach(t => {
+    const el2 = document.getElementById('d-'+t)
+    if(el2) el2.style.display = t === tab ? '' : 'none'
+  })
+}
+function toContract() { closeModal('m-detail'); showToast('正在跳转合同页面...'); setTimeout(() => window.location.href='04-合同.html',1000) }
+function saveDraft() { closeModal('m-new'); showToast('订单草稿已保存') }
+function saveOrder() { closeModal('m-new'); showToast('订单 O-20240121-001 已创建') }
+function showToast(msg) {
+  const t = document.createElement('div')
+  t.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#1E3A5F;color:#fff;padding:12px 20px;border-radius:8px;font-size:13px;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.2)'
+  t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 2500)
+}
+document.querySelectorAll('.overlay').forEach(o => {
+  o.addEventListener('click', e => { if(e.target === o) o.classList.remove('open') })
+})
+</script>
+</body>
+</html>

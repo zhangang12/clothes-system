@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>I9 服装制造管理系统 — 测试计划</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#FBF8F2;color:#1F1F22;font-size:14px;line-height:1.6}
+:root{
+  --indigo:#1E3A5F;--linen:#F5EDDC;--linen-d:#E8DCC0;
+  --rust:#D17A40;--vermilion:#C04042;--teal:#3E8E7E;--amber:#C8901E;
+  --gray-9:#1F1F22;--gray-7:#37383C;--gray-5:#6F7178;
+  --gray-3:#B5B7BD;--gray-1:#E5E2DA;--gray-0:#F4F1EA;
+  --r:4px;--r-lg:8px
+}
+.layout{display:flex;min-height:100vh}
+.sidebar{width:220px;background:var(--indigo);color:#fff;flex-shrink:0;position:sticky;top:0;height:100vh;overflow-y:auto}
+.sidebar .logo{padding:20px 16px 12px;font-size:15px;font-weight:700;border-bottom:1px solid rgba(255,255,255,.1)}
+.sidebar .logo small{display:block;font-size:11px;font-weight:400;opacity:.6;margin-top:2px}
+.nav-gl{padding:14px 16px 4px;font-size:10px;opacity:.5;letter-spacing:.06em;text-transform:uppercase}
+.nav-a{display:block;padding:7px 16px;color:rgba(255,255,255,.75);border-left:3px solid transparent;font-size:12px;cursor:pointer}
+.nav-a:hover,.nav-a.act{background:rgba(255,255,255,.1);color:#fff;border-left-color:var(--rust)}
+.main{flex:1;overflow:auto}
+.topbar{background:#fff;border-bottom:1px solid var(--gray-1);padding:0 24px;display:flex;align-items:center;height:52px;gap:12px;position:sticky;top:0;z-index:10}
+.topbar h1{font-size:16px;font-weight:600;color:var(--indigo)}
+.content{padding:24px;max-width:1100px}
+.section{margin-bottom:36px;scroll-margin-top:60px}
+.section-title{font-size:18px;font-weight:700;color:var(--indigo);margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid var(--linen-d)}
+.sub{font-size:14px;font-weight:600;color:var(--gray-7);margin:18px 0 10px}
+.sub2{font-size:13px;font-weight:600;color:var(--gray-5);margin:12px 0 6px}
+.card{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);padding:18px;margin-bottom:14px}
+.tbl-wrap{border:1px solid var(--gray-1);border-radius:var(--r-lg);overflow:hidden;margin:8px 0 16px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{background:var(--linen);color:var(--gray-7);font-weight:600;padding:8px 12px;text-align:left;border-bottom:1px solid var(--linen-d)}
+td{padding:8px 12px;border-bottom:1px solid var(--gray-0);vertical-align:top}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--gray-0)}
+.tag{display:inline-block;font-size:10px;padding:2px 7px;border-radius:8px;font-weight:600;margin:1px}
+.t-unit{background:#ede9fe;color:#4c1d95}
+.t-api{background:#d1fae5;color:#065f46}
+.t-e2e{background:#fce7f3;color:#9d174d}
+.t-comp{background:#e0f2fe;color:#0c4a6e}
+.t-biz{background:#fef3c7;color:#92400e}
+.p1{background:#fee2e2;color:#991b1b;font-size:10px;padding:2px 7px;border-radius:8px;font-weight:600}
+.p2{background:#fef3c7;color:#92400e;font-size:10px;padding:2px 7px;border-radius:8px;font-weight:600}
+.p3{background:#dbeafe;color:#1e40af;font-size:10px;padding:2px 7px;border-radius:8px;font-weight:600}
+.pass{color:var(--teal);font-weight:600}
+.fail{color:var(--vermilion);font-weight:600}
+.warn{color:var(--amber);font-weight:600}
+.alert{border-radius:var(--r-lg);padding:11px 14px;margin:8px 0;font-size:13px}
+.alert-i{background:#eff6ff;border-left:3px solid #3b82f6;color:#1e40af}
+.alert-w{background:#fffbeb;border-left:3px solid #f59e0b;color:#92400e}
+.alert-e{background:#fef2f2;border-left:3px solid #ef4444;color:#991b1b}
+code{background:#f1f5f9;color:#334155;padding:1px 5px;border-radius:3px;font-size:11px;font-family:"SF Mono",Consolas,monospace}
+pre{background:#1e293b;color:#e2e8f0;padding:14px;border-radius:var(--r-lg);font-size:11px;font-family:"SF Mono",Consolas,monospace;overflow-x:auto;margin:8px 0 14px}
+.tc{border:1px solid var(--gray-1);border-radius:var(--r-lg);margin-bottom:10px;overflow:hidden}
+.tc-head{padding:10px 14px;background:var(--gray-0);display:flex;align-items:center;gap:8px;cursor:pointer}
+.tc-head:hover{background:var(--linen)}
+.tc-id{font-family:monospace;font-size:11px;color:var(--gray-3);min-width:100px}
+.tc-title{font-size:13px;font-weight:600;color:var(--gray-9);flex:1}
+.tc-body{padding:12px 14px;border-top:1px solid var(--gray-1);display:none}
+.tc.open .tc-body{display:block}
+.step-list{counter-reset:step}
+.step{display:flex;gap:10px;margin-bottom:6px;font-size:12px}
+.step::before{counter-increment:step;content:counter(step);width:20px;height:20px;background:var(--indigo);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;margin-top:1px}
+.expect{margin-top:6px;padding:8px 10px;background:var(--linen);border-radius:var(--r);font-size:12px}
+.expect b{color:var(--teal)}
+
+/* Coverage matrix */
+.cov-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin:10px 0}
+.cov-cell{background:#fff;border:1px solid var(--gray-1);border-radius:var(--r-lg);padding:12px}
+.cov-cell .module{font-size:11px;font-weight:700;color:var(--indigo);margin-bottom:6px}
+.cov-bar{height:6px;background:var(--gray-1);border-radius:3px;overflow:hidden;margin-bottom:4px}
+.cov-fill{height:100%;border-radius:3px;background:var(--teal)}
+.cov-pct{font-size:12px;font-weight:700;color:var(--teal)}
+
+/* Checklist */
+.checklist{margin:0;padding:0;list-style:none}
+.checklist li{display:flex;gap:8px;padding:6px 0;border-bottom:1px solid var(--gray-0);font-size:13px}
+.checklist li:last-child{border-bottom:none}
+.chk{width:16px;height:16px;border:2px solid var(--gray-3);border-radius:3px;flex-shrink:0;margin-top:2px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.chk.ok{background:var(--teal);border-color:var(--teal);color:#fff;font-size:10px}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+  <div class="logo">I9 服装制造<small>测试计划 v1.0</small></div>
+  <div class="nav-gl">概览</div>
+  <a class="nav-a" onclick="s('strategy')">📋 测试策略</a>
+  <a class="nav-a" onclick="s('coverage')">📊 覆盖率目标</a>
+  <div class="nav-gl">单元测试</div>
+  <a class="nav-a" onclick="s('ut-loss')">损耗计算</a>
+  <a class="nav-a" onclick="s('ut-cost')">成本计算</a>
+  <a class="nav-a" onclick="s('ut-overpay')">超付拦截</a>
+  <a class="nav-a" onclick="s('ut-account')">账期计算</a>
+  <a class="nav-a" onclick="s('ut-refund')">退税计算</a>
+  <a class="nav-a" onclick="s('ut-numbering')">编号序列</a>
+  <a class="nav-a" onclick="s('ut-snapshot')">快照锁定</a>
+  <div class="nav-gl">API 集成测试</div>
+  <a class="nav-a" onclick="s('api-auth')">鉴权接口</a>
+  <a class="nav-a" onclick="s('api-modules')">各模块接口</a>
+  <div class="nav-gl">E2E 测试</div>
+  <a class="nav-a" onclick="s('e2e-flows')">8条核心流程</a>
+  <div class="nav-gl">业务逻辑审查</div>
+  <a class="nav-a" onclick="s('biz-review')">设计稿逐条核对</a>
+  <div class="nav-gl">前端组件测试</div>
+  <a class="nav-a" onclick="s('comp-tests')">Vitest 规范</a>
+</nav>
+<div class="main">
+  <div class="topbar">
+    <h1>I9 服装制造管理系统 — 测试计划</h1>
+    <span style="font-size:12px;color:var(--gray-5)">v1.0 · 覆盖全部8阶段</span>
+  </div>
+  <div class="content">
+
+    <!-- Strategy -->
+    <div class="section" id="strategy">
+      <div class="section-title">测试策略</div>
+      <div class="card">
+        <div class="sub">测试金字塔</div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:0;margin:12px 0">
+          <div style="background:var(--vermilion);color:#fff;padding:10px 40px;border-radius:8px 8px 0 0;font-size:12px;font-weight:700;text-align:center">E2E（Playwright）<br><small style="font-weight:400">8条全流程 · 最高价值</small></div>
+          <div style="background:var(--amber);color:#fff;padding:12px 80px;font-size:12px;font-weight:700;text-align:center">API集成测试（Supertest）<br><small style="font-weight:400">所有接口 · ≥80% 覆盖</small></div>
+          <div style="background:var(--teal);color:#fff;padding:14px 140px;border-radius:0 0 8px 8px;font-size:12px;font-weight:700;text-align:center">单元测试（Jest / Vitest）<br><small style="font-weight:400">核心业务规则 · 100% 覆盖</small></div>
+        </div>
+        <div class="alert alert-i">核心原则：业务规则（计算公式、状态机、拦截逻辑）必须100%单元测试覆盖；UI交互用E2E覆盖；接口层用API测试覆盖。测试与功能同步开发，不允许功能先完成测试后补。</div>
+      </div>
+
+      <div class="card">
+        <div class="sub">工具链</div>
+        <div class="tbl-wrap">
+          <table>
+            <tr><th>层次</th><th>框架</th><th>运行方式</th><th>报告</th></tr>
+            <tr><td>后端单元</td><td>Jest 29 + ts-jest</td><td><code>pnpm --filter api test:unit</code></td><td>lcov + HTML</td></tr>
+            <tr><td>后端API集成</td><td>Jest + Supertest + sqlite in-memory</td><td><code>pnpm --filter api test:e2e</code></td><td>junit XML for CI</td></tr>
+            <tr><td>前端单元/组件</td><td>Vitest + Vue Test Utils</td><td><code>pnpm --filter web test</code></td><td>v8 coverage</td></tr>
+            <tr><td>H5组件</td><td>Vitest + Vue Test Utils</td><td><code>pnpm --filter portal test</code></td><td>v8 coverage</td></tr>
+            <tr><td>E2E全流程</td><td>Playwright (Chromium)</td><td><code>pnpm test:e2e</code></td><td>HTML report + 截图</td></tr>
+            <tr><td>CI集成</td><td>GitHub Actions</td><td>PR触发，main分支必须全绿</td><td>Actions summary</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Coverage -->
+    <div class="section" id="coverage">
+      <div class="section-title">覆盖率目标</div>
+      <div class="cov-grid">
+        <div class="cov-cell"><div class="module">损耗计算</div><div class="cov-bar"><div class="cov-fill" style="width:100%"></div></div><span class="cov-pct">100%</span> <span style="font-size:11px;color:var(--gray-5)">必达</span></div>
+        <div class="cov-cell"><div class="module">成本计算</div><div class="cov-bar"><div class="cov-fill" style="width:100%"></div></div><span class="cov-pct">100%</span> <span style="font-size:11px;color:var(--gray-5)">必达</span></div>
+        <div class="cov-cell"><div class="module">超付拦截</div><div class="cov-bar"><div class="cov-fill" style="width:100%"></div></div><span class="cov-pct">100%</span> <span style="font-size:11px;color:var(--gray-5)">必达</span></div>
+        <div class="cov-cell"><div class="module">退税计算</div><div class="cov-bar"><div class="cov-fill" style="width:100%"></div></div><span class="cov-pct">100%</span> <span style="font-size:11px;color:var(--gray-5)">必达</span></div>
+        <div class="cov-cell"><div class="module">快照锁定</div><div class="cov-bar"><div class="cov-fill" style="width:100%"></div></div><span class="cov-pct">100%</span> <span style="font-size:11px;color:var(--gray-5)">必达</span></div>
+        <div class="cov-cell"><div class="module">账期计算</div><div class="cov-bar"><div class="cov-fill" style="width:100%"></div></div><span class="cov-pct">100%</span> <span style="font-size:11px;color:var(--gray-5)">必达</span></div>
+        <div class="cov-cell"><div class="module">API接口总体</div><div class="cov-bar"><div class="cov-fill" style="width:80%"></div></div><span class="cov-pct">≥80%</span></div>
+        <div class="cov-cell"><div class="module">前端组件</div><div class="cov-bar"><div class="cov-fill" style="width:70%"></div></div><span class="cov-pct">≥70%</span></div>
+        <div class="cov-cell"><div class="module">E2E核心流程</div><div class="cov-bar"><div class="cov-fill" style="width:100%"></div></div><span class="cov-pct">8/8 通过</span></div>
+      </div>
+    </div>
+
+    <!-- Unit Tests: Loss Calc -->
+    <div class="section" id="ut-loss">
+      <div class="section-title">单元测试 — 损耗计算（LossCalcService）</div>
+      <div class="alert alert-w"><b>公式</b>：含损单价 = 原单价 ÷ (1 - 损耗率%)  · 全局损耗率批量更新所有行</div>
+      <pre>
+// packages/api/src/quote/loss-calc.service.spec.ts
+describe('LossCalcService', () => {
+  describe('calcLossPrice', () => {
+    it('UT-LOSS-01: 损耗率0% → 含损单价等于原单价', ...)
+    it('UT-LOSS-02: 损耗率10% → 10.00÷0.90=11.1111 精确到4位', ...)
+    it('UT-LOSS-03: 损耗率5% → 100.00÷0.95=105.2632', ...)
+    it('UT-LOSS-04: 损耗率15% → 50.00÷0.85=58.8235', ...)
+    it('UT-LOSS-05: 损耗率99.99% → 极端值不抛出异常', ...)
+    it('UT-LOSS-06: 损耗率100% → 抛出 BadRequestException', ...)
+    it('UT-LOSS-07: 损耗率负数 → 抛出 BadRequestException', ...)
+    it('UT-LOSS-08: 损耗率>100% → 抛出 BadRequestException', ...)
+  })
+  describe('batchUpdateLossRate', () => {
+    it('UT-LOSS-09: 全局损耗率更新后所有行重新计算', ...)
+    it('UT-LOSS-10: 更新不影响无损耗率的行（损耗率=0）', ...)
+    it('UT-LOSS-11: 小计 = 含损单价 × 总用量，精度正确', ...)
+  })
+})</pre>
+      <div class="tbl-wrap"><table>
+        <tr><th>用例ID</th><th>输入</th><th>期望输出</th><th>优先级</th></tr>
+        <tr><td>UT-LOSS-01</td><td>原价=10.00, 损耗率=0%</td><td>含损单价=10.0000</td><td><span class="p1">P1</span></td></tr>
+        <tr><td>UT-LOSS-02</td><td>原价=10.00, 损耗率=10%</td><td>含损单价=11.1111</td><td><span class="p1">P1</span></td></tr>
+        <tr><td>UT-LOSS-03</td><td>原价=100.00, 损耗率=5%</td><td>含损单价=105.2632</td><td><span class="p1">P1</span></td></tr>
+        <tr><td>UT-LOSS-04</td><td>原价=50.00, 损耗率=15%</td><td>含损单价=58.8235</td><td><span class="p1">P1</span></td></tr>
+        <tr><td>UT-LOSS-06</td><td>损耗率=100%</td><td>抛出 BadRequestException</td><td><span class="p1">P1</span></td></tr>
+        <tr><td>UT-LOSS-07</td><td>损耗率=-1%</td><td>抛出 BadRequestException</td><td><span class="p1">P1</span></td></tr>
+        <tr><td>UT-LOSS-11</td><td>含损单价=11.1111, 用量=100</td><td>小计=1111.11</td><td><span class="p1">P1</span></td></tr>
+      </table></div>
+    </div>
+
+    <!-- Unit Tests: Cost Calc -->
+    <div class="section" id="ut-cost">
+      <div class="section-title">单元测试 — 成本计算（CostCalcService）</div>
+      <div class="alert alert-w"><b>公式</b>：有票=发票÷(1+税率) · 无票=付款全额 · 成本单价=总成本÷出货件数</div>
+      <div class="tbl-wrap"><table>
+        <tr><th>用例ID</th><th>场景</th><th>输入</th><th>期望输出</th><th>优先级</th></tr>
+        <tr><td>UT-COST-01</td><td>有票13%税率</td><td>发票=11300, 税率=13%</td><td>不含税成本=10000.0000</td><td><span class="p1">P1</span></td></tr>
+        <tr><td>UT-COST-02</td><td>有票9%税率</td><td>发票=10900, 税率=9%</td><td>不含税成本=10000.0000</td><td><span class="p1">P1</span></td></tr>
+        <tr><td>UT-COST-03</td><td>有票6%税率</td><td>发票=10600, 税率=6%</td><td>不含税成本=10000.0000</td><td><span class="p1">P1</span></td></tr>
+        <tr><td>UT-COST-04</td><td>无票含税全额</td><td>付款=15000</td><td>成本=15000.0000</td><td><span class="p1">P1</span></td></tr>
+        <tr><td>UT-COST-05</td><td>成本单价整除</td><td>总成本=10000, 出货=1000件</td><td>成本单价=10.0000</td><td><span class="p1">P1</span></td></tr>
+        <tr><td>UT-COST-06</td><td>成本单价不整除</td><td>总成本=10001, 出货=3件</td><td>成本单价=3333.6667</td><td><span class="p1">P1</span></td></tr>
+        <tr><td>UT-COST-07</td><td>出货件数=0防除零</td><td>总成本=10000, 出货=0件</td><td>抛出 BadRequestException</td><td><span class="p1">P1</span></td></tr>
+        <tr><td>UT-COST-08</td><td>有票+无票混合汇总</td><td>有票成本A + 无票成本B</td><td>总成本=A+B</td><td><span class="p2">P2</span></td></tr>
+      </table></div>
+    </div>
+
+    <!-- Unit Tests: Overpay -->
+    <div class="section" id="ut-overpay">
+      <div class="section-title">单元测试 — 超付拦截（OverpaymentGuard）</div>
+      <div class="alert alert-e"><b>规则</b>：申请金额 > (合同金额 - 已审批金额) → 拦截，精确到分（¥0.01）</div>
+      <div class="tbl-wrap"><table>
+        <tr><th>用例ID</th><th>场景</th><th>合同金额</th><th>已付</th><th>申请金额</th><th>期望结果</th></tr>
+        <tr><td>UT-OVP-01</td><td>正常申请</td><td>10000</td><td>3000</td><td>5000</td><td class="pass">通过</td></tr>
+        <tr><td>UT-OVP-02</td><td>恰好等于余额</td><td>10000</td><td>3000</td><td>7000</td><td class="pass">通过</td></tr>
+        <tr><td>UT-OVP-03</td><td>超付1分钱</td><td>10000</td><td>3000</td><td>7000.01</td><td class="fail">拦截 422</td></tr>
+        <tr><td>UT-OVP-04</td><td>超付整数</td><td>10000</td><td>3000</td><td>8000</td><td class="fail">拦截 422</td></tr>
+        <tr><td>UT-OVP-05</td><td>已付清</td><td>10000</td><td>10000</td><td>1</td><td class="fail">拦截 422</td></tr>
+        <tr><td>UT-OVP-06</td><td>申请金额=0</td><td>10000</td><td>0</td><td>0</td><td class="fail">拦截（金额必须>0）</td></tr>
+        <tr><td>UT-OVP-07</td><td>含预付款冲抵后余额</td><td>10000</td><td>2000(已付)+1000(预付冲抵)</td><td>7000</td><td class="pass">通过</td></tr>
+        <tr><td>UT-OVP-08</td><td>含预付冲抵后超付</td><td>10000</td><td>2000+1000</td><td>7001</td><td class="fail">拦截 422</td></tr>
+      </table></div>
+      <pre>
+// OverpaymentGuard 响应格式（422时）
+{
+  "code": 1002,
+  "msg": "申请金额超出可用余额",
+  "data": {
+    "contractAmount": 10000.00,
+    "paidAmount": 3000.00,
+    "availableAmount": 7000.00,
+    "requestedAmount": 7000.01
+  }
+}</pre>
+    </div>
+
+    <!-- Unit Tests: Account Period -->
+    <div class="section" id="ut-account">
+      <div class="section-title">单元测试 — 账期计算</div>
+      <div class="alert alert-w"><b>规则</b>：材料合同=最后发货日+45天 · 加工合同=最后发货日+30天</div>
+      <div class="tbl-wrap"><table>
+        <tr><th>用例ID</th><th>合同类型</th><th>最后发货日</th><th>期望账期截止日</th></tr>
+        <tr><td>UT-ACC-01</td><td>材料合同</td><td>2024-01-15</td><td>2024-03-01 (+45天)</td></tr>
+        <tr><td>UT-ACC-02</td><td>材料合同（月末）</td><td>2024-01-31</td><td>2024-03-16</td></tr>
+        <tr><td>UT-ACC-03</td><td>加工合同</td><td>2024-01-15</td><td>2024-02-14 (+30天)</td></tr>
+        <tr><td>UT-ACC-04</td><td>材料合同（跨年）</td><td>2023-12-20</td><td>2024-02-03</td></tr>
+        <tr><td>UT-ACC-05</td><td>付款比例之和≠100%</td><td>30%+40%+29%</td><td>抛出 BadRequestException</td></tr>
+        <tr><td>UT-ACC-06</td><td>付款比例之和=100%</td><td>30%+40%+30%</td><td>通过验证</td></tr>
+      </table></div>
+    </div>
+
+    <!-- Unit Tests: Tax Refund -->
+    <div class="section" id="ut-refund">
+      <div class="section-title">单元测试 — 退税计算（TaxRefundService）</div>
+      <div class="alert alert-w"><b>公式</b>：退税 = 含税面料采购额 × (出口退税率 - 增值税率差)</div>
+      <div class="tbl-wrap"><table>
+        <tr><th>用例ID</th><th>场景</th><th>输入</th><th>期望退税额</th></tr>
+        <tr><td>UT-TAX-01</td><td>标准场景</td><td>含税采购=113000, 退税率=13%, 增值税差=0%</td><td>退税=13000.00</td></tr>
+        <tr><td>UT-TAX-02</td><td>有增值税率差</td><td>含税采购=113000, 退税率=10%, 增值税差=3%</td><td>退税=7955.75</td></tr>
+        <tr><td>UT-TAX-03</td><td>退税率=0</td><td>含税采购=100000, 退税率=0%</td><td>退税=0</td></tr>
+        <tr><td>UT-TAX-04</td><td>含退税净利</td><td>货款=100000, 成本=80000, 退税=5000</td><td>净利=25000</td></tr>
+        <tr><td>UT-TAX-05</td><td>不含退税净利</td><td>货款=100000, 成本=80000</td><td>净利=20000</td></tr>
+      </table></div>
+    </div>
+
+    <!-- Unit Tests: Numbering -->
+    <div class="section" id="ut-numbering">
+      <div class="section-title">单元测试 — 编号序列（NumberingService）</div>
+      <div class="tbl-wrap"><table>
+        <tr><th>用例ID</th><th>场景</th><th>期望结果</th></tr>
+        <tr><td>UT-NUM-01</td><td>工厂编号首次生成</td><td>CN001</td></tr>
+        <tr><td>UT-NUM-02</td><td>工厂编号第2次</td><td>CN002</td></tr>
+        <tr><td>UT-NUM-03</td><td>样衣编号 2024-01-15</td><td>S-20240115-001</td></tr>
+        <tr><td>UT-NUM-04</td><td>同日第2个样衣</td><td>S-20240115-002</td></tr>
+        <tr><td>UT-NUM-05</td><td>次日第1个样衣</td><td>S-20240116-001（重置）</td></tr>
+        <tr><td>UT-NUM-06</td><td>并发100次生成CN编号</td><td>无重复，连续递增</td></tr>
+        <tr><td>UT-NUM-07</td><td>序号超999（4位）</td><td>S-20240115-1000（自动扩位）</td></tr>
+      </table></div>
+    </div>
+
+    <!-- Unit Tests: Snapshot -->
+    <div class="section" id="ut-snapshot">
+      <div class="section-title">单元测试 — 快照锁定机制</div>
+      <div class="alert alert-e"><b>核心规则</b>：盖章后合同字段不可修改；对账单引用盖章快照价格，不跟随后续修改变化。</div>
+      <div class="tbl-wrap"><table>
+        <tr><th>用例ID</th><th>场景</th><th>操作</th><th>期望结果</th></tr>
+        <tr><td>UT-SNAP-01</td><td>盖章前材料单价可修改</td><td>PATCH /contracts/{id} {unitPrice:10}</td><td>200 修改成功</td></tr>
+        <tr><td>UT-SNAP-02</td><td>盖章后修改材料单价</td><td>stamp → PATCH unitPrice</td><td>422 已锁定</td></tr>
+        <tr><td>UT-SNAP-03</td><td>快照值独立存储</td><td>盖章→修改原字段→查快照</td><td>快照值=盖章时值</td></tr>
+        <tr><td>UT-SNAP-04</td><td>对账单引用快照价格</td><td>盖章后建对账单</td><td>对账单unitPrice=盖章时快照值</td></tr>
+        <tr><td>UT-SNAP-05</td><td>快照不随合同更新而变</td><td>强制改合同原字段→查对账单</td><td>对账单unitPrice不变</td></tr>
+        <tr><td>UT-SNAP-06</td><td>门户顺序：未推送即盖章</td><td>跳步骤直接盖章</td><td>422 前置步骤未完成</td></tr>
+      </table></div>
+    </div>
+
+    <!-- API Tests -->
+    <div class="section" id="api-auth">
+      <div class="section-title">API 集成测试 — 鉴权</div>
+      <div class="tbl-wrap"><table>
+        <tr><th>用例ID</th><th>接口</th><th>场景</th><th>期望结果</th></tr>
+        <tr><td>API-AUTH-01</td><td>POST /api/v1/auth/login</td><td>正确账号密码</td><td>200 + token</td></tr>
+        <tr><td>API-AUTH-02</td><td>POST /api/v1/auth/login</td><td>错误密码</td><td>401</td></tr>
+        <tr><td>API-AUTH-03</td><td>GET /api/v1/factories</td><td>无token</td><td>401</td></tr>
+        <tr><td>API-AUTH-04</td><td>POST /api/v1/payment-requests/{id}/approve</td><td>BUSINESS角色</td><td>403（仅FINANCE可操作）</td></tr>
+        <tr><td>API-AUTH-05</td><td>POST /api/v1/payment-requests/{id}/approve</td><td>FINANCE角色</td><td>200</td></tr>
+        <tr><td>API-AUTH-06</td><td>GET /portal/v1/contracts</td><td>供应商A token</td><td>只返回A的合同</td></tr>
+        <tr><td>API-AUTH-07</td><td>GET /portal/v1/contracts/{B的合同id}</td><td>供应商A token</td><td>403 越权</td></tr>
+        <tr><td>API-AUTH-08</td><td>POST /portal/v1/auth/login</td><td>供应商账号密码</td><td>200 + portal token</td></tr>
+      </table></div>
+    </div>
+
+    <div class="section" id="api-modules">
+      <div class="section-title">API 集成测试 — 各模块关键接口</div>
+      <div class="tbl-wrap"><table>
+        <tr><th>模块</th><th>接口</th><th>场景</th><th>验收要点</th></tr>
+        <tr><td>基础资料</td><td>POST /factories</td><td>新建工厂</td><td>CN编号自动生成、响应含factory_no</td></tr>
+        <tr><td>基础资料</td><td>PATCH /factories/{id}/status</td><td>停用有活跃合同的工厂</td><td>422 含关联单据说明</td></tr>
+        <tr><td>样衣</td><td>POST /samples/{id}/reject</td><td>已确认样衣驳回</td><td>422 不可逆状态</td></tr>
+        <tr><td>报价</td><td>POST /quotes/{id}/send</td><td>发出报价</td><td>费用明细字段变为只读</td></tr>
+        <tr><td>报价</td><td>PATCH /quotes/{id}/items (已发出)</td><td>修改已发出报价费用</td><td>422 已锁定</td></tr>
+        <tr><td>合同</td><td>POST /contracts (付款比例29+40+30)</td><td>比例不等于100%</td><td>422 + 具体提示</td></tr>
+        <tr><td>合同</td><td>POST /contracts/{id}/stamp</td><td>正常盖章</td><td>snapshot_json写入，原字段locked=true</td></tr>
+        <tr><td>门户</td><td>POST /portal/v1/contracts/{id}/ship (未盖章)</td><td>跳步操作</td><td>422 步骤未完成</td></tr>
+        <tr><td>对账</td><td>POST /payment-requests (超付)</td><td>申请>余额</td><td>422 + 余额数值</td></tr>
+        <tr><td>对账</td><td>POST /reconciliations/{id}/invoice (误差0.02)</td><td>发票误差超限</td><td>422 误差说明</td></tr>
+        <tr><td>结算</td><td>POST /settlements/{id}/confirm (BUSINESS角色)</td><td>非财务确认结算</td><td>403</td></tr>
+        <tr><td>结算</td><td>POST /settlements/{id}/confirm (已确认重复)</td><td>重复确认</td><td>422 已结算</td></tr>
+      </table></div>
+    </div>
+
+    <!-- E2E -->
+    <div class="section" id="e2e-flows">
+      <div class="section-title">E2E 测试 — 8条核心流程</div>
+      <div class="alert alert-i">使用 Playwright，运行在 Chromium。每条用例失败时自动截图存档到 test-results/ 目录。</div>
+
+      <!-- E2E-01 -->
+      <div class="tc open">
+        <div class="tc-head" onclick="toggleTc(this)">
+          <span class="tc-id">E2E-01</span>
+          <span class="tc-title">完整业务链路（工厂→样衣→报价→订单→合同→门户→对账→付款→结算）</span>
+          <span class="tag t-e2e">E2E</span><span class="p1">P1</span>
+        </div>
+        <div class="tc-body">
+          <div class="step-list">
+            <div class="step">登录管理后台（admin账号）</div>
+            <div class="step">新建工厂 "测试面料厂"，类型=材料商，验证编号自动生成 CN001</div>
+            <div class="step">新建客户 "测试客户"，等级=A，币种=USD</div>
+            <div class="step">新建样衣，指派版师；切换版师视图，提交完成；业务视图确认</div>
+            <div class="step">基于样衣新建报价，填写3行费用，设置全局损耗率10%，发出报价</div>
+            <div class="step">确认报价，点击"转合同"</div>
+            <div class="step">新建材料合同，填写材料清单，推送门户</div>
+            <div class="step">切换供应商门户，步骤1盖章</div>
+            <div class="step">步骤2登记发货（100件）</div>
+            <div class="step">回到管理后台，新建对账单</div>
+            <div class="step">新建付款申请，上传水单，提交审批</div>
+            <div class="step">FINANCE账号审批通过</div>
+            <div class="step">新建结算单，确认结算，验证利润数值正确</div>
+          </div>
+          <div class="expect"><b>验收</b>：全链路无报错；各单据编号按规则生成；利润 = 货款 - 成本（不含退税视图）</div>
+        </div>
+      </div>
+
+      <!-- E2E-02 -->
+      <div class="tc">
+        <div class="tc-head" onclick="toggleTc(this)">
+          <span class="tc-id">E2E-02</span>
+          <span class="tc-title">损耗计算精度验证（前端实时计算与后端一致）</span>
+          <span class="tag t-e2e">E2E</span><span class="p1">P1</span>
+        </div>
+        <div class="tc-body">
+          <div class="step-list">
+            <div class="step">新建报价，添加费用行：面料，原单价=10.00，损耗率=10%</div>
+            <div class="step">验证页面即时显示含损单价 = 11.1111</div>
+            <div class="step">修改全局损耗率为 15%，点击批量重算</div>
+            <div class="step">验证含损单价更新为 11.7647（10÷0.85）</div>
+            <div class="step">保存草稿，重新打开，验证数值与页面展示一致</div>
+          </div>
+          <div class="expect"><b>验收</b>：前端展示值精确到4位小数，与后端API返回值完全一致</div>
+        </div>
+      </div>
+
+      <!-- E2E-03 -->
+      <div class="tc">
+        <div class="tc-head" onclick="toggleTc(this)">
+          <span class="tc-id">E2E-03</span>
+          <span class="tc-title">快照锁定——盖章后修改合同单价，对账单仍用快照值</span>
+          <span class="tag t-e2e">E2E</span><span class="p1">P1</span>
+        </div>
+        <div class="tc-body">
+          <div class="step-list">
+            <div class="step">创建材料合同，材料A单价=100.00，推送门户</div>
+            <div class="step">门户盖章确认，验证合同显示"已盖章锁定"徽章</div>
+            <div class="step">尝试修改材料A单价为200.00，验证界面输入框已禁用</div>
+            <div class="step">直接调用API PATCH尝试修改，验证返回422</div>
+            <div class="step">创建对账单，验证单价仍为100.00（快照值）</div>
+          </div>
+          <div class="expect"><b>验收</b>：盖章后UI和API两层均无法修改；对账单价格=盖章时快照值</div>
+        </div>
+      </div>
+
+      <!-- E2E-04 -->
+      <div class="tc">
+        <div class="tc-head" onclick="toggleTc(this)">
+          <span class="tc-id">E2E-04</span>
+          <span class="tc-title">门户4步顺序流——跳步被阻止，顺序完成解锁下一步</span>
+          <span class="tag t-e2e">E2E</span><span class="p1">P1</span>
+        </div>
+        <div class="tc-body">
+          <div class="step-list">
+            <div class="step">供应商登录门户，找到已推送合同</div>
+            <div class="step">验证步骤2、3、4按钮均为灰色禁用状态</div>
+            <div class="step">尝试直接点击步骤2（登记发货），验证按钮不响应</div>
+            <div class="step">完成步骤1（盖章），验证步骤2解锁变为可操作</div>
+            <div class="step">完成步骤2（发货），验证步骤3解锁</div>
+            <div class="step">直接API调用步骤4（上传发票，跳过步骤3），验证422</div>
+          </div>
+          <div class="expect"><b>验收</b>：UI层按钮禁用；API层返回422；顺序完成后正确解锁</div>
+        </div>
+      </div>
+
+      <!-- E2E-05 -->
+      <div class="tc">
+        <div class="tc-head" onclick="toggleTc(this)">
+          <span class="tc-id">E2E-05</span>
+          <span class="tc-title">超付拦截——申请金额超过余额时表单无法提交</span>
+          <span class="tag t-e2e">E2E</span><span class="p1">P1</span>
+        </div>
+        <div class="tc-body">
+          <div class="step-list">
+            <div class="step">建立合同金额=10000的对账单</div>
+            <div class="step">新建付款申请，输入金额=7000，验证余额显示=10000，提交成功</div>
+            <div class="step">再次新建付款申请，输入金额=3001（超付1元）</div>
+            <div class="step">验证页面显示红色错误提示，包含"可用余额¥3000.00"</div>
+            <div class="step">验证提交按钮被禁用，无法提交</div>
+            <div class="step">修改金额为3000.00，验证可以提交</div>
+          </div>
+          <div class="expect"><b>验收</b>：超额时UI阻止提交；错误提示含可用余额数值；精确到分</div>
+        </div>
+      </div>
+
+      <!-- E2E-06 -->
+      <div class="tc">
+        <div class="tc-head" onclick="toggleTc(this)">
+          <span class="tc-id">E2E-06</span>
+          <span class="tc-title">发票误差校验——误差≤0.01通过，>0.01拦截</span>
+          <span class="tag t-e2e">E2E</span><span class="p1">P1</span>
+        </div>
+        <div class="tc-body">
+          <div class="step-list">
+            <div class="step">创建对账单，金额=10000.00</div>
+            <div class="step">上传发票，发票金额=10000.00，验证校验通过</div>
+            <div class="step">修改发票金额=10000.01，验证通过（误差=0.01）</div>
+            <div class="step">修改发票金额=9999.98，验证拦截（误差=0.02）</div>
+            <div class="step">验证拦截时显示具体误差数值</div>
+          </div>
+          <div class="expect"><b>验收</b>：误差≤¥0.01通过；>¥0.01显示误差金额并拦截</div>
+        </div>
+      </div>
+
+      <!-- E2E-07 -->
+      <div class="tc">
+        <div class="tc-head" onclick="toggleTc(this)">
+          <span class="tc-id">E2E-07</span>
+          <span class="tc-title">利润双视图切换——含/不含退税数值正确变化</span>
+          <span class="tag t-e2e">E2E</span><span class="p1">P1</span>
+        </div>
+        <div class="tc-body">
+          <div class="step-list">
+            <div class="step">打开结算清单，默认视图=含退税利润</div>
+            <div class="step">记录当前净利数值（含退税）</div>
+            <div class="step">点击"不含退税利润"切换</div>
+            <div class="step">验证净利数值减少（差值=退税金额）</div>
+            <div class="step">切换回含退税，验证数值恢复</div>
+            <div class="step">打开结算单详情，验证详情页也有相同切换按钮，且与列表联动</div>
+          </div>
+          <div class="expect"><b>验收</b>：切换即时生效；差值精确等于退税金额；详情与列表状态同步</div>
+        </div>
+      </div>
+
+      <!-- E2E-08 -->
+      <div class="tc">
+        <div class="tc-head" onclick="toggleTc(this)">
+          <span class="tc-id">E2E-08</span>
+          <span class="tc-title">无合同费用双入口（DZ-NC- / PR-NC-）</span>
+          <span class="tag t-e2e">E2E</span><span class="p2">P2</span>
+        </div>
+        <div class="tc-body">
+          <div class="step-list">
+            <div class="step">对账付款模块 → 无合同费用 Tab</div>
+            <div class="step">路径A：新建对账单（DZ-NC-编号），验证编号格式正确</div>
+            <div class="step">基于该对账单新建付款申请（PR-编号）</div>
+            <div class="step">路径B：直接新建付款申请（PR-NC-编号），不经过对账单</div>
+            <div class="step">验证两种路径的单据都在无合同费用列表中显示</div>
+          </div>
+          <div class="expect"><b>验收</b>：DZ-NC-和PR-NC-编号格式正确；两路径均可完成；列表分类展示</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Business Logic Review -->
+    <div class="section" id="biz-review">
+      <div class="section-title">业务逻辑审查 — 设计稿逐条核对清单</div>
+      <div class="alert alert-w">每项开发完成后，逐条与UI设计稿确认问题清单（全部推荐选项 rec:0）对比核实，差异立即修复。</div>
+      <div class="card">
+        <div class="sub">核对方法</div>
+        <ol style="padding-left:18px;font-size:13px">
+          <li style="margin-bottom:6px">打开 <code>UI设计稿汇总/</code> 对应模块设计稿，找到"确认问题清单"</li>
+          <li style="margin-bottom:6px">逐条阅读推荐选项（标记 rec:0 的第一项）</li>
+          <li style="margin-bottom:6px">对比已实现的功能，确认行为一致</li>
+          <li>不一致时记录在审查报告中，当天修复</li>
+        </ol>
+      </div>
+      <div class="tbl-wrap"><table>
+        <tr><th>审查项</th><th>对应设计稿</th><th>核心推荐选项</th><th>状态</th></tr>
+        <tr><td>供应商门户形式</td><td>05-供应商门户</td><td>H5 Web，账号密码登录，不做微信小程序</td><td class="warn">待核对</td></tr>
+        <tr><td>门户步骤顺序</td><td>05-供应商门户</td><td>4步强制顺序：盖章→发货→对账→发票</td><td class="warn">待核对</td></tr>
+        <tr><td>付款审批级别</td><td>06-对账付款</td><td>单级：业务提交→财务审批，无多级</td><td class="warn">待核对</td></tr>
+        <tr><td>批量付款</td><td>06-对账付款</td><td>支持批量选多张对账单一次付款</td><td class="warn">待核对</td></tr>
+        <tr><td>水单上传方式</td><td>06-对账付款</td><td>Ctrl+V剪贴板粘贴 + 文件选择两种</td><td class="warn">待核对</td></tr>
+        <tr><td>成本计算基准</td><td>07-结算清单</td><td>有票不含税（÷实际税率），无票含税全额</td><td class="warn">待核对</td></tr>
+        <tr><td>利润视图</td><td>07-结算清单</td><td>含退税/不含退税两个视图可切换</td><td class="warn">待核对</td></tr>
+        <tr><td>结算时机</td><td>07-结算清单</td><td>出货后业务建草稿，收汇后财务确认</td><td class="warn">待核对</td></tr>
+        <tr><td>无合同费用</td><td>06-对账付款</td><td>双入口：新建对账单 或 直接付款申请</td><td class="warn">待核对</td></tr>
+        <tr><td>损耗率公式</td><td>02-客户报价</td><td>含损单价=原单价÷(1-损耗率%)</td><td class="warn">待核对</td></tr>
+        <tr><td>样衣驳回</td><td>02-样衣管理</td><td>驳回需填原因，版次+1，重新指派</td><td class="warn">待核对</td></tr>
+        <tr><td>物理删除策略</td><td>所有模块</td><td>无物理删除，启用/停用状态控制</td><td class="warn">待核对</td></tr>
+        <tr><td>合同补料</td><td>04-合同管理</td><td>补料合同挂载在材料合同下</td><td class="warn">待核对</td></tr>
+        <tr><td>预付款冲抵</td><td>06-对账付款</td><td>付款申请时可选冲抵预付款余额</td><td class="warn">待核对</td></tr>
+      </table></div>
+    </div>
+
+    <!-- Component Tests -->
+    <div class="section" id="comp-tests">
+      <div class="section-title">前端组件测试规范（Vitest + Vue Test Utils）</div>
+      <div class="tbl-wrap"><table>
+        <tr><th>组件</th><th>测试文件</th><th>测试内容</th></tr>
+        <tr><td>LossCalcTable</td><td>LossCalcTable.spec.ts</td><td>含损单价实时计算、全局损耗率更新、行增删后汇总</td></tr>
+        <tr><td>SizematrixEditor</td><td>SizematrixEditor.spec.ts</td><td>颜色/尺码动态增减、行列合计计算</td></tr>
+        <tr><td>StatusBadge</td><td>StatusBadge.spec.ts</td><td>各状态的颜色/文字映射正确</td></tr>
+        <tr><td>OverpayAlert</td><td>OverpayAlert.spec.ts</td><td>超额时显示错误提示，按钮禁用</td></tr>
+        <tr><td>AmountInput</td><td>AmountInput.spec.ts</td><td>金额格式化（千分位）、精度2位、负数拒绝</td></tr>
+        <tr><td>PortalStep</td><td>PortalStep.spec.ts</td><td>步骤禁用状态、完成状态、时间戳显示</td></tr>
+        <tr><td>ProfitToggle</td><td>ProfitToggle.spec.ts</td><td>切换含/不含退税，数值正确变化</td></tr>
+        <tr><td>InvoiceUpload</td><td>InvoiceUpload.spec.ts</td><td>Ctrl+V粘贴图片、文件选择、预览、删除</td></tr>
+      </table></div>
+      <pre>
+// 示例：LossCalcTable 测试
+import { mount } from '@vue/test-utils'
+import LossCalcTable from '@/components/LossCalcTable.vue'
+
+describe('LossCalcTable', () => {
+  it('含损单价实时计算', async () => {
+    const wrapper = mount(LossCalcTable, {
+      props: { rows: [{ name: '面料', unitPrice: 10, lossRate: 10, usage: 100 }] }
+    })
+    // 含损单价 = 10 ÷ (1 - 0.1) = 11.1111
+    expect(wrapper.find('[data-testid="loss-price"]').text()).toBe('11.1111')
+  })
+
+  it('全局损耗率批量更新', async () => {
+    const wrapper = mount(LossCalcTable, { props: { globalLossRate: 0, rows: [...] } })
+    await wrapper.setProps({ globalLossRate: 15 })
+    await wrapper.find('[data-testid="recalc-btn"]').trigger('click')
+    // 验证所有行的含损单价已更新
+    const prices = wrapper.findAll('[data-testid="loss-price"]')
+    prices.forEach(p => expect(p.text()).not.toBe('0.0000'))
+  })
+})</pre>
+    </div>
+
+    <div style="text-align:center;padding:32px 0;color:var(--gray-5);font-size:12px">
+      I9 测试计划 v1.0 · 覆盖单元/API/E2E/组件/业务审查五层 · 2024-01
+    </div>
+
+  </div>
+</div>
+</div>
+
+<script>
+function s(id){ const el=document.getElementById(id); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}) }
+function toggleTc(head){ head.parentElement.classList.toggle('open') }
+</script>
+</body>
+</html>
