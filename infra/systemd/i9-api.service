@@ -1,0 +1,33 @@
+[Unit]
+Description=I9 服装制造管理系统 API
+Documentation=https://github.com/zhangang12/clothes-system
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=i9app
+Group=i9app
+WorkingDirectory=/opt/i9/clothes-system/packages/api
+
+# 从统一环境变量文件加载（包含 DB_PASS / JWT_SECRET / REDIS_PASS 等）
+EnvironmentFile=/opt/i9/clothes-system/.env.production
+
+ExecStart=/usr/bin/node dist/main.js
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=i9-api
+
+# 资源限制
+LimitNOFILE=65536
+MemoryMax=1G
+
+# 安全加固
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

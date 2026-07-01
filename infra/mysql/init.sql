@@ -385,6 +385,7 @@ CREATE TABLE IF NOT EXISTS `payment_request` (
   `prepay_offset`     DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '预付款冲抵金额',
   `actual_pay`        DECIMAL(15,4)  DEFAULT NULL COMMENT '实付金额=amount-prepay_offset',
   `slip_url`          VARCHAR(500)   DEFAULT NULL COMMENT '水单文件路径',
+  `paid_by`           BIGINT         DEFAULT NULL COMMENT '标记付款操作人',
   `slip_uploaded_at`  DATETIME       DEFAULT NULL,
   `approval_status`   ENUM('DRAFT','PENDING','APPROVED','REJECTED','PAID') NOT NULL DEFAULT 'DRAFT',
   `submitted_by`      BIGINT         DEFAULT NULL,

@@ -27,12 +27,13 @@ async function bootstrap() {
   app.useGlobalInterceptors(new ResponseInterceptor());
 
   // CORS（开发环境宽松，生产收紧）
-  app.enableCors({
-    origin: process.env.NODE_ENV === 'production'
-      ? [process.env.WEB_ORIGIN!, process.env.PORTAL_ORIGIN!]
-      : true,
-    credentials: true,
-  });
+  if (process.env.NODE_ENV === 'production' && !process.env.WEB_ORIGIN) {
+    throw new Error('WEB_ORIGIN env var is required in production');
+  }
+  const corsOrigins: string[] | true = process.env.NODE_ENV === 'production'
+    ? [process.env.WEB_ORIGIN!, ...(process.env.PORTAL_ORIGIN ? [process.env.PORTAL_ORIGIN] : [])]
+    : true;
+  app.enableCors({ origin: corsOrigins, credentials: true });
 
   // Swagger 文档
   if (process.env.NODE_ENV !== 'production') {
