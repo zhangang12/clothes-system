@@ -30,6 +30,9 @@ export class PaymentRequest {
   @Column({ length: 500, nullable: true })
   slip_url: string;
 
+  @Column({ type: 'bigint', nullable: true })
+  paid_by: number;
+
   @Column({ type: 'datetime', nullable: true })
   slip_uploaded_at: Date;
 

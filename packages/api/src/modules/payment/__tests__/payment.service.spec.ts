@@ -173,7 +173,7 @@ describe('PaymentService', () => {
     mockPrRepo.findOne.mockResolvedValue(pr);
     mockPrRepo.save.mockResolvedValue({ ...pr, approval_status: PaymentApprovalStatus.PAID });
 
-    const result = await service.markPaid(1, 'http://example.com/slip.jpg');
+    const result = await service.markPaid(1, 'http://example.com/slip.jpg', 99);
     expect(result.approval_status).toBe(PaymentApprovalStatus.PAID);
   });
 
@@ -181,7 +181,7 @@ describe('PaymentService', () => {
   it('UT-PAY-11 markPaid throws BadRequest if status is not APPROVED', async () => {
     const pr = makePR({ approval_status: PaymentApprovalStatus.PENDING });
     mockPrRepo.findOne.mockResolvedValue(pr);
-    await expect(service.markPaid(1, 'url')).rejects.toThrow(BadRequestException);
+    await expect(service.markPaid(1, 'url', 99)).rejects.toThrow(BadRequestException);
   });
 
   // UT-PAY-12: removePaymentRequest throws if not DRAFT

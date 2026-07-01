@@ -92,8 +92,9 @@ export class PaymentController {
   markPaid(
     @Param('id', ParseIntPipe) id: number,
     @Body('slip_url') slipUrl: string,
+    @Request() req: any,
   ) {
-    return this.service.markPaid(id, slipUrl);
+    return this.service.markPaid(id, slipUrl, req.user.id);
   }
 
   @Delete('requests/:id')

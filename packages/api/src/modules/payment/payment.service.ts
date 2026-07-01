@@ -149,7 +149,7 @@ export class PaymentService {
     return this.prRepo.save(pr);
   }
 
-  async markPaid(id: number, slipUrl: string): Promise<PaymentRequest> {
+  async markPaid(id: number, slipUrl: string, paidBy: number): Promise<PaymentRequest> {
     const pr = await this.prRepo.findOne({ where: { id, deleted: 0 } });
     if (!pr) throw new NotFoundException(`付款申请 #${id} 不存在`);
     if (pr.approval_status !== PaymentApprovalStatus.APPROVED) {
@@ -157,6 +157,7 @@ export class PaymentService {
     }
     pr.approval_status = PaymentApprovalStatus.PAID;
     pr.slip_url = slipUrl;
+    pr.paid_by = paidBy;
     pr.slip_uploaded_at = new Date();
     return this.prRepo.save(pr);
   }
@@ -175,6 +176,7 @@ export class PaymentService {
     const rows = await manager.find(Prepayment, {
       where: { factory_id: factoryId },
       order: { id: 'ASC' },
+      lock: { mode: 'pessimistic_write' },
     });
     let remaining = amount;
     for (const row of rows) {
@@ -186,6 +188,11 @@ export class PaymentService {
       row.balance = +(available - deduct).toFixed(4);
       await manager.save(Prepayment, row);
       remaining = +(remaining - deduct).toFixed(4);
+    }
+    if (remaining > 0) {
+      throw new BadRequestException(
+        `预付款余额不足：仍差 ${remaining.toFixed(4)} 元未能冲抵`,
+      );
     }
   }
 }

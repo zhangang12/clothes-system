@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { diskStorage, Options } from 'multer';
 import * as path from 'path';
@@ -14,11 +14,15 @@ export interface UploadedFileInfo {
 }
 
 @Injectable()
-export class FileService {
+export class FileService implements OnModuleInit {
   private readonly uploadRoot: string;
 
   constructor(private readonly config: ConfigService) {
     this.uploadRoot = config.get('UPLOAD_ROOT', '/data/uploads');
+  }
+
+  onModuleInit() {
+    fs.mkdirSync(this.uploadRoot, { recursive: true });
   }
 
   /**
