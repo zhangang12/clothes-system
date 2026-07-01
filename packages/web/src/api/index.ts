@@ -35,3 +35,4 @@ export * from './factory';
 export * from './customer';
 export * from './sample';
 export * from './quote';
+export * from './order';

@@ -2,20 +2,29 @@ import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeor
 
 @Entity('order_shipment')
 export class OrderShipment {
-  @PrimaryGeneratedColumn()
+  @PrimaryGeneratedColumn({ type: 'bigint' })
   id: number;
 
-  @Column()
+  @Column({ type: 'bigint' })
   order_id: number;
 
   @Column({ type: 'date' })
-  ship_date: Date;
+  shipment_date: Date;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
-  quantity: number;
+  @Column({ type: 'int' })
+  qty: number;
 
-  @Column({ length: 255, nullable: true })
+  @Column({ type: 'int', nullable: true })
+  cartons: number;
+
+  @Column({ length: 100, nullable: true })
+  tracking_no: string;
+
+  @Column({ type: 'text', nullable: true })
   remark: string;
+
+  @Column({ type: 'bigint' })
+  created_by: number;
 
   @CreateDateColumn()
   created_at: Date;
