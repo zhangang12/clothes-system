@@ -58,6 +58,10 @@ export class PaymentService {
   async createPaymentRequest(dto: CreatePaymentRequestDto, createdBy: number): Promise<PaymentRequest> {
     const prepayOffset = dto.prepay_offset ?? 0;
 
+    if (prepayOffset > dto.amount) {
+      throw new BadRequestException('预付款冲抵金额不能超过付款申请金额');
+    }
+
     // Overpayment guard: prepay_offset cannot exceed available balance
     if (prepayOffset > 0) {
       const availableBalance = await this.getAvailablePrepayBalance(dto.factory_id);
@@ -115,19 +119,21 @@ export class PaymentService {
   }
 
   async approvePaymentRequest(id: number, userId: number): Promise<PaymentRequest> {
-    const pr = await this.prRepo.findOne({ where: { id, deleted: 0 } });
-    if (!pr) throw new NotFoundException(`付款申请 #${id} 不存在`);
-    if (pr.approval_status !== PaymentApprovalStatus.PENDING) {
-      throw new BadRequestException('只有待审批状态才可审批');
-    }
-
     return this.dataSource.transaction(async (manager) => {
+      const pr = await manager.findOne(PaymentRequest, {
+        where: { id, deleted: 0 },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!pr) throw new NotFoundException(`付款申请 #${id} 不存在`);
+      if (pr.approval_status !== PaymentApprovalStatus.PENDING) {
+        throw new BadRequestException('只有待审批状态才可审批');
+      }
+
       pr.approval_status = PaymentApprovalStatus.APPROVED;
       pr.approved_by = userId;
       pr.approved_at = new Date();
       await manager.save(PaymentRequest, pr);
 
-      // Deduct prepay offset from prepayment balance
       if (+pr.prepay_offset > 0) {
         await this._deductPrepay(manager, pr.factory_id, +pr.prepay_offset);
       }

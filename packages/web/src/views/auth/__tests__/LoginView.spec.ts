@@ -102,11 +102,11 @@ describe('LoginView', () => {
 
   // ─────────────────────────────────────────────── failed login
   it('does not redirect when login request is rejected', async () => {
-    mockHttpPost.mockRejectedValue(
+    mockHttpPost.mockImplementation(() => Promise.reject(
       Object.assign(new Error('Unauthorized'), {
         response: { status: 401, data: { msg: '用户名或密码错误' } },
       }),
-    );
+    ));
 
     const wrapper = mountLoginView();
     const inputs = wrapper.findAll('input');
@@ -122,7 +122,7 @@ describe('LoginView', () => {
   });
 
   it('does not store token when login request fails', async () => {
-    mockHttpPost.mockRejectedValue(new Error('Network error'));
+    mockHttpPost.mockImplementation(() => Promise.reject(new Error('Network error')));
 
     const wrapper = mountLoginView();
     await wrapper.find('form').trigger('submit');

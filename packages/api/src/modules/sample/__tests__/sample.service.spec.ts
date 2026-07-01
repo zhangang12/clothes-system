@@ -17,7 +17,7 @@ const mockVersionRepo = {
   save: jest.fn(),
   find: jest.fn(),
 };
-const mockRedis = { incr: jest.fn(), expire: jest.fn() };
+const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn(), expire: jest.fn() };
 
 describe('SampleService', () => {
   let service: SampleService;

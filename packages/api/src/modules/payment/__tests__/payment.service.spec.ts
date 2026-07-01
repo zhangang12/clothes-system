@@ -42,9 +42,10 @@ const mockPrRepo = {
   findOne: jest.fn(),
   findAndCount: jest.fn().mockResolvedValue([[], 0]),
 };
-const mockRedis = { incr: jest.fn().mockResolvedValue(1), expire: jest.fn() };
+const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn().mockResolvedValue(1) };
 const mockDataSource = {
   transaction: jest.fn().mockImplementation((cb) => cb({
+    findOne: jest.fn().mockResolvedValue(null),
     find: jest.fn().mockResolvedValue([]),
     save: jest.fn().mockImplementation((_, v) => Promise.resolve(v)),
   })),
@@ -55,6 +56,11 @@ describe('PaymentService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockDataSource.transaction.mockImplementation((cb) => cb({
+      findOne: jest.fn().mockResolvedValue(null),
+      find: jest.fn().mockResolvedValue([]),
+      save: jest.fn().mockImplementation((_, v) => Promise.resolve(v)),
+    }));
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PaymentService,
@@ -127,8 +133,8 @@ describe('PaymentService', () => {
   // UT-PAY-07: approvePaymentRequest transitions PENDING → APPROVED
   it('UT-PAY-07 approvePaymentRequest transitions PENDING→APPROVED', async () => {
     const pr = makePR({ approval_status: PaymentApprovalStatus.PENDING, prepay_offset: 0 });
-    mockPrRepo.findOne.mockResolvedValue(pr);
     const manager = {
+      findOne: jest.fn().mockResolvedValue(pr),
       find: jest.fn().mockResolvedValue([]),
       save: jest.fn().mockImplementation((_, v) => Promise.resolve(v)),
     };
@@ -141,9 +147,9 @@ describe('PaymentService', () => {
   // UT-PAY-08: approvePaymentRequest deducts prepay_offset from prepayment balance
   it('UT-PAY-08 approvePaymentRequest deducts prepay_offset from prepayment balance', async () => {
     const pr = makePR({ approval_status: PaymentApprovalStatus.PENDING, prepay_offset: 300 });
-    mockPrRepo.findOne.mockResolvedValue(pr);
     const prepay = makePrepayment({ balance: 500, used_amount: 0 });
     const manager = {
+      findOne: jest.fn().mockResolvedValue(pr),
       find: jest.fn().mockResolvedValue([prepay]),
       save: jest.fn().mockImplementation((_, v) => Promise.resolve(v)),
     };
@@ -152,7 +158,7 @@ describe('PaymentService', () => {
     await service.approvePaymentRequest(1, 1);
     // Should save prepayment with balance = 500-300 = 200
     const prepaymentSaveCalls = manager.save.mock.calls.filter(
-      (call) => call[0] === Prepayment,
+      (call: any[]) => call[0] === Prepayment,
     );
     expect(prepaymentSaveCalls[0][1]).toMatchObject({ balance: 200, used_amount: 300 });
   });
@@ -217,5 +223,12 @@ describe('PaymentService', () => {
       makePrepayment({ balance: 700 }),
     ]);
     await expect(service.createPaymentRequest(dto as any, 1)).resolves.toBeDefined();
+  });
+
+  // UT-OVP-05: prepay_offset > amount throws immediately
+  it('UT-OVP-05 prepay_offset exceeds amount throws BadRequest', async () => {
+    const dto = { type: ReconcileType.CONTRACT, factory_id: 5, amount: 1000, prepay_offset: 1500 };
+    await expect(service.createPaymentRequest(dto as any, 1)).rejects.toThrow(BadRequestException);
+    expect(mockPrepayRepo.find).not.toHaveBeenCalled();
   });
 });

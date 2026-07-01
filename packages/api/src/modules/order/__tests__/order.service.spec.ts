@@ -44,7 +44,7 @@ const mockShipmentRepo = {
   save: jest.fn().mockImplementation((v) => Promise.resolve({ ...v, id: 1 })),
   find: jest.fn().mockResolvedValue([]),
 };
-const mockRedis = { incr: jest.fn().mockResolvedValue(1), expire: jest.fn() };
+const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn().mockResolvedValue(1), expire: jest.fn() };
 const mockDataSource = {
   transaction: jest.fn().mockImplementation((cb) => cb({
     create: jest.fn().mockImplementation((_, v) => v),

@@ -105,14 +105,19 @@ export class ReconciliationService {
   }
 
   async confirm(id: number): Promise<Reconciliation> {
-    const rec = await this.repo.findOne({ where: { id, deleted: 0 } });
-    if (!rec) throw new NotFoundException(`对账单 #${id} 不存在`);
-    if (rec.status !== ReconciliationStatus.DRAFT) {
-      throw new BadRequestException('只有草稿状态才可确认');
-    }
-    rec.status = ReconciliationStatus.CONFIRMED;
-    rec.confirmed_at = new Date();
-    return this.repo.save(rec);
+    return this.dataSource.transaction(async (manager) => {
+      const rec = await manager.findOne(Reconciliation, {
+        where: { id, deleted: 0 },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!rec) throw new NotFoundException(`对账单 #${id} 不存在`);
+      if (rec.status !== ReconciliationStatus.DRAFT) {
+        throw new BadRequestException('只有草稿状态才可确认');
+      }
+      rec.status = ReconciliationStatus.CONFIRMED;
+      rec.confirmed_at = new Date();
+      return manager.save(Reconciliation, rec);
+    });
   }
 
   async remove(id: number): Promise<void> {

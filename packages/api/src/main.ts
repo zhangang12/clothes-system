@@ -7,6 +7,7 @@ import { ResponseInterceptor } from './common/interceptors/response.interceptor'
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.enableShutdownHooks();
 
   // 全局前缀
   app.setGlobalPrefix('api/v1');

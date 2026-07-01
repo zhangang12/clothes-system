@@ -34,6 +34,8 @@ async function handleLogin() {
     auth.setAuth(res.data);
     const redirect = (route.query.redirect as string) ?? '/';
     router.push(redirect);
+  } catch {
+    // error message shown by global HTTP interceptor
   } finally {
     loading.value = false;
   }
