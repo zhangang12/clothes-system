@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { diskStorage, Options } from 'multer';
 import * as path from 'path';
@@ -55,7 +55,7 @@ export class FileService implements OnModuleInit {
           'application/vnd.ms-excel',
         ];
         if (!allowed.includes(file.mimetype)) {
-          cb(new BadRequestException(`不支持的文件类型: ${file.mimetype}`), false);
+          cb(new Error(`不支持的文件类型: ${file.mimetype}`));
         } else {
           cb(null, true);
         }
