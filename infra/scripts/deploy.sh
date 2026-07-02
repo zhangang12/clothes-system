@@ -35,24 +35,35 @@ fi
 log "安装依赖（frozen）..."
 pnpm install --frozen-lockfile --prefer-offline 2>&1 | tail -5
 
-# ── 构建 API ──────────────────────────────────────────────────
+# ── 构建（types 必须先于 api）────────────────────────────────
+log "构建类型包..."
+pnpm --filter @i9/types build
+
 log "构建 API..."
 pnpm --filter @i9/api build
 
-# ── 构建前端 ──────────────────────────────────────────────────
 log "构建管理后台..."
 pnpm --filter @i9/web build
 
 log "构建供应商门户..."
 NODE_ENV=production pnpm --filter @i9/portal build
 
+# ── 修正文件权限（build 由 root 运行，服务以 i9app 启动）────
+log "修正文件权限..."
+chown -R i9app:i9app "$APP_DIR/packages/api/dist"
+
 # ── 复制静态文件 ──────────────────────────────────────────────
 log "更新静态文件..."
 rsync -a --delete packages/web/dist/     "$WEB_ROOT/"
 rsync -a --delete packages/portal/dist/  "$PORTAL_ROOT/"
 
-# ── 重启 API 服务 ─────────────────────────────────────────────
+# ── 重启 API 服务（服务不存在时先注册）──────────────────────
 log "重启 API 服务..."
+if ! systemctl is-enabled "$SERVICE" &>/dev/null; then
+  cp "$APP_DIR/infra/systemd/i9-api.service" /etc/systemd/system/
+  systemctl daemon-reload
+  systemctl enable "$SERVICE"
+fi
 systemctl restart "$SERVICE"
 
 # ── 健康检查 ──────────────────────────────────────────────────
