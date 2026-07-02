@@ -83,10 +83,12 @@ if [[ -n "$CUSTOMER_ID" ]]; then
   SAMPLE_ID=$(echo "$RESP" | json_get data.id)
   { is2xx && [[ -n "$SAMPLE_ID" ]]; } && ok "创建样衣 id=$SAMPLE_ID" || bad "创建样衣（HTTP $CODE）"
   if [[ -n "$SAMPLE_ID" ]]; then
+    api PATCH "/samples/$SAMPLE_ID/assign" '{"patternmaker_id":1}'
+    is2xx && ok "样衣指派版师(PENDING→PATTERN)" || bad "样衣指派版师（HTTP $CODE）"
     api PATCH "/samples/$SAMPLE_ID/submit" '{"remark":"首版完成"}'
-    is2xx && ok "样衣打版提交" || bad "样衣打版提交（HTTP $CODE）"
+    is2xx && ok "样衣打版提交(PATTERN→DONE)" || bad "样衣打版提交（HTTP $CODE）"
     api PATCH "/samples/$SAMPLE_ID/confirm" ''
-    is2xx && ok "样衣确认" || bad "样衣确认（HTTP $CODE）"
+    is2xx && ok "样衣确认(DONE→CONFIRMED)" || bad "样衣确认（HTTP $CODE）"
   fi
 else skip "样衣"; fi
 
@@ -158,7 +160,7 @@ if [[ -n "$FACTORY_ID" ]]; then
     is2xx && ok "付款申请提交" || bad "付款提交（HTTP $CODE）"
     api PATCH "/payments/requests/$PAYREQ_ID/approve" ''
     is2xx && ok "付款申请审批通过" || bad "付款审批（HTTP $CODE）"
-    api PATCH "/payments/requests/$PAYREQ_ID/paid" '{"pay_date":"2026-10-10"}'
+    api PATCH "/payments/requests/$PAYREQ_ID/paid" "{\"slip_url\":\"https://ex.com/slip/$SFX.pdf\"}"
     is2xx && ok "付款标记已付" || bad "付款标记（HTTP $CODE）"
   fi
 else skip "付款"; fi
