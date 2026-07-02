@@ -21,9 +21,12 @@ CREATE TABLE IF NOT EXISTS `sys_user` (
   UNIQUE KEY `uk_username` (`username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统用户';
 
--- 默认管理员账号 (密码: Admin@123，bcrypt)
+-- 默认账号（密码均为 Admin@123，bcrypt）— admin 及各角色测试账号
 INSERT IGNORE INTO `sys_user` (`id`,`username`,`password`,`real_name`,`role`) VALUES
-(1,'admin','$2a$10$Y.NI2Bzr5gof2tpDSJsJ8exF2z2wuzkoqShu822RgpuJlrNC/GW5i','系统管理员','ADMIN');
+(1,'admin','$2a$10$Y.NI2Bzr5gof2tpDSJsJ8exF2z2wuzkoqShu822RgpuJlrNC/GW5i','系统管理员','ADMIN'),
+(2,'business_user','$2a$10$Y.NI2Bzr5gof2tpDSJsJ8exF2z2wuzkoqShu822RgpuJlrNC/GW5i','业务测试','BUSINESS'),
+(3,'finance_user','$2a$10$Y.NI2Bzr5gof2tpDSJsJ8exF2z2wuzkoqShu822RgpuJlrNC/GW5i','财务测试','FINANCE'),
+(4,'pm_user','$2a$10$Y.NI2Bzr5gof2tpDSJsJ8exF2z2wuzkoqShu822RgpuJlrNC/GW5i','版师测试','PATTERNMAKER');
 
 -- ============================================================
 -- 供应商门户账号
@@ -66,6 +69,12 @@ CREATE TABLE IF NOT EXISTS `factory` (
   UNIQUE KEY `uk_factory_no` (`factory_no`),
   KEY `idx_status` (`status`,`deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='工厂主档';
+
+-- 门户测试用：工厂 + 供应商门户账号（账号 supplier1 / 密码 Admin@123）
+INSERT IGNORE INTO `factory` (`id`,`factory_no`,`name`,`type`,`status`) VALUES
+(1,'CN001','门户测试工厂','BOTH',1);
+INSERT IGNORE INTO `supplier_account` (`id`,`account`,`password`,`factory_id`,`status`) VALUES
+(1,'supplier1','$2a$10$Y.NI2Bzr5gof2tpDSJsJ8exF2z2wuzkoqShu822RgpuJlrNC/GW5i',1,1);
 
 -- ============================================================
 -- 客户主档
