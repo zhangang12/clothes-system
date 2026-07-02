@@ -1,6 +1,6 @@
 import {
   Controller, Get, Patch, Body, Param, Query,
-  ParseIntPipe, UseGuards, Request,
+  ParseIntPipe, DefaultValuePipe, UseGuards, Request,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -20,8 +20,8 @@ export class PortalController {
   @ApiOperation({ summary: '门户合同列表（供应商视角）' })
   getContracts(
     @Request() req: any,
-    @Query('page', new ParseIntPipe({ optional: true })) page?: number,
-    @Query('size', new ParseIntPipe({ optional: true })) size?: number,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('size', new DefaultValuePipe(20), ParseIntPipe) size: number,
     @Query('portal_status') portalStatus?: string,
   ) {
     return this.service.getContracts(req.user.factory_id, page, size, portalStatus);

@@ -123,6 +123,9 @@ export class SettlementService {
   async addReceipt(id: number, dto: AddReceiptDto): Promise<void> {
     const settlement = await this.repo.findOne({ where: { id, deleted: 0 } });
     if (!settlement) throw new NotFoundException(`结算单 #${id} 不存在`);
+    if (settlement.status !== SettlementStatus.DRAFT) {
+      throw new BadRequestException('只有草稿状态才可添加收款');
+    }
     await this.receiptRepo.save(
       this.receiptRepo.create({
         settlement_id: id,

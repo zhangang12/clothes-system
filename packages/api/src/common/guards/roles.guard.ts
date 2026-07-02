@@ -13,10 +13,15 @@ export class RolesGuard implements CanActivate {
       context.getClass(),
     ]);
 
-    if (!requiredRoles || requiredRoles.length === 0) return true;
-
     const { user } = context.switchToHttp().getRequest();
     if (!user) throw new ForbiddenException('未登录');
+
+    // 供应商门户 token 不得访问任何管理端接口（即使该接口未声明 @Roles）
+    if (user.type === 'supplier') {
+      throw new ForbiddenException('供应商账号无权访问管理端');
+    }
+
+    if (!requiredRoles || requiredRoles.length === 0) return true;
 
     const hasRole = requiredRoles.some((role) => user.role === role);
     if (!hasRole) {

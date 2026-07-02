@@ -27,7 +27,7 @@ jval() { node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{try{le
 # api METHOD PATH [JSON_BODY] [TOKEN]  → 设置全局 CODE、RESP（TOKEN 默认 admin）
 CODE=""; RESP=""
 api() {
-  local method=$1 path=$2 data=${3:-} token=${4:-$TOKEN_ADMIN} tmp
+  local method=$1 path=$2 data=${3:-} token=${4-$TOKEN_ADMIN} tmp
   tmp=$(mktemp)
   if [[ -n "$data" ]]; then
     CODE=$(curl -s -o "$tmp" -w '%{http_code}' -X "$method" "$BASE_URL$path" \
@@ -460,7 +460,7 @@ test_customer_ext() {
   # 5) 列表分页：?page=1&size=2→2xx且结构含分页字段
   api GET "/customers?page=1&size=2"
   expect_ok "分页查询page=1&size=2成功"
-  expect_eq data.size 2 "分页结果结构含size=2"
+  expect_eq size 2 "分页结果结构含size=2(顶层size字段)"
 
   # 6) 列表keyword关键字筛选→2xx
   api GET "/customers?keyword=EXT"
@@ -522,9 +522,9 @@ test_sample_ext() {
   api PATCH "/samples/${sid:-0}/reject" '{"reject_reason":"版型不符"}'
   expect_ok "样衣驳回(DONE→REJECTED)"
   api GET "/samples/${sid:-0}"; expect_eq data.status REJECTED "驳回后REJECTED"
-  # REJECTED 可重新派工
+  # REJECTED 样衣不能直接重新派工（assign 仅接受 PENDING）
   api PATCH "/samples/${sid:-0}/assign" '{"patternmaker_id":1}'
-  expect_ok "驳回后可重新派工"
+  expect_code 400 "REJECTED样衣不能直接重新派工(仅待打版态可派)"
   # 未到 DONE 直接驳回 → 400（此时 PATTERN）
   api PATCH "/samples/${sid:-0}/reject" '{"reject_reason":"x"}'
   expect_code 400 "非打版完成驳回应400"

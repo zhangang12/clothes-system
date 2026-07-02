@@ -3,6 +3,7 @@ import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { SampleGarment } from '../sample-garment.entity';
 import { SampleVersion, SampleAction } from '../sample-version.entity';
+import { Customer } from '../../customer/customer.entity';
 import { SampleService } from '../sample.service';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
 import { SampleStatus } from '@i9/types';
@@ -17,6 +18,7 @@ const mockVersionRepo = {
   save: jest.fn(),
   find: jest.fn(),
 };
+const mockCustomerRepo = { findOne: jest.fn() };
 const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn(), expire: jest.fn() };
 
 describe('SampleService', () => {
@@ -30,6 +32,7 @@ describe('SampleService', () => {
         NumberingService,
         { provide: getRepositoryToken(SampleGarment), useValue: mockRepo },
         { provide: getRepositoryToken(SampleVersion), useValue: mockVersionRepo },
+        { provide: getRepositoryToken(Customer), useValue: mockCustomerRepo },
         { provide: REDIS_CLIENT, useValue: mockRedis },
       ],
     }).compile();
@@ -43,6 +46,7 @@ describe('SampleService', () => {
       const entity = { id: 1, sample_no: 'SM20240601xxxxx', status: SampleStatus.PENDING };
       mockRepo.create.mockReturnValue(entity);
       mockRepo.save.mockResolvedValue(entity);
+      mockCustomerRepo.findOne.mockResolvedValue({ id: 1, deleted: 0 });
       const result = await service.create({ customer_id: 1, style_name: '测试款' }, 99);
       expect(result.status).toBe(SampleStatus.PENDING);
     });

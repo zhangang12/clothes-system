@@ -5,6 +5,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, Like } from 'typeorm';
 import { SampleGarment } from './sample-garment.entity';
 import { SampleVersion, SampleAction } from './sample-version.entity';
+import { Customer } from '../customer/customer.entity';
 import { NumberingService } from '../../common/services/numbering.service';
 import { SampleStatus } from '@i9/types';
 import {
@@ -17,10 +18,13 @@ export class SampleService {
   constructor(
     @InjectRepository(SampleGarment) private readonly repo: Repository<SampleGarment>,
     @InjectRepository(SampleVersion) private readonly versionRepo: Repository<SampleVersion>,
+    @InjectRepository(Customer) private readonly customerRepo: Repository<Customer>,
     private readonly numbering: NumberingService,
   ) {}
 
   async create(dto: CreateSampleDto, createdBy: number): Promise<SampleGarment> {
+    const customer = await this.customerRepo.findOne({ where: { id: dto.customer_id, deleted: 0 } });
+    if (!customer) throw new BadRequestException(`客户 #${dto.customer_id} 不存在`);
     const sample_no = await this.numbering.next('SM');
     const entity = this.repo.create({ ...dto, sample_no, created_by: createdBy, status: SampleStatus.PENDING });
     return this.repo.save(entity);
