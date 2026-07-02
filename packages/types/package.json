@@ -2,10 +2,16 @@
   "name": "@i9/types",
   "version": "1.0.0",
   "description": "I9系统共享 TypeScript 类型定义",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
-    "build": "tsc --emitDeclarationOnly",
+    "build": "tsc",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

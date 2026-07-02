@@ -6,8 +6,8 @@ import { AuthService } from '../auth.service';
 import { SysUser } from '../sys-user.entity';
 import { SupplierAccount } from '../supplier-account.entity';
 
-// Mock bcrypt to avoid native binding issues in CI
-jest.mock('bcrypt', () => ({
+// Mock bcryptjs to keep unit tests fast and deterministic
+jest.mock('bcryptjs', () => ({
   hash: jest.fn().mockImplementation((plain) => Promise.resolve(`hashed:${plain}`)),
   compare: jest.fn().mockImplementation((plain, hash) => Promise.resolve(hash === `hashed:${plain}`)),
 }));
@@ -119,7 +119,7 @@ describe('AuthService', () => {
   describe('hashPassword()', () => {
     it('UT-AUTH-11: returns bcrypt hash verifiable by compare', async () => {
       const hash = await service.hashPassword('mySecret');
-      const bcrypt = require('bcrypt');
+      const bcrypt = require('bcryptjs');
       const valid = await bcrypt.compare('mySecret', hash);
       expect(valid).toBe(true);
     });

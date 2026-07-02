@@ -54,8 +54,8 @@ else
 fi
 
 # ── Redis ─────────────────────────────────────────────────────
-source <(grep -E '^REDIS_PASS=' "$ENV_FILE" 2>/dev/null || echo "REDIS_PASS=")
-if docker exec i9_redis redis-cli -a "${REDIS_PASS:-}" ping 2>/dev/null | grep -q PONG; then
+source <(grep -E '^REDIS_PASSWORD=' "$ENV_FILE" 2>/dev/null || echo "REDIS_PASSWORD=")
+if docker exec i9_redis redis-cli -a "${REDIS_PASSWORD:-}" ping 2>/dev/null | grep -q PONG; then
   check "redis" $OK "PONG"
 else
   check "redis" $FAIL "no PONG"; overall=$FAIL
