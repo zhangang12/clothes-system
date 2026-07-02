@@ -67,20 +67,27 @@ fi
 systemctl restart "$SERVICE"
 
 # ── 健康检查 ──────────────────────────────────────────────────
+# 注：/api/v1 是全局前缀，没有根路由，正常会返回 404 —— 这恰好证明 HTTP
+# 服务已起来并在路由。故接受 2xx/3xx/4xx（与 health.sh 一致），不用 curl -f。
 log "等待服务就绪..."
 for i in $(seq 1 15); do
-  if curl -sf http://127.0.0.1:3000/api/v1 >/dev/null 2>&1; then
-    log "API 已就绪 ✓"
+  CODE=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/v1 2>/dev/null || echo 000)
+  if [[ "$CODE" =~ ^[234] ]]; then
+    log "API 已就绪 ✓ (HTTP $CODE)"
     break
   fi
   if [[ $i -eq 15 ]]; then
-    die "服务启动超时，请检查 journalctl -u $SERVICE"
+    die "服务启动超时（最后状态 HTTP $CODE），请检查 journalctl -u $SERVICE"
   fi
   sleep 2
 done
 
-# ── 刷新 Nginx 静态缓存 ───────────────────────────────────────
-nginx -s reload
+# ── 刷新 Nginx 静态缓存（nginx 未运行时不应使整个部署失败）──────
+if systemctl is-active --quiet nginx; then
+  nginx -s reload 2>/dev/null || systemctl reload nginx 2>/dev/null || warn "nginx reload 失败"
+else
+  warn "nginx 未运行，跳过 reload"
+fi
 
 COMMIT=$(git rev-parse --short HEAD)
 log "===== 部署成功  commit=${COMMIT} ====="

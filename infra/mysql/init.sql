@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS `sys_user` (
 
 -- 默认管理员账号 (密码: Admin@123，bcrypt)
 INSERT IGNORE INTO `sys_user` (`id`,`username`,`password`,`real_name`,`role`) VALUES
-(1,'admin','$2b$10$rQZ2Y3k0Y8bQ1X4n6V9Jx.placeholder','系统管理员','ADMIN');
+(1,'admin','$2a$10$Y.NI2Bzr5gof2tpDSJsJ8exF2z2wuzkoqShu822RgpuJlrNC/GW5i','系统管理员','ADMIN');
 
 -- ============================================================
 -- 供应商门户账号
