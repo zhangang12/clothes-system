@@ -24,10 +24,18 @@ log "===== 开始部署 ====="
 
 cd "$APP_DIR"
 
-# ── 拉取最新代码 ──────────────────────────────────────────────
+# ── 拉取最新代码（GitHub 国内网络不稳，失败自动重试）─────────
 if [[ "${1:-}" != "--skip-pull" ]]; then
   log "拉取最新代码..."
-  git fetch origin main
+  n=0
+  until git fetch origin main; do
+    n=$((n + 1))
+    if [[ $n -ge 4 ]]; then
+      die "git fetch 失败（网络问题），已重试 ${n} 次。可手动 git fetch 成功后改用：bash $0 --skip-pull"
+    fi
+    warn "git fetch 失败（${n}/4），$((n * 3))s 后重试..."
+    sleep $((n * 3))
+  done
   git reset --hard origin/main
 fi
 

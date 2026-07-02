@@ -58,15 +58,23 @@ for i in $(seq 1 18); do
   sleep 5
 done
 
-# ── 5. 验证 schema（init.sql 在 ping 通后可能还在执行，重试）──
-log "验证 schema 是否加载..."
-TABLES=""
-for _ in $(seq 1 15); do
-  TABLES=$(docker exec i9_mysql mysql -uroot -p"$ROOT_PW" -N -e \
-    "USE \`$DB_NAME\`; SHOW TABLES;" 2>/dev/null || true)
-  [[ -n "$TABLES" ]] && break
+# ── 5. 验证 schema ────────────────────────────────────────────
+# init.sql 在 ping 通后可能仍在建表，等表数「稳定」（连续两次相同且 >0）
+# 再报告，避免中途拿到部分表数误报
+log "等待 schema 初始化完成..."
+PREV=-1
+for _ in $(seq 1 30); do
+  CNT=$(docker exec i9_mysql mysql -uroot -p"$ROOT_PW" -N -e \
+    "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$DB_NAME';" 2>/dev/null || echo 0)
+  if [[ "$CNT" -gt 0 && "$CNT" == "$PREV" ]]; then
+    break
+  fi
+  PREV=$CNT
   sleep 3
 done
+
+TABLES=$(docker exec i9_mysql mysql -uroot -p"$ROOT_PW" -N -e \
+  "USE \`$DB_NAME\`; SHOW TABLES;" 2>/dev/null || true)
 
 if [[ -z "$TABLES" ]]; then
   warn "未检测到任何表。初始化日志（最后 30 行）："
