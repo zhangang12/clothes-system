@@ -75,8 +75,8 @@ api POST /auth/portal/login "{\"username\":\"supplier1\",\"password\":\"$PW\"}"
 TOKEN_SUP=$(echo "$RESP" | jval data.access_token)
 
 # ── fixtures（用 admin 建前置数据，返回新 id 到 stdout）───────
-fx_customer() { api POST /customers "{\"name\":\"C_${SFX}_${RANDOM}\",\"grade\":\"A\",\"currency\":\"USD\"}"; echo "$RESP" | jval data.id; }
-fx_factory()  { api POST /factories "{\"name\":\"F_${SFX}_${RANDOM}\",\"type\":\"BOTH\"}"; echo "$RESP" | jval data.id; }
+fx_customer() { api POST /customers "{\"name\":\"C_${SFX}_${RANDOM}\",\"type\":\"MIDDLEMAN\",\"grade\":\"A\",\"currency\":\"USD\",\"contacts\":[{\"name\":\"张三\",\"mobile\":\"13900000000\"}]}"; echo "$RESP" | jval data.id; }
+fx_factory()  { api POST /factories "{\"name\":\"F_${SFX}_${RANDOM}\",\"type\":\"FABRIC\",\"contacts\":[{\"name\":\"张三\",\"mobile\":\"13900000000\"}]}"; echo "$RESP" | jval data.id; }
 fx_sample()   { api POST /samples "{\"customer_id\":$1,\"style_name\":\"S_$SFX\"}"; echo "$RESP" | jval data.id; }
 fx_quote()    { api POST /quotes "{\"customer_id\":$1,\"currency\":\"USD\",\"global_loss_rate\":5,\"gross_margin\":30,\"total_qty\":1000,\"items\":[{\"item_name\":\"面料\",\"unit\":\"米\",\"usage_qty\":1.5,\"unit_price\":8,\"loss_rate\":5},{\"item_name\":\"加工\",\"unit_price\":3}]}"; echo "$RESP" | jval data.id; }
 fx_order()    { api POST /orders "{\"customer_id\":$1,\"qty_total\":1000,\"currency\":\"USD\",\"unit_price\":12,\"materials\":[{\"item_name\":\"面料\",\"net_usage\":1.5,\"loss_rate\":5,\"unit_price\":8}]}"; echo "$RESP" | jval data.id; }
@@ -95,26 +95,30 @@ test_customer() {
   local em="buyer_${SFX:-x}@i9.com"
   local cid
 
-  # ---- DTO 校验：异常输入应 400 ----
-  # name 必填(@IsString，无@IsOptional)，缺失应 400
-  api POST /customers "{\"grade\":\"B\",\"currency\":\"USD\"}"
-  expect_code 400 "缺少 name(必填@IsString)应400"
+  # ---- DTO 校验：异常输入应 400（基础资料设计稿 §2.1：必填=客户类型；联系人子表非空）----
+  # 客户类型 @IsEnum(CustomerType) 必填，缺失应 400
+  api POST /customers "{\"name\":\"$nm\",\"grade\":\"B\",\"currency\":\"USD\",\"contacts\":[{\"name\":\"李\"}]}"
+  expect_code 400 "缺少 type(客户类型必填)应400"
 
   # grade @IsEnum(CustomerGrade) 仅 A/B/C，非法值 Z 应 400
-  api POST /customers "{\"name\":\"$nm\",\"grade\":\"Z\",\"currency\":\"USD\"}"
+  api POST /customers "{\"name\":\"$nm\",\"type\":\"MIDDLEMAN\",\"grade\":\"Z\",\"currency\":\"USD\",\"contacts\":[{\"name\":\"李\"}]}"
   expect_code 400 "非法 grade=Z(@IsEnum 仅A/B/C)应400"
 
-  # contact_email @IsEmail，非法邮箱应 400
-  api POST /customers "{\"name\":\"$nm\",\"grade\":\"B\",\"currency\":\"USD\",\"contact_email\":\"not-an-email\"}"
-  expect_code 400 "非法 contact_email(@IsEmail)应400"
+  # 联动校验：type=最终买家 未选关联中间商应 400（设计稿 D.4）
+  api POST /customers "{\"name\":\"$nm\",\"type\":\"BUYER\",\"currency\":\"USD\",\"contacts\":[{\"name\":\"李\"}]}"
+  expect_code 400 "最终买家未选关联中间商应400(联动校验)"
+
+  # 保存前·联系人非空校验：无 contacts 应 400
+  api POST /customers "{\"name\":\"$nm\",\"type\":\"MIDDLEMAN\",\"currency\":\"USD\"}"
+  expect_code 400 "客户无联系人子表应400(联系人非空校验)"
 
   # ---- 权限：POST @Roles(ADMIN,BUSINESS) ----
   # PATTERNMAKER 不在允许角色内，应被拒(403)
-  api POST /customers "{\"name\":\"$nm\",\"grade\":\"B\",\"currency\":\"USD\",\"contact_email\":\"$em\"}" "$TOKEN_PM"
+  api POST /customers "{\"name\":\"$nm\",\"type\":\"MIDDLEMAN\",\"grade\":\"B\",\"currency\":\"USD\",\"contacts\":[{\"name\":\"李\"}]}" "$TOKEN_PM"
   expect_deny "PATTERNMAKER 创建客户应被拒(不在@Roles)"
 
   # BUSINESS 属于允许角色，合法创建应 2xx
-  api POST /customers "{\"name\":\"$nm\",\"grade\":\"B\",\"currency\":\"USD\",\"contact_email\":\"$em\"}" "$TOKEN_BUSINESS"
+  api POST /customers "{\"name\":\"$nm\",\"type\":\"MIDDLEMAN\",\"grade\":\"B\",\"currency\":\"USD\",\"contacts\":[{\"name\":\"李\",\"mobile\":\"139\"}]}" "$TOKEN_BUSINESS"
   expect_ok "BUSINESS 合法创建客户应2xx"
   cid=$(echo "$RESP" | jval data.id)
 
@@ -150,32 +154,37 @@ test_factory() {
 
   # ---- 异常：DTO class-validator 校验 ----
   # create-factory.dto: name 为 @IsString() 且无 @IsOptional，缺失即 400
-  api POST /factories '{"type":"MATERIAL"}'
+  api POST /factories '{"type":"FABRIC","contacts":[{"name":"张"}]}'
   expect_code 400 "创建工厂缺 name 应 400"
 
-  # type 为 @IsEnum(FactoryType)，非 MATERIAL/PROCESS/BOTH 即 400（name 合法以隔离 type）
-  api POST /factories '{"name":"BadType-'"$SFX"'","type":"NOT_A_TYPE"}'
+  # type 为 @IsEnum(FactoryType)，非 7 类合法值即 400（name 合法以隔离 type）
+  api POST /factories '{"name":"BadType-'"$SFX"'","type":"NOT_A_TYPE","contacts":[{"name":"张"}]}'
   expect_code 400 "创建工厂非法 type 应 400"
+
+  # 保存前·联系人非空校验：无 contacts 应 400
+  api POST /factories '{"name":"NoContact-'"$SFX"'","type":"FABRIC"}'
+  expect_code 400 "工厂无联系人子表应400(联系人非空校验)"
 
   # ---- 权限：controller @Roles(ADMIN, BUSINESS) ----
   # 打版师(PATTERNMAKER)不在允许角色内，应 403
-  api POST /factories '{"name":"Deny-'"$SFX"'","type":"PROCESS"}' "$TOKEN_PM"
+  api POST /factories '{"name":"Deny-'"$SFX"'","type":"OUTSOURCE","contacts":[{"name":"张"}]}' "$TOKEN_PM"
   expect_deny "打版师创建工厂应被拒绝"
 
   # 业务员(BUSINESS)在允许角色内，应成功
-  api POST /factories '{"name":"Biz-'"$SFX"'","type":"BOTH"}' "$TOKEN_BUSINESS"
+  api POST /factories '{"name":"Biz-'"$SFX"'","type":"ACCESSORY","contacts":[{"name":"张"}]}' "$TOKEN_BUSINESS"
   expect_ok "业务员创建工厂应成功"
 
   # ---- 正常路径：合法创建（admin 默认 token） ----
-  api POST /factories '{"name":"Fac-'"$SFX"'","type":"MATERIAL","short_name":"FS-'"$SFX"'"}'
+  api POST /factories '{"name":"Fac-'"$SFX"'","type":"FABRIC","short_name":"FS-'"$SFX"'","contacts":[{"name":"张建国","mobile":"13901588888"}]}'
   expect_ok "合法创建工厂应成功"
   fid=$(echo "$RESP" | jval data.id)
 
-  # ---- 建后 GET 详情：编号规则 NUM_PREFIX.FACTORY='CN' → factory_no ^CN ----
+  # ---- 建后 GET 详情：编号规则 NUM_PREFIX.FACTORY='S' → factory_no ^S；联系人回填 ----
   api GET /factories/${fid:-}
   expect_ok "获取工厂详情应成功"
-  expect_match data.factory_no '^CN' "工厂编号应以 CN 开头"
-  expect_eq data.type MATERIAL "详情类型应为 MATERIAL"
+  expect_match data.factory_no '^S' "工厂编号应以 S 开头(设计稿 §1.1)"
+  expect_eq data.type FABRIC "详情类型应为 FABRIC"
+  expect_eq data.contact_name "张建国" "主联系人应自动回填为子表首行姓名"
 
   # ---- 更新：PUT @Roles(ADMIN,BUSINESS)，admin 更新并校验生效 ----
   api PUT /factories/${fid:-} '{"name":"FacUpd-'"$SFX"'","short_name":"US-'"$SFX"'"}'
@@ -450,14 +459,14 @@ test_customer_ext() {
   expect_eq data.grade "C" "更新后GET详情grade已变更为C"
 
   # 2) 枚举各合法值：grade=B / C 均可建
-  api POST "/customers" '{"name":"B级客户'"$SFX"'","grade":"B","currency":"USD"}'
+  api POST "/customers" '{"name":"B级客户'"$SFX"'","type":"MIDDLEMAN","grade":"B","currency":"USD","contacts":[{"name":"李"}]}'
   expect_ok "grade=B客户创建成功"
-  api POST "/customers" '{"name":"C级客户'"$SFX"'","grade":"C","currency":"CNY"}'
+  api POST "/customers" '{"name":"C级客户'"$SFX"'","type":"MIDDLEMAN","grade":"C","currency":"CNY","contacts":[{"name":"李"}]}'
   expect_ok "grade=C客户创建成功"
 
   # 3) 边界值：name超@MaxLength(100)→400
   big_name=$(printf 'X%.0s' {1..101})
-  api POST "/customers" '{"name":"'"$big_name"'","grade":"B","currency":"USD"}'
+  api POST "/customers" '{"name":"'"$big_name"'","type":"MIDDLEMAN","currency":"USD","contacts":[{"name":"李"}]}'
   expect_code 400 "name超100字符创建应被拒"
 
   # 4) GET不存在的大id→404
@@ -496,24 +505,24 @@ test_factory_ext() {
   local fid="" no_a="" no_b="" nocmp="same" sid="" did="" longname=""
 
   # ---- CRUD 完整性：PUT 更新后重新 GET 验证字段确实变化（基础用例只校验 PUT 响应体） ----
-  api POST /factories "{\"name\":\"ExtA_${SFX}_${RANDOM}\",\"type\":\"MATERIAL\"}"
+  api POST /factories "{\"name\":\"ExtA_${SFX}_${RANDOM}\",\"type\":\"FABRIC\",\"contacts\":[{\"name\":\"初始人\",\"mobile\":\"139\"}]}"
   fid=$(echo "$RESP" | jval data.id)
-  api PUT "/factories/${fid:-0}" "{\"name\":\"ExtAUpd_${SFX}\",\"contact_name\":\"Tom_${SFX}\"}"
+  api PUT "/factories/${fid:-0}" "{\"name\":\"ExtAUpd_${SFX}\",\"contacts\":[{\"name\":\"Tom_${SFX}\",\"mobile\":\"138\"}]}"
   expect_ok "管理员 PUT 更新工厂应成功"
   api GET "/factories/${fid:-0}"
   expect_eq data.name "ExtAUpd_${SFX}" "PUT 后重新 GET 名称应已变更"
-  expect_eq data.contact_name "Tom_${SFX}" "PUT 后重新 GET 联系人应已变更"
+  expect_eq data.contact_name "Tom_${SFX}" "PUT 更新联系人子表后主联系人应自动回填"
 
-  # ---- 枚举各合法值都能建：type PROCESS / BOTH（MATERIAL 已在上方创建） ----
-  api POST /factories "{\"name\":\"TP_${SFX}_${RANDOM}\",\"type\":\"PROCESS\"}"
-  expect_eq data.type PROCESS "PROCESS 类型工厂应可创建并回显"
-  api POST /factories "{\"name\":\"TB_${SFX}_${RANDOM}\",\"type\":\"BOTH\"}"
-  expect_eq data.type BOTH "BOTH 类型工厂应可创建并回显"
+  # ---- 枚举各合法值都能建：type OUTSOURCE / ACCESSORY（FABRIC 已在上方创建） ----
+  api POST /factories "{\"name\":\"TP_${SFX}_${RANDOM}\",\"type\":\"OUTSOURCE\",\"contacts\":[{\"name\":\"李\"}]}"
+  expect_eq data.type OUTSOURCE "OUTSOURCE 类型工厂应可创建并回显"
+  api POST /factories "{\"name\":\"TB_${SFX}_${RANDOM}\",\"type\":\"ACCESSORY\",\"contacts\":[{\"name\":\"李\"}]}"
+  expect_eq data.type ACCESSORY "ACCESSORY 类型工厂应可创建并回显"
 
   # ---- 唯一/递增：连建两个工厂 factory_no 应不同（NumberingService 全局递增） ----
-  api POST /factories "{\"name\":\"NoA_${SFX}_${RANDOM}\",\"type\":\"MATERIAL\"}"
+  api POST /factories "{\"name\":\"NoA_${SFX}_${RANDOM}\",\"type\":\"FABRIC\",\"contacts\":[{\"name\":\"李\"}]}"
   no_a=$(echo "$RESP" | jval data.factory_no)
-  api POST /factories "{\"name\":\"NoB_${SFX}_${RANDOM}\",\"type\":\"MATERIAL\"}"
+  api POST /factories "{\"name\":\"NoB_${SFX}_${RANDOM}\",\"type\":\"FABRIC\",\"contacts\":[{\"name\":\"李\"}]}"
   no_b=$(echo "$RESP" | jval data.factory_no)
   if [[ -n "${no_a:-}" && "${no_a:-}" != "${no_b:-}" ]]; then ok "连建两工厂编号不同($no_a≠$no_b)"; else bad "工厂编号应唯一递增($no_a vs $no_b)"; fi
 
@@ -521,12 +530,12 @@ test_factory_ext() {
   api GET "/factories?page=1&size=2"
   expect_num size 2 "分页 size 应回显为 2"
 
-  # ---- 列表查询：按 type 筛选，返回项类型应全部为 PROCESS（取首条校验） ----
-  api GET "/factories?type=PROCESS&size=5"
-  expect_eq data.0.type PROCESS "按 type=PROCESS 筛选首条类型应为 PROCESS"
+  # ---- 列表查询：按 type 筛选，返回项类型应全部为 OUTSOURCE（取首条校验） ----
+  api GET "/factories?type=OUTSOURCE&size=5"
+  expect_eq data.0.type OUTSOURCE "按 type=OUTSOURCE 筛选首条类型应为 OUTSOURCE"
 
   # ---- 次要接口：PATCH status 用 ADMIN → 2xx，默认启用(1)切换为停用(0) ----
-  api POST /factories "{\"name\":\"St_${SFX}_${RANDOM}\",\"type\":\"MATERIAL\"}"
+  api POST /factories "{\"name\":\"St_${SFX}_${RANDOM}\",\"type\":\"FABRIC\",\"contacts\":[{\"name\":\"李\"}]}"
   sid=$(echo "$RESP" | jval data.id)
   api PATCH "/factories/${sid:-0}/status"
   expect_ok "管理员切换工厂状态应成功"
@@ -536,7 +545,7 @@ test_factory_ext() {
   expect_eq data.0.status 0 "按 status=0 筛选首条状态应为停用(0)"
 
   # ---- 软删除完整性：DELETE 后详情 404；对已删记录重复删除 → 404(终态幂等) ----
-  api POST /factories "{\"name\":\"Del_${SFX}_${RANDOM}\",\"type\":\"BOTH\"}"
+  api POST /factories "{\"name\":\"Del_${SFX}_${RANDOM}\",\"type\":\"FABRIC\",\"contacts\":[{\"name\":\"李\"}]}"
   did=$(echo "$RESP" | jval data.id)
   api DELETE "/factories/${did:-0}"
   expect_ok "管理员逻辑删除工厂应成功"
@@ -549,7 +558,7 @@ test_factory_ext() {
   api GET /factories/2000000001
   expect_code 404 "查询超大 id 工厂应 404"
   longname=$(printf 'N%.0s' $(seq 1 101))
-  api POST /factories "{\"name\":\"${longname}\",\"type\":\"MATERIAL\"}"
+  api POST /factories "{\"name\":\"${longname}\",\"type\":\"FABRIC\",\"contacts\":[{\"name\":\"李\"}]}"
   expect_code 400 "name 超过 100 字符应 400"
 
   # ---- 权限矩阵：补写接口换无权角色 ----

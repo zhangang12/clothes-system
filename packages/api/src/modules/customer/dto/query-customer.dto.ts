@@ -1,7 +1,7 @@
 import { IsOptional, IsEnum, IsInt, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { CustomerGrade } from '@i9/types';
+import { CustomerGrade, CustomerType } from '@i9/types';
 
 export class QueryCustomerDto {
   @ApiPropertyOptional({ default: 1 })
@@ -22,6 +22,11 @@ export class QueryCustomerDto {
   @ApiPropertyOptional()
   @IsOptional()
   keyword?: string;
+
+  @ApiPropertyOptional({ enum: CustomerType })
+  @IsOptional()
+  @IsEnum(CustomerType)
+  type?: CustomerType;
 
   @ApiPropertyOptional({ enum: CustomerGrade })
   @IsOptional()

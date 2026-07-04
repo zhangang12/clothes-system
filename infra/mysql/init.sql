@@ -49,30 +49,68 @@ CREATE TABLE IF NOT EXISTS `supplier_account` (
 -- ============================================================
 CREATE TABLE IF NOT EXISTS `factory` (
   `id`             BIGINT        NOT NULL AUTO_INCREMENT,
-  `factory_no`     VARCHAR(10)   NOT NULL COMMENT '工厂编号 CN001',
-  `name`           VARCHAR(100)  NOT NULL COMMENT '工厂全称',
+  `factory_no`     VARCHAR(20)   NOT NULL COMMENT '厂商编号 S001（自动生成/大写/唯一）',
+  `type`           ENUM('FABRIC','ACCESSORY','OUTSOURCE','FORWARDER','TESTING','EXPORT','OTHER') NOT NULL DEFAULT 'FABRIC' COMMENT '工厂类型',
+  `can_invoice`    TINYINT       NOT NULL DEFAULT 1 COMMENT '能否开票 1=是 0=否',
+  `name`           VARCHAR(100)  NOT NULL COMMENT '厂商名称（唯一）',
   `short_name`     VARCHAR(50)   DEFAULT NULL COMMENT '简称',
-  `type`           ENUM('MATERIAL','PROCESS','BOTH') NOT NULL DEFAULT 'MATERIAL' COMMENT '类型',
-  `contact_name`   VARCHAR(50)   DEFAULT NULL COMMENT '联系人',
-  `contact_phone`  VARCHAR(20)   DEFAULT NULL COMMENT '联系电话',
-  `address`        VARCHAR(200)  DEFAULT NULL COMMENT '地址',
+  `contact_name`   VARCHAR(50)   DEFAULT NULL COMMENT '主联系人（自动取子表首行）',
+  `contact_phone`  VARCHAR(30)   DEFAULT NULL COMMENT '主联系电话（自动取子表首行）',
+  `province`       VARCHAR(30)   DEFAULT NULL COMMENT '所在省份',
+  `city`           VARCHAR(30)   DEFAULT NULL COMMENT '所在城市',
+  `address`        VARCHAR(200)  DEFAULT NULL COMMENT '详细地址',
+  `business_scope` VARCHAR(200)  DEFAULT NULL COMMENT '业务范围',
+  `develop_date`   DATE          DEFAULT NULL COMMENT '开发时间',
   `bank_name`      VARCHAR(100)  DEFAULT NULL COMMENT '开户银行',
-  `bank_account`   VARCHAR(30)   DEFAULT NULL COMMENT '银行账号',
-  `tax_no`         VARCHAR(20)   DEFAULT NULL COMMENT '税号',
+  `bank_account`   VARCHAR(40)   DEFAULT NULL COMMENT '银行帐号',
+  `tax_no`         VARCHAR(30)   DEFAULT NULL COMMENT '公司税号',
+  `invoice_phone`  VARCHAR(30)   DEFAULT NULL COMMENT '开票电话',
+  `invoice_address` VARCHAR(200) DEFAULT NULL COMMENT '开票地址',
+  `bank_name2`     VARCHAR(100)  DEFAULT NULL COMMENT '开户银行(2)',
+  `bank_account2`  VARCHAR(40)   DEFAULT NULL COMMENT '银行帐号(2)',
+  `tax_no2`        VARCHAR(30)   DEFAULT NULL COMMENT '公司税号(2)',
+  `invoice_phone2` VARCHAR(30)   DEFAULT NULL COMMENT '开票电话(2)',
+  `invoice_address2` VARCHAR(200) DEFAULT NULL COMMENT '开票地址(2)',
+  `legal_rep`      VARCHAR(50)   DEFAULT NULL COMMENT '法人代表',
+  `registered_capital` BIGINT    DEFAULT NULL COMMENT '注册资金',
+  `established_date` DATE        DEFAULT NULL COMMENT '设立时间',
+  `annual_sales`   DECIMAL(16,2) DEFAULT NULL COMMENT '年销售额',
+  `representative_customers` VARCHAR(200) DEFAULT NULL COMMENT '代表客户',
+  `quality_certs`  TEXT          DEFAULT NULL COMMENT '质量证书',
+  `remark`         TEXT          DEFAULT NULL COMMENT '备注',
+  `last_trade_date` DATE         DEFAULT NULL COMMENT '最后交易日期（列表超期标红）',
   `status`         TINYINT       NOT NULL DEFAULT 1 COMMENT '1=启用 0=停用',
-  `remark`         TEXT          DEFAULT NULL,
   `created_by`     BIGINT        DEFAULT NULL,
   `created_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `deleted`        TINYINT       NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_factory_no` (`factory_no`),
+  KEY `idx_type` (`type`),
   KEY `idx_status` (`status`,`deleted`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='工厂主档';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='工厂/厂商主档';
+
+-- 工厂·联系人明细
+CREATE TABLE IF NOT EXISTS `factory_contact` (
+  `id`          BIGINT       NOT NULL AUTO_INCREMENT,
+  `factory_id`  BIGINT       NOT NULL,
+  `sort_order`  INT          NOT NULL DEFAULT 0,
+  `name`        VARCHAR(50)  DEFAULT NULL COMMENT '姓名',
+  `department`  VARCHAR(50)  DEFAULT NULL COMMENT '部门',
+  `title`       VARCHAR(50)  DEFAULT NULL COMMENT '职务',
+  `phone`       VARCHAR(30)  DEFAULT NULL COMMENT '电话号码',
+  `mobile`      VARCHAR(30)  DEFAULT NULL COMMENT '手机号码',
+  `email`       VARCHAR(100) DEFAULT NULL COMMENT '电子邮件',
+  `remark`      VARCHAR(200) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (`id`),
+  KEY `idx_factory` (`factory_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='工厂联系人明细';
 
 -- 门户测试用：工厂 + 供应商门户账号（账号 supplier1 / 密码 Admin@123）
-INSERT IGNORE INTO `factory` (`id`,`factory_no`,`name`,`type`,`status`) VALUES
-(1,'CN001','门户测试工厂','BOTH',1);
+INSERT IGNORE INTO `factory` (`id`,`factory_no`,`name`,`type`,`status`,`contact_name`,`contact_phone`) VALUES
+(1,'S001','门户测试工厂','FABRIC',1,'张建国','13901588888');
+INSERT IGNORE INTO `factory_contact` (`id`,`factory_id`,`sort_order`,`name`,`department`,`title`,`mobile`) VALUES
+(1,1,0,'张建国','销售部','销售经理','13901588888');
 INSERT IGNORE INTO `supplier_account` (`id`,`account`,`password`,`factory_id`,`status`) VALUES
 (1,'supplier1','$2a$10$Y.NI2Bzr5gof2tpDSJsJ8exF2z2wuzkoqShu822RgpuJlrNC/GW5i',1,1);
 
@@ -81,15 +119,34 @@ INSERT IGNORE INTO `supplier_account` (`id`,`account`,`password`,`factory_id`,`s
 -- ============================================================
 CREATE TABLE IF NOT EXISTS `customer` (
   `id`              BIGINT        NOT NULL AUTO_INCREMENT,
-  `customer_no`     VARCHAR(10)   NOT NULL COMMENT '客户编号 S001',
-  `name`            VARCHAR(100)  NOT NULL COMMENT '客户全称',
+  `customer_no`     VARCHAR(20)   NOT NULL COMMENT '客户编号 CN001（自动生成/唯一）',
+  `name`            VARCHAR(100)  NOT NULL COMMENT '客户名称（唯一）',
   `short_name`      VARCHAR(50)   DEFAULT NULL,
-  `grade`           ENUM('A','B','C') NOT NULL DEFAULT 'B' COMMENT '客户等级',
-  `currency`        VARCHAR(5)    NOT NULL DEFAULT 'USD' COMMENT '结算币种',
-  `payment_method`  VARCHAR(50)   DEFAULT NULL COMMENT '付款方式 T/T, L/C',
-  `country`         VARCHAR(50)   DEFAULT NULL COMMENT '国家',
-  `contact_name`    VARCHAR(50)   DEFAULT NULL,
-  `contact_email`   VARCHAR(100)  DEFAULT NULL,
+  `type`            ENUM('MIDDLEMAN','BUYER') NOT NULL DEFAULT 'MIDDLEMAN' COMMENT '客户类型 中间商/最终买家',
+  `related_middleman` VARCHAR(200) DEFAULT NULL COMMENT '关联中间商（买家必填，中间商ID逗号串）',
+  `trade_country`   VARCHAR(50)   DEFAULT NULL COMMENT '贸易国别',
+  `country_region`  VARCHAR(50)   DEFAULT NULL COMMENT '国家区域（随贸易国别带出）',
+  `city`            VARCHAR(50)   DEFAULT NULL COMMENT '所在城市',
+  `homepage`        VARCHAR(200)  DEFAULT NULL COMMENT '公司主页',
+  `address`         VARCHAR(200)  DEFAULT NULL COMMENT '详细地址',
+  `price_terms`     VARCHAR(50)   DEFAULT NULL COMMENT '价格条款',
+  `settlement_method` VARCHAR(50) DEFAULT NULL COMMENT '结汇方式',
+  `grade`           ENUM('A','B','C') DEFAULT NULL COMMENT '信用等级',
+  `cooperation_level` VARCHAR(20) DEFAULT NULL COMMENT '合作等级',
+  `customer_source` VARCHAR(50)   DEFAULT NULL COMMENT '客户来源',
+  `payment_days`    INT           DEFAULT NULL COMMENT '付款期限（天）',
+  `business_scope`  VARCHAR(200)  DEFAULT NULL COMMENT '业务范围',
+  `salesperson`     VARCHAR(50)   DEFAULT NULL COMMENT '外销员',
+  `develop_date`    DATE          DEFAULT NULL COMMENT '开发时间',
+  `spare1`          VARCHAR(100)  DEFAULT NULL COMMENT '备用字段1',
+  `spare2`          VARCHAR(100)  DEFAULT NULL COMMENT '备用字段2',
+  `spare3`          VARCHAR(100)  DEFAULT NULL COMMENT '备用字段3',
+  `delivery_address` TEXT         DEFAULT NULL COMMENT '收货地址',
+  `front_mark`      TEXT          DEFAULT NULL COMMENT '正面唛头',
+  `side_mark`       TEXT          DEFAULT NULL COMMENT '侧面唛头',
+  `inner_box_text`  TEXT          DEFAULT NULL COMMENT '内盒文字',
+  `customer_remark` TEXT          DEFAULT NULL COMMENT '客户备注',
+  `currency`        VARCHAR(5)    NOT NULL DEFAULT 'USD' COMMENT '主结算币种',
   `status`          TINYINT       NOT NULL DEFAULT 1,
   `remark`          TEXT          DEFAULT NULL,
   `created_by`      BIGINT        DEFAULT NULL,
@@ -98,9 +155,58 @@ CREATE TABLE IF NOT EXISTS `customer` (
   `deleted`         TINYINT       NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_customer_no` (`customer_no`),
+  KEY `idx_type` (`type`),
   KEY `idx_grade` (`grade`),
   KEY `idx_status` (`status`,`deleted`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='客户主档';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='客户主档（机密单据）';
+
+-- 客户·联系人明细（10 列）
+CREATE TABLE IF NOT EXISTS `customer_contact` (
+  `id`          BIGINT       NOT NULL AUTO_INCREMENT,
+  `customer_id` BIGINT       NOT NULL,
+  `sort_order`  INT          NOT NULL DEFAULT 0,
+  `name`        VARCHAR(50)  DEFAULT NULL,
+  `department`  VARCHAR(50)  DEFAULT NULL,
+  `gender`      VARCHAR(2)   DEFAULT NULL COMMENT 'M/F',
+  `title`       VARCHAR(50)  DEFAULT NULL,
+  `phone`       VARCHAR(30)  DEFAULT NULL,
+  `mobile`      VARCHAR(30)  DEFAULT NULL,
+  `mobile1`     VARCHAR(30)  DEFAULT NULL,
+  `mobile2`     VARCHAR(30)  DEFAULT NULL,
+  `email`       VARCHAR(100) DEFAULT NULL,
+  `remark`      VARCHAR(200) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_customer` (`customer_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='客户联系人明细';
+
+-- 客户·开户银行明细（7 列）
+CREATE TABLE IF NOT EXISTS `customer_bank` (
+  `id`           BIGINT       NOT NULL AUTO_INCREMENT,
+  `customer_id`  BIGINT       NOT NULL,
+  `sort_order`   INT          NOT NULL DEFAULT 0,
+  `account_name` VARCHAR(100) DEFAULT NULL COMMENT '开户名称（自动=客户名称）',
+  `bank_name`    VARCHAR(100) DEFAULT NULL,
+  `bank_account` VARCHAR(40)  DEFAULT NULL,
+  `bank_address` VARCHAR(200) DEFAULT NULL,
+  `currency`     VARCHAR(20)  DEFAULT NULL,
+  `swift_code`   VARCHAR(20)  DEFAULT NULL,
+  `remark`       VARCHAR(200) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_customer` (`customer_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='客户开户银行明细';
+
+-- 客户·快件帐号明细（4 列）
+CREATE TABLE IF NOT EXISTS `customer_express` (
+  `id`          BIGINT       NOT NULL AUTO_INCREMENT,
+  `customer_id` BIGINT       NOT NULL,
+  `sort_order`  INT          NOT NULL DEFAULT 0,
+  `company`     VARCHAR(100) DEFAULT NULL COMMENT '快件公司（来自工厂资料）',
+  `account`     VARCHAR(50)  DEFAULT NULL,
+  `pay_method`  VARCHAR(10)  DEFAULT NULL COMMENT '到付/预付',
+  `remark`      VARCHAR(200) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_customer` (`customer_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='客户快件帐号明细';
 
 -- ============================================================
 -- 样衣管理

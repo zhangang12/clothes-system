@@ -22,7 +22,7 @@ describe('Reconciliations (e2e)', () => {
       .set(adminAuth())
       .send({
         name: `ReconcileFactory-${Date.now()}`,
-        type: FactoryType.MATERIAL,
+        type: FactoryType.FABRIC,
       });
 
     expect(res.status).toBe(201);

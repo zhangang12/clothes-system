@@ -1,20 +1,35 @@
 import { Test } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import { Factory } from '../factory.entity';
+import { FactoryContact } from '../factory-contact.entity';
 import { Contract } from '../../contract/contract.entity';
 import { FactoryService } from '../factory.service';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
 
 const mockRepo = {
-  create: jest.fn(),
+  create: jest.fn().mockImplementation((v) => v),
   save: jest.fn(),
   findOne: jest.fn(),
   findAndCount: jest.fn(),
   find: jest.fn(),
+  count: jest.fn(),
+};
+const mockContactRepo = {
+  create: jest.fn().mockImplementation((v) => v),
+  find: jest.fn().mockResolvedValue([]),
 };
 const mockContractRepo = { count: jest.fn() };
 const mockRedis = { incr: jest.fn(), expire: jest.fn() };
+const mockManager = {
+  create: jest.fn().mockImplementation((_e: any, v: any) => v),
+  save: jest.fn().mockImplementation((_e: any, v: any) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: v.id ?? 1 })),
+  delete: jest.fn().mockResolvedValue({}),
+};
+const mockDataSource = { transaction: jest.fn((cb: any) => cb(mockManager)) };
+
+const CONTACTS = [{ name: '张建国', phone: '0512-6877', mobile: '13901588888' }];
 
 describe('FactoryService', () => {
   let service: FactoryService;
@@ -22,12 +37,17 @@ describe('FactoryService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     mockContractRepo.count.mockResolvedValue(0);
+    mockRepo.count.mockResolvedValue(0);
+    mockContactRepo.find.mockResolvedValue([]);
+    mockDataSource.transaction.mockImplementation((cb: any) => cb(mockManager));
     const module = await Test.createTestingModule({
       providers: [
         FactoryService,
         NumberingService,
         { provide: getRepositoryToken(Factory), useValue: mockRepo },
+        { provide: getRepositoryToken(FactoryContact), useValue: mockContactRepo },
         { provide: getRepositoryToken(Contract), useValue: mockContractRepo },
+        { provide: DataSource, useValue: mockDataSource },
         { provide: REDIS_CLIENT, useValue: mockRedis },
       ],
     }).compile();
@@ -35,19 +55,32 @@ describe('FactoryService', () => {
   });
 
   describe('create()', () => {
-    it('UT-FAC-01: creates factory with generated factory_no and created_by', async () => {
+    it('UT-FAC-01: generates S-prefixed factory_no, backfills main contact from subtable first row', async () => {
       mockRedis.incr.mockResolvedValue(1);
-      const entity = { id: 1, factory_no: 'CN001', name: '测试工厂' };
-      mockRepo.create.mockReturnValue(entity);
-      mockRepo.save.mockResolvedValue(entity);
-
-      const result = await service.create({ name: '测试工厂', type: 'process' } as any, 99);
-      expect(mockRepo.create).toHaveBeenCalledWith(expect.objectContaining({
-        factory_no: 'CN001',
+      const result = await service.create(
+        { name: '测试工厂', type: 'FABRIC', contacts: CONTACTS } as any, 99,
+      );
+      const savedArg = mockManager.save.mock.calls[0][1];
+      expect(savedArg).toMatchObject({
+        factory_no: 'S001',
         created_by: 99,
         name: '测试工厂',
-      }));
-      expect(result.factory_no).toBe('CN001');
+        contact_name: '张建国',
+        contact_phone: '0512-6877',
+      });
+      expect(result.factory_no).toBe('S001');
+    });
+
+    it('UT-FAC-14: throws when no contacts provided (保存前·联系人非空校验)', async () => {
+      mockRedis.incr.mockResolvedValue(2);
+      await expect(service.create({ name: 'X', type: 'FABRIC' } as any, 1))
+        .rejects.toThrow(BadRequestException);
+    });
+
+    it('UT-FAC-15: throws Conflict when factory name duplicated', async () => {
+      mockRepo.count.mockResolvedValue(1);
+      await expect(service.create({ name: 'Dup', type: 'FABRIC', contacts: CONTACTS } as any, 1))
+        .rejects.toThrow(ConflictException);
     });
   });
 
@@ -60,19 +93,19 @@ describe('FactoryService', () => {
       expect(result.page).toBe(1);
     });
 
-    it('UT-FAC-03: searches by keyword (name and factory_no)', async () => {
+    it('UT-FAC-03: keyword searches across all design-specified fields', async () => {
       mockRepo.findAndCount.mockResolvedValue([[], 0]);
       await service.findAll({ page: 1, size: 20, keyword: 'abc' } as any);
       const call = mockRepo.findAndCount.mock.calls[0][0];
       expect(Array.isArray(call.where)).toBe(true);
-      expect(call.where).toHaveLength(2);
+      expect(call.where.length).toBeGreaterThanOrEqual(5);
     });
 
     it('UT-FAC-04: filters by type and status when provided', async () => {
       mockRepo.findAndCount.mockResolvedValue([[], 0]);
-      await service.findAll({ page: 1, size: 20, type: 'process', status: 1 } as any);
+      await service.findAll({ page: 1, size: 20, type: 'FABRIC', status: 1 } as any);
       const call = mockRepo.findAndCount.mock.calls[0][0];
-      expect(call.where).toMatchObject({ type: 'process', status: 1 });
+      expect(call.where).toMatchObject({ type: 'FABRIC', status: 1 });
     });
 
     it('UT-FAC-05: calculates correct skip for pagination', async () => {
@@ -83,11 +116,12 @@ describe('FactoryService', () => {
   });
 
   describe('findOne()', () => {
-    it('UT-FAC-06: returns entity when found', async () => {
-      const entity = { id: 1, deleted: 0 };
-      mockRepo.findOne.mockResolvedValue(entity);
+    it('UT-FAC-06: returns entity with contacts when found', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 1, deleted: 0, name: 'A' });
+      mockContactRepo.find.mockResolvedValue([{ id: 5, name: '张建国' }]);
       const result = await service.findOne(1);
-      expect(result).toBe(entity);
+      expect(result).toMatchObject({ id: 1, name: 'A' });
+      expect(result.contacts).toHaveLength(1);
     });
 
     it('UT-FAC-07: throws NotFoundException when not found', async () => {
@@ -98,24 +132,21 @@ describe('FactoryService', () => {
 
   describe('toggleStatus()', () => {
     it('UT-FAC-08: toggles status from 1 to 0', async () => {
-      const entity = { id: 1, status: 1, deleted: 0 };
-      mockRepo.findOne.mockResolvedValue(entity);
-      mockRepo.save.mockResolvedValue({ ...entity, status: 0 });
-      const result = await service.toggleStatus(1);
+      mockRepo.findOne.mockResolvedValue({ id: 1, status: 1, deleted: 0 });
+      mockRepo.save.mockResolvedValue({ id: 1, status: 0 });
+      await service.toggleStatus(1);
       expect(mockRepo.save).toHaveBeenCalledWith(expect.objectContaining({ status: 0 }));
     });
 
     it('UT-FAC-09: toggles status from 0 to 1', async () => {
-      const entity = { id: 1, status: 0, deleted: 0 };
-      mockRepo.findOne.mockResolvedValue(entity);
-      mockRepo.save.mockResolvedValue({ ...entity, status: 1 });
+      mockRepo.findOne.mockResolvedValue({ id: 1, status: 0, deleted: 0 });
+      mockRepo.save.mockResolvedValue({ id: 1, status: 1 });
       await service.toggleStatus(1);
       expect(mockRepo.save).toHaveBeenCalledWith(expect.objectContaining({ status: 1 }));
     });
 
     it('UT-FAC-13: throws when disabling a factory with open (non-terminal) contracts', async () => {
-      const entity = { id: 1, status: 1, deleted: 0 };
-      mockRepo.findOne.mockResolvedValue(entity);
+      mockRepo.findOne.mockResolvedValue({ id: 1, status: 1, deleted: 0 });
       mockContractRepo.count.mockResolvedValue(1);
       await expect(service.toggleStatus(1)).rejects.toThrow('未完成合同');
       expect(mockRepo.save).not.toHaveBeenCalled();
@@ -123,18 +154,25 @@ describe('FactoryService', () => {
   });
 
   describe('remove()', () => {
-    it('UT-FAC-10: sets deleted=1 (logical delete)', async () => {
-      const entity = { id: 1, deleted: 0 };
-      mockRepo.findOne.mockResolvedValue(entity);
-      mockRepo.save.mockResolvedValue({ ...entity, deleted: 1 });
+    it('UT-FAC-10: sets deleted=1 (logical delete) when not referenced', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 1, deleted: 0 });
+      mockContractRepo.count.mockResolvedValue(0);
+      mockRepo.save.mockResolvedValue({ id: 1, deleted: 1 });
       await service.remove(1);
       expect(mockRepo.save).toHaveBeenCalledWith(expect.objectContaining({ deleted: 1 }));
+    });
+
+    it('UT-FAC-16: blocks delete when referenced by downstream contracts (C2)', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 1, deleted: 0 });
+      mockContractRepo.count.mockResolvedValue(2);
+      await expect(service.remove(1)).rejects.toThrow('无法删除');
+      expect(mockRepo.save).not.toHaveBeenCalled();
     });
   });
 
   describe('listForSelect()', () => {
     it('UT-FAC-11: returns only enabled (status=1, deleted=0) factories', async () => {
-      mockRepo.find.mockResolvedValue([{ id: 1, factory_no: 'CN001', name: '工厂A' }]);
+      mockRepo.find.mockResolvedValue([{ id: 1, factory_no: 'S001', name: '工厂A' }]);
       await service.listForSelect();
       expect(mockRepo.find).toHaveBeenCalledWith(expect.objectContaining({
         where: expect.objectContaining({ status: 1, deleted: 0 }),
@@ -143,9 +181,9 @@ describe('FactoryService', () => {
 
     it('UT-FAC-12: filters by type when provided', async () => {
       mockRepo.find.mockResolvedValue([]);
-      await service.listForSelect('process');
+      await service.listForSelect('OUTSOURCE');
       expect(mockRepo.find).toHaveBeenCalledWith(expect.objectContaining({
-        where: expect.objectContaining({ type: 'process' }),
+        where: expect.objectContaining({ type: 'OUTSOURCE' }),
       }));
     });
   });

@@ -62,7 +62,7 @@ describe('Factories (e2e)', () => {
       const createRes = await request(getApp().getHttpServer())
         .post(`${BASE}/factories`)
         .set(adminAuth())
-        .send({ name: `KeywordSearch-${tag}`, type: FactoryType.MATERIAL });
+        .send({ name: `KeywordSearch-${tag}`, type: FactoryType.FABRIC });
 
       expect(createRes.status).toBe(201);
       const id = createRes.body.data.id;
@@ -84,7 +84,7 @@ describe('Factories (e2e)', () => {
       const res = await request(getApp().getHttpServer())
         .post(`${BASE}/factories`)
         .set(financeAuth())
-        .send({ name: `ShouldFail-${tag}`, type: FactoryType.MATERIAL });
+        .send({ name: `ShouldFail-${tag}`, type: FactoryType.FABRIC });
 
       expect(res.status).toBe(403);
       expect(res.body.code).toBe(4003);
@@ -94,7 +94,7 @@ describe('Factories (e2e)', () => {
       const payload = {
         name: `Test Factory ${tag}`,
         short_name: 'TF',
-        type: FactoryType.PROCESS,
+        type: FactoryType.OUTSOURCE,
         contact_name: 'Zhang San',
         contact_phone: '13800138000',
         address: '上海市测试路1号',
@@ -113,7 +113,7 @@ describe('Factories (e2e)', () => {
       expect(res.body.code).toBe(0);
       expect(res.body.data).toMatchObject({
         name: payload.name,
-        type: FactoryType.PROCESS,
+        type: FactoryType.OUTSOURCE,
         status: 1,
         deleted: 0,
       });
@@ -151,7 +151,7 @@ describe('Factories (e2e)', () => {
       const res = await request(getApp().getHttpServer())
         .post(`${BASE}/factories`)
         .set(adminAuth())
-        .send({ name: `GetById-${tag}`, type: FactoryType.BOTH });
+        .send({ name: `GetById-${tag}`, type: FactoryType.FABRIC });
 
       expect(res.status).toBe(201);
       factoryId = res.body.data.id;
@@ -187,7 +187,7 @@ describe('Factories (e2e)', () => {
       const res = await request(getApp().getHttpServer())
         .post(`${BASE}/factories`)
         .set(adminAuth())
-        .send({ name: `ToUpdate-${tag}`, type: FactoryType.MATERIAL });
+        .send({ name: `ToUpdate-${tag}`, type: FactoryType.FABRIC });
 
       expect(res.status).toBe(201);
       factoryId = res.body.data.id;
@@ -198,7 +198,7 @@ describe('Factories (e2e)', () => {
       const res = await request(getApp().getHttpServer())
         .put(`${BASE}/factories/${factoryId}`)
         .set(adminAuth())
-        .send({ name: `Updated-${tag}`, type: FactoryType.MATERIAL });
+        .send({ name: `Updated-${tag}`, type: FactoryType.FABRIC });
 
       expect(res.status).toBe(200);
       expect(res.body.data.name).toBe(`Updated-${tag}`);
@@ -208,7 +208,7 @@ describe('Factories (e2e)', () => {
       const res = await request(getApp().getHttpServer())
         .put(`${BASE}/factories/${factoryId}`)
         .set(financeAuth())
-        .send({ name: `FinanceTryUpdate-${tag}`, type: FactoryType.MATERIAL });
+        .send({ name: `FinanceTryUpdate-${tag}`, type: FactoryType.FABRIC });
 
       expect(res.status).toBe(403);
     });
@@ -223,7 +223,7 @@ describe('Factories (e2e)', () => {
       const res = await request(getApp().getHttpServer())
         .post(`${BASE}/factories`)
         .set(adminAuth())
-        .send({ name: `ToggleStatus-${tag}`, type: FactoryType.MATERIAL });
+        .send({ name: `ToggleStatus-${tag}`, type: FactoryType.FABRIC });
 
       expect(res.status).toBe(201);
       factoryId = res.body.data.id;
@@ -265,7 +265,7 @@ describe('Factories (e2e)', () => {
       const createRes = await request(getApp().getHttpServer())
         .post(`${BASE}/factories`)
         .set(adminAuth())
-        .send({ name: `ToDelete-${tag}`, type: FactoryType.MATERIAL });
+        .send({ name: `ToDelete-${tag}`, type: FactoryType.FABRIC });
 
       expect(createRes.status).toBe(201);
       const id = createRes.body.data.id;

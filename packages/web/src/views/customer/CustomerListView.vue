@@ -1,283 +1,168 @@
 <template>
-  <div class="page-container">
-    <!-- 搜索栏 -->
-    <el-card class="search-card">
-      <el-form :model="query" inline>
-        <el-form-item label="关键词">
-          <el-input v-model="query.keyword" placeholder="客户编号/名称" clearable style="width:200px" @clear="load" />
-        </el-form-item>
-        <el-form-item label="级别">
-          <el-select v-model="query.grade" clearable placeholder="全部" style="width:100px" @change="load">
-            <el-option label="A级" value="A" />
-            <el-option label="B级" value="B" />
-            <el-option label="C级" value="C" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="状态">
-          <el-select v-model="query.status" clearable placeholder="全部" style="width:100px" @change="load">
-            <el-option label="启用" :value="1" />
-            <el-option label="停用" :value="0" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" :icon="Search" @click="load">搜索</el-button>
-          <el-button :icon="Refresh" @click="reset">重置</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
-
-    <!-- 操作栏 -->
-    <el-card class="table-card">
-      <template #header>
-        <div class="card-header">
-          <span>客户列表</span>
-          <el-button v-if="canEdit" type="primary" :icon="Plus" @click="openCreate">新建客户</el-button>
+  <div class="list-page">
+    <div class="toolbar-card">
+      <div class="toolbar">
+        <div class="tools-left">
+          <el-button v-if="canEdit" type="primary" :icon="Plus" @click="goCreate">新建</el-button>
+          <el-button type="warning" plain :icon="Upload" @click="importTip">导入客户资料</el-button>
+          <el-button v-if="isAdmin" type="warning" plain :icon="Key" :disabled="!selected.length" @click="grantTip">批量授权机密权限</el-button>
+          <el-button plain :icon="Download" @click="exportCsv">导出</el-button>
+          <el-button v-if="isAdmin" type="danger" plain :icon="Delete" :disabled="!selected.length" @click="batchRemove">
+            删除{{ selected.length ? `(${selected.length})` : '' }}
+          </el-button>
         </div>
-      </template>
+        <div class="tools-right">
+          <el-input v-model="query.keyword" placeholder="编号/国别/区域/城市/主页/地址" clearable style="width:260px"
+            @keyup.enter="load" @clear="load">
+            <template #prefix><el-icon><Search /></el-icon></template>
+          </el-input>
+          <el-button type="primary" @click="load">搜索</el-button>
+          <el-button @click="reset">清空</el-button>
+          <el-button text @click="showAdvanced = !showAdvanced">高级筛选 <el-icon><ArrowDown /></el-icon></el-button>
+        </div>
+      </div>
+      <el-collapse-transition>
+        <div v-show="showAdvanced" class="advanced">
+          <el-form inline>
+            <el-form-item label="状态">
+              <el-select v-model="query.status" clearable placeholder="全部" style="width:110px" @change="load">
+                <el-option label="启用" :value="1" /><el-option label="停用" :value="0" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="客户类型">
+              <el-select v-model="query.type" clearable placeholder="全部" style="width:130px" @change="load">
+                <el-option label="中间商" value="MIDDLEMAN" /><el-option label="最终买家" value="BUYER" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="信用等级">
+              <el-select v-model="query.grade" clearable placeholder="全部" style="width:110px" @change="load">
+                <el-option label="A级" value="A" /><el-option label="B级" value="B" /><el-option label="C级" value="C" />
+              </el-select>
+            </el-form-item>
+          </el-form>
+        </div>
+      </el-collapse-transition>
+    </div>
 
-      <el-table :data="list" v-loading="loading" border stripe>
-        <el-table-column prop="customer_no" label="客户编号" width="110" />
-        <el-table-column prop="name" label="客户名称" min-width="180" />
-        <el-table-column prop="short_name" label="简称" width="100" />
-        <el-table-column prop="grade" label="级别" width="80">
+    <div class="table-card">
+      <el-table :data="list" v-loading="loading" border stripe @selection-change="(v: any[]) => selected = v" @row-dblclick="goEdit">
+        <el-table-column type="selection" width="42" />
+        <el-table-column prop="customer_no" label="编号" width="100" sortable />
+        <el-table-column prop="name" label="客户名称" min-width="180" show-overflow-tooltip />
+        <el-table-column label="类型" width="100">
           <template #default="{ row }">
-            <el-tag :type="gradeTagType(row.grade)" size="small">{{ row.grade }}级</el-tag>
+            <el-tag size="small" :type="row.type === 'BUYER' ? 'warning' : 'primary'" effect="light">{{ typeLabel(row.type) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="currency" label="结算币种" width="90" />
-        <el-table-column prop="country" label="国家" width="100" />
-        <el-table-column prop="contact_name" label="联系人" width="100" />
-        <el-table-column prop="status" label="状态" width="80">
+        <el-table-column prop="trade_country" label="国别" width="90"><template #default="{ row }">{{ row.trade_country || '-' }}</template></el-table-column>
+        <el-table-column prop="price_terms" label="价格条款" width="120"><template #default="{ row }">{{ row.price_terms || '-' }}</template></el-table-column>
+        <el-table-column prop="settlement_method" label="结汇方式" width="120"><template #default="{ row }">{{ row.settlement_method || '-' }}</template></el-table-column>
+        <el-table-column label="信用" width="80" align="center">
+          <template #default="{ row }"><span v-if="row.grade">信用 {{ row.grade }}</span><span v-else>-</span></template>
+        </el-table-column>
+        <el-table-column label="加密" width="80" align="center"><template #default>🔒 机密</template></el-table-column>
+        <el-table-column label="状态" width="80">
           <template #default="{ row }">
-            <el-tag :type="row.status === 1 ? 'success' : 'info'" size="small">
-              {{ row.status === 1 ? '启用' : '停用' }}
+            <el-tag :type="row.status === 1 ? 'success' : 'info'" size="small"
+              :style="{ cursor: isAdmin ? 'pointer' : 'default' }" @click="isAdmin && toggleStatus(row)">
+              {{ row.status === 1 ? '活跃' : '停用' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
-            <el-button v-if="isAdmin" link :type="row.status === 1 ? 'warning' : 'success'" size="small" @click="toggleStatus(row)">
-              {{ row.status === 1 ? '停用' : '启用' }}
-            </el-button>
-            <el-popconfirm v-if="isAdmin" title="确认删除？" @confirm="remove(row.id)">
-              <template #reference>
-                <el-button link type="danger" size="small">删除</el-button>
-              </template>
+            <el-button link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
+            <el-button link size="small" @click="goView(row)">查看</el-button>
+            <el-popconfirm v-if="isAdmin" title="确认删除？被引用将被拦截" @confirm="remove(row.id)">
+              <template #reference><el-button link type="danger" size="small">删除</el-button></template>
             </el-popconfirm>
           </template>
         </el-table-column>
       </el-table>
 
-      <div class="pagination">
-        <el-pagination
-          v-model:current-page="query.page"
-          v-model:page-size="query.size"
-          :total="total"
-          :page-sizes="[10, 20, 50]"
-          layout="total, sizes, prev, pager, next"
-          @change="load"
-        />
+      <div class="footer">
+        <span class="sel-info">已选 {{ selected.length }} 条 · 共 {{ total }} 条</span>
+        <el-pagination v-model:current-page="query.page" v-model:page-size="query.size" :total="total"
+          :page-sizes="[10, 20, 50, 100]" layout="sizes, prev, pager, next" @change="load" />
       </div>
-    </el-card>
-
-    <!-- 新建/编辑弹窗 -->
-    <el-dialog
-      v-model="dialogVisible"
-      :title="editId ? '编辑客户' : '新建客户'"
-      width="600px"
-      @closed="resetForm"
-    >
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
-        <el-row :gutter="16">
-          <el-col :span="16">
-            <el-form-item label="客户名称" prop="name">
-              <el-input v-model="form.name" placeholder="请输入客户全称" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="简称" prop="short_name">
-              <el-input v-model="form.short_name" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row :gutter="16">
-          <el-col :span="8">
-            <el-form-item label="客户级别" prop="grade">
-              <el-select v-model="form.grade" style="width:100%">
-                <el-option label="A级" value="A" />
-                <el-option label="B级" value="B" />
-                <el-option label="C级" value="C" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="结算币种" prop="currency">
-              <el-select v-model="form.currency" style="width:100%">
-                <el-option label="USD" value="USD" />
-                <el-option label="EUR" value="EUR" />
-                <el-option label="CNY" value="CNY" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="国家" prop="country">
-              <el-input v-model="form.country" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="付款方式" prop="payment_method">
-              <el-input v-model="form.payment_method" placeholder="如：T/T 30天" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="联系人" prop="contact_name">
-              <el-input v-model="form.contact_name" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-form-item label="联系邮箱" prop="contact_email">
-          <el-input v-model="form.contact_email" type="email" />
-        </el-form-item>
-        <el-form-item label="备注" prop="remark">
-          <el-input v-model="form.remark" type="textarea" :rows="2" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="save">保存</el-button>
-      </template>
-    </el-dialog>
+      <div class="tip">🔒 客户资料属机密单据：未授权用户看不到该客户行，且不会在报价/合同的客户下拉中列出。</div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { Search, Refresh, Plus } from '@element-plus/icons-vue';
-import type { FormInstance, FormRules } from 'element-plus';
+import { Search, Plus, Upload, Download, Delete, Key, ArrowDown } from '@element-plus/icons-vue';
 import { customerApi } from '@/api/customer';
 import { useAuthStore } from '@/stores/auth';
-import { UserRole, CustomerGrade } from '@i9/types';
+import { UserRole, CUSTOMER_TYPE_LABEL } from '@i9/types';
 import type { Customer } from '@i9/types';
 
+const router = useRouter();
 const authStore = useAuthStore();
 const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
 const canEdit = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.BUSINESS));
+const typeLabel = (t: string) => (CUSTOMER_TYPE_LABEL as any)[t] ?? t;
 
 const loading = ref(false);
-const saving = ref(false);
-const list = ref<Customer[]>([]);
+const list = ref<any[]>([]);
 const total = ref(0);
-const query = reactive({ page: 1, size: 20, keyword: '', grade: undefined as string | undefined, status: undefined as number | undefined });
-
-function gradeTagType(grade: string) {
-  return grade === 'A' ? 'danger' : grade === 'B' ? 'warning' : 'info';
-}
+const selected = ref<any[]>([]);
+const showAdvanced = ref(false);
+const query = reactive({ page: 1, size: 20, keyword: '', type: undefined as string | undefined, grade: undefined as string | undefined, status: undefined as number | undefined });
 
 async function load() {
   loading.value = true;
   try {
-    const res = await customerApi.list(query);
-    list.value = (res as any).data?.items ?? (res as any).items ?? [];
-    total.value = (res as any).data?.total ?? (res as any).total ?? 0;
+    const res: any = await customerApi.list(query);
+    list.value = res.data?.items ?? res.items ?? [];
+    total.value = res.data?.total ?? res.total ?? 0;
   } finally {
     loading.value = false;
   }
 }
+function reset() { query.keyword = ''; query.type = undefined; query.grade = undefined; query.status = undefined; query.page = 1; load(); }
+function goCreate() { router.push({ name: 'CustomerCreate' }); }
+function goEdit(row: Customer) { router.push({ name: 'CustomerEdit', params: { id: row.id } }); }
+function goView(row: Customer) { router.push({ name: 'CustomerView', params: { id: row.id } }); }
 
-function reset() {
-  query.keyword = '';
-  query.grade = undefined;
-  query.status = undefined;
-  query.page = 1;
-  load();
+async function toggleStatus(row: any) {
+  try { await customerApi.toggleStatus(row.id); ElMessage.success(row.status === 1 ? '已停用' : '已启用'); load(); }
+  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '操作失败'); }
 }
-
-onMounted(load);
-
-// Dialog
-const dialogVisible = ref(false);
-const editId = ref<number | null>(null);
-const formRef = ref<FormInstance>();
-const form = reactive({
-  name: '', short_name: '', grade: CustomerGrade.B as string,
-  currency: 'USD', payment_method: '', country: '',
-  contact_name: '', contact_email: '', remark: '',
-});
-const rules: FormRules = {
-  name: [{ required: true, message: '请输入客户名称', trigger: 'blur' }],
-  grade: [{ required: true, message: '请选择客户级别', trigger: 'change' }],
-  currency: [{ required: true, message: '请选择结算币种', trigger: 'change' }],
-  contact_email: [{ type: 'email', message: '请输入有效的邮箱地址', trigger: 'blur' }],
-};
-
-function openCreate() {
-  editId.value = null;
-  dialogVisible.value = true;
-}
-
-function openEdit(row: Customer) {
-  editId.value = row.id;
-  Object.assign(form, {
-    name: row.name,
-    short_name: row.shortName ?? '',
-    grade: row.grade,
-    currency: row.currency ?? 'USD',
-    payment_method: row.paymentMethod ?? '',
-    country: row.country ?? '',
-    contact_name: row.contactName ?? '',
-    contact_email: row.contactEmail ?? '',
-    remark: (row as any).remark ?? '',
-  });
-  dialogVisible.value = true;
-}
-
-function resetForm() {
-  editId.value = null;
-  formRef.value?.resetFields();
-  Object.assign(form, {
-    name: '', short_name: '', grade: CustomerGrade.B, currency: 'USD',
-    payment_method: '', country: '', contact_name: '', contact_email: '', remark: '',
-  });
-}
-
-async function save() {
-  await formRef.value?.validate();
-  saving.value = true;
-  try {
-    if (editId.value) {
-      await customerApi.update(editId.value, form as any);
-      ElMessage.success('更新成功');
-    } else {
-      await customerApi.create(form as any);
-      ElMessage.success('创建成功');
-    }
-    dialogVisible.value = false;
-    load();
-  } finally {
-    saving.value = false;
-  }
-}
-
-async function toggleStatus(row: Customer) {
-  await customerApi.toggleStatus(row.id);
-  ElMessage.success(row.status === 1 ? '已停用' : '已启用');
-  load();
-}
-
 async function remove(id: number) {
-  await customerApi.remove(id);
-  ElMessage.success('删除成功');
+  try { await customerApi.remove(id); ElMessage.success('删除成功'); load(); }
+  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '删除失败'); }
+}
+async function batchRemove() {
+  let ok = 0, fail = 0;
+  for (const row of selected.value) { try { await customerApi.remove(row.id); ok++; } catch { fail++; } }
+  ElMessage[fail ? 'warning' : 'success'](`删除完成：成功 ${ok} 条${fail ? `，被引用拦截 ${fail} 条` : ''}`);
   load();
 }
+function importTip() { ElMessage.info('Excel 批量导入向导（上传→列映射→数据校验→入库）'); }
+function grantTip() { ElMessage.info(`批量授权机密权限：当前选中 ${selected.value.length} 个客户`); }
+function exportCsv() {
+  const cols = ['customer_no', 'name', 'type', 'trade_country', 'price_terms', 'grade', 'status'];
+  const head = ['编号', '客户名称', '类型', '国别', '价格条款', '信用', '状态'];
+  const rows = list.value.map((r) => cols.map((c) => `"${r[c] ?? ''}"`).join(','));
+  const csv = '﻿' + [head.join(','), ...rows].join('\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  const a = document.createElement('a'); a.href = url; a.download = '客户资料.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+onMounted(load);
 </script>
 
 <style scoped>
-.page-container { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-.search-card :deep(.el-card__body) { padding: 16px 16px 0; }
-.card-header { display: flex; justify-content: space-between; align-items: center; }
-.pagination { margin-top: 16px; display: flex; justify-content: flex-end; }
+.list-page { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.toolbar-card, .table-card { background: var(--el-bg-color); border: 1px solid var(--el-border-color-light); border-radius: 6px; padding: 12px 14px; }
+.toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.tools-left, .tools-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.advanced { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--el-border-color); }
+.footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
+.sel-info { font-size: 13px; color: var(--el-text-color-secondary); }
+.tip { margin-top: 8px; font-size: 12px; color: var(--el-text-color-secondary); }
 </style>

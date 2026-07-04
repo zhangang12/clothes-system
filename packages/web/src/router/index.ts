@@ -16,7 +16,13 @@ const routes: RouteRecordRaw[] = [
     children: [
       { path: 'dashboard', name: 'Dashboard', component: () => import('../views/DashboardView.vue') },
       { path: 'factories', name: 'Factories', component: () => import('../views/factory/FactoryListView.vue') },
+      { path: 'factories/new', name: 'FactoryCreate', component: () => import('../views/factory/FactoryEditView.vue') },
+      { path: 'factories/:id/edit', name: 'FactoryEdit', component: () => import('../views/factory/FactoryEditView.vue') },
+      { path: 'factories/:id/view', name: 'FactoryView', component: () => import('../views/factory/FactoryEditView.vue'), meta: { readonly: true } },
       { path: 'customers', name: 'Customers', component: () => import('../views/customer/CustomerListView.vue') },
+      { path: 'customers/new', name: 'CustomerCreate', component: () => import('../views/customer/CustomerEditView.vue') },
+      { path: 'customers/:id/edit', name: 'CustomerEdit', component: () => import('../views/customer/CustomerEditView.vue') },
+      { path: 'customers/:id/view', name: 'CustomerView', component: () => import('../views/customer/CustomerEditView.vue'), meta: { readonly: true } },
       { path: 'samples', name: 'Samples', component: () => import('../views/sample/SampleListView.vue') },
       { path: 'quotes', name: 'Quotes', component: () => import('../views/quote/QuoteListView.vue') },
       { path: 'orders', name: 'Orders', component: () => import('../views/order/OrderListView.vue') },

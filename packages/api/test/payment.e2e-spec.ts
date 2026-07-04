@@ -22,7 +22,7 @@ describe('Payments (e2e)', () => {
     const res = await request(getApp().getHttpServer())
       .post(`${BASE}/factories`)
       .set(adminAuth())
-      .send({ name: `PayFactory-${tag}`, type: FactoryType.MATERIAL });
+      .send({ name: `PayFactory-${tag}`, type: FactoryType.FABRIC });
 
     expect(res.status).toBe(201);
     factoryId = res.body.data.id;
@@ -119,7 +119,7 @@ describe('Payments (e2e)', () => {
       const fRes = await request(getApp().getHttpServer())
         .post(`${BASE}/factories`)
         .set(adminAuth())
-        .send({ name: `NoPrepayFactory-${tag}`, type: FactoryType.PROCESS });
+        .send({ name: `NoPrepayFactory-${tag}`, type: FactoryType.OUTSOURCE });
       expect(fRes.status).toBe(201);
       const emptyFactoryId = fRes.body.data.id;
 

@@ -3,7 +3,7 @@ import type { Customer, CreateCustomerDto } from '@i9/types';
 import type { PageResult } from './factory';
 
 export const customerApi = {
-  list: (params?: { page?: number; size?: number; keyword?: string; grade?: string; status?: number }) =>
+  list: (params?: { page?: number; size?: number; keyword?: string; type?: string; grade?: string; status?: number }) =>
     http.get<unknown, { data: PageResult<Customer> }>('/customers', { params }),
   select: (grade?: string) =>
     http.get<unknown, { data: Customer[] }>('/customers/select', { params: grade ? { grade } : {} }),

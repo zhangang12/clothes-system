@@ -1,250 +1,196 @@
 <template>
-  <div class="page-container">
-    <!-- 搜索栏 -->
-    <el-card class="search-card">
-      <el-form :model="query" inline>
-        <el-form-item label="关键词">
-          <el-input v-model="query.keyword" placeholder="工厂编号/名称" clearable style="width:200px" @clear="load" />
-        </el-form-item>
-        <el-form-item label="类型">
-          <el-select v-model="query.type" clearable placeholder="全部" style="width:130px" @change="load">
-            <el-option label="面料厂" value="MATERIAL" />
-            <el-option label="加工厂" value="PROCESS" />
-            <el-option label="两者" value="BOTH" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="状态">
-          <el-select v-model="query.status" clearable placeholder="全部" style="width:100px" @change="load">
-            <el-option label="启用" :value="1" />
-            <el-option label="停用" :value="0" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" :icon="Search" @click="load">搜索</el-button>
-          <el-button :icon="Refresh" @click="reset">重置</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
-
-    <!-- 操作栏 -->
-    <el-card class="table-card">
-      <template #header>
-        <div class="card-header">
-          <span>工厂列表</span>
-          <el-button v-if="canEdit" type="primary" :icon="Plus" @click="openCreate">新建工厂</el-button>
+  <div class="list-page">
+    <!-- 工具栏 -->
+    <div class="toolbar-card">
+      <div class="toolbar">
+        <div class="tools-left">
+          <el-button v-if="canEdit" type="primary" :icon="Plus" @click="goCreate">新建</el-button>
+          <el-button type="warning" plain :icon="Upload" @click="importTip">导入工厂资料</el-button>
+          <el-button plain :icon="Download" @click="exportCsv">导出</el-button>
+          <el-button v-if="isAdmin" type="danger" plain :icon="Delete" :disabled="!selected.length" @click="batchRemove">
+            删除{{ selected.length ? `(${selected.length})` : '' }}
+          </el-button>
         </div>
-      </template>
+        <div class="tools-right">
+          <el-input v-model="query.keyword" placeholder="编号/名称/省市/地址/业务范围/法人" clearable style="width:280px"
+            @keyup.enter="load" @clear="load">
+            <template #prefix><el-icon><Search /></el-icon></template>
+          </el-input>
+          <el-button type="primary" @click="load">搜索</el-button>
+          <el-button @click="reset">清空</el-button>
+          <el-button text @click="showAdvanced = !showAdvanced">高级筛选 <el-icon><ArrowDown /></el-icon></el-button>
+        </div>
+      </div>
+      <!-- 高级筛选 -->
+      <el-collapse-transition>
+        <div v-show="showAdvanced" class="advanced">
+          <el-form inline>
+            <el-form-item label="状态">
+              <el-select v-model="query.status" clearable placeholder="全部" style="width:110px" @change="load">
+                <el-option label="启用" :value="1" /><el-option label="停用" :value="0" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="工厂类型">
+              <el-select v-model="query.type" clearable placeholder="全部" style="width:150px" @change="load">
+                <el-option v-for="t in factoryTypes" :key="t.value" :label="t.label" :value="t.value" />
+              </el-select>
+            </el-form-item>
+          </el-form>
+        </div>
+      </el-collapse-transition>
+    </div>
 
-      <el-table :data="list" v-loading="loading" border stripe>
-        <el-table-column prop="factory_no" label="工厂编号" width="110" />
-        <el-table-column prop="name" label="工厂名称" min-width="160" />
-        <el-table-column prop="short_name" label="简称" width="100" />
-        <el-table-column prop="type" label="类型" width="90">
+    <!-- 列表 -->
+    <div class="table-card">
+      <el-table :data="list" v-loading="loading" border stripe :row-class-name="rowClass"
+        @selection-change="(v: any[]) => selected = v" @row-dblclick="goEdit">
+        <el-table-column type="selection" width="42" />
+        <el-table-column prop="factory_no" label="编号" width="100" sortable />
+        <el-table-column prop="name" label="厂商名称" min-width="180" show-overflow-tooltip />
+        <el-table-column label="工厂类型" width="120">
           <template #default="{ row }">
-            <el-tag :type="row.type === 'MATERIAL' ? 'primary' : row.type === 'BOTH' ? 'success' : 'warning'" size="small">
-              {{ factoryTypeLabel(row.type) }}
-            </el-tag>
+            <el-tag size="small" effect="light" :type="typeTag(row.type)">{{ typeLabel(row.type) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="contact_name" label="联系人" width="100" />
-        <el-table-column prop="contact_phone" label="电话" width="130" />
-        <el-table-column prop="status" label="状态" width="80">
+        <el-table-column label="省/市" width="130">
+          <template #default="{ row }">{{ [row.province, row.city].filter(Boolean).join(' ') || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="最后交易日期" width="130">
           <template #default="{ row }">
-            <el-tag :type="row.status === 1 ? 'success' : 'info'" size="small">
+            <span :class="{ overdue: isOverdue(row.last_trade_date) }">{{ row.last_trade_date || '-' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="开票" width="70" align="center">
+          <template #default="{ row }">
+            <span :style="{ color: row.can_invoice ? '#3E8E7E' : '#C04042' }">{{ row.can_invoice ? '✓' : '✗' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="80">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 1 ? 'success' : 'info'" size="small"
+              :style="{ cursor: isAdmin ? 'pointer' : 'default' }" @click="isAdmin && toggleStatus(row)">
               {{ row.status === 1 ? '启用' : '停用' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
-            <el-button v-if="isAdmin" link :type="row.status === 1 ? 'warning' : 'success'" size="small" @click="toggleStatus(row)">
-              {{ row.status === 1 ? '停用' : '启用' }}
-            </el-button>
-            <el-popconfirm v-if="isAdmin" title="确认删除？" @confirm="remove(row.id)">
-              <template #reference>
-                <el-button link type="danger" size="small">删除</el-button>
-              </template>
+            <el-button link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
+            <el-button link size="small" @click="goView(row)">查看</el-button>
+            <el-popconfirm v-if="isAdmin" title="确认删除？被引用将被拦截" @confirm="remove(row.id)">
+              <template #reference><el-button link type="danger" size="small">删除</el-button></template>
             </el-popconfirm>
           </template>
         </el-table-column>
       </el-table>
 
-      <div class="pagination">
-        <el-pagination
-          v-model:current-page="query.page"
-          v-model:page-size="query.size"
-          :total="total"
-          :page-sizes="[10, 20, 50]"
-          layout="total, sizes, prev, pager, next"
-          @change="load"
-        />
+      <div class="footer">
+        <span class="sel-info">已选 {{ selected.length }} 条 · 共 {{ total }} 条</span>
+        <el-pagination v-model:current-page="query.page" v-model:page-size="query.size" :total="total"
+          :page-sizes="[10, 20, 50, 100]" layout="sizes, prev, pager, next" @change="load" />
       </div>
-    </el-card>
-
-    <!-- 新建/编辑弹窗 -->
-    <el-dialog
-      v-model="dialogVisible"
-      :title="editId ? '编辑工厂' : '新建工厂'"
-      width="560px"
-      @closed="resetForm"
-    >
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
-        <el-form-item label="工厂名称" prop="name">
-          <el-input v-model="form.name" placeholder="请输入工厂全称" />
-        </el-form-item>
-        <el-form-item label="简称" prop="short_name">
-          <el-input v-model="form.short_name" placeholder="可选" />
-        </el-form-item>
-        <el-form-item label="类型" prop="type">
-          <el-select v-model="form.type" placeholder="请选择" style="width:100%">
-            <el-option label="面料厂" value="MATERIAL" />
-            <el-option label="加工厂" value="PROCESS" />
-            <el-option label="两者" value="BOTH" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="联系人" prop="contact_name">
-          <el-input v-model="form.contact_name" />
-        </el-form-item>
-        <el-form-item label="电话" prop="contact_phone">
-          <el-input v-model="form.contact_phone" />
-        </el-form-item>
-        <el-form-item label="地址" prop="address">
-          <el-input v-model="form.address" type="textarea" :rows="2" />
-        </el-form-item>
-        <el-form-item label="税号" prop="tax_no">
-          <el-input v-model="form.tax_no" placeholder="可选" />
-        </el-form-item>
-        <el-form-item label="银行账户" prop="bank_account">
-          <el-input v-model="form.bank_account" placeholder="可选" />
-        </el-form-item>
-        <el-form-item label="备注" prop="remark">
-          <el-input v-model="form.remark" type="textarea" :rows="2" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="save">保存</el-button>
-      </template>
-    </el-dialog>
+      <div class="tip">💡「最后交易日期」超过 90 天未更新的记录以红色标记，提示关注长期无往来厂商。</div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { Search, Refresh, Plus } from '@element-plus/icons-vue';
-import type { FormInstance, FormRules } from 'element-plus';
+import { Search, Plus, Upload, Download, Delete, ArrowDown } from '@element-plus/icons-vue';
 import { factoryApi } from '@/api/factory';
 import { useAuthStore } from '@/stores/auth';
-import { UserRole, FactoryType } from '@i9/types';
+import { UserRole, FACTORY_TYPE_LABEL } from '@i9/types';
 import type { Factory } from '@i9/types';
 
-function factoryTypeLabel(type: string) {
-  return type === 'MATERIAL' ? '面料厂' : type === 'PROCESS' ? '加工厂' : '两者';
-}
-
+const router = useRouter();
 const authStore = useAuthStore();
 const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
 const canEdit = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.BUSINESS));
+const factoryTypes = Object.entries(FACTORY_TYPE_LABEL).map(([value, label]) => ({ value, label }));
+
+const typeLabel = (t: string) => (FACTORY_TYPE_LABEL as any)[t] ?? t;
+const typeTag = (t: string) => ({ FABRIC: 'primary', ACCESSORY: 'success', OUTSOURCE: 'warning', FORWARDER: 'info', TESTING: 'info', EXPORT: 'danger', OTHER: 'info' } as any)[t] ?? 'info';
 
 const loading = ref(false);
-const saving = ref(false);
-const list = ref<Factory[]>([]);
+const list = ref<any[]>([]);
 const total = ref(0);
+const selected = ref<any[]>([]);
+const showAdvanced = ref(false);
 const query = reactive({ page: 1, size: 20, keyword: '', type: undefined as string | undefined, status: undefined as number | undefined });
+
+function isOverdue(d?: string) {
+  if (!d) return false;
+  return (Date.now() - new Date(d).getTime()) / 86400000 > 90;
+}
+const rowClass = ({ row }: { row: any }) => (isOverdue(row.last_trade_date) ? 'overdue-row' : '');
 
 async function load() {
   loading.value = true;
   try {
-    const res = await factoryApi.list(query);
-    list.value = (res as any).data?.items ?? (res as any).items ?? [];
-    total.value = (res as any).data?.total ?? (res as any).total ?? 0;
+    const res: any = await factoryApi.list(query);
+    list.value = res.data?.items ?? res.items ?? [];
+    total.value = res.data?.total ?? res.total ?? 0;
   } finally {
     loading.value = false;
   }
 }
-
 function reset() {
-  query.keyword = '';
-  query.type = undefined;
-  query.status = undefined;
-  query.page = 1;
-  load();
+  query.keyword = ''; query.type = undefined; query.status = undefined; query.page = 1; load();
 }
+function goCreate() { router.push({ name: 'FactoryCreate' }); }
+function goEdit(row: Factory) { router.push({ name: 'FactoryEdit', params: { id: row.id } }); }
+function goView(row: Factory) { router.push({ name: 'FactoryView', params: { id: row.id } }); }
 
-onMounted(load);
-
-// Dialog
-const dialogVisible = ref(false);
-const editId = ref<number | null>(null);
-const formRef = ref<FormInstance>();
-const form = reactive({
-  name: '', short_name: '', type: '' as string, contact_name: '', contact_phone: '',
-  address: '', tax_no: '', bank_name: '', bank_account: '', remark: '',
-});
-const rules: FormRules = {
-  name: [{ required: true, message: '请输入工厂名称', trigger: 'blur' }],
-  type: [{ required: true, message: '请选择类型', trigger: 'change' }],
-};
-
-function openCreate() {
-  editId.value = null;
-  dialogVisible.value = true;
-}
-
-function openEdit(row: Factory) {
-  editId.value = row.id;
-  Object.assign(form, {
-    name: row.name, short_name: row.shortName ?? '', type: row.type,
-    contact_name: (row as any).contact_name ?? '', contact_phone: (row as any).contact_phone ?? '',
-    address: (row as any).address ?? '', tax_no: (row as any).tax_no ?? '',
-    bank_name: (row as any).bank_name ?? '', bank_account: (row as any).bank_account ?? '',
-    remark: (row as any).remark ?? '',
-  });
-  dialogVisible.value = true;
-}
-
-function resetForm() {
-  editId.value = null;
-  formRef.value?.resetFields();
-  Object.assign(form, { name: '', short_name: '', type: '', contact_name: '', contact_phone: '', address: '', tax_no: '', bank_name: '', bank_account: '', remark: '' });
-}
-
-async function save() {
-  await formRef.value?.validate();
-  saving.value = true;
+async function toggleStatus(row: any) {
   try {
-    if (editId.value) {
-      await factoryApi.update(editId.value, form as any);
-      ElMessage.success('更新成功');
-    } else {
-      await factoryApi.create(form as any);
-      ElMessage.success('创建成功');
-    }
-    dialogVisible.value = false;
+    await factoryApi.toggleStatus(row.id);
+    ElMessage.success(row.status === 1 ? '已停用' : '已启用');
     load();
-  } finally {
-    saving.value = false;
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message ?? '操作失败');
   }
 }
-
-async function toggleStatus(row: Factory) {
-  await factoryApi.toggleStatus(row.id);
-  ElMessage.success(row.status === 1 ? '已停用' : '已启用');
-  load();
-}
-
 async function remove(id: number) {
-  await factoryApi.remove(id);
-  ElMessage.success('删除成功');
+  try {
+    await factoryApi.remove(id);
+    ElMessage.success('删除成功');
+    load();
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message ?? '删除失败');
+  }
+}
+async function batchRemove() {
+  let ok = 0, fail = 0;
+  for (const row of selected.value) {
+    try { await factoryApi.remove(row.id); ok++; } catch { fail++; }
+  }
+  ElMessage[fail ? 'warning' : 'success'](`删除完成：成功 ${ok} 条${fail ? `，被引用拦截 ${fail} 条` : ''}`);
   load();
 }
+function importTip() { ElMessage.info('Excel 批量导入向导（上传→列映射→数据校验→入库）'); }
+function exportCsv() {
+  const cols = ['factory_no', 'name', 'type', 'province', 'city', 'status'];
+  const head = ['编号', '厂商名称', '类型', '省份', '城市', '状态'];
+  const rows = list.value.map((r) => cols.map((c) => `"${r[c] ?? ''}"`).join(','));
+  const csv = '﻿' + [head.join(','), ...rows].join('\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  const a = document.createElement('a'); a.href = url; a.download = '工厂资料.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+onMounted(load);
 </script>
 
 <style scoped>
-.page-container { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-.search-card :deep(.el-card__body) { padding: 16px 16px 0; }
-.card-header { display: flex; justify-content: space-between; align-items: center; }
-.pagination { margin-top: 16px; display: flex; justify-content: flex-end; }
+.list-page { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.toolbar-card, .table-card { background: var(--el-bg-color); border: 1px solid var(--el-border-color-light); border-radius: 6px; padding: 12px 14px; }
+.toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.tools-left, .tools-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.advanced { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--el-border-color); }
+.footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
+.sel-info { font-size: 13px; color: var(--el-text-color-secondary); }
+.tip { margin-top: 8px; font-size: 12px; color: var(--el-text-color-secondary); }
+.overdue { color: #C04042; font-weight: 600; }
+:deep(.overdue-row) { background: #FDF0EF !important; }
 </style>

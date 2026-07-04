@@ -30,12 +30,39 @@ export enum UserRole {
   PATTERNMAKER = 'PATTERNMAKER',
 }
 
+// 工厂/厂商类型（基础资料设计稿 §1.1：面料/辅料/委外/货代/测试/出口/其他）
 export enum FactoryType {
-  MATERIAL = 'MATERIAL',
-  PROCESS = 'PROCESS',
-  BOTH = 'BOTH',
+  FABRIC = 'FABRIC',       // 面料供应商
+  ACCESSORY = 'ACCESSORY', // 辅料供应商
+  OUTSOURCE = 'OUTSOURCE', // 委外加工商
+  FORWARDER = 'FORWARDER', // 货代
+  TESTING = 'TESTING',     // 测试公司
+  EXPORT = 'EXPORT',       // 出口公司
+  OTHER = 'OTHER',         // 其他
 }
 
+export const FACTORY_TYPE_LABEL: Record<FactoryType, string> = {
+  [FactoryType.FABRIC]: '面料供应商',
+  [FactoryType.ACCESSORY]: '辅料供应商',
+  [FactoryType.OUTSOURCE]: '委外加工商',
+  [FactoryType.FORWARDER]: '货代',
+  [FactoryType.TESTING]: '测试公司',
+  [FactoryType.EXPORT]: '出口公司',
+  [FactoryType.OTHER]: '其他',
+};
+
+// 客户类型（基础资料设计稿 §2.1：中间商 / 最终买家）
+export enum CustomerType {
+  MIDDLEMAN = 'MIDDLEMAN', // 中间商
+  BUYER = 'BUYER',         // 最终买家
+}
+
+export const CUSTOMER_TYPE_LABEL: Record<CustomerType, string> = {
+  [CustomerType.MIDDLEMAN]: '中间商',
+  [CustomerType.BUYER]: '最终买家',
+};
+
+// 信用等级（客户资料「信用等级」字典字段）
 export enum CustomerGrade {
   A = 'A',
   B = 'B',
@@ -97,62 +124,172 @@ export enum SettlementStatus {
   CONFIRMED = 'CONFIRMED',
 }
 
-// ---------- 工厂 ----------
+// ---------- 工厂 / 厂商资料（基础资料设计稿 §1，35 字段 + 联系人子表） ----------
+export interface FactoryContact {
+  id?: number;
+  name?: string;
+  department?: string;
+  title?: string;
+  phone?: string;
+  mobile?: string;
+  email?: string;
+  remark?: string;
+  sortOrder?: number;
+}
+
 export interface Factory {
   id: number;
-  factoryNo: string;
-  name: string;
+  factoryNo: string;             // 厂商编号 S001（自动生成、大写、唯一）
+  type: FactoryType;             // 工厂类型（必填）
+  canInvoice: boolean;           // 能否开票（默认是）
+  name: string;                  // 厂商名称（必填、唯一）
   shortName?: string;
-  type: FactoryType;
-  contactName?: string;
-  contactPhone?: string;
-  address?: string;
-  bankName?: string;
-  bankAccount?: string;
-  taxNo?: string;
-  status: 0 | 1;
+  contactName?: string;          // 主联系人（保存时自动取联系人子表首行）
+  contactPhone?: string;         // 主联系电话（同上）
+  province?: string;             // 所在省份
+  city?: string;                 // 所在城市（随省份联动）
+  address?: string;              // 详细地址
+  businessScope?: string;        // 业务范围
+  developDate?: string;          // 开发时间（默认今天）
+  // 财务信息
+  bankName?: string; bankAccount?: string; taxNo?: string; invoicePhone?: string; invoiceAddress?: string;
+  // 财务信息(2)
+  bankName2?: string; bankAccount2?: string; taxNo2?: string; invoicePhone2?: string; invoiceAddress2?: string;
+  // 备注信息
+  legalRep?: string;             // 法人代表
+  registeredCapital?: number;    // 注册资金
+  establishedDate?: string;      // 设立时间
+  annualSales?: number;          // 年销售额
+  representativeCustomers?: string; // 代表客户
+  qualityCerts?: string;         // 质量证书
   remark?: string;
+  lastTradeDate?: string;        // 最后交易日期（列表超期标红）
+  status: 0 | 1;
+  contacts?: FactoryContact[];
   createdAt: string;
 }
 
 export interface CreateFactoryDto {
+  type: FactoryType;
+  canInvoice?: boolean;
   name: string;
   shortName?: string;
-  type: FactoryType;
-  contactName?: string;
-  contactPhone?: string;
+  province?: string;
+  city?: string;
   address?: string;
-  bankName?: string;
-  bankAccount?: string;
-  taxNo?: string;
+  businessScope?: string;
+  developDate?: string;
+  bankName?: string; bankAccount?: string; taxNo?: string; invoicePhone?: string; invoiceAddress?: string;
+  bankName2?: string; bankAccount2?: string; taxNo2?: string; invoicePhone2?: string; invoiceAddress2?: string;
+  legalRep?: string;
+  registeredCapital?: number;
+  establishedDate?: string;
+  annualSales?: number;
+  representativeCustomers?: string;
+  qualityCerts?: string;
   remark?: string;
+  contacts?: FactoryContact[];
 }
 
-// ---------- 客户 ----------
+// ---------- 客户资料（基础资料设计稿 §2，机密单据，47 字段 + 联系人/开户银行/快件三子表） ----------
+export interface CustomerContact {
+  id?: number;
+  name?: string;
+  department?: string;
+  gender?: string;      // M(男)/F(女)
+  title?: string;
+  phone?: string;
+  mobile?: string;
+  mobile1?: string;
+  mobile2?: string;
+  email?: string;
+  remark?: string;
+  sortOrder?: number;
+}
+
+export interface CustomerBank {
+  id?: number;
+  accountName?: string; // 开户名称（自动=客户名称）
+  bankName?: string;
+  bankAccount?: string;
+  bankAddress?: string;
+  currency?: string;
+  swiftCode?: string;
+  remark?: string;
+  sortOrder?: number;
+}
+
+export interface CustomerExpress {
+  id?: number;
+  company?: string;     // 快件公司（来自工厂资料）
+  account?: string;
+  payMethod?: string;   // 到付 / 预付
+  remark?: string;
+  sortOrder?: number;
+}
+
 export interface Customer {
   id: number;
-  customerNo: string;
-  name: string;
-  shortName?: string;
-  grade: CustomerGrade;
-  currency: string;
-  paymentMethod?: string;
-  country?: string;
-  contactName?: string;
-  contactEmail?: string;
+  customerNo: string;              // 客户编号 CN001（自动生成、唯一）
+  name: string;                    // 客户名称（唯一）
+  type: CustomerType;              // 客户类型（必填）中间商/最终买家
+  relatedMiddleman?: string;       // 关联中间商（type=BUYER 时显示必填；存中间商客户ID逗号串）
+  tradeCountry?: string;           // 贸易国别
+  countryRegion?: string;          // 国家区域（随贸易国别自动带出）
+  city?: string;
+  homepage?: string;
+  address?: string;
+  priceTerms?: string;             // 价格条款（字典）
+  settlementMethod?: string;       // 结汇方式（字典）
+  grade?: CustomerGrade;           // 信用等级（字典 A/B/C）
+  cooperationLevel?: string;       // 合作等级（字典）
+  customerSource?: string;         // 客户来源（字典）
+  paymentDays?: number;            // 付款期限（天）
+  businessScope?: string;
+  salesperson?: string;            // 外销员（默认当前登录人）
+  developDate?: string;
+  spare1?: string; spare2?: string; spare3?: string;
+  deliveryAddress?: string;        // 收货地址
+  frontMark?: string;              // 正面唛头
+  sideMark?: string;               // 侧面唛头
+  innerBoxText?: string;           // 内盒文字
+  customerRemark?: string;         // 客户备注
+  currency?: string;               // 主结算币种（下游报价/订单默认取值）
   status: 0 | 1;
+  contacts?: CustomerContact[];
+  banks?: CustomerBank[];
+  expresses?: CustomerExpress[];
   createdAt: string;
 }
 
 export interface CreateCustomerDto {
-  name: string;
-  shortName?: string;
-  grade: CustomerGrade;
-  currency: string;
-  paymentMethod?: string;
-  country?: string;
-  contactName?: string;
-  contactEmail?: string;
+  name?: string;
+  type: CustomerType;
+  relatedMiddleman?: string;
+  tradeCountry?: string;
+  countryRegion?: string;
+  city?: string;
+  homepage?: string;
+  address?: string;
+  priceTerms?: string;
+  settlementMethod?: string;
+  grade?: CustomerGrade;
+  cooperationLevel?: string;
+  customerSource?: string;
+  paymentDays?: number;
+  businessScope?: string;
+  salesperson?: string;
+  developDate?: string;
+  spare1?: string; spare2?: string; spare3?: string;
+  deliveryAddress?: string;
+  frontMark?: string;
+  sideMark?: string;
+  innerBoxText?: string;
+  customerRemark?: string;
+  currency?: string;
+  contacts?: CustomerContact[];
+  banks?: CustomerBank[];
+  expresses?: CustomerExpress[];
 }
 
 // ---------- 样衣 ----------

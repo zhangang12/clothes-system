@@ -5,9 +5,9 @@ export const REDIS_CLIENT = 'REDIS_CLIENT';
 
 // 前缀常量（对齐《系统开发手册》核心数据模型 · 编号规则）
 export const NUM_PREFIX = {
-  FACTORY: 'CN',
-  CUSTOMER: 'S',
-  SAMPLE: 'S',
+  FACTORY: 'S',    // 厂商编号 S001（基础资料设计稿 §1.1 D2，nextGlobal 全局递增）
+  CUSTOMER: 'CN',  // 客户编号 CN001（基础资料设计稿 §2.1 D2，nextGlobal 全局递增）
+  SAMPLE: 'S',     // 样衣编号 S-YYYYMMDD-序号（样衣设计稿 §D1，next 按日递增）
   QUOTATION: 'Q',
   ORDER: 'O',
   CONTRACT: 'HT',
