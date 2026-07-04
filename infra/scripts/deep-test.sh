@@ -49,7 +49,7 @@ expect_deny() { if [[ "$CODE" =~ ^(401|403)$ ]]; then ok "$1 [$CODE]"; else bad 
 # expect_num JSONPATH 期望值 "描述"  —— 数值≈（容差 0.011）
 expect_num() {
   local got; got=$(echo "$RESP" | jval "$1")
-  local r; r=$(node -e "const a=parseFloat(process.argv[1]),b=parseFloat(process.argv[2]);console.log(isNaN(a)?'NaN':(Math.abs(a-b)<=0.011?'OK':'BAD'))" "$got" "$2" 2>/dev/null || echo NaN)
+  local r; r=$(GOT="$got" EXP="$2" node -e "const a=parseFloat(process.env.GOT),b=parseFloat(process.env.EXP);console.log(isNaN(a)?'NaN':(Math.abs(a-b)<=0.011?'OK':'BAD'))" 2>/dev/null || echo NaN)
   if [[ "$r" == "OK" ]]; then ok "$3 ($1=$got)"; else bad "$3 (期望 $1≈$2 实得 $got)"; fi
 }
 # expect_eq JSONPATH 期望值 "描述"  —— 字符串相等
@@ -674,7 +674,7 @@ test_quote_ext() {
   api GET "/quotes/${qm:-0}"
   expect_num data.total_amount 51.25 "多费用项合计=20+31.25+0(含损小计求和)"
   expect_num data.gross_margin 35 "gross_margin 存储并回显=35"
-  expect_num data.1.subtotal 31.25 "辅料含损小计=6.25×5"
+  expect_num data.items.1.subtotal 31.25 "辅料含损小计=6.25×5"
 
   # ── CRUD:草稿编辑 PUT 后 GET 详情验证字段确实变化 ──
   qd=$(fx_quote "$cid")
@@ -980,7 +980,7 @@ test_payment_ext() {
   api POST /payments/prepayments "{\"factory_id\":${fid:-0},\"amount\":500,\"pay_date\":\"2026-08-01\"}" "$TOKEN_BUSINESS"
   expect_deny "BUSINESS建预付款应拒绝"
   api GET "/payments/prepayments?factory_id=${fid:-0}"
-  expect_num data.total 2 "按工厂筛选预付款total=2"
+  expect_num total 2 "按工厂筛选预付款total=2"
   api GET "/payments/prepayments?page=1&size=1"
   expect_num size 1 "预付款分页size=1生效"
 
