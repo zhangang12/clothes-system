@@ -5,6 +5,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Prepayment } from './prepayment.entity';
 import { PaymentRequest } from './payment-request.entity';
+import { Reconciliation, ReconciliationStatus } from '../reconciliation/reconciliation.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { PaymentApprovalStatus, ReconcileType } from '@i9/types';
 import { CreatePrepaymentDto } from './dto/create-prepayment.dto';
@@ -15,6 +16,7 @@ export class PaymentService {
   constructor(
     @InjectRepository(Prepayment) private readonly prepayRepo: Repository<Prepayment>,
     @InjectRepository(PaymentRequest) private readonly prRepo: Repository<PaymentRequest>,
+    @InjectRepository(Reconciliation) private readonly reconcileRepo: Repository<Reconciliation>,
     private readonly numbering: NumberingService,
     private readonly dataSource: DataSource,
   ) {}
@@ -73,7 +75,7 @@ export class PaymentService {
     }
 
     const prefix = dto.type === ReconcileType.NO_CONTRACT
-      ? `${NUM_PREFIX.PAYMENT}NC`
+      ? `${NUM_PREFIX.PAYMENT}-NC`
       : NUM_PREFIX.PAYMENT;
     const pr_no = await this.numbering.next(prefix);
 
@@ -165,7 +167,16 @@ export class PaymentService {
     pr.slip_url = slipUrl;
     pr.paid_by = paidBy;
     pr.slip_uploaded_at = new Date();
-    return this.prRepo.save(pr);
+    const saved = await this.prRepo.save(pr);
+
+    // 付款完成后联动关联对账单进入已付款状态（系统开发手册·状态流转规则）
+    if (pr.reconcile_id) {
+      await this.reconcileRepo.update(
+        { id: pr.reconcile_id, status: ReconciliationStatus.CONFIRMED },
+        { status: ReconciliationStatus.PAID },
+      );
+    }
+    return saved;
   }
 
   async removePaymentRequest(id: number): Promise<void> {

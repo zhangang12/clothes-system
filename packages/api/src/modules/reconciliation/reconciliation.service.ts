@@ -21,7 +21,7 @@ export class ReconciliationService {
 
   async create(dto: CreateReconciliationDto, createdBy: number): Promise<Reconciliation> {
     const prefix = dto.type === ReconcileType.NO_CONTRACT
-      ? `${NUM_PREFIX.RECONCILIATION}NC`
+      ? `${NUM_PREFIX.RECONCILIATION}-NC`
       : NUM_PREFIX.RECONCILIATION;
     const reconcile_no = await this.numbering.next(prefix);
 

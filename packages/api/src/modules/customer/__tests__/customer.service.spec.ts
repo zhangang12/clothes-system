@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Customer } from '../customer.entity';
+import { OrderMain } from '../../order/order-main.entity';
 import { CustomerService } from '../customer.service';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
 import { CustomerGrade } from '@i9/types';
@@ -13,6 +14,7 @@ const mockRepo = {
   findAndCount: jest.fn(),
   find: jest.fn(),
 };
+const mockOrderRepo = { count: jest.fn() };
 const mockRedis = { incr: jest.fn(), expire: jest.fn() };
 
 describe('CustomerService', () => {
@@ -20,11 +22,13 @@ describe('CustomerService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockOrderRepo.count.mockResolvedValue(0);
     const module = await Test.createTestingModule({
       providers: [
         CustomerService,
         NumberingService,
         { provide: getRepositoryToken(Customer), useValue: mockRepo },
+        { provide: getRepositoryToken(OrderMain), useValue: mockOrderRepo },
         { provide: REDIS_CLIENT, useValue: mockRedis },
       ],
     }).compile();
@@ -109,6 +113,14 @@ describe('CustomerService', () => {
       mockRepo.save.mockResolvedValue({ ...entity, status: 1 });
       await service.toggleStatus(1);
       expect(mockRepo.save).toHaveBeenCalledWith(expect.objectContaining({ status: 1 }));
+    });
+
+    it('UT-CUS-13: throws when disabling a customer with open (non-DONE) orders', async () => {
+      const entity = { id: 1, status: 1, deleted: 0 };
+      mockRepo.findOne.mockResolvedValue(entity);
+      mockOrderRepo.count.mockResolvedValue(2);
+      await expect(service.toggleStatus(1)).rejects.toThrow('未完成订单');
+      expect(mockRepo.save).not.toHaveBeenCalled();
     });
   });
 

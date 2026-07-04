@@ -3,16 +3,17 @@ import Redis from 'ioredis';
 
 export const REDIS_CLIENT = 'REDIS_CLIENT';
 
-// 前缀常量
+// 前缀常量（对齐《系统开发手册》核心数据模型 · 编号规则）
 export const NUM_PREFIX = {
   FACTORY: 'CN',
   CUSTOMER: 'S',
+  SAMPLE: 'S',
   QUOTATION: 'Q',
-  ORDER: 'SO',
-  CONTRACT: 'CT',
+  ORDER: 'O',
+  CONTRACT: 'HT',
   PAYMENT: 'PR',
-  RECONCILIATION: 'RC',
-  SETTLEMENT: 'SL',
+  RECONCILIATION: 'DZ',
+  SETTLEMENT: 'JS',
 } as const;
 
 @Injectable()
@@ -20,8 +21,8 @@ export class NumberingService {
   constructor(@Inject(REDIS_CLIENT) private readonly redis: Redis) {}
 
   /**
-   * 生成带日期的流水号，格式：{prefix}{YYYYMMDD}{5位序号}
-   * 例如：CN2024060100001
+   * 生成带日期的流水号，格式：{prefix}-{YYYYMMDD}-{3位序号}
+   * 例如：HT-20260705-001
    */
   async next(prefix: string, date?: Date): Promise<string> {
     const d = date ?? new Date();
@@ -35,7 +36,7 @@ export class NumberingService {
       1,
       key,
     ) as number;
-    return `${prefix}${ymd}${String(seq).padStart(5, '0')}`;
+    return `${prefix}-${ymd}-${String(seq).padStart(3, '0')}`;
   }
 
   /**

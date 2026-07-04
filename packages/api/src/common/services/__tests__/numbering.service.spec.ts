@@ -21,17 +21,17 @@ describe('NumberingService', () => {
   });
 
   describe('next()', () => {
-    it('UT-NUM-01: generates correct format prefix+date+5digit', async () => {
+    it('UT-NUM-01: generates correct format prefix-date-3digit', async () => {
       mockRedis.eval.mockResolvedValue(1);
       const date = new Date('2024-06-01');
       const result = await service.next('Q', date);
-      expect(result).toBe('Q2024060100001');
+      expect(result).toBe('Q-20240601-001');
     });
 
-    it('UT-NUM-02: pads sequence to 5 digits', async () => {
+    it('UT-NUM-02: pads sequence to 3 digits', async () => {
       mockRedis.eval.mockResolvedValue(99);
       const result = await service.next('PR', new Date('2024-06-01'));
-      expect(result).toBe('PR2024060100099');
+      expect(result).toBe('PR-20240601-099');
     });
 
     it('UT-NUM-03: uses Lua eval for atomic INCR+EXPIRE', async () => {
@@ -57,10 +57,10 @@ describe('NumberingService', () => {
       expect(mockRedis.eval).toHaveBeenCalledWith(expect.any(String), 1, 'seq:SO:20240602');
     });
 
-    it('UT-NUM-05: handles high sequence (seq=99999)', async () => {
+    it('UT-NUM-05: handles high sequence (seq=99999, exceeds 3-digit pad width)', async () => {
       mockRedis.eval.mockResolvedValue(99999);
-      const result = await service.next('CT', new Date('2024-06-01'));
-      expect(result).toBe('CT2024060199999');
+      const result = await service.next('HT', new Date('2024-06-01'));
+      expect(result).toBe('HT-20240601-99999');
     });
   });
 

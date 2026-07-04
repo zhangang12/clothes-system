@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Factory } from '../factory.entity';
+import { Contract } from '../../contract/contract.entity';
 import { FactoryService } from '../factory.service';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
 
@@ -12,6 +13,7 @@ const mockRepo = {
   findAndCount: jest.fn(),
   find: jest.fn(),
 };
+const mockContractRepo = { count: jest.fn() };
 const mockRedis = { incr: jest.fn(), expire: jest.fn() };
 
 describe('FactoryService', () => {
@@ -19,11 +21,13 @@ describe('FactoryService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockContractRepo.count.mockResolvedValue(0);
     const module = await Test.createTestingModule({
       providers: [
         FactoryService,
         NumberingService,
         { provide: getRepositoryToken(Factory), useValue: mockRepo },
+        { provide: getRepositoryToken(Contract), useValue: mockContractRepo },
         { provide: REDIS_CLIENT, useValue: mockRedis },
       ],
     }).compile();
@@ -107,6 +111,14 @@ describe('FactoryService', () => {
       mockRepo.save.mockResolvedValue({ ...entity, status: 1 });
       await service.toggleStatus(1);
       expect(mockRepo.save).toHaveBeenCalledWith(expect.objectContaining({ status: 1 }));
+    });
+
+    it('UT-FAC-13: throws when disabling a factory with open (non-terminal) contracts', async () => {
+      const entity = { id: 1, status: 1, deleted: 0 };
+      mockRepo.findOne.mockResolvedValue(entity);
+      mockContractRepo.count.mockResolvedValue(1);
+      await expect(service.toggleStatus(1)).rejects.toThrow('未完成合同');
+      expect(mockRepo.save).not.toHaveBeenCalled();
     });
   });
 

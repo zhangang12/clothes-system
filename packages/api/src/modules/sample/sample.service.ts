@@ -6,7 +6,7 @@ import { Repository, FindOptionsWhere, Like } from 'typeorm';
 import { SampleGarment } from './sample-garment.entity';
 import { SampleVersion, SampleAction } from './sample-version.entity';
 import { Customer } from '../customer/customer.entity';
-import { NumberingService } from '../../common/services/numbering.service';
+import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { SampleStatus } from '@i9/types';
 import {
   CreateSampleDto, AssignPatternmakerDto, SubmitVersionDto, RejectSampleDto,
@@ -25,7 +25,7 @@ export class SampleService {
   async create(dto: CreateSampleDto, createdBy: number): Promise<SampleGarment> {
     const customer = await this.customerRepo.findOne({ where: { id: dto.customer_id, deleted: 0 } });
     if (!customer) throw new BadRequestException(`客户 #${dto.customer_id} 不存在`);
-    const sample_no = await this.numbering.next('SM');
+    const sample_no = await this.numbering.next(NUM_PREFIX.SAMPLE);
     const entity = this.repo.create({ ...dto, sample_no, created_by: createdBy, status: SampleStatus.PENDING });
     return this.repo.save(entity);
   }

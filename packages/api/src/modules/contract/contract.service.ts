@@ -7,7 +7,14 @@ import { Contract, ContractStatus } from './contract.entity';
 import { ContractMaterial } from './contract-material.entity';
 import { ContractPortalLog, PortalOperatorType } from './contract-portal-log.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
-import { ContractPortalStatus } from '@i9/types';
+import { ContractPortalStatus, ContractType } from '@i9/types';
+
+// 账期规则（系统开发手册·核心业务规则）：材料合同 = 最后发货日+45天，加工合同 = 最后发货日+30天
+const DEFAULT_ACCOUNT_PERIOD_DAYS: Record<ContractType, number> = {
+  [ContractType.MATERIAL]: 45,
+  [ContractType.PROCESS]: 30,
+  [ContractType.SUPPLEMENT]: 45,
+};
 import { CreateContractDto } from './dto/create-contract.dto';
 import { QueryContractDto } from './dto/query-contract.dto';
 
@@ -24,6 +31,16 @@ export class ContractService {
   async create(dto: CreateContractDto, createdBy: number): Promise<Contract> {
     const contract_no = await this.numbering.next(NUM_PREFIX.CONTRACT);
 
+    const deposit_ratio = dto.deposit_ratio ?? 30;
+    const mid_ratio = dto.mid_ratio ?? 40;
+    const final_ratio = dto.final_ratio ?? 30;
+    // 付款条款验证（系统开发手册·核心业务规则）：定金% + 中期% + 尾款% 必须 = 100%
+    if (Math.abs(deposit_ratio + mid_ratio + final_ratio - 100) > 0.01) {
+      throw new BadRequestException(
+        `定金比例 + 中期比例 + 尾款比例必须等于 100%（当前为 ${deposit_ratio + mid_ratio + final_ratio}%）`,
+      );
+    }
+
     return this.dataSource.transaction(async (manager) => {
       const totalAmount = dto.materials.reduce((sum, m) => sum + m.unit_price * m.qty, 0);
 
@@ -35,11 +52,11 @@ export class ContractService {
         order_id: dto.order_id,
         total_amount: +totalAmount.toFixed(4),
         currency: dto.currency ?? 'CNY',
-        deposit_ratio: dto.deposit_ratio ?? 30,
-        mid_ratio: dto.mid_ratio ?? 40,
-        final_ratio: dto.final_ratio ?? 30,
+        deposit_ratio,
+        mid_ratio,
+        final_ratio,
         last_ship_date: dto.last_ship_date as any,
-        account_period_days: dto.account_period_days ?? 45,
+        account_period_days: dto.account_period_days ?? DEFAULT_ACCOUNT_PERIOD_DAYS[dto.type],
         remark: dto.remark,
         created_by: createdBy,
         portal_status: ContractPortalStatus.DRAFT,

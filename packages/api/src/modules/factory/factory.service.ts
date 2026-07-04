@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, Like } from 'typeorm';
+import { Repository, FindOptionsWhere, Like, Not, In } from 'typeorm';
 import { Factory } from './factory.entity';
+import { Contract, ContractStatus } from '../contract/contract.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { CreateFactoryDto } from './dto/create-factory.dto';
 import { QueryFactoryDto } from './dto/query-factory.dto';
@@ -10,6 +11,7 @@ import { QueryFactoryDto } from './dto/query-factory.dto';
 export class FactoryService {
   constructor(
     @InjectRepository(Factory) private readonly repo: Repository<Factory>,
+    @InjectRepository(Contract) private readonly contractRepo: Repository<Contract>,
     private readonly numbering: NumberingService,
   ) {}
 
@@ -51,6 +53,14 @@ export class FactoryService {
 
   async toggleStatus(id: number): Promise<Factory> {
     const entity = await this.findOne(id);
+    if (entity.status === 1) {
+      const openContracts = await this.contractRepo.count({
+        where: { factory_id: id, status: Not(In([ContractStatus.COMPLETED, ContractStatus.CANCELLED])) },
+      });
+      if (openContracts > 0) {
+        throw new BadRequestException(`该工厂有 ${openContracts} 个未完成合同，不可停用`);
+      }
+    }
     entity.status = entity.status === 1 ? 0 : 1;
     return this.repo.save(entity);
   }

@@ -1,7 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, Like } from 'typeorm';
+import { Repository, FindOptionsWhere, Like, Not } from 'typeorm';
 import { Customer } from './customer.entity';
+import { OrderMain } from '../order/order-main.entity';
+import { OrderStatus } from '@i9/types';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { QueryCustomerDto } from './dto/query-customer.dto';
@@ -10,6 +12,7 @@ import { QueryCustomerDto } from './dto/query-customer.dto';
 export class CustomerService {
   constructor(
     @InjectRepository(Customer) private readonly repo: Repository<Customer>,
+    @InjectRepository(OrderMain) private readonly orderRepo: Repository<OrderMain>,
     private readonly numbering: NumberingService,
   ) {}
 
@@ -51,6 +54,14 @@ export class CustomerService {
 
   async toggleStatus(id: number): Promise<Customer> {
     const entity = await this.findOne(id);
+    if (entity.status === 1) {
+      const openOrders = await this.orderRepo.count({
+        where: { customer_id: id, status: Not(OrderStatus.DONE) },
+      });
+      if (openOrders > 0) {
+        throw new BadRequestException(`该客户有 ${openOrders} 个未完成订单，不可停用`);
+      }
+    }
     entity.status = entity.status === 1 ? 0 : 1;
     return this.repo.save(entity);
   }

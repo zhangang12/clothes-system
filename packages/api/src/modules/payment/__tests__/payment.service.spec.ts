@@ -5,6 +5,7 @@ import { DataSource } from 'typeorm';
 import { PaymentService } from '../payment.service';
 import { Prepayment } from '../prepayment.entity';
 import { PaymentRequest } from '../payment-request.entity';
+import { Reconciliation } from '../../reconciliation/reconciliation.entity';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
 import { PaymentApprovalStatus, ReconcileType } from '@i9/types';
 
@@ -42,6 +43,9 @@ const mockPrRepo = {
   findOne: jest.fn(),
   findAndCount: jest.fn().mockResolvedValue([[], 0]),
 };
+const mockReconcileRepo = {
+  update: jest.fn().mockResolvedValue({ affected: 1 }),
+};
 const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn().mockResolvedValue(1) };
 const mockDataSource = {
   transaction: jest.fn().mockImplementation((cb) => cb({
@@ -66,6 +70,7 @@ describe('PaymentService', () => {
         PaymentService,
         { provide: getRepositoryToken(Prepayment), useValue: mockPrepayRepo },
         { provide: getRepositoryToken(PaymentRequest), useValue: mockPrRepo },
+        { provide: getRepositoryToken(Reconciliation), useValue: mockReconcileRepo },
         { provide: NumberingService, useValue: new NumberingService(mockRedis as any) },
         { provide: DataSource, useValue: mockDataSource },
         { provide: REDIS_CLIENT, useValue: mockRedis },
@@ -188,6 +193,29 @@ describe('PaymentService', () => {
     const pr = makePR({ approval_status: PaymentApprovalStatus.PENDING });
     mockPrRepo.findOne.mockResolvedValue(pr);
     await expect(service.markPaid(1, 'url', 99)).rejects.toThrow(BadRequestException);
+  });
+
+  // UT-PAY-13: markPaid syncs linked reconciliation to PAID (系统开发手册·状态流转规则)
+  it('UT-PAY-13 markPaid advances linked reconciliation to PAID', async () => {
+    const pr = makePR({ approval_status: PaymentApprovalStatus.APPROVED, reconcile_id: 77 });
+    mockPrRepo.findOne.mockResolvedValue(pr);
+    mockPrRepo.save.mockResolvedValue({ ...pr, approval_status: PaymentApprovalStatus.PAID });
+
+    await service.markPaid(1, 'http://example.com/slip.jpg', 99);
+    expect(mockReconcileRepo.update).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 77 }),
+      expect.objectContaining({ status: 'PAID' }),
+    );
+  });
+
+  // UT-PAY-14: markPaid skips reconciliation sync when no reconcile_id (NO_CONTRACT flow)
+  it('UT-PAY-14 markPaid does not touch reconciliation when reconcile_id is absent', async () => {
+    const pr = makePR({ approval_status: PaymentApprovalStatus.APPROVED, reconcile_id: undefined });
+    mockPrRepo.findOne.mockResolvedValue(pr);
+    mockPrRepo.save.mockResolvedValue({ ...pr, approval_status: PaymentApprovalStatus.PAID });
+
+    await service.markPaid(1, 'http://example.com/slip.jpg', 99);
+    expect(mockReconcileRepo.update).not.toHaveBeenCalled();
   });
 
   // UT-PAY-12: removePaymentRequest throws if not DRAFT
