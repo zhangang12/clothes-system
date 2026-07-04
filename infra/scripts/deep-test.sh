@@ -624,7 +624,7 @@ test_sample_ext() {
   expect_ok "样衣分页查询2xx"
   expect_eq size 2 "分页返回size=2"
   api GET "/samples?status=REJECTED&customer_id=${cid:-0}"
-  expect_eq data.items.0.status REJECTED "按状态+客户筛选命中REJECTED"
+  expect_eq data.0.status REJECTED "按状态+客户筛选命中REJECTED"
   api GET "/samples?status=BOGUS"
   expect_code 400 "非法status枚举筛选应400"
 
@@ -674,7 +674,7 @@ test_quote_ext() {
   api GET "/quotes/${qm:-0}"
   expect_num data.total_amount 51.25 "多费用项合计=20+31.25+0(含损小计求和)"
   expect_num data.gross_margin 35 "gross_margin 存储并回显=35"
-  expect_num data.items.1.subtotal 31.25 "辅料含损小计=6.25×5"
+  expect_num data.1.subtotal 31.25 "辅料含损小计=6.25×5"
 
   # ── CRUD:草稿编辑 PUT 后 GET 详情验证字段确实变化 ──
   qd=$(fx_quote "$cid")
@@ -882,9 +882,9 @@ test_contract_ext() {
   # —— 列表分页 & keyword 筛选 & 大id 404 ——
   api GET "/contracts?page=1&size=2"
   expect_num size 2 "分页size=2生效"
-  expect_num data.page 1 "分页page=1生效"
+  expect_num page 1 "分页page=1生效"
   api GET "/contracts?keyword=${no:-NOPE}&size=5"
-  expect_eq data.items.0.contract_no "${no:-x}" "按合同号keyword筛选命中"
+  expect_eq data.0.contract_no "${no:-x}" "按合同号keyword筛选命中"
   api GET "/contracts/999999999"
   expect_code 404 "查询不存在的大id合同应404"
 }
@@ -958,7 +958,7 @@ test_reconciliation_ext() {
   fid2=$(fx_factory)
   api POST /reconciliations "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid2:-0}}" "$TOKEN_FINANCE"
   api GET "/reconciliations?factory_id=${fid2:-0}&type=NO_CONTRACT" '' "$TOKEN_FINANCE"
-  expect_eq data.items.0.factory_id "${fid2:-0}" "factory_id筛选命中本厂"
+  expect_eq data.0.factory_id "${fid2:-0}" "factory_id筛选命中本厂"
   api GET "/reconciliations?status=BADX" '' "$TOKEN_FINANCE"
   expect_code 400 "非法status筛选枚举应400"
 
@@ -1054,6 +1054,7 @@ test_settlement_ext() {
   expect_eq data.0.order_id "${oid:-0}" "筛选结果首条order_id匹配"
 
   # ── revenue=0(仅@IsNumber无@IsPositive)允许, 净利可为负 ──
+  oid=$(fx_order_producing "$cid")  # 一订单仅一结算(uk_order)，每个结算换新订单
   api POST /settlements "{\"order_id\":${oid:-0},\"revenue\":0,\"costs\":[{\"cost_name\":\"样品费\",\"amount\":500}]}" "$TOKEN_FINANCE"
   expect_ok "revenue=0应允许创建"
   expect_num data.net_profit -500 "revenue=0净利=0-500=-500"
@@ -1069,6 +1070,7 @@ test_settlement_ext() {
   expect_deny "FINANCE删除结算应被拒(DELETE仅ADMIN)"
 
   # ── 次要状态机:确认后的受限/放行操作 ──
+  oid=$(fx_order_producing "$cid")
   api POST /settlements "{\"order_id\":${oid:-0},\"revenue\":9000,\"costs\":[{\"cost_name\":\"面料\",\"amount\":4000}]}" "$TOKEN_FINANCE"
   sid2=$(echo "$RESP" | jval data.id)
   api PATCH "/settlements/${sid2:-0}/confirm" '' "$TOKEN_FINANCE"
@@ -1079,6 +1081,7 @@ test_settlement_ext() {
   expect_code 400 "确认后登记回款应400(addReceipt仅DRAFT，已修复)"
 
   # ── 软删除DRAFT + 删除后GET详情→404 ──
+  oid=$(fx_order_producing "$cid")
   api POST /settlements "{\"order_id\":${oid:-0},\"revenue\":1000}" "$TOKEN_FINANCE"
   sid3=$(echo "$RESP" | jval data.id)
   api DELETE "/settlements/${sid3:-0}"
