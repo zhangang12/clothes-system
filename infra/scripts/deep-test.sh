@@ -89,7 +89,7 @@ echo " I9 深度测试   目标：$BASE_URL"
 echo " token: admin=${TOKEN_ADMIN:+✓} business=${TOKEN_BUSINESS:+✓} finance=${TOKEN_FINANCE:+✓} pm=${TOKEN_PM:+✓} supplier=${TOKEN_SUP:+✓}"
 echo "=================================================================="
 
-# ═══ 基础用例 ═══
+# ═══════════════ 基础用例(11 模块) ═══════════════
 test_customer() {
   local nm="客户测试_${SFX:-x}"
   local em="buyer_${SFX:-x}@i9.com"
@@ -388,7 +388,7 @@ test_portal() {
   expect_code 400 "重复盖章应400(非PUSHED)"
 }
 
-# ═══ 扩展用例 ═══
+# ═══════════════ 扩展用例(11 模块 · 深度补充) ═══════════════
 test_auth_ext() {
   local longname="" longpass="" injp="" inja=""
 
@@ -460,7 +460,7 @@ test_customer_ext() {
   # 5) 列表分页：?page=1&size=2→2xx且结构含分页字段
   api GET "/customers?page=1&size=2"
   expect_ok "分页查询page=1&size=2成功"
-  expect_eq size 2 "分页结果结构含size=2(顶层size字段)"
+  expect_eq size 2 "分页结果结构含size=2"
 
   # 6) 列表keyword关键字筛选→2xx
   api GET "/customers?keyword=EXT"
@@ -486,223 +486,676 @@ test_customer_ext() {
 }
 
 test_factory_ext() {
-  local fid f2 long
-  fid=$(fx_factory)
-  # PUT 更新后 GET 验证
-  api PUT "/factories/${fid:-0}" "{\"name\":\"改名工厂_${SFX}\",\"type\":\"PROCESS\"}"
-  expect_ok "工厂更新"
-  api GET "/factories/${fid:-0}"; expect_eq data.name "改名工厂_${SFX}" "更新后名称生效"
-  # 编号递增：两个工厂 factory_no 不同
-  f2=$(fx_factory)
-  api GET "/factories/${f2:-0}"; local n2; n2=$(echo "$RESP" | jval data.factory_no)
-  api GET "/factories/${fid:-0}"; local n1; n1=$(echo "$RESP" | jval data.factory_no)
-  [[ -n "$n1" && "$n1" != "$n2" ]] && ok "工厂编号唯一递增($n1≠$n2)" || bad "工厂编号应唯一($n1 vs $n2)"
-  # 超长 name → 400
-  long=$(printf 'x%.0s' $(seq 1 101))
-  api POST /factories "{\"name\":\"$long\",\"type\":\"BOTH\"}"
-  expect_code 400 "工厂name超100字符应400"
-  # type MATERIAL/PROCESS 均可建
-  api POST /factories "{\"name\":\"M_${SFX}_${RANDOM}\",\"type\":\"MATERIAL\"}"; expect_ok "MATERIAL类型工厂"
-  api POST /factories "{\"name\":\"P_${SFX}_${RANDOM}\",\"type\":\"PROCESS\"}"; expect_ok "PROCESS类型工厂"
-  # DELETE 后 GET → 404
-  api DELETE "/factories/${f2:-0}"; expect_ok "删除工厂"
-  api GET "/factories/${f2:-0}"; expect_code 404 "删除后查询应404"
-  # 不存在 id → 404
-  api GET /factories/99999999; expect_code 404 "查不存在工厂应404"
-  # 列表分页
-  api GET "/factories?page=1&size=2"; expect_ok "工厂列表分页"
+  local fid="" no_a="" no_b="" nocmp="same" sid="" did="" longname=""
+
+  # ---- CRUD 完整性：PUT 更新后重新 GET 验证字段确实变化（基础用例只校验 PUT 响应体） ----
+  api POST /factories "{\"name\":\"ExtA_${SFX}_${RANDOM}\",\"type\":\"MATERIAL\"}"
+  fid=$(echo "$RESP" | jval data.id)
+  api PUT "/factories/${fid:-0}" "{\"name\":\"ExtAUpd_${SFX}\",\"contact_name\":\"Tom_${SFX}\"}"
+  expect_ok "管理员 PUT 更新工厂应成功"
+  api GET "/factories/${fid:-0}"
+  expect_eq data.name "ExtAUpd_${SFX}" "PUT 后重新 GET 名称应已变更"
+  expect_eq data.contact_name "Tom_${SFX}" "PUT 后重新 GET 联系人应已变更"
+
+  # ---- 枚举各合法值都能建：type PROCESS / BOTH（MATERIAL 已在上方创建） ----
+  api POST /factories "{\"name\":\"TP_${SFX}_${RANDOM}\",\"type\":\"PROCESS\"}"
+  expect_eq data.type PROCESS "PROCESS 类型工厂应可创建并回显"
+  api POST /factories "{\"name\":\"TB_${SFX}_${RANDOM}\",\"type\":\"BOTH\"}"
+  expect_eq data.type BOTH "BOTH 类型工厂应可创建并回显"
+
+  # ---- 唯一/递增：连建两个工厂 factory_no 应不同（NumberingService 全局递增） ----
+  api POST /factories "{\"name\":\"NoA_${SFX}_${RANDOM}\",\"type\":\"MATERIAL\"}"
+  no_a=$(echo "$RESP" | jval data.factory_no)
+  api POST /factories "{\"name\":\"NoB_${SFX}_${RANDOM}\",\"type\":\"MATERIAL\"}"
+  no_b=$(echo "$RESP" | jval data.factory_no)
+  if [[ -n "${no_a:-}" && "${no_a:-}" != "${no_b:-}" ]]; then ok "连建两工厂编号不同($no_a≠$no_b)"; else bad "工厂编号应唯一递增($no_a vs $no_b)"; fi
+
+  # ---- 列表查询：分页 size=2 结构应含分页字段并回显 ----
+  api GET "/factories?page=1&size=2"
+  expect_num size 2 "分页 size 应回显为 2"
+
+  # ---- 列表查询：按 type 筛选，返回项类型应全部为 PROCESS（取首条校验） ----
+  api GET "/factories?type=PROCESS&size=5"
+  expect_eq data.0.type PROCESS "按 type=PROCESS 筛选首条类型应为 PROCESS"
+
+  # ---- 次要接口：PATCH status 用 ADMIN → 2xx，默认启用(1)切换为停用(0) ----
+  api POST /factories "{\"name\":\"St_${SFX}_${RANDOM}\",\"type\":\"MATERIAL\"}"
+  sid=$(echo "$RESP" | jval data.id)
+  api PATCH "/factories/${sid:-0}/status"
+  expect_ok "管理员切换工厂状态应成功"
+  expect_eq data.status 0 "默认启用(1)切换后应为停用(0)"
+  # 按 status=0 筛选应能命中刚停用的工厂
+  api GET "/factories?status=0&size=5"
+  expect_eq data.0.status 0 "按 status=0 筛选首条状态应为停用(0)"
+
+  # ---- 软删除完整性：DELETE 后详情 404；对已删记录重复删除 → 404(终态幂等) ----
+  api POST /factories "{\"name\":\"Del_${SFX}_${RANDOM}\",\"type\":\"BOTH\"}"
+  did=$(echo "$RESP" | jval data.id)
+  api DELETE "/factories/${did:-0}"
+  expect_ok "管理员逻辑删除工厂应成功"
+  api GET "/factories/${did:-0}"
+  expect_code 404 "软删除后查询详情应 404"
+  api DELETE "/factories/${did:-0}"
+  expect_code 404 "重复删除已删除工厂应 404(终态)"
+
+  # ---- 边界：GET 超大 id → 404；name 超 @MaxLength(100) → 400 ----
+  api GET /factories/2000000001
+  expect_code 404 "查询超大 id 工厂应 404"
+  longname=$(printf 'N%.0s' $(seq 1 101))
+  api POST /factories "{\"name\":\"${longname}\",\"type\":\"MATERIAL\"}"
+  expect_code 400 "name 超过 100 字符应 400"
+
+  # ---- 权限矩阵：补写接口换无权角色 ----
+  # PUT @Roles(ADMIN,BUSINESS)：财务无权
+  api PUT "/factories/${fid:-0}" "{\"name\":\"Hack_${SFX}\"}" "$TOKEN_FINANCE"
+  expect_deny "财务角色更新工厂应被拒绝"
+  # PATCH status @Roles(ADMIN)：业务员可建工厂但无权切换状态
+  api PATCH "/factories/${fid:-0}/status" "" "$TOKEN_BUSINESS"
+  expect_deny "业务员切换工厂状态应被拒绝(仅ADMIN)"
 }
 
 test_sample_ext() {
-  local cid sid
-  cid=$(fx_customer); sid=$(fx_sample "$cid")
-  # 走到 DONE 再驳回 → REJECTED
-  api PATCH "/samples/${sid:-0}/assign" '{"patternmaker_id":1}'
-  api PATCH "/samples/${sid:-0}/submit" '{"remark":"v1"}'
-  api PATCH "/samples/${sid:-0}/reject" '{"reject_reason":"版型不符"}'
-  expect_ok "样衣驳回(DONE→REJECTED)"
-  api GET "/samples/${sid:-0}"; expect_eq data.status REJECTED "驳回后REJECTED"
-  # REJECTED 样衣不能直接重新派工（assign 仅接受 PENDING）
-  api PATCH "/samples/${sid:-0}/assign" '{"patternmaker_id":1}'
-  expect_code 400 "REJECTED样衣不能直接重新派工(仅待打版态可派)"
-  # 未到 DONE 直接驳回 → 400（此时 PATTERN）
-  api PATCH "/samples/${sid:-0}/reject" '{"reject_reason":"x"}'
-  expect_code 400 "非打版完成驳回应400"
-  # 不存在 id 操作 → 404
-  api PATCH /samples/99999999/submit '{"remark":"x"}'; expect_code 404 "不存在样衣提交应404"
-  api GET /samples/99999999; expect_code 404 "查不存在样衣应404"
-  # 列表 status 筛选
-  api GET "/samples?status=PENDING&page=1&size=5"; expect_ok "样衣按状态筛选"
+  local cid rr newname big sid_r sid_p sid_pat sid_del
+
+  cid=$(fx_customer)
+  rr="reject_${SFX}"
+  newname="U_${SFX}"
+
+  # ── reject 流程：读前置状态(DONE)，构造到 DONE 再驳回 ──────────────
+  sid_r=$(fx_sample "$cid")
+  api PATCH "/samples/${sid_r:-0}/assign" '{"patternmaker_id":1}'
+  api PATCH "/samples/${sid_r:-0}/submit" '{"remark":"v1"}' "$TOKEN_PM"
+  expect_ok "版师提交版次(PATTERN→DONE)"
+  api PUT "/samples/${sid_r:-0}" '{"style_name":"x"}'
+  expect_code 400 "打版完成状态不可修改基本信息"
+  api PATCH "/samples/${sid_r:-0}/reject" "{\"reject_reason\":\"$rr\"}"
+  expect_ok "驳回打版完成样衣(DONE→REJECTED)"
+  api GET "/samples/${sid_r:-0}"
+  expect_eq data.status REJECTED "驳回后状态变REJECTED"
+  expect_eq data.version 2 "驳回后版次+1"
+  expect_eq data.reject_reason "$rr" "驳回原因已记录"
+
+  # ── 终态幂等：对已驳回记录重复驳回 ────────────────────────────────
+  api PATCH "/samples/${sid_r:-0}/reject" "{\"reject_reason\":\"$rr\"}"
+  expect_code 400 "重复驳回已驳回样衣应400"
+
+  # ── 被驳回后重新走流程：assign 仅 PENDING，故不可再指派 ───────────
+  api PATCH "/samples/${sid_r:-0}/assign" '{"patternmaker_id":1}'
+  expect_code 400 "已驳回样衣不能再指派(非PENDING)"
+
+  # ── PUT 更新仅特定状态：REJECTED 允许改，更新后 GET 验证字段变化 ───
+  api PUT "/samples/${sid_r:-0}" "{\"style_name\":\"$newname\"}"
+  expect_ok "已驳回样衣允许修改基本信息"
+  api GET "/samples/${sid_r:-0}"
+  expect_eq data.style_name "$newname" "更新后GET字段确实变化"
+
+  # ── PENDING 样衣：非法转移 + 越界值 + 权限 ────────────────────────
+  sid_p=$(fx_sample "$cid")
+  api PATCH "/samples/${sid_p:-0}/reject" "{\"reject_reason\":\"$rr\"}"
+  expect_code 400 "PENDING状态直接驳回应400"
+  api PATCH "/samples/${sid_p:-0}/assign" '{"patternmaker_id":0}'
+  expect_code 400 "指派版师id=0越界(<Min1)应400"
+  api PATCH "/samples/${sid_p:-0}/assign" '{"patternmaker_id":1}' "$TOKEN_FINANCE"
+  expect_deny "财务指派版师应拒绝"
+
+  # ── PATTERN 样衣：重复指派非法转移 ───────────────────────────────
+  sid_pat=$(fx_sample "$cid")
+  api PATCH "/samples/${sid_pat:-0}/assign" '{"patternmaker_id":1}'
+  api PATCH "/samples/${sid_pat:-0}/assign" '{"patternmaker_id":2}'
+  expect_code 400 "PATTERN状态再次指派应400"
+
+  # ── 不存在的大 id：GET / assign / submit 均 404 ───────────────────
+  api GET "/samples/99999999"
+  expect_code 404 "GET不存在样衣应404"
+  api PATCH "/samples/99999999/assign" '{"patternmaker_id":1}'
+  expect_code 404 "指派不存在样衣应404"
+  api PATCH "/samples/99999999/submit" '{"remark":"x"}' "$TOKEN_PM"
+  expect_code 404 "提交不存在样衣应404"
+
+  # ── 软删除完整性：DELETE 后详情不可见 ────────────────────────────
+  sid_del=$(fx_sample "$cid")
+  api DELETE "/samples/${sid_del:-0}"
+  expect_ok "逻辑删除样衣"
+  api GET "/samples/${sid_del:-0}"
+  expect_code 404 "软删除后详情应404"
+
+  # ── 列表查询：分页结构 / 状态筛选 / 非法枚举 ─────────────────────
+  api GET "/samples?page=1&size=2"
+  expect_ok "样衣分页查询2xx"
+  expect_eq size 2 "分页返回size=2"
+  api GET "/samples?status=REJECTED&customer_id=${cid:-0}"
+  expect_eq data.items.0.status REJECTED "按状态+客户筛选命中REJECTED"
+  api GET "/samples?status=BOGUS"
+  expect_code 400 "非法status枚举筛选应400"
+
+  # ── 边界：超 MaxLength(100) 的 style_name ────────────────────────
+  big=$(printf 'x%.0s' {1..101})
+  api POST /samples "{\"customer_id\":${cid:-0},\"style_name\":\"$big\"}"
+  expect_code 400 "style_name超100字符应400"
+
+  # ── 权限矩阵：各写接口换无权角色 ─────────────────────────────────
+  api POST /samples "{\"customer_id\":${cid:-0},\"style_name\":\"deny\"}" "$TOKEN_FINANCE"
+  expect_deny "财务创建样衣应拒绝"
+  api PATCH "/samples/${sid_pat:-0}/submit" '{"remark":"x"}' "$TOKEN_BUSINESS"
+  expect_deny "业务提交版次应拒绝(仅版师/管理员)"
+  api DELETE "/samples/${sid_p:-0}" '' "$TOKEN_BUSINESS"
+  expect_deny "业务删除样衣应拒绝(仅管理员)"
 }
 
 test_quote_ext() {
-  local cid q1 q3
+  local cid qa qb qm qd big
   cid=$(fx_customer)
-  # to-contract 完整流程
-  q3=$(fx_quote "$cid")
-  api PATCH "/quotes/${q3:-0}/send" ''
-  api PATCH "/quotes/${q3:-0}/confirm" ''
-  api PATCH "/quotes/${q3:-0}/to-contract" ''
-  expect_ok "报价转合同(CONFIRMED→TO_CONTRACT)"
-  api GET "/quotes/${q3:-0}"; expect_eq data.status TO_CONTRACT "转合同后TO_CONTRACT"
-  # 非草稿编辑 → 400
-  api PUT "/quotes/${q3:-0}" "{\"customer_id\":${cid:-0},\"items\":[{\"item_name\":\"x\",\"unit_price\":1}]}"
-  expect_code 400 "非草稿报价编辑应400"
-  # item 缺 item_name → 400
+
+  # ── 次要状态机:全流程转合同 DRAFT→SENT→CONFIRMED→TO_CONTRACT(补主状态机终点)──
+  qa=$(fx_quote "$cid")
+  api PATCH "/quotes/${qa:-0}/send" ''
+  api PATCH "/quotes/${qa:-0}/confirm" ''
+  api PATCH "/quotes/${qa:-0}/to-contract" ''
+  expect_ok "报价转合同(CONFIRMED→TO_CONTRACT)应2xx"
+  api GET "/quotes/${qa:-0}"
+  expect_eq data.status TO_CONTRACT "转合同后状态为TO_CONTRACT"
+
+  # ── 幂等/终态:TO_CONTRACT 上再转合同、再编辑均应400 ──
+  api PATCH "/quotes/${qa:-0}/to-contract" ''
+  expect_code 400 "已转合同再转合同应400(终态幂等)"
+  api PUT "/quotes/${qa:-0}" "{\"style_name\":\"改\"}"
+  expect_code 400 "非草稿(TO_CONTRACT)编辑应400(仅DRAFT可编辑)"
+
+  # ── 非法转移:SENT 未确认直接转合同应400 ──
+  qb=$(fx_quote "$cid")
+  api PATCH "/quotes/${qb:-0}/send" ''
+  api PATCH "/quotes/${qb:-0}/to-contract" ''
+  expect_code 400 "SENT未确认直接转合同应400(非法转移)"
+
+  # ── 多费用项合计手算:total_amount=Σ含损小计 ──
+  # 面料 10×2/(1-0)=20; 辅料 5/(1-.2)×4/(1-.2)=6.25×5=31.25; 加工无用量=0 → 51.25
+  api POST /quotes "{\"customer_id\":${cid:-0},\"currency\":\"USD\",\"global_loss_rate\":0,\"gross_margin\":35,\"total_qty\":500,\"items\":[{\"item_name\":\"面料\",\"unit\":\"米\",\"usage_qty\":2,\"unit_price\":10,\"loss_rate\":0},{\"item_name\":\"辅料\",\"usage_qty\":4,\"unit_price\":5,\"loss_rate\":20},{\"item_name\":\"加工\",\"unit_price\":3}]}"
+  qm=$(echo "$RESP" | jval data.id)
+  api GET "/quotes/${qm:-0}"
+  expect_num data.total_amount 51.25 "多费用项合计=20+31.25+0(含损小计求和)"
+  expect_num data.gross_margin 35 "gross_margin 存储并回显=35"
+  expect_num data.items.1.subtotal 31.25 "辅料含损小计=6.25×5"
+
+  # ── CRUD:草稿编辑 PUT 后 GET 详情验证字段确实变化 ──
+  qd=$(fx_quote "$cid")
+  api PUT "/quotes/${qd:-0}" "{\"style_name\":\"改款EXT${SFX}\",\"remark\":\"改备注\"}"
+  expect_ok "草稿报价编辑应2xx"
+  api GET "/quotes/${qd:-0}"
+  expect_eq data.style_name "改款EXT${SFX}" "编辑后GET详情款名已变更"
+
+  # ── 输入校验:费用项缺 item_name(@IsString 必填)应400 ──
   api POST /quotes "{\"customer_id\":${cid:-0},\"items\":[{\"unit_price\":5}]}"
-  expect_code 400 "报价费用项缺item_name应400"
-  # 草稿可编辑
-  q1=$(fx_quote "$cid")
-  api PUT "/quotes/${q1:-0}" "{\"customer_id\":${cid:-0},\"remark\":\"改\",\"items\":[{\"item_name\":\"面料\",\"unit_price\":10}]}"
-  expect_ok "草稿报价可编辑"
-  # 大id → 404
-  api GET /quotes/99999999; expect_code 404 "查不存在报价应404"
-  # 列表分页
-  api GET "/quotes?page=1&size=2"; expect_ok "报价列表分页"
+  expect_code 400 "费用项缺item_name应400"
+  # ── 边界:item_name 超@MaxLength(100)应400 ──
+  big=$(printf 'X%.0s' $(seq 1 101))
+  api POST /quotes "{\"customer_id\":${cid:-0},\"items\":[{\"item_name\":\"$big\",\"unit_price\":5}]}"
+  expect_code 400 "费用项item_name超100字符应400"
+
+  # ── 权限矩阵:写接口对无权角色(非ADMIN/BUSINESS)应拒绝 ──
+  api POST /quotes "{\"customer_id\":${cid:-0},\"items\":[{\"item_name\":\"x\",\"unit_price\":5}]}" "$TOKEN_FINANCE"
+  expect_deny "FINANCE创建报价应被拒(不在@Roles)"
+  api PATCH "/quotes/${qm:-0}/send" '' "$TOKEN_PM"
+  expect_deny "打版师发送报价应被拒(不在@Roles)"
+
+  # ── 列表:分页返回2xx且结构含分页 + status 筛选 ──
+  api GET "/quotes?page=1&size=2"
+  expect_ok "报价列表分页page=1&size=2应2xx"
+  expect_num size 2 "分页结构顶层含size=2"
+  api GET "/quotes?status=TO_CONTRACT&page=1&size=5"
+  expect_ok "报价按status=TO_CONTRACT筛选应2xx"
+
+  # ── GET 不存在大id应404 ──
+  api GET /quotes/99999999
+  expect_code 404 "查不存在报价应404"
+
+  # ── 软删除:草稿删除后 GET 详情应404 ──
+  api DELETE "/quotes/${qd:-0}"
+  api GET "/quotes/${qd:-0}"
+  expect_code 404 "草稿软删除后GET详情应404"
 }
 
 test_order_ext() {
-  local cid o2 o3
+  local cid moid uoid doid soid delid delid2 poid m2oid long101
   cid=$(fx_customer)
-  # 一路推进到 DONE，DONE 再 advance → 400
-  o2=$(fx_order "$cid")
-  api PATCH "/orders/${o2:-0}/advance" ''
-  api PATCH "/orders/${o2:-0}/advance" ''
-  api PATCH "/orders/${o2:-0}/advance" ''
-  api PATCH "/orders/${o2:-0}/advance" ''
-  api GET "/orders/${o2:-0}"; expect_eq data.status DONE "推进4次到DONE"
-  api PATCH "/orders/${o2:-0}/advance" ''; expect_code 400 "DONE后再推进应400"
-  # 非草稿编辑 → 400
-  api PUT "/orders/${o2:-0}" "{\"customer_id\":${cid:-0},\"qty_total\":500}"
-  expect_code 400 "非草稿订单编辑应400"
-  # 尺码矩阵设置
-  o3=$(fx_order "$cid")
-  api PATCH "/orders/${o3:-0}/matrix" '{"matrix_data":{"colors":["红"],"sizes":["M","L"],"cells":{"红-M":100,"红-L":200}}}'
-  expect_ok "设置尺码矩阵"
-  # qty_total 负 → 400
-  api POST /orders "{\"customer_id\":${cid:-0},\"qty_total\":-10}"
-  expect_code 400 "订单数量负数应400"
-  # 大id → 404
-  api GET /orders/99999999; expect_code 404 "查不存在订单应404"
-  # 列表 status 筛选
-  api GET "/orders?status=DONE&page=1&size=5"; expect_ok "订单按状态筛选"
+
+  # ── 尺码矩阵：设置→2xx，GET回读；再更新→变化生效 ──
+  moid=$(fx_order "$cid")
+  api PATCH "/orders/${moid:-0}/matrix" '{"matrix_data":{"S":10,"M":20,"L":30}}'
+  expect_ok "PATCH 设置尺码矩阵→2xx"
+  api GET "/orders/${moid:-0}"
+  expect_num data.matrix.matrix_data.M 20 "GET回读矩阵M码=20"
+  api PATCH "/orders/${moid:-0}/matrix" '{"matrix_data":{"S":1,"M":99}}'
+  expect_ok "PATCH 更新尺码矩阵→2xx"
+  api GET "/orders/${moid:-0}"
+  expect_num data.matrix.matrix_data.M 99 "更新后矩阵M码=99确已变化"
+
+  # ── PUT 仅草稿可编辑：草稿改成功并回读，非草稿→400 ──
+  uoid=$(fx_order "$cid")
+  api PUT "/orders/${uoid:-0}" '{"style_name":"改后款式X","remark":"upd"}'
+  expect_ok "草稿订单PUT编辑成功"
+  api GET "/orders/${uoid:-0}"
+  expect_eq data.style_name "改后款式X" "PUT后GET回读style_name已变更"
+  api PATCH "/orders/${uoid:-0}/advance" ''
+  api PUT "/orders/${uoid:-0}" '{"style_name":"再改"}'
+  expect_code 400 "非草稿(CONFIRMED)订单PUT编辑→400"
+
+  # ── 多条 materials 各自含损用量 loss_usage ──
+  api POST /orders "{\"customer_id\":${cid:-0},\"qty_total\":1000,\"materials\":[{\"item_name\":\"面料A\",\"net_usage\":2,\"loss_rate\":20,\"sort_order\":0},{\"item_name\":\"辅料B\",\"net_usage\":3,\"loss_rate\":25,\"sort_order\":1}]}"
+  m2oid=$(echo "$RESP" | jval data.id)
+  api GET "/orders/${m2oid:-0}"
+  expect_num data.materials.0.loss_usage 2.5 "料0含损=2÷(1-20%)=2.5"
+  expect_num data.materials.1.loss_usage 4 "料1含损=3÷(1-25%)=4"
+
+  # ── 一路 advance 到 DONE；DONE 再 advance→400；DONE 发货→400 ──
+  doid=$(fx_order "$cid")
+  api PATCH "/orders/${doid:-0}/advance" ''; expect_ok "推进1 DRAFT→CONFIRMED"
+  api PATCH "/orders/${doid:-0}/advance" ''; expect_ok "推进2 CONFIRMED→PRODUCING"
+  api PATCH "/orders/${doid:-0}/advance" ''; expect_ok "推进3 PRODUCING→SHIPPED"
+  api PATCH "/orders/${doid:-0}/advance" ''; expect_ok "推进4 SHIPPED→DONE"
+  api GET "/orders/${doid:-0}"; expect_eq data.status DONE "四次推进后状态=DONE"
+  api PATCH "/orders/${doid:-0}/advance" ''; expect_code 400 "终态DONE再推进(非法转移)→400"
+  api POST "/orders/${doid:-0}/shipments" '{"shipment_date":"2026-09-01","qty":10}'
+  expect_code 400 "终态DONE订单发货→400"
+
+  # ── 多次发货累计（PRODUCING 连续两单，明细按日期累积）──
+  soid=$(fx_order_producing "$cid")
+  api POST "/orders/${soid:-0}/shipments" '{"shipment_date":"2026-09-01","qty":100}'; expect_ok "首次发货成功"
+  api POST "/orders/${soid:-0}/shipments" '{"shipment_date":"2026-09-05","qty":200}'; expect_ok "二次发货成功"
+  api GET "/orders/${soid:-0}"
+  expect_num data.shipments.0.qty 100 "累计出货第1条qty=100"
+  expect_num data.shipments.1.qty 200 "累计出货第2条qty=200"
+
+  # ── 列表：status 筛选 + 分页结构 ──
+  api GET '/orders?status=DRAFT'
+  expect_ok "列表按status=DRAFT筛选成功"
+  expect_eq data.0.status DRAFT "筛选结果首条status=DRAFT"
+  api GET '/orders?page=1&size=2'
+  expect_ok "列表分页查询成功"
+  expect_num size 2 "分页size回显=2"
+  expect_num page 1 "分页page回显=1"
+  expect_match total '^[0-9]+$' "分页结构含数字total"
+
+  # ── 边界/异常值 ──
+  api GET /orders/99999999
+  expect_code 404 "查询不存在大id订单→404"
+  api POST /orders "{\"customer_id\":${cid:-0},\"qty_total\":-5}"
+  expect_code 400 "qty_total负数→400"
+  api POST /orders "{\"customer_id\":${cid:-0},\"qty_total\":0}"
+  expect_ok "qty_total=0边界(@Min0)允许创建"
+  long101=$(printf 'x%.0s' {1..101})
+  api POST /orders "{\"customer_id\":${cid:-0},\"qty_total\":1,\"style_name\":\"$long101\"}"
+  expect_code 400 "style_name超100字符(@MaxLength)→400"
+  api POST /orders "{\"customer_id\":${cid:-0},\"qty_total\":500,\"materials\":[]}"
+  expect_ok "空materials数组允许创建"
+
+  # ── 软删除：草稿删除后详情404；非草稿删除→400 ──
+  delid=$(fx_order "$cid")
+  api DELETE "/orders/${delid:-0}"; expect_ok "草稿订单逻辑删除成功"
+  api GET "/orders/${delid:-0}"; expect_code 404 "软删除后GET详情→404"
+  delid2=$(fx_order "$cid")
+  api PATCH "/orders/${delid2:-0}/advance" ''
+  api DELETE "/orders/${delid2:-0}"; expect_code 400 "非草稿订单删除→400"
+
+  # ── 权限矩阵：每个写接口换无权角色→拒绝 ──
+  poid=$(fx_order "$cid")
+  api POST /orders "{\"customer_id\":${cid:-0},\"qty_total\":1}" "$TOKEN_FINANCE"
+  expect_deny "finance创建订单应拒绝"
+  api PUT "/orders/${poid:-0}" '{"style_name":"x"}' "$TOKEN_FINANCE"
+  expect_deny "finance编辑订单应拒绝"
+  api PATCH "/orders/${poid:-0}/advance" '' "$TOKEN_PM"
+  expect_deny "pm推进订单应拒绝"
+  api POST "/orders/${poid:-0}/shipments" '{"shipment_date":"2026-09-01","qty":1}' "$TOKEN_FINANCE"
+  expect_deny "finance添加发货应拒绝"
+  api PATCH "/orders/${poid:-0}/matrix" '{"matrix_data":{}}' "$TOKEN_PM"
+  expect_deny "pm改尺码矩阵应拒绝"
+  api DELETE "/orders/${poid:-0}" '' "$TOKEN_BUSINESS"
+  expect_deny "business删除订单应拒绝(仅ADMIN)"
 }
 
 test_contract_ext() {
-  local cid fid oid oid2 ctid
-  cid=$(fx_customer); fid=$(fx_factory); oid=$(fx_order_producing "$cid")
-  # SUPPLEMENT 补充合同
-  api POST /contracts "{\"type\":\"SUPPLEMENT\",\"factory_id\":${fid:-0},\"order_id\":${oid:-0},\"materials\":[{\"item_name\":\"补料\",\"unit_price\":5,\"qty\":100}]}"
-  expect_ok "SUPPLEMENT补充合同创建"
-  # 账期负数 → 400
-  api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${fid:-0},\"order_id\":${oid:-0},\"account_period_days\":-5,\"materials\":[{\"item_name\":\"x\",\"unit_price\":1,\"qty\":1}]}"
-  expect_code 400 "账期负数应400"
-  # push 后 delete → 400
-  oid2=$(fx_order_producing "$cid")
-  api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${fid:-0},\"order_id\":${oid2:-0},\"materials\":[{\"item_name\":\"面料\",\"unit_price\":8,\"qty\":100}]}"
-  ctid=$(echo "$RESP" | jval data.id)
-  api PATCH "/contracts/${ctid:-0}/push" ''
-  api DELETE "/contracts/${ctid:-0}"
-  expect_code 400 "已推送合同删除应400(仅DRAFT可删)"
-  # 大id → 404
-  api GET /contracts/99999999; expect_code 404 "查不存在合同应404"
-  # 列表分页
-  api GET "/contracts?page=1&size=2"; expect_ok "合同列表分页"
+  local cid fid oid ctid ctdel ctpush ctm no
+  cid=$(fx_customer); fid=$(fx_factory); oid=$(fx_order "$cid")
+
+  # —— 权限矩阵：写接口换无权角色 → 拒绝 ——
+  api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${fid:-0},\"order_id\":${oid:-0},\"materials\":[{\"item_name\":\"面料\",\"unit_price\":8,\"qty\":100}]}" "$TOKEN_FINANCE"
+  expect_deny "FINANCE创建合同应拒绝(仅ADMIN/BUSINESS)"
+
+  ctid=$(fx_contract "${fid:-0}" "${oid:-0}")
+  api PATCH "/contracts/${ctid:-0}/push" '' "$TOKEN_FINANCE"
+  expect_deny "FINANCE推送合同应拒绝(仅ADMIN/BUSINESS)"
+
+  # —— PATCH status：ADMIN 正向 + 回读验证(对照已有 BUSINESS 403) ——
+  api PATCH "/contracts/${ctid:-0}/status" '{"status":"COMPLETED"}'
+  expect_ok "ADMIN更新合同状态为COMPLETED"
+  api GET "/contracts/${ctid:-0}"
+  expect_eq data.status COMPLETED "状态更新后GET回读=COMPLETED"
+
+  api DELETE "/contracts/${ctid:-0}" '' "$TOKEN_BUSINESS"
+  expect_deny "BUSINESS删除合同应拒绝(仅ADMIN)"
+
+  # —— 软删除 CRUD 完整性：DRAFT 删除→详情404→重复删除404 ——
+  ctdel=$(fx_contract "${fid:-0}" "${oid:-0}")
+  api DELETE "/contracts/${ctdel:-0}"
+  expect_ok "删除草稿合同(逻辑删除)"
+  api GET "/contracts/${ctdel:-0}"
+  expect_code 404 "软删除后查询详情应404"
+  api DELETE "/contracts/${ctdel:-0}"
+  expect_code 404 "重复删除已删除合同应404"
+
+  # —— 次要状态机：推送后(非DRAFT)删除应400 ——
+  ctpush=$(fx_contract "${fid:-0}" "${oid:-0}")
+  api PATCH "/contracts/${ctpush:-0}/push" ''
+  api DELETE "/contracts/${ctpush:-0}"
+  expect_code 400 "推送后删除应400(仅DRAFT可删)"
+
+  # —— 类型枚举：PROCESS / SUPPLEMENT(带parent_id) 均可建 ——
+  api POST /contracts "{\"type\":\"PROCESS\",\"factory_id\":${fid:-0},\"order_id\":${oid:-0},\"materials\":[{\"item_name\":\"加工\",\"unit_price\":3,\"qty\":100}]}"
+  expect_ok "创建PROCESS类型合同"
+  api POST /contracts "{\"type\":\"SUPPLEMENT\",\"parent_id\":${ctid:-0},\"factory_id\":${fid:-0},\"order_id\":${oid:-0},\"materials\":[{\"item_name\":\"补充料\",\"unit_price\":2,\"qty\":50}]}"
+  expect_ok "创建SUPPLEMENT补充合同"
+  expect_eq data.type SUPPLEMENT "补充合同type=SUPPLEMENT"
+  expect_num data.parent_id "${ctid:-0}" "补充合同parent_id指向母合同"
+
+  # —— 比例组合 & 边界值 ——
+  api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${fid:-0},\"order_id\":${oid:-0},\"deposit_ratio\":20,\"mid_ratio\":30,\"final_ratio\":50,\"materials\":[{\"item_name\":\"面料\",\"unit_price\":8,\"qty\":100}]}"
+  expect_num data.deposit_ratio 20 "自定义定金比例20生效"
+  api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${fid:-0},\"order_id\":${oid:-0},\"mid_ratio\":-1,\"materials\":[{\"item_name\":\"面料\",\"unit_price\":8,\"qty\":100}]}"
+  expect_code 400 "中期付款比例负数应400"
+  api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${fid:-0},\"order_id\":${oid:-0},\"account_period_days\":-1,\"materials\":[{\"item_name\":\"面料\",\"unit_price\":8,\"qty\":100}]}"
+  expect_code 400 "账期天数负数应400"
+  api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${fid:-0},\"order_id\":${oid:-0},\"currency\":\"ABCDEF\",\"materials\":[{\"item_name\":\"面料\",\"unit_price\":8,\"qty\":100}]}"
+  expect_code 400 "货币代码超5字符应400"
+
+  # —— 材料金额合计 & 明细金额 ——
+  api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${fid:-0},\"order_id\":${oid:-0},\"materials\":[{\"item_name\":\"面料A\",\"unit_price\":10,\"qty\":100},{\"item_name\":\"面料B\",\"unit_price\":5,\"qty\":200}]}"
+  ctm=$(echo "$RESP" | jval data.id)
+  expect_num data.total_amount 2000 "合同金额合计=10*100+5*200"
+  api GET "/contracts/${ctm:-0}"
+  no=$(echo "$RESP" | jval data.contract_no)
+  expect_num data.materials.0.amount 1000 "首条材料金额=10*100"
+
+  # —— 空材料数组：可建且合计为0 ——
+  api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${fid:-0},\"order_id\":${oid:-0},\"materials\":[]}"
+  expect_ok "空材料数组可创建合同"
+  expect_num data.total_amount 0 "空材料合同合计=0"
+
+  # —— 列表分页 & keyword 筛选 & 大id 404 ——
+  api GET "/contracts?page=1&size=2"
+  expect_num size 2 "分页size=2生效"
+  expect_num data.page 1 "分页page=1生效"
+  api GET "/contracts?keyword=${no:-NOPE}&size=5"
+  expect_eq data.items.0.contract_no "${no:-x}" "按合同号keyword筛选命中"
+  api GET "/contracts/999999999"
+  expect_code 404 "查询不存在的大id合同应404"
 }
 
 test_reconciliation_ext() {
-  local cid fid oid ctid rid
-  fid=$(fx_factory); cid=$(fx_customer); oid=$(fx_order_producing "$cid")
-  # CONTRACT 类型带 contract_id
-  api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${fid:-0},\"order_id\":${oid:-0},\"materials\":[{\"item_name\":\"面料\",\"unit_price\":8,\"qty\":100}]}"
-  ctid=$(echo "$RESP" | jval data.id)
-  api POST /reconciliations "{\"type\":\"CONTRACT\",\"contract_id\":${ctid:-0},\"factory_id\":${fid:-0}}" "$TOKEN_FINANCE"
-  expect_ok "CONTRACT类型对账(带contract_id)"
+  local fid cid oid ctid fid2 rid rid2 rid3
+  fid=$(fx_factory); cid=$(fx_customer); oid=$(fx_order_producing "$cid"); ctid=$(fx_contract "$fid" "$oid")
+
+  # ── 明细/税额/发票差额 计算校验（FINANCE 建含明细对账）──
+  api POST /reconciliations "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid:-0},\"tax_rate\":10,\"invoice_no\":\"INV-${SFX}\",\"invoice_amount\":100,\"shipments\":[{\"shipment_id\":1,\"item_name\":\"SHIPA\",\"snapshot_unit_price\":10,\"qty\":5},{\"shipment_id\":2,\"item_name\":\"SHIPB\",\"snapshot_unit_price\":20,\"qty\":2}]}" "$TOKEN_FINANCE"
+  expect_ok "FINANCE建对账(含明细/税/发票)"
   rid=$(echo "$RESP" | jval data.id)
-  # confirm 后 delete → 400
+  expect_num data.total_amount 90 "总额=Σ单价×数量(10*5+20*2)"
+  expect_num data.tax_amount 9 "税额=总额×税率÷100"
+  expect_num data.invoice_diff 10 "发票差额=发票额−总额"
+  expect_num data.has_invoice 1 "含发票号→has_invoice=1"
+
+  # ── 详情返回明细行金额快照 ──
+  api GET "/reconciliations/${rid:-0}" '' "$TOKEN_FINANCE"
+  expect_ok "对账详情(含出货明细)"
+  expect_num data.shipments.0.amount 50 "明细行金额=单价×数量快照"
+
+  # ── 状态机：确认后复查状态确实变更 ──
   api PATCH "/reconciliations/${rid:-0}/confirm" '' "$TOKEN_FINANCE"
+  expect_ok "确认对账(DRAFT→CONFIRMED)"
+  api GET "/reconciliations/${rid:-0}" '' "$TOKEN_FINANCE"
+  expect_eq data.status CONFIRMED "确认后详情状态复查为CONFIRMED"
+
+  # ── 非法转移：已确认(终态)删除应拒 ──
   api DELETE "/reconciliations/${rid:-0}"
-  expect_code 400 "已确认对账删除应400"
-  # ADMIN 也能建
-  api POST /reconciliations "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid:-0}}" "$TOKEN_ADMIN"
-  expect_ok "ADMIN建对账"
-  # 列表 + 大id
-  api GET "/reconciliations?page=1&size=2" '' "$TOKEN_FINANCE"; expect_ok "对账列表分页"
-  api GET /reconciliations/99999999 '' "$TOKEN_FINANCE"; expect_code 404 "查不存在对账应404"
+  expect_code 400 "已确认对账删除应400(仅DRAFT可删)"
+
+  # ── CONTRACT 类型带合同+明细创建（枚举各合法值可建）──
+  api POST /reconciliations "{\"type\":\"CONTRACT\",\"contract_id\":${ctid:-0},\"factory_id\":${fid:-0},\"shipments\":[{\"shipment_id\":9,\"item_name\":\"C1\",\"snapshot_unit_price\":8,\"qty\":10}]}" "$TOKEN_FINANCE"
+  expect_ok "CONTRACT类型带合同+明细创建"
+  expect_num data.total_amount 80 "CONTRACT对账总额=8*10"
+
+  # ── 边界：空明细数组可建且总额0 ──
+  api POST /reconciliations "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid:-0},\"shipments\":[]}" "$TOKEN_FINANCE"
+  expect_ok "空明细数组可建"
+  expect_num data.total_amount 0 "空明细总额=0"
+
+  # ── 边界：明细单价负数 / 税率负数 → 400 ──
+  api POST /reconciliations "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid:-0},\"shipments\":[{\"shipment_id\":1,\"item_name\":\"X\",\"snapshot_unit_price\":-1,\"qty\":1}]}" "$TOKEN_FINANCE"
+  expect_code 400 "明细单价负数应400(@Min0)"
+  api POST /reconciliations "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid:-0},\"tax_rate\":-5}" "$TOKEN_FINANCE"
+  expect_code 400 "税率负数应400(@Min0)"
+
+  # ── 软删除：草稿删除成功，删后详情404 ──
+  api POST /reconciliations "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid:-0}}"
+  rid2=$(echo "$RESP" | jval data.id)
+  api DELETE "/reconciliations/${rid2:-0}"
+  expect_ok "草稿对账软删除(ADMIN)"
+  api GET "/reconciliations/${rid2:-0}" '' "$TOKEN_FINANCE"
+  expect_code 404 "软删后查详情应404"
+
+  # ── 权限矩阵：PM建/ FINANCE删/ BUSINESS确认 → 拒绝 ──
+  api POST /reconciliations "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid:-0}}" "$TOKEN_PM"
+  expect_deny "PM建对账应拒绝(仅FINANCE/ADMIN)"
+  api POST /reconciliations "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid:-0}}" "$TOKEN_FINANCE"
+  rid3=$(echo "$RESP" | jval data.id)
+  api DELETE "/reconciliations/${rid3:-0}" '' "$TOKEN_FINANCE"
+  expect_deny "FINANCE删除对账应拒绝(仅ADMIN)"
+  api PATCH "/reconciliations/${rid3:-0}/confirm" '' "$TOKEN_BUSINESS"
+  expect_deny "BUSINESS确认对账应拒绝"
+
+  # ── 列表筛选：status+分页 / factory_id命中 / 非法status ──
+  api GET "/reconciliations?page=1&size=2&status=DRAFT" '' "$TOKEN_FINANCE"
+  expect_ok "列表status+分页筛选"
+  expect_num size 2 "分页size=2生效"
+  fid2=$(fx_factory)
+  api POST /reconciliations "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid2:-0}}" "$TOKEN_FINANCE"
+  api GET "/reconciliations?factory_id=${fid2:-0}&type=NO_CONTRACT" '' "$TOKEN_FINANCE"
+  expect_eq data.items.0.factory_id "${fid2:-0}" "factory_id筛选命中本厂"
+  api GET "/reconciliations?status=BADX" '' "$TOKEN_FINANCE"
+  expect_code 400 "非法status筛选枚举应400"
+
+  # ── 写接口 not-found：确认不存在大id → 404 ──
+  api PATCH "/reconciliations/99999999/confirm" '' "$TOKEN_FINANCE"
+  expect_code 404 "确认不存在对账应404"
 }
 
 test_payment_ext() {
-  local fid pid
-  fid=$(fx_factory)
-  # 预付款创建
+  local fid fid0 pidA pidB pidC slip501
+  fid=$(fx_factory); fid0=$(fx_factory)
+
+  # ——— 预付款：创建 / 零额边界 / 权限 / 按工厂筛选 / 分页 ———
   api POST /payments/prepayments "{\"factory_id\":${fid:-0},\"amount\":1000,\"pay_date\":\"2026-08-01\"}" "$TOKEN_FINANCE"
-  expect_ok "预付款创建"
-  # 预付冲抵 > 申请金额 → 400
+  expect_ok "预付款创建2xx"
+  api POST /payments/prepayments "{\"factory_id\":${fid:-0},\"amount\":1000,\"pay_date\":\"2026-08-02\"}" "$TOKEN_FINANCE"
+  api POST /payments/prepayments "{\"factory_id\":${fid:-0},\"amount\":0,\"pay_date\":\"2026-08-01\"}" "$TOKEN_FINANCE"
+  expect_code 400 "预付款金额0应400"
+  api POST /payments/prepayments "{\"factory_id\":${fid:-0},\"amount\":500,\"pay_date\":\"2026-08-01\"}" "$TOKEN_BUSINESS"
+  expect_deny "BUSINESS建预付款应拒绝"
+  api GET "/payments/prepayments?factory_id=${fid:-0}"
+  expect_num data.total 2 "按工厂筛选预付款total=2"
+  api GET "/payments/prepayments?page=1&size=1"
+  expect_num size 1 "预付款分页size=1生效"
+
+  # ——— 付款申请：冲抵两分支校验(读service) + 枚举合法值 ———
   api POST /payments/requests "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid:-0},\"amount\":100,\"prepay_offset\":200}" "$TOKEN_FINANCE"
   expect_code 400 "预付冲抵>申请金额应400"
-  # 已审批再提交 → 400；已付款再审批 → 400
+  api POST /payments/requests "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid0:-0},\"amount\":1000,\"prepay_offset\":500}" "$TOKEN_FINANCE"
+  expect_code 400 "预付冲抵超可用余额应400"
+  api POST /payments/requests "{\"type\":\"CONTRACT\",\"factory_id\":${fid:-0},\"amount\":600}" "$TOKEN_FINANCE"
+  expect_ok "type=CONTRACT建付款申请2xx"
+
+  # ——— 状态机补充：APPROVED→submit / 水单MaxLength500 / 终态PAID→approve ———
   api POST /payments/requests "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid:-0},\"amount\":500}" "$TOKEN_FINANCE"
-  pid=$(echo "$RESP" | jval data.id)
-  api PATCH "/payments/requests/${pid:-0}/submit" '' "$TOKEN_FINANCE"
-  api PATCH "/payments/requests/${pid:-0}/approve" '' "$TOKEN_ADMIN"
-  api PATCH "/payments/requests/${pid:-0}/submit" '' "$TOKEN_FINANCE"
+  pidA=$(echo "$RESP" | jval data.id)
+  api PATCH "/payments/requests/${pidA:-0}/submit" '' "$TOKEN_ADMIN"
+  api PATCH "/payments/requests/${pidA:-0}/approve" '' "$TOKEN_ADMIN"
+  api PATCH "/payments/requests/${pidA:-0}/submit" '' "$TOKEN_ADMIN"
   expect_code 400 "已审批再提交应400"
-  api PATCH "/payments/requests/${pid:-0}/paid" '{"slip_url":"https://ex.com/s.pdf"}' "$TOKEN_FINANCE"
-  api PATCH "/payments/requests/${pid:-0}/approve" '' "$TOKEN_ADMIN"
+  slip501=$(printf 'u%.0s' {1..501})
+  api PATCH "/payments/requests/${pidA:-0}/paid" "{\"slip_url\":\"${slip501}\"}" "$TOKEN_ADMIN"
+  expect_code 400 "水单URL超500字应400"
+  api PATCH "/payments/requests/${pidA:-0}/paid" '{"slip_url":"https://ex.com/ok.pdf"}' "$TOKEN_ADMIN"
+  expect_ok "标记已付款2xx"
+  api PATCH "/payments/requests/${pidA:-0}/approve" '' "$TOKEN_ADMIN"
   expect_code 400 "已付款再审批应400"
-  # BUSINESS 建付款申请 → deny（仅 FINANCE/ADMIN）
-  api POST /payments/requests "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid:-0},\"amount\":100}" "$TOKEN_BUSINESS"
-  expect_deny "BUSINESS建付款申请应拒绝"
+
+  # ——— 驳回：reason 非必填(@Body('reason') 无校验器) ———
+  api POST /payments/requests "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid:-0},\"amount\":300}" "$TOKEN_FINANCE"
+  pidB=$(echo "$RESP" | jval data.id)
+  api PATCH "/payments/requests/${pidB:-0}/submit" '' "$TOKEN_ADMIN"
+  api PATCH "/payments/requests/${pidB:-0}/reject" '{}' "$TOKEN_ADMIN"
+  expect_ok "驳回不强制reason(2xx)"
+
+  # ——— 软删除：删除权限 + 删除后再操作失效(404) ———
+  api POST /payments/requests "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid:-0},\"amount\":200}" "$TOKEN_FINANCE"
+  pidC=$(echo "$RESP" | jval data.id)
+  api DELETE "/payments/requests/${pidC:-0}" '' "$TOKEN_FINANCE"
+  expect_deny "FINANCE删除付款申请应拒绝"
+  api DELETE "/payments/requests/${pidC:-0}" '' "$TOKEN_ADMIN"
+  expect_ok "删除草稿付款申请2xx"
+  api PATCH "/payments/requests/${pidC:-0}/submit" '' "$TOKEN_ADMIN"
+  expect_code 404 "删除后再提交应404(软删生效)"
+
+  # ——— 不存在的大 id → 404 ———
+  api PATCH "/payments/requests/999999999/submit" '' "$TOKEN_ADMIN"
+  expect_code 404 "提交不存在付款申请应404"
 }
 
 test_settlement_ext() {
-  local cid oid sid
+  local cid oid sid sid2 sid3
+
   cid=$(fx_customer); oid=$(fx_order_producing "$cid")
-  api POST /settlements "{\"order_id\":${oid:-0},\"revenue\":8000,\"costs\":[{\"cost_name\":\"料\",\"amount\":5000}]}" "$TOKEN_FINANCE"
+
+  # ── 多明细累计 + has_invoice(有票/无票)均计入 + net_profit_ex_refund(读service公式) ──
+  api POST /settlements "{\"order_id\":${oid:-0},\"revenue\":20000,\"costs\":[{\"cost_name\":\"面料\",\"amount\":10000,\"has_invoice\":1},{\"cost_name\":\"加工\",\"amount\":3000,\"has_invoice\":0},{\"cost_name\":\"物流\",\"amount\":2000}]}" "$TOKEN_FINANCE"
   sid=$(echo "$RESP" | jval data.id)
-  # 不含退税净利 = 收入-成本
-  api GET "/settlements/${sid:-0}" '' "$TOKEN_FINANCE"
-  expect_num data.net_profit_ex_refund 3000 "不含退税净利=8000-5000"
-  # 添加收款
-  api POST "/settlements/${sid:-0}/receipts" '{"amount":4000,"receipt_date":"2026-10-01"}' "$TOKEN_FINANCE"
-  expect_ok "结算添加收款"
-  # confirm 后加收款 → 400
-  api PATCH "/settlements/${sid:-0}/confirm" '' "$TOKEN_FINANCE"
-  api POST "/settlements/${sid:-0}/receipts" '{"amount":100,"receipt_date":"2026-10-02"}' "$TOKEN_FINANCE"
-  expect_code 400 "已确认加收款应400"
-  # 已确认删除 → 400
-  api DELETE "/settlements/${sid:-0}"
-  expect_code 400 "已确认结算删除应400"
-  # 按订单筛选 + 大id
-  api GET "/settlements?order_id=${oid:-0}" '' "$TOKEN_FINANCE"; expect_ok "结算按订单筛选"
-  api GET /settlements/99999999 '' "$TOKEN_FINANCE"; expect_code 404 "查不存在结算应404"
+  [[ -n "$sid" ]] && ok "FINANCE多明细结算创建 id=$sid" || bad "多明细结算创建失败 ${RESP:0:120}"
+  expect_num data.total_cost 15000 "3笔成本累计=15000(有票/无票均计入total_cost)"
+  expect_num data.net_profit_ex_refund 5000 "net_profit_ex_refund=收入20000-成本15000=5000"
+
+  # ── 登记回款→2xx，POST后再GET详情验证回款已落库 ──
+  api POST "/settlements/${sid:-0}/receipts" '{"amount":8000,"receipt_date":"2026-06-15","remark":"首款"}' "$TOKEN_FINANCE"
+  expect_ok "FINANCE登记回款应2xx"
+  api GET "/settlements/${sid:-0}"
+  expect_num data.receipts.0.amount 8000 "GET详情回款记录已落库=8000"
+
+  # ── 按order_id筛选 + 分页结构(data即items数组, size顶层回显) ──
+  api GET "/settlements?order_id=${oid:-0}&page=1&size=2"
+  expect_ok "按order_id分页查询应2xx"
+  expect_num size 2 "分页size顶层回显=2(结构含分页)"
+  expect_eq data.0.order_id "${oid:-0}" "筛选结果首条order_id匹配"
+
+  # ── revenue=0(仅@IsNumber无@IsPositive)允许, 净利可为负 ──
+  api POST /settlements "{\"order_id\":${oid:-0},\"revenue\":0,\"costs\":[{\"cost_name\":\"样品费\",\"amount\":500}]}" "$TOKEN_FINANCE"
+  expect_ok "revenue=0应允许创建"
+  expect_num data.net_profit -500 "revenue=0净利=0-500=-500"
+
+  # ── 边界:成本amount=0违反@IsPositive→400 ──
+  api POST /settlements "{\"order_id\":${oid:-0},\"revenue\":1000,\"costs\":[{\"cost_name\":\"零费\",\"amount\":0}]}" "$TOKEN_FINANCE"
+  expect_code 400 "成本amount=0违反@IsPositive应400"
+
+  # ── 权限矩阵:写接口换无权角色 ──
+  api POST "/settlements/${sid:-0}/costs" '{"cost_name":"越权","amount":100}' "$TOKEN_BUSINESS"
+  expect_deny "BUSINESS追加成本应被拒(仅ADMIN/FINANCE)"
+  api DELETE "/settlements/${sid:-0}" '' "$TOKEN_FINANCE"
+  expect_deny "FINANCE删除结算应被拒(DELETE仅ADMIN)"
+
+  # ── 次要状态机:确认后的受限/放行操作 ──
+  api POST /settlements "{\"order_id\":${oid:-0},\"revenue\":9000,\"costs\":[{\"cost_name\":\"面料\",\"amount\":4000}]}" "$TOKEN_FINANCE"
+  sid2=$(echo "$RESP" | jval data.id)
+  api PATCH "/settlements/${sid2:-0}/confirm" '' "$TOKEN_FINANCE"
+  expect_ok "FINANCE确认草稿结算应2xx"
+  api DELETE "/settlements/${sid2:-0}"
+  expect_code 400 "已确认结算删除应400(DELETE仅DRAFT)"
+  api POST "/settlements/${sid2:-0}/receipts" '{"amount":9000,"receipt_date":"2026-06-20"}' "$TOKEN_FINANCE"
+  expect_code 400 "确认后登记回款应400(addReceipt仅DRAFT，已修复)"
+
+  # ── 软删除DRAFT + 删除后GET详情→404 ──
+  api POST /settlements "{\"order_id\":${oid:-0},\"revenue\":1000}" "$TOKEN_FINANCE"
+  sid3=$(echo "$RESP" | jval data.id)
+  api DELETE "/settlements/${sid3:-0}"
+  expect_ok "ADMIN删除草稿结算应2xx"
+  api GET "/settlements/${sid3:-0}"
+  expect_code 404 "软删除后GET详情应404"
+
+  # ── GET不存在的大id→404 ──
+  api GET "/settlements/99999999"
+  expect_code 404 "GET不存在结算(大id)应404"
 }
 
 test_portal_ext() {
-  local cid oid oid2 fid2 ctidOther ctid
-  cid=$(fx_customer); oid=$(fx_order_producing "$cid"); oid2=$(fx_order_producing "$cid")
-  # 数据隔离：另一工厂的合同，supplier1(工厂1)查不到 → 404
-  fid2=$(fx_factory)
-  api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${fid2:-0},\"order_id\":${oid:-0},\"materials\":[{\"item_name\":\"料\",\"unit_price\":8,\"qty\":100}]}"
-  ctidOther=$(echo "$RESP" | jval data.id)
-  api PATCH "/contracts/${ctidOther:-0}/push" ''
-  api GET "/portal/contracts/${ctidOther:-0}" '' "$TOKEN_SUP"
-  expect_code 404 "供应商无法查看其它工厂合同(数据隔离)"
-  # 工厂1合同：未盖章就发货 → 400
-  api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":1,\"order_id\":${oid2:-0},\"materials\":[{\"item_name\":\"料\",\"unit_price\":8,\"qty\":100}]}"
-  ctid=$(echo "$RESP" | jval data.id)
-  api PATCH "/contracts/${ctid:-0}/push" ''
-  api PATCH "/portal/contracts/${ctid:-0}/ship" '{"remark":"x"}' "$TOKEN_SUP"
-  expect_code 400 "未盖章就发货应400"
-  # 盖章→发货后再盖章 → 400
-  api PATCH "/portal/contracts/${ctid:-0}/stamp" '' "$TOKEN_SUP"
-  api PATCH "/portal/contracts/${ctid:-0}/ship" '{"remark":"发货"}' "$TOKEN_SUP"
-  api PATCH "/portal/contracts/${ctid:-0}/stamp" '' "$TOKEN_SUP"
+  local cid oidA oidB fidOther ctA ctB
+  cid=$(fx_customer)
+  oidA=$(fx_order_producing "$cid")
+  oidB=$(fx_order_producing "$cid")
+
+  # ── 数据隔离：admin 建“另一个工厂”的合同并 push，supplier1(绑定工厂1)不可见/不可操作 ──
+  fidOther=$(fx_factory)
+  api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${fidOther:-0},\"order_id\":${oidA:-0},\"currency\":\"CNY\",\"materials\":[{\"item_name\":\"面料\",\"unit_price\":8,\"qty\":100}]}"
+  ctA=$(echo "$RESP" | jval data.id)
+  api PATCH "/contracts/${ctA:-0}/push" ''
+  api GET "/portal/contracts/${ctA:-0}" '' "$TOKEN_SUP"
+  expect_code 404 "供应商无法查看其它工厂合同详情(数据隔离)"
+  api PATCH "/portal/contracts/${ctA:-0}/stamp" '' "$TOKEN_SUP"
+  expect_code 404 "供应商无法盖章其它工厂合同(数据隔离)"
+
+  # ── 工厂1合同：状态机非法/次要转移 ──
+  api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":1,\"order_id\":${oidB:-0},\"currency\":\"CNY\",\"materials\":[{\"item_name\":\"面料\",\"unit_price\":8,\"qty\":100}]}"
+  ctB=$(echo "$RESP" | jval data.id)
+  api PATCH "/contracts/${ctB:-0}/push" ''
+  # PUSHED 未盖章 → 直接确认发货应400
+  api PATCH "/portal/contracts/${ctB:-0}/ship" '{"remark":"x"}' "$TOKEN_SUP"
+  expect_code 400 "未盖章直接确认发货应400"
+  # PUSHED 未盖章 → 直接开票应400(发票状态机不含PUSHED)
+  api PATCH "/portal/contracts/${ctB:-0}/invoice" '{"invoice_no":"INV-EXT-0"}' "$TOKEN_SUP"
+  expect_code 400 "未盖章直接开票应400"
+  # 盖章 → STAMPED(setup)
+  api PATCH "/portal/contracts/${ctB:-0}/stamp" '' "$TOKEN_SUP"
+  # STAMPED 已盖章未发货 → 开票放行(状态机允许)
+  api PATCH "/portal/contracts/${ctB:-0}/invoice" '{"invoice_no":"INV-EXT-1","invoice_amount":800}' "$TOKEN_SUP"
+  expect_ok "已盖章未发货可开票(状态机放行)"
+  # 确认发货 → SHIPPING(setup)
+  api PATCH "/portal/contracts/${ctB:-0}/ship" '{"remark":"发货"}' "$TOKEN_SUP"
+  # SHIPPING 已发货 → 再盖章应400
+  api PATCH "/portal/contracts/${ctB:-0}/stamp" '' "$TOKEN_SUP"
   expect_code 400 "已发货后再盖章应400"
-  # 供应商 token 访问管理端 → deny
+  # SHIPPING 已发货 → 重复确认发货应400
+  api PATCH "/portal/contracts/${ctB:-0}/ship" '{"remark":"再发货"}' "$TOKEN_SUP"
+  expect_code 400 "已发货后重复确认发货应400"
+  # SHIPPING → 开票放行，且可重复开票(仅追加日志)
+  api PATCH "/portal/contracts/${ctB:-0}/invoice" '{"invoice_no":"INV-EXT-2"}' "$TOKEN_SUP"
+  expect_ok "已发货后开票放行"
+  api PATCH "/portal/contracts/${ctB:-0}/invoice" '{"invoice_no":"INV-EXT-2"}' "$TOKEN_SUP"
+  expect_ok "重复开票应放行(仅记录日志)"
+
+  # ── 不存在的大 id → 404 ──
+  api GET "/portal/contracts/999999999" '' "$TOKEN_SUP"
+  expect_code 404 "查看不存在合同详情应404"
+  api PATCH "/portal/contracts/999999999/stamp" '' "$TOKEN_SUP"
+  expect_code 404 "盖章不存在合同应404"
+
+  # ── 列表查询：分页与状态筛选 ──
+  api GET "/portal/contracts?page=1&size=2" '' "$TOKEN_SUP"
+  expect_ok "门户合同分页查询"
+  expect_eq size 2 "分页size回显=2"
+  api GET "/portal/contracts?portal_status=STAMPED" '' "$TOKEN_SUP"
+  expect_ok "门户按portal_status筛选查询"
+
+  # ── 权限矩阵：跨端拒绝 ──
   api GET /customers '' "$TOKEN_SUP"
-  expect_deny "供应商token访问管理端应拒绝"
+  expect_deny "供应商token访问管理端/customers应拒绝"
+  api GET /portal/contracts '' "$TOKEN_ADMIN"
+  expect_deny "管理员token访问供应商门户应拒绝"
 }
+
 
 # ── 执行所有模块（基础 + 扩展）────────────────────────────────
 group "1. 鉴权与权限基线";        test_auth;           test_auth_ext
