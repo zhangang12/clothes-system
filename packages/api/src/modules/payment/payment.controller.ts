@@ -1,6 +1,6 @@
 import {
   Controller, Get, Post, Delete, Patch, Body, Param, Query,
-  ParseIntPipe, UseGuards, Request,
+  ParseIntPipe, DefaultValuePipe, UseGuards, Request,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -30,11 +30,11 @@ export class PaymentController {
   @Get('prepayments')
   @ApiOperation({ summary: '预付款列表' })
   findPrepayments(
-    @Query('factory_id', new ParseIntPipe({ optional: true })) factoryId?: number,
-    @Query('page', new ParseIntPipe({ optional: true })) page?: number,
-    @Query('size', new ParseIntPipe({ optional: true })) size?: number,
+    @Query('factory_id') factoryId?: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
+    @Query('size', new DefaultValuePipe(20), ParseIntPipe) size: number = 20,
   ) {
-    return this.service.findPrepayments(factoryId, page, size);
+    return this.service.findPrepayments(factoryId ? Number(factoryId) : undefined, page, size);
   }
 
   @Get('prepayments/balance')
@@ -55,12 +55,12 @@ export class PaymentController {
   @Get('requests')
   @ApiOperation({ summary: '付款申请列表' })
   findPaymentRequests(
-    @Query('factory_id', new ParseIntPipe({ optional: true })) factoryId?: number,
+    @Query('factory_id') factoryId?: string,
     @Query('approval_status') approvalStatus?: PaymentApprovalStatus,
-    @Query('page', new ParseIntPipe({ optional: true })) page?: number,
-    @Query('size', new ParseIntPipe({ optional: true })) size?: number,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
+    @Query('size', new DefaultValuePipe(20), ParseIntPipe) size: number = 20,
   ) {
-    return this.service.findPaymentRequests(factoryId, approvalStatus, page, size);
+    return this.service.findPaymentRequests(factoryId ? Number(factoryId) : undefined, approvalStatus, page, size);
   }
 
   @Patch('requests/:id/submit')
