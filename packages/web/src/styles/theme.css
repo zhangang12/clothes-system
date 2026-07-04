@@ -1,0 +1,153 @@
+/* =============================================================================
+ * I9 服装制造管理系统 — 设计系统主题（对齐 UI规范.html · 服装制造业风）
+ * 靛蓝(denim) 主色 + 铁锈橙(rust) CTA + 棉麻米色背景
+ * 覆盖 element-plus 主题变量，务必在 element-plus/dist/index.css 之后引入
+ * ========================================================================== */
+
+:root {
+  /* —— 服装制造业风 配色 —— */
+  --indigo: #1E3A5F;        /* 靛蓝 主色（denim） */
+  --indigo-d: #152A45;
+  --indigo-l: #2C5180;
+  --linen: #F5EDDC;         /* 棉麻米色 浅背景 */
+  --linen-d: #E8DCC0;
+  --canvas: #FBF8F2;        /* 米白 卡片/页面背景 */
+  --rust: #D17A40;          /* 暖橙 强调/CTA */
+  --rust-d: #B86530;
+  --vermilion: #C04042;     /* 朱砂红 错误/警示 */
+  --teal: #3E8E7E;          /* 织布青 成功 */
+  --amber: #C8901E;         /* 琥珀 提示 */
+  --gray-9: #1F1F22;        /* 主文本 */
+  --gray-7: #37383C;
+  --gray-5: #6F7178;
+  --gray-3: #B5B7BD;
+  --gray-1: #E5E2DA;        /* 边框 偏米色 */
+  --gray-0: #F4F1EA;        /* 极浅背景 */
+  --font: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  --font-mono: Consolas, "Courier New", monospace;
+  --r: 4px;
+  --r-lg: 6px;
+  --shadow-sm: 0 1px 2px rgba(30, 58, 95, 0.05);
+  --shadow: 0 2px 6px rgba(30, 58, 95, 0.08);
+
+  /* —— 覆盖 element-plus 主题变量 —— */
+  --el-color-primary: #1E3A5F;
+  --el-color-primary-light-3: #2C5180;
+  --el-color-primary-light-5: #55708f;
+  --el-color-primary-light-7: #8f9fb5;
+  --el-color-primary-light-8: #c9d3df;
+  --el-color-primary-light-9: #EDF1F7;
+  --el-color-primary-dark-2: #152A45;
+
+  --el-color-success: #3E8E7E;
+  --el-color-success-light-9: #E8F4F0;
+  --el-color-warning: #C8901E;
+  --el-color-warning-light-9: #FBF1DA;
+  --el-color-danger: #C04042;
+  --el-color-danger-light-9: #FBEAEA;
+  --el-color-error: #C04042;
+  --el-color-info: #6F7178;
+
+  --el-border-radius-base: 4px;
+  --el-border-radius-small: 4px;
+  --el-font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  --el-font-size-base: 13px;
+
+  --el-text-color-primary: #1F1F22;
+  --el-text-color-regular: #37383C;
+  --el-text-color-secondary: #6F7178;
+  --el-text-color-placeholder: #B5B7BD;
+
+  --el-border-color: #E5E2DA;
+  --el-border-color-light: #E5E2DA;
+  --el-border-color-lighter: #EDEAE2;
+  --el-border-color-extra-light: #F4F1EA;
+  --el-fill-color-blank: #FFFFFF;
+  --el-fill-color-light: #F4F1EA;
+  --el-fill-color-lighter: #FBF8F2;
+  --el-bg-color: #FFFFFF;
+  --el-bg-color-page: #FBF8F2;
+  --el-box-shadow-light: 0 1px 2px rgba(30, 58, 95, 0.05);
+}
+
+/* —— 全局 —— */
+html, body, #app {
+  background: var(--canvas);
+  font-family: var(--font);
+  color: var(--gray-9);
+}
+
+/* —— 主按钮：靛蓝 —— */
+.el-button--primary {
+  --el-button-bg-color: var(--indigo);
+  --el-button-border-color: var(--indigo);
+  --el-button-hover-bg-color: var(--indigo-l);
+  --el-button-hover-border-color: var(--indigo-l);
+  --el-button-active-bg-color: var(--indigo-d);
+  --el-button-active-border-color: var(--indigo-d);
+}
+/* —— CTA 暖橙：下推 / 导入等强调操作，页面用 type="warning" 或 class="btn-cta" —— */
+.el-button--warning,
+.el-button.btn-cta {
+  --el-button-bg-color: var(--rust);
+  --el-button-border-color: var(--rust);
+  --el-button-text-color: #fff;
+  --el-button-hover-bg-color: var(--rust-d);
+  --el-button-hover-border-color: var(--rust-d);
+  --el-button-hover-text-color: #fff;
+  color: #fff;
+}
+.el-button { border-radius: var(--r); font-weight: 500; }
+
+/* —— 卡片：米边 + 柔和阴影 —— */
+.el-card {
+  --el-card-border-color: var(--gray-1);
+  --el-card-border-radius: var(--r-lg);
+  border-color: var(--gray-1);
+  box-shadow: var(--shadow-sm) !important;
+}
+
+/* —— 表格：米色边框 + 米底表头 —— */
+.el-table {
+  --el-table-border-color: var(--gray-1);
+  --el-table-header-bg-color: var(--gray-0);
+  --el-table-header-text-color: var(--gray-7);
+  --el-table-row-hover-bg-color: #FBF8F2;
+  font-size: 13px;
+}
+.el-table th.el-table__cell { font-weight: 600; }
+
+/* —— 状态徽章：圆角胶囊 —— */
+.el-tag { border-radius: 10px; font-weight: 500; }
+.el-tag.el-tag--primary { --el-tag-bg-color: #EDF1F7; --el-tag-border-color: #D5DDE8; --el-tag-text-color: var(--indigo); }
+.el-tag.el-tag--success { --el-tag-bg-color: #E8F4F0; --el-tag-border-color: #C8E2D9; --el-tag-text-color: var(--teal); }
+.el-tag.el-tag--warning { --el-tag-bg-color: #FBF1DA; --el-tag-border-color: #EDD8A8; --el-tag-text-color: var(--amber); }
+.el-tag.el-tag--danger  { --el-tag-bg-color: #FBEAEA; --el-tag-border-color: #E8C7C7; --el-tag-text-color: var(--vermilion); }
+.el-tag.el-tag--info    { --el-tag-bg-color: #FBE8DD; --el-tag-border-color: #EDD2BC; --el-tag-text-color: var(--rust); }
+
+/* —— 输入 / 选择：4px 圆角 —— */
+.el-input__wrapper, .el-textarea__inner, .el-select__wrapper { border-radius: var(--r); }
+
+/* —— 侧边菜单：靛蓝底 —— */
+.el-menu {
+  --el-menu-bg-color: var(--indigo);
+  --el-menu-text-color: #C9D3DF;
+  --el-menu-hover-bg-color: var(--indigo-d);
+  --el-menu-active-color: #fff;
+  --el-menu-hover-text-color: #fff;
+  border-right: none;
+}
+.el-menu-item.is-active {
+  background: var(--indigo-d) !important;
+  color: #fff !important;
+  border-left: 3px solid var(--rust);
+}
+
+/* —— 分页 / 对话框标题 —— */
+.el-dialog__title { color: var(--indigo); font-weight: 600; }
+.el-page-header__title { color: var(--indigo); }
+
+/* —— 滚动条 —— */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--gray-3); border-radius: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
