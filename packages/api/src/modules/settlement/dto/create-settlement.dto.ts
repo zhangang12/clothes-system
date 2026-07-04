@@ -1,4 +1,4 @@
-import { IsInt, IsPositive, IsNumber, IsOptional, IsString, IsArray, ValidateNested, IsIn } from 'class-validator';
+import { IsInt, IsPositive, IsNumber, IsOptional, IsString, IsArray, ValidateNested, IsIn, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -39,4 +39,16 @@ export class CreateSettlementDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @ApiPropertyOptional({ description: '汇率快照（外币结算时填写，缺省按1处理）' })
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  exchange_rate?: number;
+
+  @ApiPropertyOptional({ description: '退税金额（含税面料采购额×(退税率-增值税率差)，由财务按当期税率核算后填入）', default: 0 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  tax_refund?: number;
 }

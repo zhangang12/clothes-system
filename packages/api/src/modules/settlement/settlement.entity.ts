@@ -12,6 +12,15 @@ export class Settlement {
   @Column()
   order_id: number;
 
+  @Column({ type: 'int', default: 0 })
+  shipped_qty: number;
+
+  @Column({ length: 5, default: 'CNY' })
+  currency: string;
+
+  @Column({ type: 'decimal', precision: 10, scale: 4, nullable: true })
+  exchange_rate?: number;
+
   @Column({ type: 'enum', enum: SettlementStatus, default: SettlementStatus.DRAFT })
   status: SettlementStatus;
 
@@ -20,6 +29,18 @@ export class Settlement {
 
   @Column({ type: 'decimal', precision: 15, scale: 4, default: 0 })
   total_cost: number;
+
+  @Column({ type: 'decimal', precision: 15, scale: 4, nullable: true })
+  cost_per_unit?: number;
+
+  @Column({ type: 'decimal', precision: 15, scale: 4, default: 0 })
+  gross_profit: number;
+
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
+  gross_margin?: number;
+
+  @Column({ type: 'decimal', precision: 15, scale: 4, default: 0 })
+  tax_refund: number;
 
   @Column({ type: 'decimal', precision: 15, scale: 4, default: 0 })
   net_profit: number;

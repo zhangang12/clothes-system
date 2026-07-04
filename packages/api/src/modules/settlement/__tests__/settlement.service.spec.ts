@@ -6,6 +6,8 @@ import { SettlementService } from '../settlement.service';
 import { Settlement } from '../settlement.entity';
 import { SettlementCost } from '../settlement-cost.entity';
 import { SettlementReceipt } from '../settlement-receipt.entity';
+import { OrderMain } from '../../order/order-main.entity';
+import { OrderShipment } from '../../order/order-shipment.entity';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
 import { SettlementStatus } from '@i9/types';
 
@@ -45,6 +47,12 @@ const mockReceiptRepo = {
   save: jest.fn().mockImplementation((v) => Promise.resolve(v)),
   find: jest.fn().mockResolvedValue([]),
 };
+const mockOrderRepo = {
+  findOne: jest.fn().mockResolvedValue({ id: 10, currency: 'USD', deleted: 0 }),
+};
+const mockShipmentRepo = {
+  find: jest.fn().mockResolvedValue([]),
+};
 const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn().mockResolvedValue(1) };
 const mockDataSource = {
   transaction: jest.fn().mockImplementation((cb) => cb(makeManager())),
@@ -56,12 +64,16 @@ describe('SettlementService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     mockDataSource.transaction.mockImplementation((cb) => cb(makeManager()));
+    mockOrderRepo.findOne.mockResolvedValue({ id: 10, currency: 'USD', deleted: 0 });
+    mockShipmentRepo.find.mockResolvedValue([]);
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SettlementService,
         { provide: getRepositoryToken(Settlement), useValue: mockRepo },
         { provide: getRepositoryToken(SettlementCost), useValue: mockCostRepo },
         { provide: getRepositoryToken(SettlementReceipt), useValue: mockReceiptRepo },
+        { provide: getRepositoryToken(OrderMain), useValue: mockOrderRepo },
+        { provide: getRepositoryToken(OrderShipment), useValue: mockShipmentRepo },
         { provide: NumberingService, useValue: new NumberingService(mockRedis as any) },
         { provide: DataSource, useValue: mockDataSource },
         { provide: REDIS_CLIENT, useValue: mockRedis },
@@ -97,6 +109,45 @@ describe('SettlementService', () => {
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.create(dto as any, 1);
     expect(manager.save.mock.calls[0][1]).toMatchObject({ total_cost: 0, net_profit: 5000 });
+  });
+
+  // UT-SLT-11: create throws NotFoundException when order does not exist
+  it('UT-SLT-11 create throws NotFoundException for missing order', async () => {
+    mockOrderRepo.findOne.mockResolvedValueOnce(null);
+    await expect(service.create({ order_id: 999, revenue: 1000 } as any, 1)).rejects.toThrow(NotFoundException);
+  });
+
+  // UT-SLT-12: create inherits currency from order and sums shipped_qty from shipments
+  it('UT-SLT-12 create inherits order currency and sums shipped_qty from order_shipment', async () => {
+    mockOrderRepo.findOne.mockResolvedValueOnce({ id: 10, currency: 'USD', deleted: 0 });
+    mockShipmentRepo.find.mockResolvedValueOnce([{ qty: 300 }, { qty: 200 }]);
+    const dto = { order_id: 10, revenue: 10000, costs: [{ cost_name: '面料费', amount: 5000 }] };
+    const manager = makeManager();
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await service.create(dto as any, 1);
+    expect(manager.save.mock.calls[0][1]).toMatchObject({
+      currency: 'USD',
+      shipped_qty: 500,
+      cost_per_unit: 10, // 5000/500
+      gross_profit: 5000, // 10000-5000
+      gross_margin: 50, // 5000/10000*100
+    });
+  });
+
+  // UT-SLT-13: create includes tax_refund in net_profit but not net_profit_ex_refund
+  it('UT-SLT-13 create adds tax_refund into net_profit (含退税) but excludes from net_profit_ex_refund', async () => {
+    const dto = {
+      order_id: 10, revenue: 10000, tax_refund: 800,
+      costs: [{ cost_name: '面料费', amount: 6000 }],
+    };
+    const manager = makeManager();
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await service.create(dto as any, 1);
+    expect(manager.save.mock.calls[0][1]).toMatchObject({
+      tax_refund: 800,
+      net_profit: 4800, // (10000-6000)+800
+      net_profit_ex_refund: 4000, // 10000-6000
+    });
   });
 
   // UT-SLT-03: confirm transitions DRAFT → CONFIRMED

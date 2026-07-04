@@ -5,11 +5,22 @@ import { SettlementStatus } from '@i9/types';
 import { Settlement } from './settlement.entity';
 import { SettlementCost } from './settlement-cost.entity';
 import { SettlementReceipt } from './settlement-receipt.entity';
+import { OrderMain } from '../order/order-main.entity';
+import { OrderShipment } from '../order/order-shipment.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { CreateSettlementDto } from './dto/create-settlement.dto';
 import { AddCostDto } from './dto/add-cost.dto';
 import { AddReceiptDto } from './dto/add-receipt.dto';
 import { QuerySettlementDto } from './dto/query-settlement.dto';
+
+// 结算成本单价/毛利/毛利率计算（系统开发手册·核心业务规则）
+function calcDerived(revenue: number, totalCost: number, shippedQty: number, taxRefund: number) {
+  const grossProfit = +(revenue - totalCost).toFixed(4);
+  const grossMargin = revenue > 0 ? +((grossProfit / revenue) * 100).toFixed(2) : undefined;
+  const costPerUnit = shippedQty > 0 ? +(totalCost / shippedQty).toFixed(4) : undefined;
+  const netProfit = +(grossProfit + taxRefund).toFixed(4);
+  return { grossProfit, grossMargin, costPerUnit, netProfit, netProfitExRefund: grossProfit };
+}
 
 @Injectable()
 export class SettlementService {
@@ -17,6 +28,8 @@ export class SettlementService {
     @InjectRepository(Settlement) private readonly repo: Repository<Settlement>,
     @InjectRepository(SettlementCost) private readonly costRepo: Repository<SettlementCost>,
     @InjectRepository(SettlementReceipt) private readonly receiptRepo: Repository<SettlementReceipt>,
+    @InjectRepository(OrderMain) private readonly orderRepo: Repository<OrderMain>,
+    @InjectRepository(OrderShipment) private readonly shipmentRepo: Repository<OrderShipment>,
     private readonly numbering: NumberingService,
     private readonly dataSource: DataSource,
   ) {}
@@ -24,21 +37,35 @@ export class SettlementService {
   async create(dto: CreateSettlementDto, createdBy: number): Promise<Settlement> {
     const settlement_no = await this.numbering.next(NUM_PREFIX.SETTLEMENT);
 
+    const order = await this.orderRepo.findOne({ where: { id: dto.order_id, deleted: 0 } });
+    if (!order) throw new NotFoundException(`订单 #${dto.order_id} 不存在`);
+
+    const shipments = await this.shipmentRepo.find({ where: { order_id: dto.order_id } });
+    const shippedQty = shipments.reduce((sum, s) => sum + s.qty, 0);
+
     return this.dataSource.transaction(async (manager) => {
       const costs = dto.costs ?? [];
       const totalCost = costs.reduce((sum, c) => sum + c.amount, 0);
-      const netProfit = +(dto.revenue - totalCost).toFixed(4);
+      const taxRefund = dto.tax_refund ?? 0;
+      const derived = calcDerived(dto.revenue, totalCost, shippedQty, taxRefund);
 
       const settlement = await manager.save(
         Settlement,
         manager.create(Settlement, {
           settlement_no,
           order_id: dto.order_id,
+          shipped_qty: shippedQty,
+          currency: order.currency ?? 'CNY',
+          exchange_rate: dto.exchange_rate,
           status: SettlementStatus.DRAFT,
           revenue: +dto.revenue.toFixed(4),
           total_cost: +totalCost.toFixed(4),
-          net_profit: netProfit,
-          net_profit_ex_refund: netProfit,
+          cost_per_unit: derived.costPerUnit,
+          gross_profit: derived.grossProfit,
+          gross_margin: derived.grossMargin,
+          tax_refund: +taxRefund.toFixed(4),
+          net_profit: derived.netProfit,
+          net_profit_ex_refund: derived.netProfitExRefund,
           description: dto.description ?? null,
           created_by: createdBy,
           deleted: 0,
@@ -112,10 +139,13 @@ export class SettlementService {
 
       const costs = await manager.find(SettlementCost, { where: { settlement_id: id } });
       const totalCost = costs.reduce((sum, c) => sum + +c.amount, 0);
-      const netProfit = +(+settlement.revenue - totalCost).toFixed(4);
+      const derived = calcDerived(+settlement.revenue, totalCost, settlement.shipped_qty ?? 0, +(settlement.tax_refund ?? 0));
       settlement.total_cost = +totalCost.toFixed(4);
-      settlement.net_profit = netProfit;
-      settlement.net_profit_ex_refund = netProfit;
+      settlement.cost_per_unit = derived.costPerUnit;
+      settlement.gross_profit = derived.grossProfit;
+      settlement.gross_margin = derived.grossMargin;
+      settlement.net_profit = derived.netProfit;
+      settlement.net_profit_ex_refund = derived.netProfitExRefund;
       return manager.save(Settlement, settlement);
     });
   }
