@@ -6,6 +6,7 @@ import { Repository, FindOptionsWhere, Like, DataSource } from 'typeorm';
 import { Contract, ContractStatus } from './contract.entity';
 import { ContractMaterial } from './contract-material.entity';
 import { ContractPortalLog, PortalOperatorType } from './contract-portal-log.entity';
+import { OrderMaterial } from '../order/order-material.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { ContractPortalStatus, ContractType } from '@i9/types';
 
@@ -24,6 +25,7 @@ export class ContractService {
     @InjectRepository(Contract) private readonly repo: Repository<Contract>,
     @InjectRepository(ContractMaterial) private readonly materialRepo: Repository<ContractMaterial>,
     @InjectRepository(ContractPortalLog) private readonly logRepo: Repository<ContractPortalLog>,
+    @InjectRepository(OrderMaterial) private readonly orderMaterialRepo: Repository<OrderMaterial>,
     private readonly numbering: NumberingService,
     private readonly dataSource: DataSource,
   ) {}
@@ -41,8 +43,29 @@ export class ContractService {
       );
     }
 
+    // 快照机制（系统开发手册）：报价→合同时锁定费用明细/单价。材料合同若未手工提供
+    // materials，自动从该订单已核算的用料清单（quote_item→order_material 链路，
+    // total_purchase/unit_price 已按报价损耗率算好）带出，避免业务员凭空重新誊抄。
+    let materialInputs = dto.materials ?? [];
+    if (materialInputs.length === 0 && dto.type === ContractType.MATERIAL) {
+      const orderMaterials = await this.orderMaterialRepo.find({
+        where: { order_id: dto.order_id },
+        order: { sort_order: 'ASC' },
+      });
+      materialInputs = orderMaterials.map((om) => ({
+        item_name: om.item_name,
+        unit: om.unit,
+        unit_price: +om.unit_price || 0,
+        qty: +om.total_purchase || 0,
+        sort_order: om.sort_order,
+      }));
+    }
+    if (materialInputs.length === 0) {
+      throw new BadRequestException('材料明细不能为空（该订单无可带出的用料核算记录，请手动填写 materials）');
+    }
+
     return this.dataSource.transaction(async (manager) => {
-      const totalAmount = dto.materials.reduce((sum, m) => sum + m.unit_price * m.qty, 0);
+      const totalAmount = materialInputs.reduce((sum, m) => sum + m.unit_price * m.qty, 0);
 
       const contract = await manager.save(Contract, manager.create(Contract, {
         contract_no,
@@ -63,7 +86,7 @@ export class ContractService {
         status: ContractStatus.ACTIVE,
       }));
 
-      const materials = dto.materials.map((m, idx) => manager.create(ContractMaterial, {
+      const materials = materialInputs.map((m, idx) => manager.create(ContractMaterial, {
         contract_id: contract.id,
         sort_order: m.sort_order ?? idx,
         item_name: m.item_name,

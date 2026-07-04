@@ -6,8 +6,9 @@ import { ContractService } from '../contract.service';
 import { Contract, ContractStatus } from '../contract.entity';
 import { ContractMaterial } from '../contract-material.entity';
 import { ContractPortalLog, PortalOperatorType } from '../contract-portal-log.entity';
+import { OrderMaterial } from '../../order/order-material.entity';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
-import { ContractPortalStatus } from '@i9/types';
+import { ContractPortalStatus, ContractType } from '@i9/types';
 
 const makeContract = (overrides = {}): any => ({
   id: 1,
@@ -39,6 +40,9 @@ const mockLogRepo = {
   save: jest.fn().mockResolvedValue({}),
   find: jest.fn().mockResolvedValue([]),
 };
+const mockOrderMaterialRepo = {
+  find: jest.fn().mockResolvedValue([]),
+};
 const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn().mockResolvedValue(1), expire: jest.fn() };
 const mockDataSource = {
   transaction: jest.fn().mockImplementation((cb) => cb({
@@ -52,12 +56,14 @@ describe('ContractService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockOrderMaterialRepo.find.mockResolvedValue([]);
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ContractService,
         { provide: getRepositoryToken(Contract), useValue: mockRepo },
         { provide: getRepositoryToken(ContractMaterial), useValue: mockMaterialRepo },
         { provide: getRepositoryToken(ContractPortalLog), useValue: mockLogRepo },
+        { provide: getRepositoryToken(OrderMaterial), useValue: mockOrderMaterialRepo },
         { provide: NumberingService, useValue: new NumberingService(mockRedis as any) },
         { provide: DataSource, useValue: mockDataSource },
         { provide: REDIS_CLIENT, useValue: mockRedis },
@@ -99,6 +105,41 @@ describe('ContractService', () => {
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.create(dto as any, 1);
     expect(manager.save.mock.calls[0][1]).toMatchObject({ portal_status: ContractPortalStatus.DRAFT });
+  });
+
+  // UT-CON-12: create auto-derives materials from order_material when none provided (MATERIAL type)
+  it('UT-CON-12 create auto-derives materials from order_material when dto.materials is empty (快照联动)', async () => {
+    mockOrderMaterialRepo.find.mockResolvedValueOnce([
+      { item_name: '面料A', unit: 'M', unit_price: 8, total_purchase: 150, sort_order: 0 },
+      { item_name: '面料B', unit: 'M', unit_price: 5, total_purchase: 100, sort_order: 1 },
+    ]);
+    const dto = { type: ContractType.MATERIAL, factory_id: 5, order_id: 10 };
+    const manager = {
+      create: jest.fn().mockImplementation((_, v) => v),
+      save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
+    };
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await service.create(dto as any, 1);
+    expect(mockOrderMaterialRepo.find).toHaveBeenCalledWith(expect.objectContaining({ where: { order_id: 10 } }));
+    // total = 8*150 + 5*100 = 1200 + 500 = 1700
+    expect(manager.save.mock.calls[0][1]).toMatchObject({ total_amount: 1700 });
+    const materialSaveCall = manager.save.mock.calls.find((c: any[]) => Array.isArray(c[1]));
+    expect(materialSaveCall[1]).toHaveLength(2);
+    expect(materialSaveCall[1][0]).toMatchObject({ item_name: '面料A', unit_price: 8, qty: 150 });
+  });
+
+  // UT-CON-13: create throws when no materials provided and no order_material to derive from
+  it('UT-CON-13 create throws BadRequest when materials empty and order has no order_material records', async () => {
+    mockOrderMaterialRepo.find.mockResolvedValueOnce([]);
+    const dto = { type: ContractType.MATERIAL, factory_id: 5, order_id: 10 };
+    await expect(service.create(dto as any, 1)).rejects.toThrow(BadRequestException);
+  });
+
+  // UT-CON-14: create still honors explicitly-provided materials for PROCESS type (no auto-derive)
+  it('UT-CON-14 create does not auto-derive for PROCESS type; requires explicit materials', async () => {
+    const dto = { type: ContractType.PROCESS, factory_id: 5, order_id: 10 };
+    await expect(service.create(dto as any, 1)).rejects.toThrow(BadRequestException);
+    expect(mockOrderMaterialRepo.find).not.toHaveBeenCalled();
   });
 
   // UT-CON-03: push transitions DRAFT → PUSHED and logs action

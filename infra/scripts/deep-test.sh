@@ -274,10 +274,17 @@ test_order() {
 }
 
 test_contract() {
-  local cid fid oid ctid
+  local cid fid oid ctid oidBare
   cid=$(fx_customer); fid=$(fx_factory); oid=$(fx_order_producing "$cid")
+  # 快照联动（Phase 3）：材料合同不传 materials 时，自动从订单已核算的用料清单带出
   api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${fid:-0},\"order_id\":${oid:-0}}"
-  expect_code 400 "合同缺materials应400"
+  expect_ok "不传materials时自动从order_material带出(快照联动)"
+  expect_num data.total_amount 12631.2 "自动带出总额=单价8×含损采购量1578.9"
+  # 真正无可带出记录时才报错：手工建一个不含 materials 的裸订单
+  api POST /orders "{\"customer_id\":${cid:-0},\"qty_total\":100,\"unit_price\":5}"
+  oidBare=$(echo "$RESP" | jval data.id)
+  api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${fid:-0},\"order_id\":${oidBare:-0}}"
+  expect_code 400 "无materials且订单无用料核算记录应400"
   api POST /contracts "{\"type\":\"BADTYPE\",\"factory_id\":${fid:-0},\"order_id\":${oid:-0},\"materials\":[{\"item_name\":\"x\",\"unit_price\":1,\"qty\":1}]}"
   expect_code 400 "合同非法type应400"
   api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${fid:-0},\"order_id\":${oid:-0},\"deposit_ratio\":150,\"materials\":[{\"item_name\":\"x\",\"unit_price\":1,\"qty\":1}]}"
@@ -874,10 +881,13 @@ test_contract_ext() {
   no=$(echo "$RESP" | jval data.contract_no)
   expect_num data.materials.0.amount 1000 "首条材料金额=10*100"
 
-  # —— 空材料数组：可建且合计为0 ——
+  # —— 空材料数组：PROCESS类型不做快照自动带出，无明细应拒绝(Phase 3新规则，没有材料明细的合同没有业务意义) ——
+  api POST /contracts "{\"type\":\"PROCESS\",\"factory_id\":${fid:-0},\"order_id\":${oid:-0},\"materials\":[]}"
+  expect_code 400 "PROCESS类型空材料数组应400(不支持自动带出)"
+  # —— MATERIAL类型空数组会触发快照自动带出，非空(该订单有order_material) ——
   api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${fid:-0},\"order_id\":${oid:-0},\"materials\":[]}"
-  expect_ok "空材料数组可创建合同"
-  expect_num data.total_amount 0 "空材料合同合计=0"
+  expect_ok "MATERIAL类型空数组触发自动带出应2xx"
+  if [[ "$(echo "$RESP" | jval data.total_amount)" != "0" ]]; then ok "自动带出后合计非0(来自order_material)"; else bad "自动带出后合计不应为0"; fi
 
   # —— 列表分页 & keyword 筛选 & 大id 404 ——
   api GET "/contracts?page=1&size=2"

@@ -5,9 +5,10 @@ import { ContractService } from './contract.service';
 import { Contract } from './contract.entity';
 import { ContractMaterial } from './contract-material.entity';
 import { ContractPortalLog } from './contract-portal-log.entity';
+import { OrderMaterial } from '../order/order-material.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Contract, ContractMaterial, ContractPortalLog])],
+  imports: [TypeOrmModule.forFeature([Contract, ContractMaterial, ContractPortalLog, OrderMaterial])],
   controllers: [ContractController],
   providers: [ContractService],
   exports: [ContractService],

@@ -114,9 +114,13 @@ export class CreateContractDto {
   @IsString()
   remark?: string;
 
-  @ApiProperty({ type: [CreateContractMaterialDto] })
+  @ApiPropertyOptional({
+    type: [CreateContractMaterialDto],
+    description: '材料明细；不传时按合同类型自动从关联订单的用料核算(材料合同)或报价费用项(加工合同)带出',
+  })
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateContractMaterialDto)
-  materials: CreateContractMaterialDto[];
+  materials?: CreateContractMaterialDto[];
 }
