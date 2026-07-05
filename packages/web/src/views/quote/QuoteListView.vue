@@ -53,10 +53,11 @@
           </template>
         </el-table-column>
         <el-table-column prop="salesperson" label="业务员" width="90"><template #default="{ row }">{{ row.salesperson || '-' }}</template></el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="230" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
             <el-button link size="small" @click="copyRow(row)">复制</el-button>
+            <el-button link size="small" :icon="Printer" @click="printRow(row)">打印/PDF</el-button>
             <el-button v-if="row.approval_status === 'PENDING' && canReview" link type="success" size="small" @click="doApprove(row)">审批</el-button>
           </template>
         </el-table-column>
@@ -76,7 +77,8 @@
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { Search, Plus, Download, Delete, CopyDocument, ArrowDown } from '@element-plus/icons-vue';
+import { Search, Plus, Download, Delete, CopyDocument, ArrowDown, Printer } from '@element-plus/icons-vue';
+import { printQuote } from '@/utils/quotePrint';
 import { quoteApi } from '@/api/quote';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole, QUOTE_STATUS_LABEL } from '@i9/types';
@@ -116,6 +118,12 @@ async function copyRow(row: any) {
 async function doApprove(row: any) {
   try { await quoteApi.approve(row.id); ElMessage.success('已审批，报价可发出'); load(); }
   catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '审批失败'); }
+}
+async function printRow(row: any) {
+  try {
+    const res: any = await quoteApi.get(row.id);
+    printQuote(res.data ?? res);
+  } catch (e: any) { ElMessage.error(e?.message ?? e?.response?.data?.message ?? '打印失败'); }
 }
 function copyOne() { copyRow(selected.value[0]); }
 async function batchRemove() {

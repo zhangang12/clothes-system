@@ -34,6 +34,7 @@
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="viewDetail(row)">详情</el-button>
+            <el-button link size="small" @click="printRow(row)">打印/PDF</el-button>
             <el-button v-if="row.approval_status === 'PENDING' && canReview" link type="success" size="small" @click="doApprove(row)">审批</el-button>
             <el-button v-if="row.portal_status === 'DRAFT' && canEdit" link type="warning" size="small" @click="doPush(row)">推送门户</el-button>
             <el-popconfirm v-if="row.portal_status === 'DRAFT' && isAdmin" title="确认删除？" @confirm="remove(row.id)">
@@ -146,6 +147,7 @@ import { Search, Plus, Download } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { contractApi } from '@/api/contract';
 import { factoryApi } from '@/api/factory';
+import { printContract } from '@/utils/contractPrint';
 import { orderApi } from '@/api/order';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole } from '@i9/types';
@@ -203,6 +205,15 @@ async function viewDetail(row: any) {
 async function doApprove(row: any) {
   try { await contractApi.approve(row.id); ElMessage.success('已审批，合同可推送'); load(); }
   catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '审批失败'); }
+}
+async function printRow(row: any) {
+  try {
+    if (!factories.value.length) await loadRefs();
+    const res: any = await contractApi.get(row.id);
+    const detail = res.data ?? res;
+    const fname = factories.value.find((f: any) => f.id === detail.factory_id)?.name;
+    printContract(detail, fname);
+  } catch (e: any) { ElMessage.error(e?.message ?? e?.response?.data?.message ?? '打印失败'); }
 }
 async function doPush(row: any) {
   try { await contractApi.push(row.id); ElMessage.success('已推送至供应商门户'); load(); }
