@@ -87,11 +87,17 @@ fi
 log "结构校验通过 ✓（关键表/列均已就位）"
 
 # ── ④ 重启 API 清理失败连接状态 ───────────────────────────────
-if systemctl list-unit-files 2>/dev/null | grep -q "^${SERVICE}"; then
-  log "重启 API 服务..."
+# 说明：结构补齐后 TypeORM 下一次查询即恢复，重启并非必需——仅为清空可能缓存的失败连接。
+# 用 `systemctl cat` 判定单元是否存在（比 grep list-unit-files 稳健，不受名称格式影响）。
+if systemctl cat "${SERVICE}.service" &>/dev/null; then
+  log "重启 API 服务 ($SERVICE)..."
   systemctl restart "$SERVICE" || warn "重启 $SERVICE 失败，请手动 systemctl restart $SERVICE"
+elif command -v pm2 &>/dev/null && pm2 list 2>/dev/null | grep -q "$SERVICE"; then
+  log "检测到 pm2 托管，重启 API ($SERVICE)..."
+  pm2 restart "$SERVICE" || warn "pm2 restart $SERVICE 失败，请手动重启"
 else
-  warn "未找到 systemd 服务 $SERVICE，跳过重启（请自行重启 API 进程）"
+  warn "未找到 systemd 单元 ${SERVICE}.service（可能手动/其他方式启动）。"
+  warn "结构升级不依赖重启（TypeORM 下次查询即恢复）；若用其他进程管理，请自行重启 API 以清空连接池。"
 fi
 
 # ── ⑤ 健康检查 ────────────────────────────────────────────────

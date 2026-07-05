@@ -39,7 +39,9 @@ else
 fi
 
 # ── API ───────────────────────────────────────────────────────
-API_STATUS=$(curl -sf -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/api/v1 2>/dev/null || echo "000")
+# 不用 -f：/api/v1 无根路由，正常返回 404，恰好证明服务在路由（-f 会让 curl 非零退出，
+# 触发 || echo 000 拼成 "404000"）。接受 2xx/3xx/4xx 视为存活。
+API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/api/v1 2>/dev/null || echo "000")
 if [[ "$API_STATUS" =~ ^[234] ]]; then
   check "api" $OK "HTTP $API_STATUS"
 else
@@ -54,11 +56,20 @@ else
 fi
 
 # ── Redis ─────────────────────────────────────────────────────
+# 区分「容器没起」/「密码不一致」/「无响应」，给出可执行的原因而非笼统 no PONG
 source <(grep -E '^REDIS_PASSWORD=' "$ENV_FILE" 2>/dev/null || echo "REDIS_PASSWORD=")
-if docker exec i9_redis redis-cli -a "${REDIS_PASSWORD:-}" ping 2>/dev/null | grep -q PONG; then
-  check "redis" $OK "PONG"
+if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^i9_redis$'; then
+  check "redis" $FAIL "容器未运行（docker compose up -d 起 redis）"; overall=$FAIL
 else
-  check "redis" $FAIL "no PONG"; overall=$FAIL
+  # --no-auth-warning 抑制 -a 的告警；PONG 走 stdout
+  RPING=$(docker exec i9_redis redis-cli -a "${REDIS_PASSWORD:-}" --no-auth-warning ping 2>/dev/null || true)
+  if [[ "$RPING" == "PONG" ]]; then
+    check "redis" $OK "PONG"
+  elif [[ "$RPING" == *WRONGPASS* || "$RPING" == *NOAUTH* ]]; then
+    check "redis" $FAIL "认证失败：.env.production 的 REDIS_PASSWORD 与运行中的容器不一致"; overall=$FAIL
+  else
+    check "redis" $FAIL "无响应（${RPING:-空}）"; overall=$FAIL
+  fi
 fi
 
 # ── 磁盘 ──────────────────────────────────────────────────────
