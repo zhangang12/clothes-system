@@ -8,6 +8,7 @@ import { ContractMaterial } from './contract-material.entity';
 import { ContractPortalLog, PortalOperatorType } from './contract-portal-log.entity';
 import { OrderMaterial } from '../order/order-material.entity';
 import { OrderMain } from '../order/order-main.entity';
+import { SupplierAccount } from '../auth/supplier-account.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { ContractPortalStatus, ContractType, OrderStatus } from '@i9/types';
 
@@ -27,6 +28,7 @@ export class ContractService {
     @InjectRepository(ContractMaterial) private readonly materialRepo: Repository<ContractMaterial>,
     @InjectRepository(ContractPortalLog) private readonly logRepo: Repository<ContractPortalLog>,
     @InjectRepository(OrderMaterial) private readonly orderMaterialRepo: Repository<OrderMaterial>,
+    @InjectRepository(SupplierAccount) private readonly supplierRepo: Repository<SupplierAccount>,
     private readonly numbering: NumberingService,
     private readonly dataSource: DataSource,
   ) {}
@@ -161,6 +163,11 @@ export class ContractService {
     if (!contract) throw new NotFoundException(`合同 #${id} 不存在`);
     if (contract.portal_status !== ContractPortalStatus.DRAFT) {
       throw new BadRequestException('只有草稿状态才可推送');
+    }
+    // 推送前校验工厂已绑定门户账号，避免推送后无人能登录处理（设计稿 A5：静默死流程）
+    const account = await this.supplierRepo.findOne({ where: { factory_id: contract.factory_id, status: 1 } });
+    if (!account) {
+      throw new BadRequestException('该工厂尚未开通供应商门户账号，请先在工厂档案开通后再推送');
     }
     contract.portal_status = ContractPortalStatus.PUSHED;
     contract.pushed_at = new Date();

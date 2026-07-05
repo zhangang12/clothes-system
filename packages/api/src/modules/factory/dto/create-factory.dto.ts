@@ -58,6 +58,12 @@ export class CreateFactoryDto {
   @ApiPropertyOptional() @IsOptional() @IsString() qualityCerts?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() remark?: string;
 
+  // 供应商门户账号（可选：填写则建档时开通门户登录账号，用于接收合同推送）
+  @ApiPropertyOptional({ description: '门户登录账号（开通后供应商可登录 H5 处理合同）' })
+  @IsOptional() @IsString() @MaxLength(50) portalAccount?: string;
+  @ApiPropertyOptional({ description: '门户登录初始密码' })
+  @IsOptional() @IsString() @MaxLength(50) portalPassword?: string;
+
   @ApiPropertyOptional({ type: [FactoryContactDto] })
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => FactoryContactDto)
   contacts?: FactoryContactDto[];

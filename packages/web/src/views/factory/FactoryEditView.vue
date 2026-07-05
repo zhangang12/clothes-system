@@ -156,6 +156,14 @@
           <el-col :span="24"><el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item></el-col>
         </el-row>
       </section-block>
+
+      <section-block v-if="!editId" title="6. 供应商门户账号（可选·新建时开通）" badge="接收合同推送">
+        <el-row :gutter="16">
+          <el-col :span="8"><el-form-item label="门户账号"><el-input v-model="form.portalAccount" placeholder="开通后供应商可登录 H5 处理合同" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="初始密码"><el-input v-model="form.portalPassword" placeholder="供应商首次登录密码" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label=" "><span style="color:#999;font-size:12px">未开通账号的工厂，合同无法推送门户</span></el-form-item></el-col>
+        </el-row>
+      </section-block>
     </el-form>
   </div>
 </template>
@@ -199,6 +207,7 @@ const form = reactive<any>({
   bankName2: '', bankAccount2: '', taxNo2: '', invoicePhone2: '', invoiceAddress2: '',
   legalRep: '', registeredCapital: '', establishedDate: '', annualSales: '',
   representativeCustomers: '', qualityCerts: '', remark: '',
+  portalAccount: '', portalPassword: '',
   contacts: [emptyContact()],
 });
 
@@ -263,6 +272,9 @@ function buildDto() {
     establishedDate: form.establishedDate || undefined, annualSales: num(form.annualSales),
     representativeCustomers: form.representativeCustomers || undefined,
     qualityCerts: form.qualityCerts || undefined, remark: form.remark || undefined,
+    // 门户账号仅新建时开通（编辑不重置）
+    portalAccount: !editId.value ? (form.portalAccount || undefined) : undefined,
+    portalPassword: !editId.value ? (form.portalPassword || undefined) : undefined,
     contacts: form.contacts.filter((c: any) => c.name || c.mobile || c.phone),
   };
 }

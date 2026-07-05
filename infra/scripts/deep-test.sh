@@ -76,7 +76,7 @@ TOKEN_SUP=$(echo "$RESP" | jval data.access_token)
 
 # ── fixtures（用 admin 建前置数据，返回新 id 到 stdout）───────
 fx_customer() { api POST /customers "{\"name\":\"C_${SFX}_${RANDOM}\",\"type\":\"MIDDLEMAN\",\"grade\":\"A\",\"currency\":\"USD\",\"contacts\":[{\"name\":\"张三\",\"mobile\":\"13900000000\"}]}"; echo "$RESP" | jval data.id; }
-fx_factory()  { api POST /factories "{\"name\":\"F_${SFX}_${RANDOM}\",\"type\":\"FABRIC\",\"contacts\":[{\"name\":\"张三\",\"mobile\":\"13900000000\"}]}"; echo "$RESP" | jval data.id; }
+fx_factory()  { api POST /factories "{\"name\":\"F_${SFX}_${RANDOM}\",\"type\":\"FABRIC\",\"portalAccount\":\"sup_${SFX}_${RANDOM}\",\"portalPassword\":\"Sup@123\",\"contacts\":[{\"name\":\"张三\",\"mobile\":\"13900000000\"}]}"; echo "$RESP" | jval data.id; }
 fx_sample()   { api POST /samples "{\"middlemanId\":$1,\"styleNo\":\"S_$SFX\",\"materials\":[{\"itemName\":\"面料\",\"part\":\"主面料\"}]}"; echo "$RESP" | jval data.id; }
 fx_quote()    { api POST /quotes "{\"middlemanId\":$1,\"styleNo\":\"K_$SFX\",\"currency\":\"USD\",\"exchangeRate\":7,\"profitRate\":10,\"items\":[{\"itemName\":\"面料\",\"unit\":\"米\",\"quoteUsage\":1.5,\"rmbPrice\":8,\"lossRate\":5}]}"; echo "$RESP" | jval data.id; }
 fx_order()    { api POST /orders "{\"customer_id\":$1,\"qty_total\":1000,\"currency\":\"USD\",\"unit_price\":12,\"materials\":[{\"item_name\":\"面料\",\"net_usage\":1.5,\"loss_rate\":5,\"unit_price\":8}]}"; echo "$RESP" | jval data.id; }
@@ -321,6 +321,15 @@ test_contract() {
   api GET "/contracts/${ctid:-0}"; expect_eq data.portal_status PUSHED "推送后portal_status=PUSHED"
   api PATCH "/contracts/${ctid:-0}/push" ''
   expect_code 400 "重复推送应400(非DRAFT)"
+
+  # ── 推送前校验门户账号：未开通账号的工厂,合同推送应拦截(设计稿 A5 死流程防护) ──
+  api POST /factories "{\"name\":\"NoAcc_${SFX}_${RANDOM}\",\"type\":\"FABRIC\",\"contacts\":[{\"name\":\"李\"}]}"
+  local noAccFid noAccCt
+  noAccFid=$(echo "$RESP" | jval data.id)
+  api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${noAccFid:-0},\"order_id\":${oid:-0},\"materials\":[{\"item_name\":\"面料\",\"unit_price\":8,\"qty\":100}]}"
+  noAccCt=$(echo "$RESP" | jval data.id)
+  api PATCH "/contracts/${noAccCt:-0}/push" ''
+  expect_code 400 "未开通门户账号的工厂合同推送应400(A5死流程防护)"
 }
 
 test_reconciliation() {

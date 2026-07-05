@@ -7,6 +7,7 @@ import { Contract, ContractStatus } from '../contract.entity';
 import { ContractMaterial } from '../contract-material.entity';
 import { ContractPortalLog, PortalOperatorType } from '../contract-portal-log.entity';
 import { OrderMaterial } from '../../order/order-material.entity';
+import { SupplierAccount } from '../../auth/supplier-account.entity';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
 import { ContractPortalStatus, ContractType } from '@i9/types';
 
@@ -43,6 +44,9 @@ const mockLogRepo = {
 const mockOrderMaterialRepo = {
   find: jest.fn().mockResolvedValue([]),
 };
+const mockSupplierRepo = {
+  findOne: jest.fn().mockResolvedValue({ id: 1, factory_id: 5, status: 1 }),
+};
 const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn().mockResolvedValue(1), expire: jest.fn() };
 const mockDataSource = {
   transaction: jest.fn().mockImplementation((cb) => cb({
@@ -65,6 +69,7 @@ describe('ContractService', () => {
         { provide: getRepositoryToken(ContractMaterial), useValue: mockMaterialRepo },
         { provide: getRepositoryToken(ContractPortalLog), useValue: mockLogRepo },
         { provide: getRepositoryToken(OrderMaterial), useValue: mockOrderMaterialRepo },
+        { provide: getRepositoryToken(SupplierAccount), useValue: mockSupplierRepo },
         { provide: NumberingService, useValue: new NumberingService(mockRedis as any) },
         { provide: DataSource, useValue: mockDataSource },
         { provide: REDIS_CLIENT, useValue: mockRedis },
@@ -160,6 +165,14 @@ describe('ContractService', () => {
   it('UT-CON-04 push throws BadRequest if not DRAFT', async () => {
     const contract = makeContract({ portal_status: ContractPortalStatus.PUSHED });
     mockRepo.findOne.mockResolvedValue(contract);
+    await expect(service.push(1, 'admin')).rejects.toThrow(BadRequestException);
+  });
+
+  // UT-CON-04b: push throws when factory has no bound portal account (A5 死流程防护)
+  it('UT-CON-04b push throws BadRequest when factory has no active portal account', async () => {
+    const contract = makeContract({ portal_status: ContractPortalStatus.DRAFT });
+    mockRepo.findOne.mockResolvedValue(contract);
+    mockSupplierRepo.findOne.mockResolvedValueOnce(null);
     await expect(service.push(1, 'admin')).rejects.toThrow(BadRequestException);
   });
 

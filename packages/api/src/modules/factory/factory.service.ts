@@ -3,9 +3,11 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, Like, Not, In, DataSource } from 'typeorm';
+import * as bcrypt from 'bcryptjs';
 import { Factory } from './factory.entity';
 import { FactoryContact } from './factory-contact.entity';
 import { Contract, ContractStatus } from '../contract/contract.entity';
+import { SupplierAccount } from '../auth/supplier-account.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { CreateFactoryDto } from './dto/create-factory.dto';
 import { QueryFactoryDto } from './dto/query-factory.dto';
@@ -94,6 +96,17 @@ export class FactoryService {
       }));
       const contacts = this.buildContacts(saved.id, dto.contacts);
       if (contacts.length) await manager.save(FactoryContact, contacts);
+      // 建档时可选开通供应商门户账号（设计稿 A5：合同推送前须已绑定账号）
+      if (dto.portalAccount && dto.portalPassword) {
+        const exists = await manager.findOne(SupplierAccount, { where: { account: dto.portalAccount } });
+        if (exists) throw new ConflictException(`门户账号「${dto.portalAccount}」已存在`);
+        await manager.save(SupplierAccount, manager.create(SupplierAccount, {
+          account: dto.portalAccount,
+          password: await bcrypt.hash(dto.portalPassword, 10),
+          factory_id: saved.id,
+          status: 1,
+        }));
+      }
       return saved;
     });
   }
