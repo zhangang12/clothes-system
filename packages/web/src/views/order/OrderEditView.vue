@@ -70,13 +70,13 @@
       </section-block>
 
       <!-- 附件档案 5 类 -->
-      <section-block title="▣ 附件档案" badge="5 类">
+      <section-block title="▣ 附件档案" badge="5 类 · 多文件">
         <el-row :gutter="16">
-          <el-col :span="8"><el-form-item label="彩稿"><el-input v-model="form.att1" placeholder="文件URL/路径(多文件逗号分隔)" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="大货尺寸表"><el-input v-model="form.att2" placeholder="文件URL/路径" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="大货纸板"><el-input v-model="form.att3" placeholder="文件URL/路径" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="包装资料"><el-input v-model="form.att4" placeholder="文件URL/路径" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="填充量"><el-input v-model="form.att5" placeholder="羽绒/棉服填充克重表" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="彩稿"><file-upload v-model="form.att1" multiple :disabled="readonly" accept="image/*,application/pdf" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="大货尺寸表"><file-upload v-model="form.att2" multiple :disabled="readonly" accept="image/*,application/pdf,.xlsx,.xls" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="大货纸板"><file-upload v-model="form.att3" multiple :disabled="readonly" accept="image/*,application/pdf" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="包装资料"><file-upload v-model="form.att4" multiple :disabled="readonly" accept="image/*,application/pdf" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="填充量"><file-upload v-model="form.att5" multiple :disabled="readonly" accept="image/*,application/pdf,.xlsx,.xls" /></el-form-item></el-col>
         </el-row>
       </section-block>
 
@@ -146,6 +146,7 @@ import { Back, Check, Plus, Minus, Download, Promotion } from '@element-plus/ico
 import { orderApi } from '@/api/order';
 import { quoteApi } from '@/api/quote';
 import { factoryApi } from '@/api/factory';
+import FileUpload from '@/components/FileUpload.vue';
 import { ORDER_STATUS_LABEL } from '@i9/types';
 
 const SectionBlock = (props: { title: string; badge?: string }, { slots }: any) =>
@@ -227,6 +228,7 @@ async function load() {
     unitPrice: d.unit_price ?? '', currency: d.currency ?? 'USD', deliveryDate: d.delivery_date ?? '',
     commissionRate: d.commission_rate ?? 0, factoryId: d.factory_id ?? undefined, middlemanName: d.middleman_name ?? '',
     buyerName: d.buyer_name ?? '', salesperson: d.salesperson ?? '', makeDate: d.make_date ?? '', splitMode: d.split_mode ?? 'NONE', status: d.status,
+    att1: d.att_artwork ?? '', att2: d.att_sizechart ?? '', att3: d.att_board ?? '', att4: d.att_packing ?? '', att5: d.att_filling ?? '',
     sizes: Array.isArray(cells) && cells.length ? cells : [emptySize()],
     materials: d.materials?.length ? d.materials.map((m: any) => ({
       itemName: m.item_name, part: m.part, width: m.width, color: m.color, composition: m.composition,
@@ -245,6 +247,8 @@ function buildDto() {
     unit_price: num(form.unitPrice), currency: form.currency, delivery_date: form.deliveryDate || undefined,
     commission_rate: num(form.commissionRate) ?? 0, factory_id: form.factoryId, salesperson: form.salesperson || undefined,
     split_mode: form.splitMode, qty_total: qtyTotal.value,
+    att_artwork: form.att1 || undefined, att_sizechart: form.att2 || undefined, att_board: form.att3 || undefined,
+    att_packing: form.att4 || undefined, att_filling: form.att5 || undefined,
     matrix_data: { rows: form.sizes.filter((s: any) => s.qty) },
     materials: form.materials.filter((m: any) => m.itemName).map((m: any, i: number) => ({
       item_name: m.itemName, part: m.part, width: m.width, color: m.color, composition: m.composition,

@@ -85,6 +85,16 @@ export class FileService implements OnModuleInit {
   }
 
   /**
+   * 将相对路径解析为磁盘绝对路径（防目录穿越）；不存在返回 null
+   */
+  resolvePath(relativePath: string): string | null {
+    const clean = relativePath.replace(/\.\.[/\\]?/g, '').replace(/^[/\\]+/, '');
+    const full = path.join(this.uploadRoot, clean);
+    if (!full.startsWith(this.uploadRoot)) return null;
+    return fs.existsSync(full) ? full : null;
+  }
+
+  /**
    * 删除文件（逻辑删除时也删物理文件）
    */
   deleteFile(relativePath: string): void {

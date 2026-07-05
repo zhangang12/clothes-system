@@ -60,9 +60,9 @@
       <!-- 图片信息 -->
       <section-block title="▣ 图片信息" badge="3 字段">
         <el-row :gutter="16">
-          <el-col :span="8"><el-form-item label="图片1"><el-input v-model="form.image1" :disabled="bizDisabled" placeholder="图片URL / 路径" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="图片2"><el-input v-model="form.image2" :disabled="bizDisabled" placeholder="图片URL / 路径" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="图片3"><el-input v-model="form.image3" :disabled="bizDisabled" placeholder="图片URL / 路径" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="图片1"><file-upload v-model="form.image1" :disabled="bizDisabled" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="图片2"><file-upload v-model="form.image2" :disabled="bizDisabled" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="图片3"><file-upload v-model="form.image3" :disabled="bizDisabled" /></el-form-item></el-col>
         </el-row>
       </section-block>
 
@@ -135,6 +135,7 @@ import { Back, Check, Plus, Minus, Promotion, CopyDocument } from '@element-plus
 import { sampleApi } from '@/api/sample';
 import { customerApi } from '@/api/customer';
 import { factoryApi } from '@/api/factory';
+import FileUpload from '@/components/FileUpload.vue';
 import { SAMPLE_CATEGORIES, SAMPLE_STATUS_LABEL } from '@i9/types';
 
 const SectionBlock = (props: { title: string; badge?: string }, { slots }: any) =>

@@ -1172,6 +1172,27 @@ test_portal_ext() {
 }
 
 
+test_upload() {
+  local origin="${BASE_URL%/api/v1}" code resp url tmpf
+  # 未鉴权上传应 401
+  code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE_URL/uploads" -F "file=@/etc/hostname;type=image/png" 2>/dev/null)
+  [[ "$code" == "401" ]] && ok "未鉴权上传应401 [$code]" || bad "未鉴权上传应401 实得$code"
+  # 鉴权上传临时图片，返回 url
+  tmpf=$(mktemp /tmp/up_XXXXXX.png); printf 'PNGDATA' > "$tmpf"
+  resp=$(curl -s -X POST "$BASE_URL/uploads" -H "Authorization: Bearer $TOKEN_ADMIN" -F "file=@$tmpf;type=image/png" 2>/dev/null)
+  url=$(echo "$resp" | jval data.url)
+  [[ -n "$url" ]] && ok "鉴权上传返回 url" || bad "上传失败 ${resp:0:120}"
+  # 读取已上传文件应 200（能力URL，公开可读）
+  if [[ -n "$url" ]]; then
+    code=$(curl -s -o /dev/null -w '%{http_code}' "${origin}${url}" 2>/dev/null)
+    [[ "$code" == "200" ]] && ok "读取已上传文件应200 [$code]" || bad "读取文件应200 实得$code"
+  fi
+  rm -f "$tmpf"
+  # 读取不存在文件应 404
+  code=$(curl -s -o /dev/null -w '%{http_code}' "${origin}/api/v1/uploads/file?p=misc/1900/01/nope.png" 2>/dev/null)
+  [[ "$code" == "404" ]] && ok "读取不存在文件应404 [$code]" || bad "读取不存在应404 实得$code"
+}
+
 # ── 执行所有模块（基础 + 扩展）────────────────────────────────
 group "1. 鉴权与权限基线";        test_auth;           test_auth_ext
 group "2. 客户";                  test_customer;       test_customer_ext
@@ -1184,6 +1205,7 @@ group "8. 对账";                  test_reconciliation; test_reconciliation_ext
 group "9. 付款 · 审批流";          test_payment;        test_payment_ext
 group "10. 结算 · 业务计算";       test_settlement;     test_settlement_ext
 group "11. 供应商门户 · 端到端";   test_portal;         test_portal_ext
+group "12. 文件上传";              test_upload
 
 echo ""
 echo "=================================================================="

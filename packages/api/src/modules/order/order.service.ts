@@ -75,6 +75,8 @@ export class OrderService {
         total_amount: dto.unit_price && dto.qty_total ? +(dto.unit_price * dto.qty_total).toFixed(4) : null,
         commission_rate: dto.commission_rate ?? 0, factory_id: dto.factory_id, salesperson: dto.salesperson,
         make_date: today, split_mode: dto.split_mode ?? 'NONE', remark: dto.remark,
+        att_artwork: dto.att_artwork, att_sizechart: dto.att_sizechart, att_board: dto.att_board,
+        att_packing: dto.att_packing, att_filling: dto.att_filling,
         created_by: createdBy, status: OrderStatus.DRAFT,
       }));
 
@@ -128,6 +130,8 @@ export class OrderService {
       ['buyer_id', 'buyer_id'], ['qty_total', 'qty_total'], ['currency', 'currency'], ['unit_price', 'unit_price'],
       ['commission_rate', 'commission_rate'], ['factory_id', 'factory_id'], ['salesperson', 'salesperson'],
       ['split_mode', 'split_mode'], ['remark', 'remark'],
+      ['att_artwork', 'att_artwork'], ['att_sizechart', 'att_sizechart'], ['att_board', 'att_board'],
+      ['att_packing', 'att_packing'], ['att_filling', 'att_filling'],
     ];
     for (const [k, col] of map) if (dto[k] !== undefined) (order as any)[col] = dto[k];
     if (dto.delivery_date !== undefined) order.delivery_date = dto.delivery_date as any;

@@ -16,6 +16,7 @@ import { PaymentModule } from './modules/payment/payment.module';
 import { SettlementModule } from './modules/settlement/settlement.module';
 import { NumberingModule } from './common/services/numbering.module';
 import { FileModule } from './common/services/file.module';
+import { UploadModule } from './modules/upload/upload.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { FileModule } from './common/services/file.module';
     ReconciliationModule,
     PaymentModule,
     SettlementModule,
+    UploadModule,
   ],
 })
 export class AppModule {}

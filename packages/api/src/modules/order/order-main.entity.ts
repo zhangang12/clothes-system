@@ -60,6 +60,22 @@ export class OrderMain {
   @Column({ type: 'varchar', length: 10, default: 'NONE' })
   split_mode: string; // 整单核算模式 NONE/BY_SIZE/BY_COLOR
 
+  // 附件档案 5 类（逗号分隔多文件 URL）
+  @Column({ type: 'text', nullable: true })
+  att_artwork: string;   // 彩稿
+
+  @Column({ type: 'text', nullable: true })
+  att_sizechart: string; // 大货尺寸表
+
+  @Column({ type: 'text', nullable: true })
+  att_board: string;     // 大货纸板
+
+  @Column({ type: 'text', nullable: true })
+  att_packing: string;   // 包装资料
+
+  @Column({ type: 'text', nullable: true })
+  att_filling: string;   // 填充量
+
   @Column({ type: 'decimal', precision: 15, scale: 4, nullable: true })
   total_amount: number;
 

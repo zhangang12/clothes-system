@@ -87,6 +87,11 @@ export class CreateOrderDto {
   @ApiPropertyOptional({ description: '生产工厂ID' }) @IsOptional() @Type(() => Number) @IsInt() factory_id?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) salesperson?: string;
   @ApiPropertyOptional({ description: '整单核算模式 NONE/BY_SIZE/BY_COLOR' }) @IsOptional() @IsString() @MaxLength(10) split_mode?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() att_artwork?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() att_sizechart?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() att_board?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() att_packing?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() att_filling?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
