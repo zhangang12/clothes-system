@@ -154,6 +154,7 @@ export enum ContractPortalStatus {
 export enum ReconcileType {
   CONTRACT = 'CONTRACT',
   NO_CONTRACT = 'NO_CONTRACT',
+  LABOR = 'LABOR', // 样衣打样工时对账（版师/打样间，多款合并；独立于供应商对账）
 }
 
 export enum PaymentApprovalStatus {

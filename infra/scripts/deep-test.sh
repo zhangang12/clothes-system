@@ -245,6 +245,21 @@ test_sample() {
   expect_ok "版师填件数+单价"
   api GET "/samples/${sid:-0}"; expect_eq data.status RECONCILED "件数单价填完已对账RECONCILED"
   expect_num data.labor_amount 150 "工时金额=件数×单价=150"
+  # ── 样衣打样工时对账（多款合并；此处单款冒烟 + 校验，设计稿 样衣确认清单·工时对账多款合并）──
+  api POST "/reconciliations/labor" "{\"sampleIds\":[${sid:-0}]}" "$TOKEN_BUSINESS"
+  expect_ok "业务勾选已对账样衣生成工时对账单"
+  lrid=$(echo "$RESP" | jval data.id)
+  api GET "/reconciliations/${lrid:-0}"
+  expect_eq data.type LABOR "工时对账类型=LABOR"
+  expect_num data.total_amount 150 "工时对账金额=样衣工时合计150"
+  expect_eq data.patternmaker_id 1 "工时对账受款方=版师1"
+  expect_eq data.currency CNY "工时对账币种默认CNY"
+  # 同一样衣重复对账应被拦截
+  api POST "/reconciliations/labor" "{\"sampleIds\":[${sid:-0}]}" "$TOKEN_BUSINESS"
+  expect_code 400 "同一样衣重复工时对账应400"
+  # 两级审批（业务提交→主管确认）
+  reconcile_approve "${lrid:-0}"
+  api GET "/reconciliations/${lrid:-0}"; expect_eq data.status CONFIRMED "工时对账两级审批后已确认"
   # 版师只填件数不填单价应 400
   api PATCH "/samples/${sid:-0}/patternmaker" '{"pieceCount":5}' "$TOKEN_PM"
   expect_code 400 "版师仅填件数缺单价应400"

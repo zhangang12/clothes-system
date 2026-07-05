@@ -532,10 +532,14 @@ CREATE TABLE IF NOT EXISTS `contract_portal_log` (
 CREATE TABLE IF NOT EXISTS `reconciliation` (
   `id`               BIGINT         NOT NULL AUTO_INCREMENT,
   `reconcile_no`     VARCHAR(30)    NOT NULL COMMENT 'DZ-YYYYMMDD-001 或 DZ-NC-YYYYMMDD-001',
-  `type`             ENUM('CONTRACT','NO_CONTRACT') NOT NULL DEFAULT 'CONTRACT',
+  `type`             ENUM('CONTRACT','NO_CONTRACT','LABOR') NOT NULL DEFAULT 'CONTRACT',
   `contract_id`      BIGINT         DEFAULT NULL COMMENT '有合同时关联',
-  `style_no`         VARCHAR(60)    DEFAULT NULL COMMENT '款号(合同→订单带出,供检索)',
-  `factory_id`       BIGINT         NOT NULL,
+  `style_no`         VARCHAR(200)   DEFAULT NULL COMMENT '款号(合同→订单带出,供检索;工时对账为「款A 等N款」)',
+  `factory_id`       BIGINT         DEFAULT NULL COMMENT '供应商对账=加工厂/供应商;工时对账为空',
+  `patternmaker_id`  BIGINT         DEFAULT NULL COMMENT '工时对账受款方版师',
+  `patternmaker_name` VARCHAR(50)   DEFAULT NULL,
+  `currency`         VARCHAR(10)    NOT NULL DEFAULT 'CNY' COMMENT '工时单价币种,默认CNY',
+  `period`           VARCHAR(20)    DEFAULT NULL COMMENT '归属账期(按月合并如2026-07)',
   `total_amount`     DECIMAL(15,4)  NOT NULL COMMENT '对账金额',
   `tax_rate`         DECIMAL(5,2)   DEFAULT NULL COMMENT '税率%',
   `tax_amount`       DECIMAL(15,4)  DEFAULT NULL COMMENT '税额',
@@ -556,6 +560,7 @@ CREATE TABLE IF NOT EXISTS `reconciliation` (
   KEY `idx_contract` (`contract_id`),
   KEY `idx_factory` (`factory_id`),
   KEY `idx_style_no` (`style_no`),
+  KEY `idx_patternmaker` (`patternmaker_id`),
   KEY `idx_status` (`status`,`deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='对账单';
 
@@ -570,6 +575,20 @@ CREATE TABLE IF NOT EXISTS `reconciliation_shipment` (
   PRIMARY KEY (`id`),
   KEY `idx_reconcile` (`reconcile_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='对账单发货明细（含快照单价）';
+
+CREATE TABLE IF NOT EXISTS `reconciliation_labor_item` (
+  `id`               BIGINT         NOT NULL AUTO_INCREMENT,
+  `reconcile_id`     BIGINT         NOT NULL,
+  `sample_id`        BIGINT         NOT NULL COMMENT '关联样衣',
+  `sample_no`        VARCHAR(30)    DEFAULT NULL,
+  `style_no`         VARCHAR(100)   DEFAULT NULL COMMENT '客户款号',
+  `piece_count`      INT            DEFAULT NULL COMMENT '件数(快照)',
+  `labor_unit_price` DECIMAL(12,2)  DEFAULT NULL COMMENT '工时单价(快照)',
+  `labor_amount`     DECIMAL(14,2)  DEFAULT NULL COMMENT '工时金额(快照)',
+  PRIMARY KEY (`id`),
+  KEY `idx_reconcile` (`reconcile_id`),
+  KEY `idx_sample` (`sample_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='工时对账明细（多款合并·样衣工时快照）';
 
 -- ============================================================
 -- 预付款

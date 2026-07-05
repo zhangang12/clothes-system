@@ -9,6 +9,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@i9/types';
 import { ReconciliationService } from './reconciliation.service';
 import { CreateReconciliationDto } from './dto/create-reconciliation.dto';
+import { GenerateLaborDto } from './dto/generate-labor.dto';
 import { QueryReconciliationDto } from './dto/query-reconciliation.dto';
 
 @ApiTags('对账管理')
@@ -23,6 +24,13 @@ export class ReconciliationController {
   @ApiOperation({ summary: '创建对账单（含出货明细）' })
   create(@Body() dto: CreateReconciliationDto, @Request() req: any) {
     return this.service.create(dto, req.user.id);
+  }
+
+  @Post('labor')
+  @Roles(UserRole.ADMIN, UserRole.FINANCE, UserRole.BUSINESS)
+  @ApiOperation({ summary: '样衣打样工时对账：勾选多款样衣合并生成工时对账单（同一版师）' })
+  generateLabor(@Body() dto: GenerateLaborDto, @Request() req: any) {
+    return this.service.generateLabor(dto, req.user.id);
   }
 
   @Get()

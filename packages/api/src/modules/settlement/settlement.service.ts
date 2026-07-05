@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like, FindOptionsWhere, DataSource } from 'typeorm';
-import { SettlementStatus } from '@i9/types';
+import { Repository, Like, In, FindOptionsWhere, DataSource } from 'typeorm';
+import { SettlementStatus, ReconcileType } from '@i9/types';
 import { Settlement } from './settlement.entity';
 import { SettlementCost } from './settlement-cost.entity';
 import { SettlementReceipt } from './settlement-receipt.entity';
@@ -92,10 +92,12 @@ export class SettlementService {
   // 按款号从已确认/已付对账付款汇总总货款(含税)——成本明细只读、源自对账付款（设计稿 D4/D6）
   private async aggregateGoodsTax(styleNo?: string): Promise<number> {
     if (!styleNo) return 0;
+    // 仅统计供应商货款对账（合同/无合同费用），排除样衣工时对账(LABOR)，避免单款工时污染货款汇总
+    const goodsTypes = In([ReconcileType.CONTRACT, ReconcileType.NO_CONTRACT]);
     const recons = await this.reconcileRepo.find({
       where: [
-        { style_no: styleNo, status: ReconciliationStatus.CONFIRMED, deleted: 0 },
-        { style_no: styleNo, status: ReconciliationStatus.PAID, deleted: 0 },
+        { style_no: styleNo, type: goodsTypes, status: ReconciliationStatus.CONFIRMED, deleted: 0 },
+        { style_no: styleNo, type: goodsTypes, status: ReconciliationStatus.PAID, deleted: 0 },
       ],
     });
     return r4(recons.reduce((s, r) => s + +r.total_amount, 0));

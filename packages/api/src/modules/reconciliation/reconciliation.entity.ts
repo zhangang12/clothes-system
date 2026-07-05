@@ -22,11 +22,24 @@ export class Reconciliation {
   @Column({ type: 'bigint', nullable: true })
   contract_id: number;
 
-  @Column({ length: 60, nullable: true })
-  style_no: string; // 款号（合同→订单带出，供检索）
+  @Column({ length: 200, nullable: true })
+  style_no: string; // 款号（合同→订单带出，供检索；工时对账多款合并时为「款A 等N款」）
 
-  @Column({ type: 'bigint' })
-  factory_id: number;
+  @Column({ type: 'bigint', nullable: true })
+  factory_id: number; // 供应商对账=加工厂/供应商；工时对账无工厂（用 patternmaker_id）
+
+  // 工时对账（LABOR）：版师/打样间为受款方，多款合并
+  @Column({ type: 'bigint', nullable: true })
+  patternmaker_id: number;
+
+  @Column({ length: 50, nullable: true })
+  patternmaker_name: string;
+
+  @Column({ length: 10, default: 'CNY' })
+  currency: string; // 工时单价默认 CNY，特殊出口样衣可切币种留痕
+
+  @Column({ length: 20, nullable: true })
+  period: string; // 归属账期（如 2026-07，按月合并时填）
 
   @Column({ type: 'decimal', precision: 15, scale: 4 })
   total_amount: number;

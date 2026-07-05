@@ -5,8 +5,29 @@ import { DataSource } from 'typeorm';
 import { ReconciliationService } from '../reconciliation.service';
 import { Reconciliation, ReconciliationStatus } from '../reconciliation.entity';
 import { ReconciliationShipment } from '../reconciliation-shipment.entity';
+import { ReconciliationLaborItem } from '../reconciliation-labor-item.entity';
+import { SampleGarment } from '../../sample/sample-garment.entity';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
-import { ReconcileType } from '@i9/types';
+import { ReconcileType, SampleStatus } from '@i9/types';
+
+const makeSample = (overrides = {}) => ({
+  id: 1, sample_no: 'S001', style_no: 'K-100', patternmaker_id: 7, patternmaker_name: '王版师',
+  piece_count: 3, labor_unit_price: 50, labor_amount: 150, status: SampleStatus.RECONCILED, deleted: 0,
+  ...overrides,
+});
+
+// manager whose find() dispatches by entity — for generateLabor
+const makeLaborManager = (samples: any[], existedItems: any[] = [], activeRecs: any[] = []) => ({
+  create: jest.fn().mockImplementation((_: any, v: any) => v),
+  save: jest.fn().mockImplementation((_: any, v: any) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
+  findOne: jest.fn(),
+  find: jest.fn().mockImplementation((entity: any) => {
+    if (entity === SampleGarment) return Promise.resolve(samples);
+    if (entity === ReconciliationLaborItem) return Promise.resolve(existedItems);
+    if (entity === Reconciliation) return Promise.resolve(activeRecs);
+    return Promise.resolve([]);
+  }),
+});
 
 const makeReconciliation = (overrides = {}) => ({
   id: 1,
@@ -37,6 +58,9 @@ const mockShipmentRepo = {
   save: jest.fn().mockResolvedValue([]),
   find: jest.fn().mockResolvedValue([]),
 };
+const mockLaborItemRepo = {
+  find: jest.fn().mockResolvedValue([]),
+};
 const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn().mockResolvedValue(1) };
 const mockDataSource = {
   transaction: jest.fn().mockImplementation((cb) => cb(makeManager())),
@@ -53,6 +77,7 @@ describe('ReconciliationService', () => {
         ReconciliationService,
         { provide: getRepositoryToken(Reconciliation), useValue: mockReconciliationRepo },
         { provide: getRepositoryToken(ReconciliationShipment), useValue: mockShipmentRepo },
+        { provide: getRepositoryToken(ReconciliationLaborItem), useValue: mockLaborItemRepo },
         { provide: NumberingService, useValue: new NumberingService(mockRedis as any) },
         { provide: DataSource, useValue: mockDataSource },
         { provide: REDIS_CLIENT, useValue: mockRedis },
@@ -157,5 +182,70 @@ describe('ReconciliationService', () => {
   it('UT-REC-08 findOne throws NotFoundException for missing record', async () => {
     mockReconciliationRepo.findOne.mockResolvedValue(null);
     await expect(service.findOne(99)).rejects.toThrow(NotFoundException);
+  });
+
+  // UT-REC-09: generateLabor 合并多款工时→一张 LABOR 对账单，金额求和、受款方=版师
+  it('UT-REC-09 generateLabor sums labor_amount and creates one LABOR reconciliation', async () => {
+    const samples = [
+      makeSample({ id: 1, sample_no: 'S001', style_no: 'K-100', labor_amount: 150 }),
+      makeSample({ id: 2, sample_no: 'S002', style_no: 'K-200', labor_amount: 200 }),
+    ];
+    const manager = makeLaborManager(samples);
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await service.generateLabor({ sampleIds: [1, 2] } as any, 9);
+    const savedRec = manager.save.mock.calls[0][1];
+    expect(savedRec).toMatchObject({
+      type: ReconcileType.LABOR,
+      patternmaker_id: 7,
+      patternmaker_name: '王版师',
+      currency: 'CNY',
+      factory_id: null,
+      total_amount: 350, // 150 + 200
+      status: ReconciliationStatus.DRAFT,
+    });
+    expect(savedRec.style_no).toContain('等2款');
+    // 明细行落库（批次可点跳）
+    const savedItems = manager.save.mock.calls[1][1];
+    expect(savedItems).toHaveLength(2);
+  });
+
+  // UT-REC-10: generateLabor 拒绝未完成工时的样衣（未对账/无工时金额）
+  it('UT-REC-10 generateLabor throws when a sample is not RECONCILED / has no labor amount', async () => {
+    const samples = [
+      makeSample({ id: 1, labor_amount: 150 }),
+      makeSample({ id: 2, status: SampleStatus.RETURNED, labor_amount: 0 }),
+    ];
+    const manager = makeLaborManager(samples);
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await expect(service.generateLabor({ sampleIds: [1, 2] } as any, 9)).rejects.toThrow(BadRequestException);
+  });
+
+  // UT-REC-11: generateLabor 要求同一版师（受款方唯一）
+  it('UT-REC-11 generateLabor throws when samples belong to different patternmakers', async () => {
+    const samples = [
+      makeSample({ id: 1, patternmaker_id: 7 }),
+      makeSample({ id: 2, patternmaker_id: 8 }),
+    ];
+    const manager = makeLaborManager(samples);
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await expect(service.generateLabor({ sampleIds: [1, 2] } as any, 9)).rejects.toThrow('同一版师');
+  });
+
+  // UT-REC-12: generateLabor 防重复对账（样衣已在未删除的工时对账单中）
+  it('UT-REC-12 generateLabor throws when a sample is already in an active labor reconciliation', async () => {
+    const samples = [makeSample({ id: 1 })];
+    const existed = [{ id: 1, reconcile_id: 99, sample_id: 1 }];
+    const activeRecs = [{ id: 99, deleted: 0 }];
+    const manager = makeLaborManager(samples, existed, activeRecs);
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await expect(service.generateLabor({ sampleIds: [1] } as any, 9)).rejects.toThrow('重复对账');
+  });
+
+  // UT-REC-13: generateLabor 拒绝不存在的样衣（数量对不上）
+  it('UT-REC-13 generateLabor throws when some sampleIds do not resolve', async () => {
+    const samples = [makeSample({ id: 1 })]; // only 1 of 2 found
+    const manager = makeLaborManager(samples);
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await expect(service.generateLabor({ sampleIds: [1, 2] } as any, 9)).rejects.toThrow(BadRequestException);
   });
 });

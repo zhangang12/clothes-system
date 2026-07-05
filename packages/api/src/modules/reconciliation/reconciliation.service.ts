@@ -2,14 +2,17 @@ import {
   Injectable, NotFoundException, BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, Like, DataSource } from 'typeorm';
+import { Repository, FindOptionsWhere, Like, In, DataSource } from 'typeorm';
 import { Reconciliation, ReconciliationStatus } from './reconciliation.entity';
 import { ReconciliationShipment } from './reconciliation-shipment.entity';
+import { ReconciliationLaborItem } from './reconciliation-labor-item.entity';
 import { Contract } from '../contract/contract.entity';
 import { OrderMain } from '../order/order-main.entity';
+import { SampleGarment } from '../sample/sample-garment.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
-import { ReconcileType, ContractPortalStatus, OrderStatus } from '@i9/types';
+import { ReconcileType, ContractPortalStatus, OrderStatus, SampleStatus } from '@i9/types';
 import { CreateReconciliationDto } from './dto/create-reconciliation.dto';
+import { GenerateLaborDto } from './dto/generate-labor.dto';
 import { QueryReconciliationDto } from './dto/query-reconciliation.dto';
 
 @Injectable()
@@ -17,6 +20,7 @@ export class ReconciliationService {
   constructor(
     @InjectRepository(Reconciliation) private readonly repo: Repository<Reconciliation>,
     @InjectRepository(ReconciliationShipment) private readonly shipmentRepo: Repository<ReconciliationShipment>,
+    @InjectRepository(ReconciliationLaborItem) private readonly laborItemRepo: Repository<ReconciliationLaborItem>,
     private readonly numbering: NumberingService,
     private readonly dataSource: DataSource,
   ) {}
@@ -96,6 +100,78 @@ export class ReconciliationService {
     });
   }
 
+  // 样衣打样工时对账：业务自由勾选多款样衣（须同一版师、均已对账），合并生成一张工时对账单
+  // 设计稿 样衣确认清单 rec:0「业务自由勾选多款合并生成工时对账单，工时单价默认 CNY」（批注#8：工时对账要一起提取很多款）
+  async generateLabor(dto: GenerateLaborDto, createdBy: number): Promise<Reconciliation> {
+    const ids = Array.from(new Set(dto.sampleIds));
+    return this.dataSource.transaction(async (manager) => {
+      const samples = await manager.find(SampleGarment, { where: { id: In(ids), deleted: 0 } });
+      if (samples.length !== ids.length) {
+        throw new BadRequestException('部分样衣不存在或已删除，无法生成工时对账');
+      }
+      // 均须已对账（版师填完件数+单价、状态已对账）且有工时金额
+      const notReady = samples.filter((s) => s.status !== SampleStatus.RECONCILED || !(+s.labor_amount > 0));
+      if (notReady.length) {
+        throw new BadRequestException(
+          `样衣 ${notReady.map((s) => s.sample_no || s.id).join('、')} 未完成工时（需版师填件数+单价、状态已对账）`,
+        );
+      }
+      // 一张工时对账单受款方唯一：须同一版师
+      const makerIds = Array.from(new Set(samples.map((s) => s.patternmaker_id ?? 0)));
+      if (makerIds.length > 1 || makerIds[0] === 0) {
+        throw new BadRequestException('工时对账须同一版师的样衣合并（受款方唯一）');
+      }
+      // 防重复对账：所选样衣不得已在未删除的工时对账单中
+      const existed = await manager.find(ReconciliationLaborItem, { where: { sample_id: In(ids) } });
+      if (existed.length) {
+        const recIds = Array.from(new Set(existed.map((e) => e.reconcile_id)));
+        const active = await manager.find(Reconciliation, { where: { id: In(recIds), deleted: 0 } });
+        if (active.length) {
+          throw new BadRequestException('部分样衣已在其他工时对账单中，不能重复对账');
+        }
+      }
+
+      const total = +samples.reduce((s, x) => s + (+x.labor_amount || 0), 0).toFixed(2);
+      const firstStyle = samples[0].style_no;
+      const styleNo = samples.length > 1 ? `${firstStyle} 等${samples.length}款` : firstStyle;
+      const reconcile_no = await this.numbering.nextWithSegment(NUM_PREFIX.RECONCILIATION, '工时');
+
+      const reconciliation = await manager.save(
+        Reconciliation,
+        manager.create(Reconciliation, {
+          reconcile_no,
+          type: ReconcileType.LABOR,
+          contract_id: null,
+          style_no: styleNo,
+          factory_id: null,
+          patternmaker_id: samples[0].patternmaker_id,
+          patternmaker_name: samples[0].patternmaker_name ?? null,
+          currency: 'CNY',
+          total_amount: total,
+          has_invoice: 0,
+          description: `样衣打样工时对账·${samples.length}款`,
+          status: ReconciliationStatus.DRAFT,
+          created_by: createdBy,
+        }),
+      );
+
+      const items = samples.map((s) =>
+        manager.create(ReconciliationLaborItem, {
+          reconcile_id: reconciliation.id,
+          sample_id: s.id,
+          sample_no: s.sample_no,
+          style_no: s.style_no,
+          piece_count: s.piece_count,
+          labor_unit_price: s.labor_unit_price,
+          labor_amount: s.labor_amount,
+        }),
+      );
+      await manager.save(ReconciliationLaborItem, items);
+
+      return reconciliation;
+    });
+  }
+
   async findAll(query: QueryReconciliationDto) {
     const { page = 1, size = 20, keyword, type, status, factory_id } = query;
     const base: FindOptionsWhere<Reconciliation> = {
@@ -125,7 +201,11 @@ export class ReconciliationService {
     const reconciliation = await this.repo.findOne({ where: { id, deleted: 0 } });
     if (!reconciliation) throw new NotFoundException(`对账单 #${id} 不存在`);
     const shipments = await this.shipmentRepo.find({ where: { reconcile_id: id } });
-    return { ...reconciliation, shipments };
+    // 工时对账带出多款明细（批次可点跳回样衣）
+    const laborItems = reconciliation.type === ReconcileType.LABOR
+      ? await this.laborItemRepo.find({ where: { reconcile_id: id } })
+      : [];
+    return { ...reconciliation, shipments, laborItems };
   }
 
   // 业务员初审提交：草稿→待主管复核（设计稿 对账 B1/C1 二级审批）

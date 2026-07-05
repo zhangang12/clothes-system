@@ -9,6 +9,7 @@
           <el-select v-model="query.type" clearable placeholder="全部" style="width:120px" @change="load">
             <el-option label="合同对账" value="CONTRACT" />
             <el-option label="非合同对账" value="NO_CONTRACT" />
+            <el-option label="工时对账" value="LABOR" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
@@ -33,7 +34,10 @@
       <template #header>
         <div class="card-header">
           <span>对账单列表</span>
-          <el-button v-if="canEdit" type="primary" :icon="Plus" @click="openCreate">新建对账单</el-button>
+          <div>
+            <el-button v-if="canBusiness" :icon="Coin" @click="openLabor">生成工时对账</el-button>
+            <el-button v-if="canEdit" type="primary" :icon="Plus" @click="openCreate">新建对账单</el-button>
+          </div>
         </div>
       </template>
 
@@ -44,12 +48,14 @@
         </el-table-column>
         <el-table-column prop="type" label="类型" width="110">
           <template #default="{ row }">
-            <el-tag size="small" :type="row.type === 'CONTRACT' ? '' : 'warning'">
-              {{ row.type === 'CONTRACT' ? '合同对账' : '非合同对账' }}
-            </el-tag>
+            <el-tag size="small" :type="typeTag(row.type)">{{ typeLabel(row.type) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="factory_id" label="工厂ID" width="80" align="center" />
+        <el-table-column label="工厂/版师" width="110" align="center">
+          <template #default="{ row }">
+            {{ row.type === 'LABOR' ? (row.patternmaker_name || '版师#' + row.patternmaker_id) : (row.factory_id ?? '—') }}
+          </template>
+        </el-table-column>
         <el-table-column prop="total_amount" label="对账金额" width="120" align="right">
           <template #default="{ row }">{{ (+row.total_amount).toFixed(2) }}</template>
         </el-table-column>
@@ -111,11 +117,13 @@
       <template v-if="detailData">
         <el-descriptions :column="3" border size="small">
           <el-descriptions-item label="对账单编号">{{ detailData.reconcile_no }}</el-descriptions-item>
-          <el-descriptions-item label="类型">{{ detailData.type === 'CONTRACT' ? '合同对账' : '非合同对账' }}</el-descriptions-item>
+          <el-descriptions-item label="类型">{{ typeLabel(detailData.type) }}</el-descriptions-item>
           <el-descriptions-item label="状态">
             <el-tag :type="statusTagType(detailData.status)" size="small">{{ statusLabel(detailData.status) }}</el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="工厂ID">{{ detailData.factory_id }}</el-descriptions-item>
+          <el-descriptions-item :label="detailData.type === 'LABOR' ? '版师' : '工厂ID'">
+            {{ detailData.type === 'LABOR' ? (detailData.patternmaker_name || detailData.patternmaker_id) : detailData.factory_id }}
+          </el-descriptions-item>
           <el-descriptions-item label="合同ID">{{ detailData.contract_id ?? '--' }}</el-descriptions-item>
           <el-descriptions-item label="对账金额">{{ (+detailData.total_amount).toFixed(2) }}</el-descriptions-item>
           <el-descriptions-item label="税率">{{ detailData.tax_rate != null ? detailData.tax_rate + '%' : '--' }}</el-descriptions-item>
@@ -125,18 +133,65 @@
           <el-descriptions-item label="发票差额">{{ detailData.invoice_diff != null ? (+detailData.invoice_diff).toFixed(2) : '--' }}</el-descriptions-item>
           <el-descriptions-item label="确认时间">{{ detailData.confirmed_at ?? '--' }}</el-descriptions-item>
         </el-descriptions>
-        <el-divider>出货明细</el-divider>
-        <el-table :data="detailData.shipments ?? []" border size="small">
-          <el-table-column prop="shipment_id" label="出货单ID" width="100" />
-          <el-table-column prop="item_name" label="品名" />
-          <el-table-column prop="snapshot_unit_price" label="单价" width="100" align="right">
-            <template #default="{ row }">{{ (+row.snapshot_unit_price).toFixed(4) }}</template>
-          </el-table-column>
-          <el-table-column prop="qty" label="数量" width="80" align="right" />
-          <el-table-column prop="amount" label="金额" width="110" align="right">
-            <template #default="{ row }">{{ (+row.amount).toFixed(2) }}</template>
-          </el-table-column>
-        </el-table>
+        <template v-if="detailData.type === 'LABOR'">
+          <el-divider>工时明细（多款合并）</el-divider>
+          <el-table :data="detailData.laborItems ?? []" border size="small">
+            <el-table-column prop="sample_no" label="样衣编号" width="120" />
+            <el-table-column prop="style_no" label="客户款号" />
+            <el-table-column prop="piece_count" label="件数" width="80" align="right" />
+            <el-table-column prop="labor_unit_price" label="工时单价" width="100" align="right">
+              <template #default="{ row }">{{ row.labor_unit_price != null ? (+row.labor_unit_price).toFixed(2) : '--' }}</template>
+            </el-table-column>
+            <el-table-column prop="labor_amount" label="工时金额" width="110" align="right">
+              <template #default="{ row }">{{ row.labor_amount != null ? (+row.labor_amount).toFixed(2) : '--' }}</template>
+            </el-table-column>
+          </el-table>
+        </template>
+        <template v-else>
+          <el-divider>出货明细</el-divider>
+          <el-table :data="detailData.shipments ?? []" border size="small">
+            <el-table-column prop="shipment_id" label="出货单ID" width="100" />
+            <el-table-column prop="item_name" label="品名" />
+            <el-table-column prop="snapshot_unit_price" label="单价" width="100" align="right">
+              <template #default="{ row }">{{ (+row.snapshot_unit_price).toFixed(4) }}</template>
+            </el-table-column>
+            <el-table-column prop="qty" label="数量" width="80" align="right" />
+            <el-table-column prop="amount" label="金额" width="110" align="right">
+              <template #default="{ row }">{{ (+row.amount).toFixed(2) }}</template>
+            </el-table-column>
+          </el-table>
+        </template>
+      </template>
+    </el-dialog>
+
+    <!-- 生成工时对账弹窗：勾选同一版师的已对账样衣 -->
+    <el-dialog v-model="laborVisible" title="生成工时对账（勾选多款样衣·同一版师）" width="820px">
+      <el-alert
+        type="info" :closable="false" show-icon style="margin-bottom:12px"
+        title="仅显示「已对账」状态的样衣；一张工时对账单需为同一版师，勾选后合并金额生成待复核对账单。"
+      />
+      <el-table
+        :data="laborSamples" v-loading="laborLoading" border size="small"
+        max-height="420" @selection-change="onLaborSelect"
+      >
+        <el-table-column type="selection" width="46" />
+        <el-table-column prop="sample_no" label="样衣编号" width="130" />
+        <el-table-column prop="style_no" label="客户款号" width="120" />
+        <el-table-column prop="patternmaker_name" label="版师" width="100">
+          <template #default="{ row }">{{ row.patternmaker_name || ('#' + (row.patternmaker_id ?? '')) }}</template>
+        </el-table-column>
+        <el-table-column prop="piece_count" label="件数" width="70" align="right" />
+        <el-table-column prop="labor_unit_price" label="工时单价" width="90" align="right">
+          <template #default="{ row }">{{ row.labor_unit_price != null ? (+row.labor_unit_price).toFixed(2) : '--' }}</template>
+        </el-table-column>
+        <el-table-column prop="labor_amount" label="工时金额" width="100" align="right">
+          <template #default="{ row }">{{ row.labor_amount != null ? (+row.labor_amount).toFixed(2) : '--' }}</template>
+        </el-table-column>
+      </el-table>
+      <div class="labor-sum">已选 {{ laborSelection.length }} 款 · 合计工时金额 ¥{{ laborTotal.toFixed(2) }}</div>
+      <template #footer>
+        <el-button @click="laborVisible = false">取消</el-button>
+        <el-button type="primary" :loading="laborSaving" :disabled="!laborSelection.length" @click="doGenerateLabor">生成工时对账单</el-button>
       </template>
     </el-dialog>
 
@@ -212,9 +267,10 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
-import { Search, Refresh, Plus } from '@element-plus/icons-vue';
+import { Search, Refresh, Plus, Coin } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { reconciliationApi } from '@/api/reconciliation';
+import { sampleApi } from '@/api/sample';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole } from '@i9/types';
 
@@ -222,12 +278,20 @@ const authStore = useAuthStore();
 const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
 const canEdit = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.FINANCE));
 const canReview = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.SUPERVISOR));
+const canBusiness = computed(() =>
+  authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.FINANCE) || authStore.hasRole(UserRole.BUSINESS));
 
 function statusLabel(s: string) {
   return { DRAFT: '草稿', PENDING: '待复核', CONFIRMED: '已确认', PAID: '已付款' }[s] ?? s;
 }
 function statusTagType(s: string): any {
   return { DRAFT: 'info', PENDING: 'warning', CONFIRMED: 'primary', PAID: 'success' }[s] ?? 'info';
+}
+function typeLabel(t: string) {
+  return { CONTRACT: '合同对账', NO_CONTRACT: '非合同对账', LABOR: '工时对账' }[t] ?? t;
+}
+function typeTag(t: string): any {
+  return { CONTRACT: '', NO_CONTRACT: 'warning', LABOR: 'success' }[t] ?? 'info';
 }
 
 const loading = ref(false);
@@ -325,6 +389,45 @@ async function doCreate() {
     load();
   } finally { saving.value = false; }
 }
+
+// 生成工时对账：勾选已对账样衣（同一版师）合并
+const laborVisible = ref(false);
+const laborLoading = ref(false);
+const laborSaving = ref(false);
+const laborSamples = ref<any[]>([]);
+const laborSelection = ref<any[]>([]);
+const laborTotal = computed(() =>
+  laborSelection.value.reduce((s, x) => s + (+x.labor_amount || 0), 0));
+
+async function openLabor() {
+  laborVisible.value = true;
+  laborSelection.value = [];
+  laborLoading.value = true;
+  try {
+    // 仅拉「已对账」样衣（版师已填件数+单价、工时金额生成）
+    const res = await sampleApi.list({ status: 'RECONCILED', page: 1, size: 200 });
+    const items = res?.data?.items ?? (res as any)?.items ?? [];
+    laborSamples.value = items.filter((s: any) => +s.labor_amount > 0);
+  } finally { laborLoading.value = false; }
+}
+function onLaborSelect(rows: any[]) { laborSelection.value = rows; }
+
+async function doGenerateLabor() {
+  if (!laborSelection.value.length) return;
+  const makerIds = Array.from(new Set(laborSelection.value.map((s) => s.patternmaker_id)));
+  if (makerIds.length > 1) {
+    ElMessage.warning('一张工时对账单需为同一版师，请勿跨版师勾选');
+    return;
+  }
+  laborSaving.value = true;
+  try {
+    await reconciliationApi.generateLabor(laborSelection.value.map((s) => s.id));
+    ElMessage.success('工时对账单已生成（草稿·待提交复核）');
+    laborVisible.value = false;
+    query.type = 'LABOR';
+    load();
+  } finally { laborSaving.value = false; }
+}
 </script>
 
 <style scoped>
@@ -334,4 +437,5 @@ async function doCreate() {
 .pagination { margin-top: 16px; display: flex; justify-content: flex-end; }
 .item-row { margin-bottom: 8px; }
 .amount { font-size: 12px; color: #909399; }
+.labor-sum { margin-top: 10px; text-align: right; font-weight: 600; color: var(--el-color-primary); }
 </style>
