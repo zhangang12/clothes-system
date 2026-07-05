@@ -113,6 +113,17 @@
         <el-timeline v-if="logs.length">
           <el-timeline-item v-for="l in logs" :key="l.id" :timestamp="l.created_at" size="small">
             {{ actionLabel(l.action) }} · {{ l.operator }}（{{ l.operator_type === 'SUPPLIER' ? '供应商' : '内部' }}）
+            <div v-if="l.remark" class="log-remark">
+              <span v-if="remarkText(l.remark)">{{ remarkText(l.remark) }}</span>
+              <el-link
+                v-if="remarkAttachment(l.remark)"
+                type="primary"
+                :href="remarkAttachment(l.remark)"
+                target="_blank"
+                :underline="false"
+                style="margin-left: 6px;"
+              >📎 查看发票附件</el-link>
+            </div>
           </el-timeline-item>
         </el-timeline>
         <el-empty v-else description="暂无门户流水" :image-size="60" />
@@ -139,7 +150,13 @@ const portalStatuses = [{ v: 'DRAFT', l: '草稿' }, { v: 'PUSHED', l: '已推�
 const typeLabel = (t: string) => ({ MATERIAL: '面料合同', PROCESS: '加工合同', SUPPLEMENT: '补料合同' } as any)[t] ?? t;
 const portalLabel = (s: string) => ({ DRAFT: '草稿', PUSHED: '已推送', STAMPED: '已盖章', SHIPPING: '出货中', RECONCILED: '已对账' } as any)[s] ?? s;
 const portalTagType = (s: string): any => ({ DRAFT: 'info', PUSHED: 'warning', STAMPED: 'primary', SHIPPING: 'success', RECONCILED: 'success' } as any)[s] ?? 'info';
-const actionLabel = (a: string) => ({ PUSH: '推送门户', STAMP: '供应商盖章', SHIP: '发货', RECONCILE: '对账' } as any)[a] ?? a;
+const actionLabel = (a: string) => ({ PUSH: '推送门户', STAMP: '供应商盖章', SHIP: '发货', INVOICE: '上传发票', RECONCILE: '对账' } as any)[a] ?? a;
+// 门户流水备注：抽取 附件:<url> 作可点击链接，剩余文本正常展示
+const remarkAttachment = (remark?: string): string => {
+  const m = remark?.match(/附件:(\S+)/);
+  return m ? m[1] : '';
+};
+const remarkText = (remark?: string): string => (remark ? remark.replace(/\s*·?\s*附件:\S+/, '').trim() : '');
 
 const loading = ref(false);
 const saving = ref(false);
@@ -243,4 +260,5 @@ async function doCreate() {
 .ratio-hint.bad { color: #C04042; font-weight: 600; }
 .muted { font-size: 12px; color: var(--el-text-color-secondary); font-weight: 400; }
 .sec { margin: 16px 0 8px; color: #1E3A5F; }
+.log-remark { margin-top: 4px; font-size: 12px; color: var(--el-text-color-secondary); }
 </style>
