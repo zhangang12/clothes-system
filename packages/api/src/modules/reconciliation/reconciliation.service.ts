@@ -129,6 +129,18 @@ export class ReconciliationService {
     return { ...reconciliation, shipments };
   }
 
+  // 业务员初审提交：草稿→待主管复核（设计稿 对账 B1/C1 二级审批）
+  async submit(id: number): Promise<Reconciliation> {
+    const rec = await this.repo.findOne({ where: { id, deleted: 0 } });
+    if (!rec) throw new NotFoundException(`对账单 #${id} 不存在`);
+    if (rec.status !== ReconciliationStatus.DRAFT) {
+      throw new BadRequestException('只有草稿状态才可提交复核');
+    }
+    rec.status = ReconciliationStatus.PENDING;
+    return this.repo.save(rec);
+  }
+
+  // 主管复核确认：待复核→已确认（二级审批第二级）
   async confirm(id: number): Promise<Reconciliation> {
     return this.dataSource.transaction(async (manager) => {
       const rec = await manager.findOne(Reconciliation, {
@@ -136,8 +148,8 @@ export class ReconciliationService {
         lock: { mode: 'pessimistic_write' },
       });
       if (!rec) throw new NotFoundException(`对账单 #${id} 不存在`);
-      if (rec.status !== ReconciliationStatus.DRAFT) {
-        throw new BadRequestException('只有草稿状态才可确认');
+      if (rec.status !== ReconciliationStatus.PENDING) {
+        throw new BadRequestException('只有待复核状态才可复核确认（需业务员先提交）');
       }
       // 发票=对账金额校验（设计稿 门户 D2/G3）：含票时发票金额须与对账金额相等，允许 ≤¥0.01 舍入，否则拦截、不进付款
       if (rec.invoice_amount != null && Math.abs(+(rec.invoice_diff ?? 0)) > 0.01) {

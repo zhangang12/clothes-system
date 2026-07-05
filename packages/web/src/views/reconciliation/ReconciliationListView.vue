@@ -14,6 +14,7 @@
         <el-form-item label="状态">
           <el-select v-model="query.status" clearable placeholder="全部" style="width:110px" @change="load">
             <el-option label="草稿" value="DRAFT" />
+            <el-option label="待复核" value="PENDING" />
             <el-option label="已确认" value="CONFIRMED" />
             <el-option label="已付款" value="PAID" />
           </el-select>
@@ -76,9 +77,14 @@
             <el-button link type="primary" size="small" @click="viewDetail(row.id)">详情</el-button>
             <el-button
               v-if="row.status === 'DRAFT' && canEdit"
+              link type="warning" size="small"
+              @click="doSubmit(row)"
+            >提交复核</el-button>
+            <el-button
+              v-if="row.status === 'PENDING' && canReview"
               link type="success" size="small"
               @click="doConfirm(row)"
-            >确认</el-button>
+            >复核确认</el-button>
             <el-popconfirm v-if="row.status === 'DRAFT' && isAdmin" title="确认删除？" @confirm="doRemove(row.id)">
               <template #reference>
                 <el-button link type="danger" size="small">删除</el-button>
@@ -215,12 +221,13 @@ import { UserRole } from '@i9/types';
 const authStore = useAuthStore();
 const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
 const canEdit = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.FINANCE));
+const canReview = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.SUPERVISOR));
 
 function statusLabel(s: string) {
-  return { DRAFT: '草稿', CONFIRMED: '已确认', PAID: '已付款' }[s] ?? s;
+  return { DRAFT: '草稿', PENDING: '待复核', CONFIRMED: '已确认', PAID: '已付款' }[s] ?? s;
 }
 function statusTagType(s: string): any {
-  return { DRAFT: 'info', CONFIRMED: 'primary', PAID: 'success' }[s] ?? 'info';
+  return { DRAFT: 'info', PENDING: 'warning', CONFIRMED: 'primary', PAID: 'success' }[s] ?? 'info';
 }
 
 const loading = ref(false);
@@ -259,9 +266,15 @@ async function viewDetail(id: number) {
   detailVisible.value = true;
 }
 
+async function doSubmit(row: any) {
+  await reconciliationApi.submit(row.id);
+  ElMessage.success('已提交主管复核');
+  load();
+}
+
 async function doConfirm(row: any) {
   await reconciliationApi.confirm(row.id);
-  ElMessage.success('已确认对账单');
+  ElMessage.success('主管复核已确认');
   load();
 }
 

@@ -37,9 +37,16 @@ export class ReconciliationController {
     return this.service.findOne(id);
   }
 
+  @Patch(':id/submit')
+  @Roles(UserRole.ADMIN, UserRole.FINANCE, UserRole.BUSINESS)
+  @ApiOperation({ summary: '提交复核（业务员初审，DRAFT→PENDING）' })
+  submit(@Param('id', ParseIntPipe) id: number) {
+    return this.service.submit(id);
+  }
+
   @Patch(':id/confirm')
-  @Roles(UserRole.ADMIN, UserRole.FINANCE)
-  @ApiOperation({ summary: '确认对账单（DRAFT→CONFIRMED）' })
+  @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
+  @ApiOperation({ summary: '主管复核确认（PENDING→CONFIRMED，二级审批）' })
   confirm(@Param('id', ParseIntPipe) id: number) {
     return this.service.confirm(id);
   }

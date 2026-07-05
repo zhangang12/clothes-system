@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS `sys_user` (
   `username`     VARCHAR(50)  NOT NULL COMMENT '登录用户名',
   `password`     VARCHAR(255) NOT NULL COMMENT '密码(bcrypt)',
   `real_name`    VARCHAR(50)  NOT NULL COMMENT '真实姓名',
-  `role`         ENUM('ADMIN','BUSINESS','FINANCE','PATTERNMAKER') NOT NULL DEFAULT 'BUSINESS',
+  `role`         ENUM('ADMIN','BUSINESS','FINANCE','PATTERNMAKER','SUPERVISOR','SAMPLE_MAKER') NOT NULL DEFAULT 'BUSINESS',
   `status`       TINYINT      NOT NULL DEFAULT 1 COMMENT '1=启用 0=停用',
   `created_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -26,7 +26,9 @@ INSERT IGNORE INTO `sys_user` (`id`,`username`,`password`,`real_name`,`role`) VA
 (1,'admin','$2a$10$Y.NI2Bzr5gof2tpDSJsJ8exF2z2wuzkoqShu822RgpuJlrNC/GW5i','系统管理员','ADMIN'),
 (2,'business_user','$2a$10$Y.NI2Bzr5gof2tpDSJsJ8exF2z2wuzkoqShu822RgpuJlrNC/GW5i','业务测试','BUSINESS'),
 (3,'finance_user','$2a$10$Y.NI2Bzr5gof2tpDSJsJ8exF2z2wuzkoqShu822RgpuJlrNC/GW5i','财务测试','FINANCE'),
-(4,'pm_user','$2a$10$Y.NI2Bzr5gof2tpDSJsJ8exF2z2wuzkoqShu822RgpuJlrNC/GW5i','版师测试','PATTERNMAKER');
+(4,'pm_user','$2a$10$Y.NI2Bzr5gof2tpDSJsJ8exF2z2wuzkoqShu822RgpuJlrNC/GW5i','版师测试','PATTERNMAKER'),
+(5,'supervisor_user','$2a$10$Y.NI2Bzr5gof2tpDSJsJ8exF2z2wuzkoqShu822RgpuJlrNC/GW5i','主管测试','SUPERVISOR'),
+(6,'sample_user','$2a$10$Y.NI2Bzr5gof2tpDSJsJ8exF2z2wuzkoqShu822RgpuJlrNC/GW5i','打样测试','SAMPLE_MAKER');
 
 -- ============================================================
 -- 供应商门户账号
@@ -541,7 +543,7 @@ CREATE TABLE IF NOT EXISTS `reconciliation` (
   `invoice_diff`     DECIMAL(15,4)  DEFAULT NULL COMMENT '发票与对账差额',
   `invoice_url`      VARCHAR(500)   DEFAULT NULL COMMENT '发票文件路径',
   `has_invoice`      TINYINT        NOT NULL DEFAULT 0 COMMENT '1=有票 0=无票',
-  `status`           ENUM('DRAFT','CONFIRMED','PAID') NOT NULL DEFAULT 'DRAFT',
+  `status`           ENUM('DRAFT','PENDING','CONFIRMED','PAID') NOT NULL DEFAULT 'DRAFT',
   `confirmed_at`     DATETIME       DEFAULT NULL,
   `description`      TEXT           DEFAULT NULL COMMENT '无合同费用说明',
   `created_by`       BIGINT         NOT NULL,

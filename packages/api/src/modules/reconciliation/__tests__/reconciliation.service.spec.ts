@@ -110,9 +110,18 @@ describe('ReconciliationService', () => {
     expect(manager.save.mock.calls[0][1]).toMatchObject({ tax_amount: 130 });
   });
 
-  // UT-REC-04: confirm transitions DRAFT → CONFIRMED
-  it('UT-REC-04 confirm transitions DRAFT→CONFIRMED', async () => {
+  // UT-REC-04a: submit transitions DRAFT → PENDING (业务员初审)
+  it('UT-REC-04a submit transitions DRAFT→PENDING', async () => {
     const rec = makeReconciliation({ status: ReconciliationStatus.DRAFT });
+    mockReconciliationRepo.findOne.mockResolvedValue(rec);
+    mockReconciliationRepo.save.mockResolvedValue({ ...rec, status: ReconciliationStatus.PENDING });
+    const result = await service.submit(1);
+    expect(result.status).toBe(ReconciliationStatus.PENDING);
+  });
+
+  // UT-REC-04: confirm transitions PENDING → CONFIRMED (主管复核，二级审批)
+  it('UT-REC-04 confirm transitions PENDING→CONFIRMED', async () => {
+    const rec = makeReconciliation({ status: ReconciliationStatus.PENDING });
     const manager = makeManager(rec);
     manager.save.mockResolvedValue({ ...rec, status: ReconciliationStatus.CONFIRMED });
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
@@ -121,9 +130,9 @@ describe('ReconciliationService', () => {
     expect(result.status).toBe(ReconciliationStatus.CONFIRMED);
   });
 
-  // UT-REC-05: confirm throws if already confirmed
-  it('UT-REC-05 confirm throws BadRequestException if already CONFIRMED', async () => {
-    const rec = makeReconciliation({ status: ReconciliationStatus.CONFIRMED });
+  // UT-REC-05: confirm throws if not PENDING (DRAFT 未提交不可直接复核)
+  it('UT-REC-05 confirm throws BadRequestException if not PENDING', async () => {
+    const rec = makeReconciliation({ status: ReconciliationStatus.DRAFT });
     const manager = makeManager(rec);
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await expect(service.confirm(1)).rejects.toThrow(BadRequestException);

@@ -3,6 +3,7 @@ import { ReconcileType } from '@i9/types';
 
 export enum ReconciliationStatus {
   DRAFT = 'DRAFT',
+  PENDING = 'PENDING',   // 待主管复核（业务员初审提交后）
   CONFIRMED = 'CONFIRMED',
   PAID = 'PAID',
 }

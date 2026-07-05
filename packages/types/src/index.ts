@@ -28,6 +28,8 @@ export enum UserRole {
   BUSINESS = 'BUSINESS',
   FINANCE = 'FINANCE',
   PATTERNMAKER = 'PATTERNMAKER',
+  SUPERVISOR = 'SUPERVISOR',     // 业务主管（对账单二级复核）
+  SAMPLE_MAKER = 'SAMPLE_MAKER', // 打样
 }
 
 // 工厂/厂商类型（基础资料设计稿 §1.1：面料/辅料/委外/货代/测试/出口/其他）

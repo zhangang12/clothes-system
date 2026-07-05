@@ -7,6 +7,8 @@ export const reconciliationApi = {
     http.get<unknown, any>(`/reconciliations/${id}`),
   create: (dto: Record<string, unknown>) =>
     http.post<unknown, any>('/reconciliations', dto),
+  submit: (id: number) =>
+    http.patch<unknown, any>(`/reconciliations/${id}/submit`),
   confirm: (id: number) =>
     http.patch<unknown, any>(`/reconciliations/${id}/confirm`),
   remove: (id: number) =>

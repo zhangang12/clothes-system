@@ -169,32 +169,33 @@ describe('ReconciliationListView', () => {
   });
 
   // ────────────────────────────── 确认 button only shown for DRAFT + canEdit
-  it('shows "确认" button only for DRAFT rows (ADMIN)', async () => {
+  it('shows "提交复核" on DRAFT and "复核确认" on PENDING (ADMIN, 二级审批)', async () => {
     mockList.mockResolvedValue({
       items: [
         makeItem({ id: 1, status: 'DRAFT' }),
-        makeItem({ id: 2, reconcile_no: 'RC-002', status: 'CONFIRMED' }),
+        makeItem({ id: 2, reconcile_no: 'RC-002', status: 'PENDING' }),
       ],
       total: 2,
     });
     const wrapper = mountView(UserRole.ADMIN);
-    // Wait until both rows are rendered (we have two 详情 buttons)
     await vi.waitFor(() => {
       const detailBtns = wrapper.findAll('button').filter((b) => b.text() === '详情');
       expect(detailBtns).toHaveLength(2);
     });
 
-    const confirmBtns = wrapper.findAll('button').filter((b) => b.text() === '确认');
-    expect(confirmBtns.length).toBe(1);
+    const submitBtns = wrapper.findAll('button').filter((b) => b.text() === '提交复核');
+    const reviewBtns = wrapper.findAll('button').filter((b) => b.text() === '复核确认');
+    expect(submitBtns.length).toBe(1); // DRAFT row
+    expect(reviewBtns.length).toBe(1); // PENDING row
   });
 
-  it('hides "确认" button for BUSINESS user on DRAFT row', async () => {
-    mockList.mockResolvedValue({ items: [makeItem({ status: 'DRAFT' })], total: 1 });
-    const wrapper = mountView(UserRole.BUSINESS);
+  it('hides "复核确认" button for FINANCE user on PENDING row (仅主管/ADMIN)', async () => {
+    mockList.mockResolvedValue({ items: [makeItem({ status: 'PENDING' })], total: 1 });
+    const wrapper = mountView(UserRole.FINANCE);
     await vi.waitFor(() => expect(wrapper.text()).toContain('RC-2024-001'));
 
-    const confirmBtns = wrapper.findAll('button').filter((b) => b.text() === '确认');
-    expect(confirmBtns.length).toBe(0);
+    const reviewBtns = wrapper.findAll('button').filter((b) => b.text() === '复核确认');
+    expect(reviewBtns.length).toBe(0);
   });
 
   // ──────────────────────────────────────────── 删除 button (ADMIN only)

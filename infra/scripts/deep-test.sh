@@ -71,8 +71,13 @@ TOKEN_ADMIN=$(login_user admin)
 TOKEN_BUSINESS=$(login_user business_user)
 TOKEN_FINANCE=$(login_user finance_user)
 TOKEN_PM=$(login_user pm_user)
+TOKEN_SUPERVISOR=$(login_user supervisor_user)
+TOKEN_SAMPLE=$(login_user sample_user)
 api POST /auth/portal/login "{\"username\":\"supplier1\",\"password\":\"$PW\"}"
 TOKEN_SUP=$(echo "$RESP" | jval data.access_token)
+
+# 对账二级审批：业务员(财务)提交初审 + 主管复核确认（设计稿 对账 B1/C1）
+reconcile_approve() { api PATCH "/reconciliations/$1/submit" '' "$TOKEN_FINANCE"; api PATCH "/reconciliations/$1/confirm" '' "$TOKEN_SUPERVISOR"; }
 
 # ── fixtures（用 admin 建前置数据，返回新 id 到 stdout）───────
 fx_customer() { api POST /customers "{\"name\":\"C_${SFX}_${RANDOM}\",\"type\":\"MIDDLEMAN\",\"grade\":\"A\",\"currency\":\"USD\",\"contacts\":[{\"name\":\"张三\",\"mobile\":\"13900000000\"}]}"; echo "$RESP" | jval data.id; }
@@ -344,10 +349,15 @@ test_reconciliation() {
   api POST /reconciliations "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid:-0},\"description\":\"测试对账\"}" "$TOKEN_FINANCE"
   rid=$(echo "$RESP" | jval data.id)
   [[ -n "$rid" ]] && ok "FINANCE创建对账 id=$rid" || bad "创建对账失败 ${RESP:0:120}"
+  # 二级审批：业务员(财务)提交初审 → 主管复核确认（设计稿 对账 B1/C1）
+  api PATCH "/reconciliations/${rid:-0}/submit" '' "$TOKEN_FINANCE"
+  expect_ok "对账提交复核(DRAFT→PENDING)"
   api PATCH "/reconciliations/${rid:-0}/confirm" '' "$TOKEN_FINANCE"
-  expect_ok "对账确认(DRAFT→)"
-  api PATCH "/reconciliations/${rid:-0}/confirm" '' "$TOKEN_FINANCE"
-  expect_code 400 "重复确认对账应400"
+  expect_deny "财务复核对账应拒绝(仅主管/ADMIN)"
+  api PATCH "/reconciliations/${rid:-0}/confirm" '' "$TOKEN_SUPERVISOR"
+  expect_ok "主管复核确认(PENDING→CONFIRMED)"
+  api PATCH "/reconciliations/${rid:-0}/confirm" '' "$TOKEN_SUPERVISOR"
+  expect_code 400 "重复复核应400(非PENDING)"
 }
 
 test_payment() {
@@ -442,8 +452,8 @@ test_portal() {
   # 内部对账（CONTRACT类型）确认 → 合同门户置「已对账」RECONCILED，解锁开票
   api POST /reconciliations "{\"type\":\"CONTRACT\",\"contract_id\":${ctid:-0},\"factory_id\":1,\"shipments\":[{\"shipment_id\":1,\"item_name\":\"面料\",\"snapshot_unit_price\":8,\"qty\":1500}]}" "$TOKEN_FINANCE"
   rcid=$(echo "$RESP" | jval data.id)
-  api PATCH "/reconciliations/${rcid:-0}/confirm" '' "$TOKEN_FINANCE"
-  expect_ok "内部对账确认"
+  reconcile_approve "${rcid:-0}"
+  expect_ok "内部对账确认(二级审批)"
   api GET "/portal/contracts/${ctid:-0}" '' "$TOKEN_SUP"
   expect_eq data.portal_status RECONCILED "对账确认后合同门户置「已对账」"
   api PATCH "/portal/contracts/${ctid:-0}/invoice" '{"invoice_no":"INV-P1","invoice_amount":12000,"invoice_url":"/api/v1/uploads/file?p=misc/2026/01/inv.pdf"}' "$TOKEN_SUP"
@@ -905,8 +915,8 @@ test_order_ext() {
   # 对账确认驱动订单「已完成」
   api POST /reconciliations "{\"type\":\"CONTRACT\",\"contract_id\":${wf_ct:-0},\"factory_id\":${wf_fid:-0},\"shipments\":[{\"shipment_id\":1,\"item_name\":\"面料\",\"snapshot_unit_price\":8,\"qty\":100}]}" "$TOKEN_FINANCE"
   wf_rc=$(echo "$RESP" | jval data.id)
-  api PATCH "/reconciliations/${wf_rc:-0}/confirm" '' "$TOKEN_FINANCE"
-  expect_ok "对账确认(wf)"
+  reconcile_approve "${wf_rc:-0}"
+  expect_ok "对账确认(wf,二级审批)"
   api GET "/orders/${wf_oid:-0}"
   expect_eq data.status DONE "对账确认驱动订单「已完成」"
 }
@@ -1027,18 +1037,19 @@ test_reconciliation_ext() {
   expect_num data.shipments.0.amount 50 "明细行金额=单价×数量快照"
 
   # ── 发票=对账金额校验（设计稿 G3/门户D2）：发票100≠对账90(差10)确认应拦截，不进付款 ──
-  api PATCH "/reconciliations/${rid:-0}/confirm" '' "$TOKEN_FINANCE"
-  expect_code 400 "发票≠对账金额(差10)确认应400"
+  api PATCH "/reconciliations/${rid:-0}/submit" '' "$TOKEN_FINANCE"
+  api PATCH "/reconciliations/${rid:-0}/confirm" '' "$TOKEN_SUPERVISOR"
+  expect_code 400 "发票≠对账金额(差10)复核应400"
   api GET "/reconciliations/${rid:-0}" '' "$TOKEN_FINANCE"
-  expect_eq data.status DRAFT "发票不符拦截后仍为DRAFT"
+  expect_eq data.status PENDING "发票不符拦截后仍为待复核PENDING"
 
-  # ── 发票=对账金额(±0.01容差内)→确认放行并复查状态 ──
+  # ── 发票=对账金额(±0.01容差内)→复核放行并复查状态 ──
   api POST /reconciliations "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid:-0},\"invoice_no\":\"INVOK-${SFX}\",\"invoice_amount\":90.005,\"shipments\":[{\"shipment_id\":1,\"item_name\":\"OK\",\"snapshot_unit_price\":10,\"qty\":9}]}" "$TOKEN_FINANCE"
   ridok=$(echo "$RESP" | jval data.id)
-  api PATCH "/reconciliations/${ridok:-0}/confirm" '' "$TOKEN_FINANCE"
-  expect_ok "发票=对账金额(±0.01容差)确认放行"
+  reconcile_approve "${ridok:-0}"
+  expect_ok "发票=对账金额(±0.01容差)复核放行"
   api GET "/reconciliations/${ridok:-0}" '' "$TOKEN_FINANCE"
-  expect_eq data.status CONFIRMED "确认后详情状态复查为CONFIRMED"
+  expect_eq data.status CONFIRMED "复核后详情状态复查为CONFIRMED"
 
   # ── 非法转移：已确认(终态)删除应拒 ──
   api DELETE "/reconciliations/${ridok:-0}"
@@ -1107,8 +1118,8 @@ test_reconciliation_ext() {
   expect_code 400 "非法status筛选枚举应400"
 
   # ── 写接口 not-found：确认不存在大id → 404 ──
-  api PATCH "/reconciliations/99999999/confirm" '' "$TOKEN_FINANCE"
-  expect_code 404 "确认不存在对账应404"
+  api PATCH "/reconciliations/99999999/confirm" '' "$TOKEN_SUPERVISOR"
+  expect_code 404 "复核不存在对账应404"
 }
 
 test_payment_ext() {
@@ -1260,7 +1271,7 @@ test_settlement_ext() {
   aggCt=$(echo "$RESP" | jval data.id)
   api POST /reconciliations "{\"type\":\"CONTRACT\",\"contract_id\":${aggCt:-0},\"factory_id\":${aggFid:-0},\"shipments\":[{\"shipment_id\":1,\"item_name\":\"面料\",\"snapshot_unit_price\":8,\"qty\":1130}]}" "$TOKEN_FINANCE"
   aggRc=$(echo "$RESP" | jval data.id)
-  api PATCH "/reconciliations/${aggRc:-0}/confirm" '' "$TOKEN_FINANCE"
+  reconcile_approve "${aggRc:-0}"
   expect_ok "对账确认(款号${aggSfx},含税9040)"
   api POST /settlements "{\"order_id\":${aggOid:-0}}" "$TOKEN_FINANCE"
   expect_ok "结算不给成本→自动从对账付款汇总"
@@ -1320,7 +1331,7 @@ test_portal_ext() {
   # 内部对账确认 → RECONCILED，解锁开票
   api POST /reconciliations "{\"type\":\"CONTRACT\",\"contract_id\":${ctB:-0},\"factory_id\":1,\"shipments\":[{\"shipment_id\":1,\"item_name\":\"面料\",\"snapshot_unit_price\":8,\"qty\":100}]}" "$TOKEN_FINANCE"
   rcidB=$(echo "$RESP" | jval data.id)
-  api PATCH "/reconciliations/${rcidB:-0}/confirm" '' "$TOKEN_FINANCE"
+  reconcile_approve "${rcidB:-0}"
   expect_ok "内部对账确认(ctB→RECONCILED)"
   # RECONCILED → 开票放行，且可重复开票(仅追加日志)
   api PATCH "/portal/contracts/${ctB:-0}/invoice" '{"invoice_no":"INV-EXT-3"}' "$TOKEN_SUP"
