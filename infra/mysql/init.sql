@@ -503,6 +503,7 @@ CREATE TABLE IF NOT EXISTS `contract_material` (
   `unit_price`   DECIMAL(15,4)  NOT NULL COMMENT '单价',
   `qty`          DECIMAL(15,4)  NOT NULL COMMENT '数量',
   `amount`       DECIMAL(15,4)  NOT NULL COMMENT '金额=单价×数量',
+  `qty_source`   VARCHAR(20)    DEFAULT NULL COMMENT '数量来源:采购量含损耗/大货数',
   `remark`       VARCHAR(200)   DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_contract` (`contract_id`)

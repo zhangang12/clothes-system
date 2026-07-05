@@ -29,6 +29,9 @@ export class ContractMaterial {
   @Column({ type: 'decimal', precision: 15, scale: 4 })
   amount: number;
 
+  @Column({ length: 20, nullable: true })
+  qty_source: string; // 数量来源标注：采购量含损耗 / 大货数（设计稿 合同 C3）
+
   @Column({ length: 200, nullable: true })
   remark: string;
 }

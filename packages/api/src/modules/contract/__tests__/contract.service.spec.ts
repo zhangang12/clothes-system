@@ -7,6 +7,7 @@ import { Contract, ContractStatus } from '../contract.entity';
 import { ContractMaterial } from '../contract-material.entity';
 import { ContractPortalLog, PortalOperatorType } from '../contract-portal-log.entity';
 import { OrderMaterial } from '../../order/order-material.entity';
+import { OrderMain } from '../../order/order-main.entity';
 import { SupplierAccount } from '../../auth/supplier-account.entity';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
 import { ContractPortalStatus, ContractType } from '@i9/types';
@@ -47,6 +48,9 @@ const mockOrderMaterialRepo = {
 const mockSupplierRepo = {
   findOne: jest.fn().mockResolvedValue({ id: 1, factory_id: 5, status: 1 }),
 };
+const mockOrderRepo = {
+  findOne: jest.fn().mockResolvedValue({ id: 10, qty_total: 1000, deleted: 0 }),
+};
 const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn().mockResolvedValue(1), expire: jest.fn() };
 const mockDataSource = {
   transaction: jest.fn().mockImplementation((cb) => cb({
@@ -69,6 +73,7 @@ describe('ContractService', () => {
         { provide: getRepositoryToken(ContractMaterial), useValue: mockMaterialRepo },
         { provide: getRepositoryToken(ContractPortalLog), useValue: mockLogRepo },
         { provide: getRepositoryToken(OrderMaterial), useValue: mockOrderMaterialRepo },
+        { provide: getRepositoryToken(OrderMain), useValue: mockOrderRepo },
         { provide: getRepositoryToken(SupplierAccount), useValue: mockSupplierRepo },
         { provide: NumberingService, useValue: new NumberingService(mockRedis as any) },
         { provide: DataSource, useValue: mockDataSource },
@@ -144,11 +149,19 @@ describe('ContractService', () => {
     await expect(service.create(dto as any, 1)).rejects.toThrow(BadRequestException);
   });
 
-  // UT-CON-14: create still honors explicitly-provided materials for PROCESS type (no auto-derive)
-  it('UT-CON-14 create does not auto-derive for PROCESS type; requires explicit materials', async () => {
+  // UT-CON-14: PROCESS type auto-derives a single line from order 大货数 (设计稿 合同A4/C3)
+  it('UT-CON-14 create auto-derives PROCESS quantity from order qty_total with qty_source=大货数', async () => {
+    mockOrderRepo.findOne.mockResolvedValueOnce({ id: 10, qty_total: 1000, deleted: 0 });
     const dto = { type: ContractType.PROCESS, factory_id: 5, order_id: 10 };
-    await expect(service.create(dto as any, 1)).rejects.toThrow(BadRequestException);
-    expect(mockOrderMaterialRepo.find).not.toHaveBeenCalled();
+    const manager = {
+      create: jest.fn().mockImplementation((_, v) => v),
+      save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
+      findOne: jest.fn().mockResolvedValue(null),
+    };
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await service.create(dto as any, 1);
+    const materialSaveCall = manager.save.mock.calls.find((c: any[]) => Array.isArray(c[1]));
+    expect(materialSaveCall[1][0]).toMatchObject({ qty: 1000, qty_source: '大货数' });
   });
 
   // UT-CON-03: push transitions DRAFT → PUSHED and logs action

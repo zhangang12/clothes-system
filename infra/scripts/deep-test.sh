@@ -968,13 +968,21 @@ test_contract_ext() {
   no=$(echo "$RESP" | jval data.contract_no)
   expect_num data.materials.0.amount 1000 "首条材料金额=10*100"
 
-  # —— 空材料数组：PROCESS类型不做快照自动带出，无明细应拒绝(Phase 3新规则，没有材料明细的合同没有业务意义) ——
+  # —— 加工合同(PROCESS)空明细：自动取订单大货数带出单行,数量来源标注大货数(设计稿 合同A4/C3) ——
+  local procCt matCt
   api POST /contracts "{\"type\":\"PROCESS\",\"factory_id\":${fid:-0},\"order_id\":${oid:-0},\"materials\":[]}"
-  expect_code 400 "PROCESS类型空材料数组应400(不支持自动带出)"
-  # —— MATERIAL类型空数组会触发快照自动带出，非空(该订单有order_material) ——
+  expect_ok "PROCESS空数组取大货数自动带出应2xx"
+  procCt=$(echo "$RESP" | jval data.id)
+  api GET "/contracts/${procCt:-0}"
+  expect_num data.materials.0.qty 1000 "加工合同数量=订单大货数1000"
+  expect_eq data.materials.0.qty_source 大货数 "加工合同数量来源标注=大货数"
+  # —— MATERIAL类型空数组触发快照自动带出，数量来源=采购量含损耗 ——
   api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${fid:-0},\"order_id\":${oid:-0},\"materials\":[]}"
   expect_ok "MATERIAL类型空数组触发自动带出应2xx"
+  matCt=$(echo "$RESP" | jval data.id)
   if [[ "$(echo "$RESP" | jval data.total_amount)" != "0" ]]; then ok "自动带出后合计非0(来自order_material)"; else bad "自动带出后合计不应为0"; fi
+  api GET "/contracts/${matCt:-0}"
+  expect_eq data.materials.0.qty_source 采购量含损耗 "材料合同数量来源标注=采购量含损耗"
 
   # —— 列表分页 & keyword 筛选 & 大id 404 ——
   api GET "/contracts?page=1&size=2"

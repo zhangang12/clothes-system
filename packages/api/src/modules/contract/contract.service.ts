@@ -28,6 +28,7 @@ export class ContractService {
     @InjectRepository(ContractMaterial) private readonly materialRepo: Repository<ContractMaterial>,
     @InjectRepository(ContractPortalLog) private readonly logRepo: Repository<ContractPortalLog>,
     @InjectRepository(OrderMaterial) private readonly orderMaterialRepo: Repository<OrderMaterial>,
+    @InjectRepository(OrderMain) private readonly orderRepo: Repository<OrderMain>,
     @InjectRepository(SupplierAccount) private readonly supplierRepo: Repository<SupplierAccount>,
     private readonly numbering: NumberingService,
     private readonly dataSource: DataSource,
@@ -59,7 +60,8 @@ export class ContractService {
     // 快照机制（系统开发手册）：报价→合同时锁定费用明细/单价。材料合同若未手工提供
     // materials，自动从该订单已核算的用料清单（quote_item→order_material 链路，
     // total_purchase/unit_price 已按报价损耗率算好）带出，避免业务员凭空重新誊抄。
-    let materialInputs = dto.materials ?? [];
+    let materialInputs: Array<Record<string, any>> = dto.materials ?? [];
+    // 材料合同：从订单用料核算带出，数量=采购量(含损耗)（设计稿 合同 A5/C3）
     if (materialInputs.length === 0 && dto.type === ContractType.MATERIAL) {
       const orderMaterials = await this.orderMaterialRepo.find({
         where: { order_id: dto.order_id },
@@ -69,9 +71,24 @@ export class ContractService {
         item_name: om.item_name,
         unit: om.unit,
         unit_price: +om.unit_price || 0,
-        qty: +om.total_purchase || 0,
+        qty: +(om.final_purchase ?? om.total_purchase) || 0,
+        qty_source: '采购量含损耗',
         sort_order: om.sort_order,
       }));
+    }
+    // 加工合同：数量取订单大货数（设计稿 合同 A4）；单价由业务填写
+    if (materialInputs.length === 0 && dto.type === ContractType.PROCESS && dto.order_id) {
+      const order = await this.orderRepo.findOne({ where: { id: dto.order_id, deleted: 0 } });
+      if (order && +order.qty_total) {
+        materialInputs = [{
+          item_name: '加工费',
+          unit: '件',
+          unit_price: 0,
+          qty: +order.qty_total,
+          qty_source: '大货数',
+          sort_order: 0,
+        }];
+      }
     }
     if (materialInputs.length === 0) {
       throw new BadRequestException('材料明细不能为空（该订单无可带出的用料核算记录，请手动填写 materials）');
@@ -108,6 +125,7 @@ export class ContractService {
         unit_price: m.unit_price,
         qty: m.qty,
         amount: +(m.unit_price * m.qty).toFixed(4),
+        qty_source: m.qty_source ?? null,
         remark: m.remark,
       }));
       await manager.save(ContractMaterial, materials);

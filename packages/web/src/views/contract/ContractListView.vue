@@ -106,6 +106,12 @@
           <el-table-column prop="unit" label="单位" width="60" />
           <el-table-column prop="unit_price" label="单价" width="90" align="right" />
           <el-table-column prop="qty" label="数量" width="90" align="right" />
+          <el-table-column prop="qty_source" label="数量来源" width="110">
+            <template #default="{ row }">
+              <el-tag v-if="row.qty_source" size="small" :type="row.qty_source === '大货数' ? 'warning' : 'info'">{{ row.qty_source }}</el-tag>
+              <span v-else>—</span>
+            </template>
+          </el-table-column>
           <el-table-column prop="amount" label="金额" width="100" align="right" />
         </el-table>
 
