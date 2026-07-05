@@ -1052,7 +1052,7 @@ test_reconciliation_ext() {
 }
 
 test_payment_ext() {
-  local fid fid0 pidA pidB pidC slip501
+  local fid fid0 pidA pidB pidC slip501 rid_pay
   fid=$(fx_factory); fid0=$(fx_factory)
 
   # ——— 预付款：创建 / 零额边界 / 权限 / 按工厂筛选 / 分页 ———
@@ -1075,6 +1075,16 @@ test_payment_ext() {
   expect_code 400 "预付冲抵超可用余额应400"
   api POST /payments/requests "{\"type\":\"CONTRACT\",\"factory_id\":${fid:-0},\"amount\":600}" "$TOKEN_FINANCE"
   expect_ok "type=CONTRACT建付款申请2xx"
+
+  # ——— 分批付款·超付拦截：同一对账单累计申请额≤对账应付（设计稿 G4）———
+  api POST /reconciliations "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid:-0},\"shipments\":[{\"shipment_id\":1,\"item_name\":\"料\",\"snapshot_unit_price\":10,\"qty\":100}]}" "$TOKEN_FINANCE"
+  rid_pay=$(echo "$RESP" | jval data.id)  # 对账应付=10×100=1000
+  api POST /payments/requests "{\"type\":\"CONTRACT\",\"factory_id\":${fid:-0},\"reconcile_id\":${rid_pay:-0},\"amount\":600}" "$TOKEN_FINANCE"
+  expect_ok "分批付款1:申请600(≤应付1000)放行"
+  api POST /payments/requests "{\"type\":\"CONTRACT\",\"factory_id\":${fid:-0},\"reconcile_id\":${rid_pay:-0},\"amount\":500}" "$TOKEN_FINANCE"
+  expect_code 400 "分批付款超付:累计1100>应付1000应400"
+  api POST /payments/requests "{\"type\":\"CONTRACT\",\"factory_id\":${fid:-0},\"reconcile_id\":${rid_pay:-0},\"amount\":400}" "$TOKEN_FINANCE"
+  expect_ok "分批付款2:申请400(累计1000=应付)放行"
 
   # ——— 状态机补充：APPROVED→submit / 水单MaxLength500 / 终态PAID→approve ———
   api POST /payments/requests "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid:-0},\"amount\":500}" "$TOKEN_FINANCE"

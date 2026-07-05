@@ -74,6 +74,21 @@ export class PaymentService {
       }
     }
 
+    // 分批付款·超付拦截（设计稿 G4）：同一对账单累计付款申请额不得超过对账应付
+    if (dto.reconcile_id) {
+      const rec = await this.reconcileRepo.findOne({ where: { id: dto.reconcile_id, deleted: 0 } });
+      if (!rec) throw new NotFoundException(`对账单 #${dto.reconcile_id} 不存在`);
+      const existing = await this.prRepo.find({ where: { reconcile_id: dto.reconcile_id, deleted: 0 } });
+      const requested = existing
+        .filter((p) => p.approval_status !== PaymentApprovalStatus.REJECTED)
+        .reduce((s, p) => s + +p.amount, 0);
+      if (requested + dto.amount > +rec.total_amount + 0.01) {
+        throw new BadRequestException(
+          `累计付款申请 ${(requested + dto.amount).toFixed(2)} 超过对账应付 ${(+rec.total_amount).toFixed(2)}（已申请 ${requested.toFixed(2)}，本次 ${dto.amount}）`,
+        );
+      }
+    }
+
     const prefix = dto.type === ReconcileType.NO_CONTRACT
       ? `${NUM_PREFIX.PAYMENT}-NC`
       : NUM_PREFIX.PAYMENT;
