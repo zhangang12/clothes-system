@@ -6,6 +6,7 @@ import { Repository, FindOptionsWhere, Like, DataSource } from 'typeorm';
 import { Reconciliation, ReconciliationStatus } from './reconciliation.entity';
 import { ReconciliationShipment } from './reconciliation-shipment.entity';
 import { Contract } from '../contract/contract.entity';
+import { OrderMain } from '../order/order-main.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { ReconcileType, ContractPortalStatus } from '@i9/types';
 import { CreateReconciliationDto } from './dto/create-reconciliation.dto';
@@ -30,6 +31,16 @@ export class ReconciliationService {
       const shipmentLines = dto.shipments ?? [];
       const totalAmount = shipmentLines.reduce((sum, s) => sum + s.snapshot_unit_price * s.qty, 0);
 
+      // 款号带出（合同→订单），供对账列表按款号检索（设计稿 对账 A2）
+      let styleNo: string | null = null;
+      if (dto.contract_id) {
+        const contract = await manager.findOne(Contract, { where: { id: dto.contract_id, deleted: 0 } });
+        if (contract?.order_id) {
+          const order = await manager.findOne(OrderMain, { where: { id: contract.order_id, deleted: 0 } });
+          styleNo = order?.style_no ?? null;
+        }
+      }
+
       const hasInvoice = dto.invoice_no ? 1 : 0;
       const taxAmount = dto.tax_rate && totalAmount
         ? +(totalAmount * dto.tax_rate / 100).toFixed(4)
@@ -44,6 +55,7 @@ export class ReconciliationService {
           reconcile_no,
           type: dto.type,
           contract_id: dto.contract_id,
+          style_no: styleNo,
           factory_id: dto.factory_id,
           total_amount: +totalAmount.toFixed(4),
           tax_rate: dto.tax_rate ?? null,
@@ -85,8 +97,12 @@ export class ReconciliationService {
       ...(status !== undefined && { status }),
       ...(factory_id !== undefined && { factory_id }),
     };
+    // 支持按对账单号或款号检索（设计稿 对账 A2）
     const where: FindOptionsWhere<Reconciliation> | FindOptionsWhere<Reconciliation>[] = keyword
-      ? [{ ...base, reconcile_no: Like(`%${keyword}%`) }]
+      ? [
+          { ...base, reconcile_no: Like(`%${keyword}%`) },
+          { ...base, style_no: Like(`%${keyword}%`) },
+        ]
       : base;
 
     const [items, total] = await this.repo.findAndCount({

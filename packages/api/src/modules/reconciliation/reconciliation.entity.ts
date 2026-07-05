@@ -21,6 +21,9 @@ export class Reconciliation {
   @Column({ type: 'bigint', nullable: true })
   contract_id: number;
 
+  @Column({ length: 60, nullable: true })
+  style_no: string; // 款号（合同→订单带出，供检索）
+
   @Column({ type: 'bigint' })
   factory_id: number;
 

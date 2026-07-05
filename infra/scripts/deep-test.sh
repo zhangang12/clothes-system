@@ -966,7 +966,7 @@ test_contract_ext() {
 }
 
 test_reconciliation_ext() {
-  local fid cid oid ctid fid2 rid ridok rid2 rid3
+  local fid cid oid ctid fid2 rid ridok rid2 rid3 knOid knCtid knSfx
   fid=$(fx_factory); cid=$(fx_customer); oid=$(fx_order_producing "$cid"); ctid=$(fx_contract "$fid" "$oid")
 
   # ── 明细/税额/发票差额 计算校验（FINANCE 建含明细对账）──
@@ -1005,6 +1005,17 @@ test_reconciliation_ext() {
   api POST /reconciliations "{\"type\":\"CONTRACT\",\"contract_id\":${ctid:-0},\"factory_id\":${fid:-0},\"shipments\":[{\"shipment_id\":9,\"item_name\":\"C1\",\"snapshot_unit_price\":8,\"qty\":10}]}" "$TOKEN_FINANCE"
   expect_ok "CONTRACT类型带合同+明细创建"
   expect_num data.total_amount 80 "CONTRACT对账总额=8*10"
+
+  # ── 款号检索：对账单从合同→订单带出款号，可按款号搜索（设计稿 对账 A2）──
+  knSfx="KN${SFX}${RANDOM}"
+  api POST /orders "{\"customer_id\":${cid:-0},\"qty_total\":100,\"style_no\":\"${knSfx}\",\"materials\":[{\"item_name\":\"面料\",\"net_usage\":1,\"loss_rate\":3,\"unit_price\":8}]}"
+  knOid=$(echo "$RESP" | jval data.id)
+  api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${fid:-0},\"order_id\":${knOid:-0},\"materials\":[{\"item_name\":\"面料\",\"unit_price\":8,\"qty\":100}]}"
+  knCtid=$(echo "$RESP" | jval data.id)
+  api POST /reconciliations "{\"type\":\"CONTRACT\",\"contract_id\":${knCtid:-0},\"factory_id\":${fid:-0},\"shipments\":[{\"shipment_id\":1,\"item_name\":\"面料\",\"snapshot_unit_price\":8,\"qty\":100}]}" "$TOKEN_FINANCE"
+  expect_eq data.style_no "${knSfx}" "对账单从合同→订单带出款号"
+  api GET "/reconciliations?keyword=${knSfx}" '' "$TOKEN_FINANCE"
+  expect_num total 1 "按款号检索对账单命中1条"
 
   # ── 边界：空明细数组可建且总额0 ──
   api POST /reconciliations "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid:-0},\"shipments\":[]}" "$TOKEN_FINANCE"

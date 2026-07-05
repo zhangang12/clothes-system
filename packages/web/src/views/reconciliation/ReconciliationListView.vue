@@ -3,7 +3,7 @@
     <el-card class="search-card">
       <el-form :model="query" inline>
         <el-form-item label="关键词">
-          <el-input v-model="query.keyword" placeholder="对账单编号" clearable style="width:180px" @clear="load" />
+          <el-input v-model="query.keyword" placeholder="对账单号 / 款号" clearable style="width:180px" @clear="load" />
         </el-form-item>
         <el-form-item label="类型">
           <el-select v-model="query.type" clearable placeholder="全部" style="width:120px" @change="load">
@@ -38,6 +38,9 @@
 
       <el-table :data="list" v-loading="loading" border stripe>
         <el-table-column prop="reconcile_no" label="对账单编号" width="180" />
+        <el-table-column prop="style_no" label="款号" width="120" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.style_no || '—' }}</template>
+        </el-table-column>
         <el-table-column prop="type" label="类型" width="110">
           <template #default="{ row }">
             <el-tag size="small" :type="row.type === 'CONTRACT' ? '' : 'warning'">

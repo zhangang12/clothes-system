@@ -527,6 +527,7 @@ CREATE TABLE IF NOT EXISTS `reconciliation` (
   `reconcile_no`     VARCHAR(30)    NOT NULL COMMENT 'DZ-YYYYMMDD-001 或 DZ-NC-YYYYMMDD-001',
   `type`             ENUM('CONTRACT','NO_CONTRACT') NOT NULL DEFAULT 'CONTRACT',
   `contract_id`      BIGINT         DEFAULT NULL COMMENT '有合同时关联',
+  `style_no`         VARCHAR(60)    DEFAULT NULL COMMENT '款号(合同→订单带出,供检索)',
   `factory_id`       BIGINT         NOT NULL,
   `total_amount`     DECIMAL(15,4)  NOT NULL COMMENT '对账金额',
   `tax_rate`         DECIMAL(5,2)   DEFAULT NULL COMMENT '税率%',
@@ -547,6 +548,7 @@ CREATE TABLE IF NOT EXISTS `reconciliation` (
   UNIQUE KEY `uk_reconcile_no` (`reconcile_no`),
   KEY `idx_contract` (`contract_id`),
   KEY `idx_factory` (`factory_id`),
+  KEY `idx_style_no` (`style_no`),
   KEY `idx_status` (`status`,`deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='对账单';
 
