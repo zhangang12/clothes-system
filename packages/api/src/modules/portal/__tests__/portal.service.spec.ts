@@ -160,18 +160,18 @@ describe('PortalService', () => {
     await expect(service.confirmShipping(1, 'supplier_A', 10)).rejects.toThrow(BadRequestException);
   });
 
-  // UT-PORTAL-11: uploadInvoice logs INVOICE action during SHIPPING
-  it('UT-PORTAL-11 uploadInvoice logs INVOICE action during SHIPPING', async () => {
-    const contract = makeContract({ portal_status: ContractPortalStatus.SHIPPING });
+  // UT-PORTAL-11: uploadInvoice logs INVOICE action only after 对账（RECONCILED）
+  it('UT-PORTAL-11 uploadInvoice logs INVOICE action during RECONCILED', async () => {
+    const contract = makeContract({ portal_status: ContractPortalStatus.RECONCILED });
     contractRepo.findOne.mockResolvedValue(contract);
 
     await service.uploadInvoice(1, 'supplier_A', 10, { invoice_no: 'INV-001', invoice_amount: 5000 });
     expect(logRepo.create).toHaveBeenCalledWith(expect.objectContaining({ action: 'INVOICE' }));
   });
 
-  // UT-PORTAL-12: uploadInvoice throws if portal_status is PUSHED (not yet stamped)
-  it('UT-PORTAL-12 uploadInvoice throws BadRequestException if status is PUSHED', async () => {
-    const contract = makeContract({ portal_status: ContractPortalStatus.PUSHED });
+  // UT-PORTAL-12: uploadInvoice throws before 对账（开票须对账后）—— SHIPPING 尚不可开票
+  it('UT-PORTAL-12 uploadInvoice throws BadRequestException before 对账 (SHIPPING)', async () => {
+    const contract = makeContract({ portal_status: ContractPortalStatus.SHIPPING });
     contractRepo.findOne.mockResolvedValue(contract);
     await expect(service.uploadInvoice(1, 'supplier_A', 10, {})).rejects.toThrow(BadRequestException);
   });

@@ -5,8 +5,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, Like, DataSource } from 'typeorm';
 import { Reconciliation, ReconciliationStatus } from './reconciliation.entity';
 import { ReconciliationShipment } from './reconciliation-shipment.entity';
+import { Contract } from '../contract/contract.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
-import { ReconcileType } from '@i9/types';
+import { ReconcileType, ContractPortalStatus } from '@i9/types';
 import { CreateReconciliationDto } from './dto/create-reconciliation.dto';
 import { QueryReconciliationDto } from './dto/query-reconciliation.dto';
 
@@ -122,7 +123,18 @@ export class ReconciliationService {
       }
       rec.status = ReconciliationStatus.CONFIRMED;
       rec.confirmed_at = new Date();
-      return manager.save(Reconciliation, rec);
+      const saved = await manager.save(Reconciliation, rec);
+
+      // 对账确认后推进合同门户至「已对账」，解锁供应商开票（设计稿 门户 B2/E4：开票须对账后）
+      if (rec.type === ReconcileType.CONTRACT && rec.contract_id) {
+        const contract = await manager.findOne(Contract, { where: { id: rec.contract_id, deleted: 0 } });
+        if (contract && contract.portal_status === ContractPortalStatus.SHIPPING) {
+          contract.portal_status = ContractPortalStatus.RECONCILED;
+          await manager.save(Contract, contract);
+        }
+      }
+
+      return saved;
     });
   }
 

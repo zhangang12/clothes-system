@@ -91,7 +91,7 @@
       </van-button>
 
       <van-button
-        v-if="['STAMPED', 'SHIPPING'].includes(contract.portal_status)"
+        v-if="contract.portal_status === 'RECONCILED'"
         type="default"
         block
         round
@@ -101,6 +101,7 @@
       >
         上传发票
       </van-button>
+      <div v-else-if="contract.portal_status === 'SHIPPING'" class="await-hint">已发货，待内部对账后可开票</div>
     </div>
 
     <!-- Invoice Upload Dialog -->
@@ -261,6 +262,7 @@ onMounted(load);
   padding: 12px 16px;
   box-shadow: 0 -2px 8px rgba(0,0,0,0.08);
 }
+.await-hint { margin-top: 10px; text-align: center; font-size: 13px; color: #969799; }
 .invoice-form { padding: 16px 0; }
 .invoice-upload { padding: 12px 16px 4px; }
 .upload-label { display: block; margin-bottom: 8px; font-size: 14px; color: #646566; }

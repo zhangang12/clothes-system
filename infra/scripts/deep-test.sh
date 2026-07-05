@@ -411,7 +411,7 @@ test_settlement() {
 }
 
 test_portal() {
-  local cid oid ctid
+  local cid oid ctid rcid
   cid=$(fx_customer); oid=$(fx_order_producing "$cid")
   api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":1,\"order_id\":${oid:-0},\"currency\":\"CNY\",\"materials\":[{\"item_name\":\"面料\",\"unit_price\":8,\"qty\":1500}]}"
   ctid=$(echo "$RESP" | jval data.id)
@@ -427,8 +427,18 @@ test_portal() {
   expect_ok "供应商盖章(PUSHED→STAMPED)"
   api PATCH "/portal/contracts/${ctid:-0}/ship" '{"remark":"已发货"}' "$TOKEN_SUP"
   expect_ok "供应商确认发货(STAMPED→SHIPPING)"
+  # 四步顺序锁定：未对账直接开票应拦截（设计稿 门户 B2/E4）
+  api PATCH "/portal/contracts/${ctid:-0}/invoice" '{"invoice_no":"INV-EARLY"}' "$TOKEN_SUP"
+  expect_code 400 "未对账直接开票应400(开票须对账后)"
+  # 内部对账（CONTRACT类型）确认 → 合同门户置「已对账」RECONCILED，解锁开票
+  api POST /reconciliations "{\"type\":\"CONTRACT\",\"contract_id\":${ctid:-0},\"factory_id\":1,\"shipments\":[{\"shipment_id\":1,\"item_name\":\"面料\",\"snapshot_unit_price\":8,\"qty\":1500}]}" "$TOKEN_FINANCE"
+  rcid=$(echo "$RESP" | jval data.id)
+  api PATCH "/reconciliations/${rcid:-0}/confirm" '' "$TOKEN_FINANCE"
+  expect_ok "内部对账确认"
+  api GET "/portal/contracts/${ctid:-0}" '' "$TOKEN_SUP"
+  expect_eq data.portal_status RECONCILED "对账确认后合同门户置「已对账」"
   api PATCH "/portal/contracts/${ctid:-0}/invoice" '{"invoice_no":"INV-P1","invoice_amount":12000,"invoice_url":"/api/v1/uploads/file?p=misc/2026/01/inv.pdf"}' "$TOKEN_SUP"
-  expect_ok "供应商开票(含发票号/金额/附件URL)"
+  expect_ok "供应商开票(对账后放行,含发票号/金额/附件URL)"
   api GET "/portal/contracts/${ctid:-0}" '' "$TOKEN_SUP"
   [[ "$RESP" == *"附件:/api/v1/uploads"* ]] && ok "开票附件URL写入门户流水备注" || bad "开票备注未含附件URL ${RESP:0:160}"
   api PATCH "/portal/contracts/${ctid:-0}/stamp" '' "$TOKEN_SUP"
@@ -1174,7 +1184,7 @@ test_settlement_ext() {
 }
 
 test_portal_ext() {
-  local cid oidA oidB fidOther ctA ctB
+  local cid oidA oidB fidOther ctA ctB rcidB
   cid=$(fx_customer)
   oidA=$(fx_order_producing "$cid")
   oidB=$(fx_order_producing "$cid")
@@ -1201,9 +1211,9 @@ test_portal_ext() {
   expect_code 400 "未盖章直接开票应400"
   # 盖章 → STAMPED(setup)
   api PATCH "/portal/contracts/${ctB:-0}/stamp" '' "$TOKEN_SUP"
-  # STAMPED 已盖章未发货 → 开票放行(状态机允许)
-  api PATCH "/portal/contracts/${ctB:-0}/invoice" '{"invoice_no":"INV-EXT-1","invoice_amount":800}' "$TOKEN_SUP"
-  expect_ok "已盖章未发货可开票(状态机放行)"
+  # STAMPED 未对账 → 开票应400(开票须对账后)
+  api PATCH "/portal/contracts/${ctB:-0}/invoice" '{"invoice_no":"INV-EXT-1"}' "$TOKEN_SUP"
+  expect_code 400 "已盖章未对账开票应400(开票须对账后)"
   # 确认发货 → SHIPPING(setup)
   api PATCH "/portal/contracts/${ctB:-0}/ship" '{"remark":"发货"}' "$TOKEN_SUP"
   # SHIPPING 已发货 → 再盖章应400
@@ -1212,10 +1222,18 @@ test_portal_ext() {
   # SHIPPING 已发货 → 重复确认发货应400
   api PATCH "/portal/contracts/${ctB:-0}/ship" '{"remark":"再发货"}' "$TOKEN_SUP"
   expect_code 400 "已发货后重复确认发货应400"
-  # SHIPPING → 开票放行，且可重复开票(仅追加日志)
+  # SHIPPING 未对账 → 开票仍应400
   api PATCH "/portal/contracts/${ctB:-0}/invoice" '{"invoice_no":"INV-EXT-2"}' "$TOKEN_SUP"
-  expect_ok "已发货后开票放行"
-  api PATCH "/portal/contracts/${ctB:-0}/invoice" '{"invoice_no":"INV-EXT-2"}' "$TOKEN_SUP"
+  expect_code 400 "已发货未对账开票应400(开票须对账后)"
+  # 内部对账确认 → RECONCILED，解锁开票
+  api POST /reconciliations "{\"type\":\"CONTRACT\",\"contract_id\":${ctB:-0},\"factory_id\":1,\"shipments\":[{\"shipment_id\":1,\"item_name\":\"面料\",\"snapshot_unit_price\":8,\"qty\":100}]}" "$TOKEN_FINANCE"
+  rcidB=$(echo "$RESP" | jval data.id)
+  api PATCH "/reconciliations/${rcidB:-0}/confirm" '' "$TOKEN_FINANCE"
+  expect_ok "内部对账确认(ctB→RECONCILED)"
+  # RECONCILED → 开票放行，且可重复开票(仅追加日志)
+  api PATCH "/portal/contracts/${ctB:-0}/invoice" '{"invoice_no":"INV-EXT-3"}' "$TOKEN_SUP"
+  expect_ok "对账后开票放行"
+  api PATCH "/portal/contracts/${ctB:-0}/invoice" '{"invoice_no":"INV-EXT-3"}' "$TOKEN_SUP"
   expect_ok "重复开票应放行(仅记录日志)"
 
   # ── 不存在的大 id → 404 ──

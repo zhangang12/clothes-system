@@ -133,13 +133,9 @@ export class PortalService {
     if (!contract || !VISIBLE_STATUSES.includes(contract.portal_status)) {
       throw new NotFoundException('合同不存在');
     }
-    const allowedStatuses: ContractPortalStatus[] = [
-      ContractPortalStatus.STAMPED,
-      ContractPortalStatus.SHIPPING,
-      ContractPortalStatus.RECONCILED,
-    ];
-    if (!allowedStatuses.includes(contract.portal_status)) {
-      throw new BadRequestException('当前状态不可上传发票');
+    // 四步顺序锁定：开票须在对账通过后（设计稿 门户 B2/E4）
+    if (contract.portal_status !== ContractPortalStatus.RECONCILED) {
+      throw new BadRequestException('开票须在对账通过后进行（当前合同尚未完成对账）');
     }
 
     const parts: string[] = [];
