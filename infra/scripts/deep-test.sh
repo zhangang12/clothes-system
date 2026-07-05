@@ -886,13 +886,22 @@ test_contract_ext() {
   api DELETE "/contracts/${ctpush:-0}"
   expect_code 400 "推送后删除应400(仅DRAFT可删)"
 
-  # —— 类型枚举：PROCESS / SUPPLEMENT(带parent_id) 均可建 ——
+  # —— 类型枚举：PROCESS(账期默认45) / SUPPLEMENT(补料独立编号) ——
   api POST /contracts "{\"type\":\"PROCESS\",\"factory_id\":${fid:-0},\"order_id\":${oid:-0},\"materials\":[{\"item_name\":\"加工\",\"unit_price\":3,\"qty\":100}]}"
   expect_ok "创建PROCESS类型合同"
+  expect_num data.account_period_days 45 "加工合同账期默认=发货日+45天"
+  # 补料合同必须带 parent_id，否则 400
+  api POST /contracts "{\"type\":\"SUPPLEMENT\",\"factory_id\":${fid:-0},\"order_id\":${oid:-0},\"materials\":[{\"item_name\":\"补充料\",\"unit_price\":2,\"qty\":50}]}"
+  expect_code 400 "补料合同缺parent_id应400"
+  # 补料合同用「补料-原合同号-序号」独立标识，不占 HT 主序号
   api POST /contracts "{\"type\":\"SUPPLEMENT\",\"parent_id\":${ctid:-0},\"factory_id\":${fid:-0},\"order_id\":${oid:-0},\"materials\":[{\"item_name\":\"补充料\",\"unit_price\":2,\"qty\":50}]}"
   expect_ok "创建SUPPLEMENT补充合同"
   expect_eq data.type SUPPLEMENT "补充合同type=SUPPLEMENT"
   expect_num data.parent_id "${ctid:-0}" "补充合同parent_id指向母合同"
+  expect_match data.contract_no '^补料-' "补料合同编号=补料-原合同号-序号(不占HT主序号)"
+  # —— 材料合同账期默认 90 天 ——
+  api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${fid:-0},\"order_id\":${oid:-0},\"materials\":[{\"item_name\":\"面料\",\"unit_price\":8,\"qty\":100}]}"
+  expect_num data.account_period_days 90 "材料合同账期默认=发货日+90天"
 
   # —— 比例组合 & 边界值 ——
   api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${fid:-0},\"order_id\":${oid:-0},\"deposit_ratio\":20,\"mid_ratio\":30,\"final_ratio\":50,\"materials\":[{\"item_name\":\"面料\",\"unit_price\":8,\"qty\":100}]}"
@@ -931,7 +940,7 @@ test_contract_ext() {
 }
 
 test_reconciliation_ext() {
-  local fid cid oid ctid fid2 rid rid2 rid3
+  local fid cid oid ctid fid2 rid ridok rid2 rid3
   fid=$(fx_factory); cid=$(fx_customer); oid=$(fx_order_producing "$cid"); ctid=$(fx_contract "$fid" "$oid")
 
   # ── 明细/税额/发票差额 计算校验（FINANCE 建含明细对账）──
@@ -948,14 +957,22 @@ test_reconciliation_ext() {
   expect_ok "对账详情(含出货明细)"
   expect_num data.shipments.0.amount 50 "明细行金额=单价×数量快照"
 
-  # ── 状态机：确认后复查状态确实变更 ──
+  # ── 发票=对账金额校验（设计稿 G3/门户D2）：发票100≠对账90(差10)确认应拦截，不进付款 ──
   api PATCH "/reconciliations/${rid:-0}/confirm" '' "$TOKEN_FINANCE"
-  expect_ok "确认对账(DRAFT→CONFIRMED)"
+  expect_code 400 "发票≠对账金额(差10)确认应400"
   api GET "/reconciliations/${rid:-0}" '' "$TOKEN_FINANCE"
+  expect_eq data.status DRAFT "发票不符拦截后仍为DRAFT"
+
+  # ── 发票=对账金额(±0.01容差内)→确认放行并复查状态 ──
+  api POST /reconciliations "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid:-0},\"invoice_no\":\"INVOK-${SFX}\",\"invoice_amount\":90.005,\"shipments\":[{\"shipment_id\":1,\"item_name\":\"OK\",\"snapshot_unit_price\":10,\"qty\":9}]}" "$TOKEN_FINANCE"
+  ridok=$(echo "$RESP" | jval data.id)
+  api PATCH "/reconciliations/${ridok:-0}/confirm" '' "$TOKEN_FINANCE"
+  expect_ok "发票=对账金额(±0.01容差)确认放行"
+  api GET "/reconciliations/${ridok:-0}" '' "$TOKEN_FINANCE"
   expect_eq data.status CONFIRMED "确认后详情状态复查为CONFIRMED"
 
   # ── 非法转移：已确认(终态)删除应拒 ──
-  api DELETE "/reconciliations/${rid:-0}"
+  api DELETE "/reconciliations/${ridok:-0}"
   expect_code 400 "已确认对账删除应400(仅DRAFT可删)"
 
   # ── CONTRACT 类型带合同+明细创建（枚举各合法值可建）──

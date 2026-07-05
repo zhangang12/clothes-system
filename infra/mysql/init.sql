@@ -472,7 +472,7 @@ CREATE TABLE IF NOT EXISTS `contract` (
   `mid_ratio`           DECIMAL(5,2)   NOT NULL DEFAULT 40.00 COMMENT '中期款比例%',
   `final_ratio`         DECIMAL(5,2)   NOT NULL DEFAULT 30.00 COMMENT '尾款比例%',
   `last_ship_date`      DATE           DEFAULT NULL COMMENT '最后发货日',
-  `account_period_days` INT            NOT NULL DEFAULT 45 COMMENT '账期天数',
+  `account_period_days` INT            NOT NULL DEFAULT 90 COMMENT '账期天数(材料90/加工45,发货日+账期=到期日)',
   `due_date`            DATE           DEFAULT NULL COMMENT '账期截止日',
   `portal_status`       ENUM('DRAFT','PUSHED','STAMPED','SHIPPING','RECONCILED') NOT NULL DEFAULT 'DRAFT',
   `pushed_at`           DATETIME       DEFAULT NULL COMMENT '推送门户时间',

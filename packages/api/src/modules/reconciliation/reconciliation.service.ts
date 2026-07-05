@@ -114,6 +114,12 @@ export class ReconciliationService {
       if (rec.status !== ReconciliationStatus.DRAFT) {
         throw new BadRequestException('只有草稿状态才可确认');
       }
+      // 发票=对账金额校验（设计稿 门户 D2/G3）：含票时发票金额须与对账金额相等，允许 ≤¥0.01 舍入，否则拦截、不进付款
+      if (rec.invoice_amount != null && Math.abs(+(rec.invoice_diff ?? 0)) > 0.01) {
+        throw new BadRequestException(
+          `发票金额 ${rec.invoice_amount} 须与对账金额 ${rec.total_amount} 一致（允许±0.01），当前差额 ${rec.invoice_diff}`,
+        );
+      }
       rec.status = ReconciliationStatus.CONFIRMED;
       rec.confirmed_at = new Date();
       return manager.save(Reconciliation, rec);

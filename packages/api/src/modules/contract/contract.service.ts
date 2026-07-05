@@ -10,11 +10,11 @@ import { OrderMaterial } from '../order/order-material.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { ContractPortalStatus, ContractType } from '@i9/types';
 
-// 账期规则（系统开发手册·核心业务规则）：材料合同 = 最后发货日+45天，加工合同 = 最后发货日+30天
+// 账期规则（06-对账付款设计稿 v1.4「v1.3 业务定」+ 补充确认清单 C）：材料 = 发货日+90天，加工 = 发货日+45天（可人工改）
 const DEFAULT_ACCOUNT_PERIOD_DAYS: Record<ContractType, number> = {
-  [ContractType.MATERIAL]: 45,
-  [ContractType.PROCESS]: 30,
-  [ContractType.SUPPLEMENT]: 45,
+  [ContractType.MATERIAL]: 90,
+  [ContractType.PROCESS]: 45,
+  [ContractType.SUPPLEMENT]: 90,
 };
 import { CreateContractDto } from './dto/create-contract.dto';
 import { QueryContractDto } from './dto/query-contract.dto';
@@ -31,7 +31,17 @@ export class ContractService {
   ) {}
 
   async create(dto: CreateContractDto, createdBy: number): Promise<Contract> {
-    const contract_no = await this.numbering.next(NUM_PREFIX.CONTRACT);
+    // 补料合同用「补料-原合同号-序号」独立标识，不占 HT 主序号（设计稿 合同 D1/Q23）
+    let contract_no: string;
+    if (dto.type === ContractType.SUPPLEMENT) {
+      if (!dto.parent_id) throw new BadRequestException('补料合同必须指定原合同（parent_id）');
+      const parent = await this.repo.findOne({ where: { id: dto.parent_id, deleted: 0 } });
+      if (!parent) throw new NotFoundException(`原合同 #${dto.parent_id} 不存在`);
+      const seq = await this.repo.count({ where: { parent_id: dto.parent_id, type: ContractType.SUPPLEMENT } });
+      contract_no = `补料-${parent.contract_no}-${String(seq + 1).padStart(2, '0')}`;
+    } else {
+      contract_no = await this.numbering.next(NUM_PREFIX.CONTRACT);
+    }
 
     const deposit_ratio = dto.deposit_ratio ?? 30;
     const mid_ratio = dto.mid_ratio ?? 40;

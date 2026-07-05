@@ -45,8 +45,8 @@ export class Contract {
   @Column({ type: 'date', nullable: true })
   last_ship_date: Date;
 
-  @Column({ type: 'int', default: 45 })
-  account_period_days: number;
+  @Column({ type: 'int', default: 90 })
+  account_period_days: number; // 账期天数（材料90/加工45，发货日+账期=到期日）
 
   @Column({ type: 'date', nullable: true })
   due_date: Date;
