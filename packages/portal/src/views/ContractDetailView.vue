@@ -114,6 +114,17 @@
         <van-field v-model="invoiceForm.invoice_no" label="发票号" placeholder="请输入发票号（选填）" />
         <van-field v-model="invoiceForm.invoice_amount" label="发票金额" type="number" placeholder="请输入发票金额（选填）" />
         <van-field v-model="invoiceForm.remark" label="备注" placeholder="可选备注" />
+        <div class="invoice-upload">
+          <span class="upload-label">发票附件</span>
+          <van-uploader
+            v-model="invoiceFiles"
+            :after-read="onInvoiceRead"
+            :max-count="1"
+            accept="image/*,.pdf"
+            upload-text="发票照片/PDF"
+            @delete="invoiceForm.invoice_url = ''"
+          />
+        </div>
       </div>
     </van-dialog>
   </div>
@@ -128,13 +139,33 @@ import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { showConfirmDialog, showSuccessToast } from 'vant';
 import { portalContractApi } from '../api/contract';
+import { uploadApi } from '../api/upload';
 
 const route = useRoute();
 const contract = ref<any>({});
 const loadingDetail = ref(true);
 const actioning = ref(false);
 const showInvoiceDialog = ref(false);
-const invoiceForm = ref({ invoice_no: '', invoice_amount: '', remark: '' });
+const invoiceForm = ref({ invoice_no: '', invoice_amount: '', remark: '', invoice_url: '' });
+const invoiceFiles = ref<any[]>([]);
+
+// 发票附件上传：走后端 /uploads 端点，成功后写入 invoice_url
+async function onInvoiceRead(item: any) {
+  const f = Array.isArray(item) ? item[0] : item;
+  f.status = 'uploading';
+  f.message = '上传中...';
+  try {
+    const res = await uploadApi.upload(f.file);
+    const data = (res as any).data ?? res;
+    invoiceForm.value.invoice_url = data.url;
+    f.status = 'done';
+    f.message = '';
+  } catch {
+    f.status = 'failed';
+    f.message = '上传失败';
+    invoiceForm.value.invoice_url = '';
+  }
+}
 
 const currentStep = computed(() => {
   const map: Record<string, number> = { PUSHED: 0, STAMPED: 1, SHIPPING: 2, RECONCILED: 3 };
@@ -197,10 +228,12 @@ async function handleInvoiceClose(action: string) {
     await portalContractApi.uploadInvoice(contract.value.id, {
       invoice_no: invoiceForm.value.invoice_no || undefined,
       invoice_amount: invoiceForm.value.invoice_amount ? Number(invoiceForm.value.invoice_amount) : undefined,
+      invoice_url: invoiceForm.value.invoice_url || undefined,
       remark: invoiceForm.value.remark || undefined,
     });
     showSuccessToast('发票信息已提交');
-    invoiceForm.value = { invoice_no: '', invoice_amount: '', remark: '' };
+    invoiceForm.value = { invoice_no: '', invoice_amount: '', remark: '', invoice_url: '' };
+    invoiceFiles.value = [];
     await load();
     return true;
   } catch {
@@ -229,6 +262,8 @@ onMounted(load);
   box-shadow: 0 -2px 8px rgba(0,0,0,0.08);
 }
 .invoice-form { padding: 16px 0; }
+.invoice-upload { padding: 12px 16px 4px; }
+.upload-label { display: block; margin-bottom: 8px; font-size: 14px; color: #646566; }
 .loading-state {
   display: flex;
   justify-content: center;

@@ -142,7 +142,12 @@ export class PortalService {
       throw new BadRequestException('当前状态不可上传发票');
     }
 
-    const remark = dto.remark ?? (dto.invoice_no ? `发票号:${dto.invoice_no}` : undefined);
+    const parts: string[] = [];
+    if (dto.invoice_no) parts.push(`发票号:${dto.invoice_no}`);
+    if (dto.invoice_amount != null) parts.push(`金额:${dto.invoice_amount}`);
+    if (dto.invoice_url) parts.push(`附件:${dto.invoice_url}`);
+    if (dto.remark) parts.push(dto.remark);
+    const remark = parts.length ? parts.join(' · ') : undefined;
     await this.logRepo.save(
       this.logRepo.create({
         contract_id: id,
