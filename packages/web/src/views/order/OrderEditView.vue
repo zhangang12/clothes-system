@@ -38,7 +38,7 @@
           <el-col :span="8"><el-form-item label="佣金(%)"><el-input v-model="form.commissionRate" type="number" /></el-form-item></el-col>
           <el-col :span="8">
             <el-form-item label="生产工厂">
-              <el-select v-model="form.factoryId" filterable clearable placeholder="从供应商库选(可后填)" style="width:100%">
+              <el-select v-model="form.factoryId" filterable clearable placeholder="从委外加工商选(可后填)" style="width:100%">
                 <el-option v-for="f in factories" :key="f.id" :label="f.name" :value="f.id" />
               </el-select>
             </el-form-item>
@@ -214,7 +214,8 @@ function addMat() { form.materials.push(emptyMat()); }
 function delMats() { form.materials = form.materials.filter((r: any) => !selMats.value.includes(r)); if (!form.materials.length) form.materials.push(emptyMat()); }
 
 async function loadRefs() {
-  const [qs, fs] = await Promise.all([quoteApi.list({ page: 1, size: 200 }), factoryApi.select()]);
+  // 生产工厂只选「委外加工商」(设计稿 订单 B3)
+  const [qs, fs] = await Promise.all([quoteApi.list({ page: 1, size: 200 }), factoryApi.select('OUTSOURCE')]);
   quotes.value = (qs as any).data?.items ?? (qs as any).items ?? [];
   factories.value = (((fs as any).data ?? fs) as any[]) ?? [];
 }
