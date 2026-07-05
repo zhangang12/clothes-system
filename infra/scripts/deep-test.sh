@@ -437,6 +437,13 @@ test_payment() {
   expect_ok "驳回付款申请(PENDING→REJECTED)"
   api PATCH "/payments/requests/${pid2:-0}/paid" '{"slip_url":"https://ex.com/s2.pdf"}' "$TOKEN_FINANCE"
   expect_code 400 "驳回后标记付款应400"
+
+  # 工厂+申请日期组合检索（付款申请设计稿 检索区）
+  api GET "/payments/requests?factory_id=${fid:-0}&start_date=2000-01-01"
+  local dCnt; dCnt=$(echo "$RESP" | jval data.total)
+  [[ "${dCnt:-0}" -ge 1 ]] && ok "付款申请按工厂+起始日期检索命中(total=$dCnt)" || bad "日期检索未命中 ${RESP:0:120}"
+  api GET "/payments/requests?factory_id=${fid:-0}&start_date=2099-01-01&end_date=2099-12-31"
+  expect_num data.total 0 "付款申请未来日期区间检索应为空"
 }
 
 test_settlement() {

@@ -73,6 +73,18 @@
                 <el-option label="已付款" value="PAID" />
               </el-select>
             </el-form-item>
+            <el-form-item label="申请日期">
+              <el-date-picker
+                v-model="prDateRange"
+                type="daterange"
+                value-format="YYYY-MM-DD"
+                range-separator="至"
+                start-placeholder="开始日期"
+                end-placeholder="结束日期"
+                style="width:240px"
+                @change="loadPR"
+              />
+            </el-form-item>
             <el-form-item>
               <el-button type="primary" :icon="Search" @click="loadPR">搜索</el-button>
               <el-button :icon="Refresh" @click="resetPR">重置</el-button>
@@ -192,6 +204,18 @@
         <el-form-item label="工厂ID" prop="factory_id">
           <el-input-number v-model="prForm.factory_id" :min="1" style="width:100%" />
         </el-form-item>
+        <el-alert
+          v-if="prPrepayBalance > 0"
+          type="warning"
+          :closable="false"
+          show-icon
+          style="margin: 0 0 12px;"
+        >
+          <template #title>
+            该工厂存在可用预付款余额 ¥{{ prPrepayBalance.toFixed(2) }}
+            <el-button link type="primary" size="small" style="margin-left:8px" @click="applyPrepayOffset">一键冲抵</el-button>
+          </template>
+        </el-alert>
         <el-form-item label="对账单ID">
           <el-input-number v-model="prForm.reconcile_id" :min="1" style="width:100%" />
         </el-form-item>
@@ -220,16 +244,35 @@
       </template>
     </el-dialog>
 
-    <!-- 标记付款弹窗 -->
-    <el-dialog v-model="markPaidVisible" title="上传付款水单" width="400px">
+    <!-- 标记付款弹窗（水单支持点击上传/拖拽/截图 Ctrl+V 粘贴） -->
+    <el-dialog v-model="markPaidVisible" title="上传付款水单" width="480px" @closed="resetSlip">
       <el-form label-width="80px">
+        <el-form-item label="付款水单">
+          <div class="slip-uploader" @paste="onSlipPaste" tabindex="0">
+            <el-upload
+              :show-file-list="false"
+              :before-upload="onSlipBeforeUpload"
+              accept="image/*,application/pdf"
+              drag
+            >
+              <div v-if="slipUrl" class="slip-preview">
+                <img :src="slipUrl" alt="付款水单" />
+              </div>
+              <div v-else class="slip-empty">
+                <el-icon :size="34"><UploadFilled /></el-icon>
+                <div class="slip-tip">点击上传 / 拖拽文件，或聚焦此处按 <b>Ctrl+V</b> 粘贴截图</div>
+              </div>
+            </el-upload>
+            <div v-if="slipUploading" class="slip-loading">上传中…</div>
+          </div>
+        </el-form-item>
         <el-form-item label="水单URL">
-          <el-input v-model="slipUrl" placeholder="请输入付款水单图片地址" />
+          <el-input v-model="slipUrl" placeholder="上传后自动填入，也可手动粘贴地址" />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="markPaidVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="doMarkPaid">确认付款</el-button>
+        <el-button type="primary" :loading="saving" :disabled="slipUploading" @click="doMarkPaid">确认付款</el-button>
       </template>
     </el-dialog>
   </div>
@@ -238,9 +281,10 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { ElMessage } from 'element-plus';
-import { Search, Refresh, Plus } from '@element-plus/icons-vue';
+import { Search, Refresh, Plus, UploadFilled } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { prepaymentApi, paymentRequestApi } from '@/api/payment';
+import { uploadApi } from '@/api/upload';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole } from '@i9/types';
 
@@ -328,11 +372,18 @@ const prQuery = reactive({
   factory_id: undefined as number | undefined,
   approval_status: undefined as string | undefined,
 });
+// 申请日期范围（工厂+日期组合检索，付款申请设计稿 检索区）
+const prDateRange = ref<[string, string] | null>(null);
 
 async function loadPR() {
   prLoading.value = true;
   try {
-    const res = await paymentRequestApi.list(prQuery);
+    const params: Record<string, unknown> = { ...prQuery };
+    if (prDateRange.value?.length === 2) {
+      params.start_date = prDateRange.value[0];
+      params.end_date = prDateRange.value[1];
+    }
+    const res = await paymentRequestApi.list(params);
     prList.value = res?.data?.items ?? res?.items ?? [];
     prTotal.value = res?.data?.total ?? res?.total ?? 0;
   } finally { prLoading.value = false; }
@@ -340,6 +391,7 @@ async function loadPR() {
 
 function resetPR() {
   Object.assign(prQuery, { factory_id: undefined, approval_status: undefined, page: 1 });
+  prDateRange.value = null;
   loadPR();
 }
 
@@ -372,10 +424,41 @@ async function doReject() {
 
 const markPaidVisible = ref(false);
 const slipUrl = ref('');
+const slipUploading = ref(false);
 let markPaidTarget: any = null;
 function openMarkPaid(row: any) { markPaidTarget = row; slipUrl.value = ''; markPaidVisible.value = true; }
+function resetSlip() { slipUrl.value = ''; slipUploading.value = false; }
+
+// 上传水单文件（点击/拖拽/粘贴共用）：走后端 /uploads，成功后写入 slip_url
+async function uploadSlipFile(file: File) {
+  slipUploading.value = true;
+  try {
+    const res: any = await uploadApi.upload(file);
+    slipUrl.value = (res?.data ?? res)?.url ?? '';
+    if (slipUrl.value) ElMessage.success('水单上传成功');
+  } catch {
+    ElMessage.error('水单上传失败');
+  } finally { slipUploading.value = false; }
+}
+// el-upload 拦截默认上传，改走自定义上传
+function onSlipBeforeUpload(file: File) {
+  uploadSlipFile(file);
+  return false;
+}
+// 截图 Ctrl+V 粘贴：从剪贴板取图片直接上传
+function onSlipPaste(e: ClipboardEvent) {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const it of items) {
+    if (it.kind === 'file' && it.type.startsWith('image/')) {
+      const f = it.getAsFile();
+      if (f) { e.preventDefault(); uploadSlipFile(f); return; }
+    }
+  }
+}
+
 async function doMarkPaid() {
-  if (!slipUrl.value.trim()) { ElMessage.warning('请填写水单地址'); return; }
+  if (!slipUrl.value.trim()) { ElMessage.warning('请上传或填写水单地址'); return; }
   saving.value = true;
   try {
     await paymentRequestApi.markPaid(markPaidTarget.id, slipUrl.value);
@@ -393,6 +476,7 @@ async function doPRRemove(id: number) {
 
 const createPRVisible = ref(false);
 const prFormRef = ref<FormInstance>();
+const prPrepayBalance = ref(0);
 const prForm = reactive({
   type: 'CONTRACT',
   factory_id: undefined as number | undefined,
@@ -409,6 +493,22 @@ const prRules: FormRules = {
 function openCreatePR() { createPRVisible.value = true; }
 function resetPRForm() {
   Object.assign(prForm, { type: 'CONTRACT', factory_id: undefined, reconcile_id: undefined, amount: undefined, prepay_offset: 0, description: '' });
+  prPrepayBalance.value = 0;
+}
+// 选择工厂后自动提示是否存在可用预付款余额（付款申请设计稿：存在预付时提示冲抵）
+watch(() => prForm.factory_id, async (fid) => {
+  prPrepayBalance.value = 0;
+  if (!createPRVisible.value || !fid) return;
+  try {
+    const res: any = await prepaymentApi.getBalance(fid);
+    prPrepayBalance.value = +(res?.data ?? res ?? 0) || 0;
+  } catch { prPrepayBalance.value = 0; }
+});
+// 一键把可用预付款余额（不超过申请金额）填入冲抵栏
+function applyPrepayOffset() {
+  const bal = prPrepayBalance.value;
+  const amt = prForm.amount ?? bal;
+  prForm.prepay_offset = +Math.min(bal, amt).toFixed(2);
 }
 async function doCreatePR() {
   await prFormRef.value?.validate();
@@ -433,4 +533,10 @@ onMounted(() => { loadPrepay(); loadPR(); });
 .balance-num { color: #409eff; font-size: 16px; }
 .text-danger { color: #f56c6c; }
 .pagination { margin-top: 16px; display: flex; justify-content: flex-end; }
+.slip-uploader { width: 100%; outline: none; }
+.slip-uploader :deep(.el-upload-dragger) { padding: 12px; }
+.slip-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; color: #909399; padding: 8px 0; }
+.slip-tip { font-size: 12px; line-height: 1.5; }
+.slip-preview img { max-width: 100%; max-height: 200px; object-fit: contain; }
+.slip-loading { margin-top: 6px; font-size: 12px; color: #409eff; text-align: center; }
 </style>

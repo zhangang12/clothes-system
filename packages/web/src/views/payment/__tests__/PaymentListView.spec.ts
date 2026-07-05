@@ -319,7 +319,7 @@ describe('PaymentListView', () => {
     await wrapper.findAll('button').find((b) => b.text() === '确认付款')!.trigger('click');
     await wrapper.vm.$nextTick();
 
-    expect(ElMessageMock.warning).toHaveBeenCalledWith('请填写水单地址');
+    expect(ElMessageMock.warning).toHaveBeenCalledWith('请上传或填写水单地址');
     expect(mockPRMarkPaid).not.toHaveBeenCalled();
   });
 

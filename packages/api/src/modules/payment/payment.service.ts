@@ -2,7 +2,7 @@ import {
   Injectable, NotFoundException, BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import { Prepayment } from './prepayment.entity';
 import { PaymentRequest } from './payment-request.entity';
 import { Reconciliation, ReconciliationStatus } from '../reconciliation/reconciliation.entity';
@@ -109,10 +109,25 @@ export class PaymentService {
     return this.prRepo.save(pr);
   }
 
-  async findPaymentRequests(factoryId?: number, approvalStatus?: PaymentApprovalStatus, page = 1, size = 20) {
+  async findPaymentRequests(
+    factoryId?: number,
+    approvalStatus?: PaymentApprovalStatus,
+    page = 1,
+    size = 20,
+    startDate?: string,
+    endDate?: string,
+  ) {
     const where: any = { deleted: 0 };
     if (factoryId) where.factory_id = factoryId;
     if (approvalStatus) where.approval_status = approvalStatus;
+    // 供应商(工厂)+申请日期组合检索（付款申请设计稿 检索区）
+    if (startDate && endDate) {
+      where.created_at = Between(`${startDate} 00:00:00`, `${endDate} 23:59:59`);
+    } else if (startDate) {
+      where.created_at = MoreThanOrEqual(`${startDate} 00:00:00`);
+    } else if (endDate) {
+      where.created_at = LessThanOrEqual(`${endDate} 23:59:59`);
+    }
 
     const [items, total] = await this.prRepo.findAndCount({
       where,

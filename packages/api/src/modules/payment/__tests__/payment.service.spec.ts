@@ -225,6 +225,15 @@ describe('PaymentService', () => {
     await expect(service.removePaymentRequest(1)).rejects.toThrow(BadRequestException);
   });
 
+  // UT-PAY-15: findPaymentRequests applies factory + 申请日期 range filter (工厂+日期组合检索)
+  it('UT-PAY-15 findPaymentRequests filters by factory_id and created_at range', async () => {
+    mockPrRepo.findAndCount.mockResolvedValue([[], 0]);
+    await service.findPaymentRequests(7, undefined, 1, 20, '2026-01-01', '2026-01-31');
+    const arg = mockPrRepo.findAndCount.mock.calls.at(-1)[0];
+    expect(arg.where.factory_id).toBe(7);
+    expect(arg.where.created_at).toBeDefined(); // Between(...) FindOperator
+  });
+
   // UT-OVP-01~04: overpayment guard scenarios
   it('UT-OVP-01 no prepay_offset → no balance check', async () => {
     const dto = { type: ReconcileType.CONTRACT, factory_id: 5, amount: 3000 };

@@ -53,14 +53,18 @@ export class PaymentController {
   }
 
   @Get('requests')
-  @ApiOperation({ summary: '付款申请列表' })
+  @ApiOperation({ summary: '付款申请列表（工厂+申请日期组合检索）' })
   findPaymentRequests(
     @Query('factory_id') factoryId?: string,
     @Query('approval_status') approvalStatus?: PaymentApprovalStatus,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
     @Query('size', new DefaultValuePipe(20), ParseIntPipe) size: number = 20,
+    @Query('start_date') startDate?: string,
+    @Query('end_date') endDate?: string,
   ) {
-    return this.service.findPaymentRequests(factoryId ? Number(factoryId) : undefined, approvalStatus, page, size);
+    return this.service.findPaymentRequests(
+      factoryId ? Number(factoryId) : undefined, approvalStatus, page, size, startDate, endDate,
+    );
   }
 
   @Patch('requests/:id/submit')
