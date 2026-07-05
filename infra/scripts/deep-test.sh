@@ -848,6 +848,22 @@ test_order_ext() {
   expect_deny "pm改尺码矩阵应拒绝"
   api DELETE "/orders/${poid:-0}" '' "$TOKEN_BUSINESS"
   expect_deny "business删除订单应拒绝(仅ADMIN)"
+
+  # ── 状态联动：下单反写报价「已成单」；生成合同反写订单「已生成合同」(设计稿 订单D2/合同A9) ──
+  local wf_fid wf_qid wf_oid
+  wf_fid=$(fx_factory)
+  wf_qid=$(fx_quote "$cid")
+  api PATCH "/quotes/${wf_qid:-0}/submit" ''; expect_ok "报价提交(草稿→已报价)"
+  wf_oid=$(fx_order "$cid")
+  api PATCH "/orders/${wf_oid:-0}/import-quote/${wf_qid:-0}" ''
+  expect_ok "订单从报价导入(建立quote_id关联)"
+  api PATCH "/orders/${wf_oid:-0}/advance" ''; expect_ok "订单下单(草稿→已下单)"
+  api GET "/quotes/${wf_qid:-0}"
+  expect_eq data.status ORDERED "下单自动反写关联报价「已成单」"
+  api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${wf_fid:-0},\"order_id\":${wf_oid:-0},\"materials\":[{\"item_name\":\"面料\",\"unit_price\":8,\"qty\":100}]}"
+  expect_ok "从已下单订单生成材料合同"
+  api GET "/orders/${wf_oid:-0}"
+  expect_eq data.status CONTRACTED "生成合同后订单自动「已生成合同」"
 }
 
 test_contract_ext() {

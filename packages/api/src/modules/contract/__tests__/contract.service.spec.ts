@@ -48,6 +48,7 @@ const mockDataSource = {
   transaction: jest.fn().mockImplementation((cb) => cb({
     create: jest.fn().mockImplementation((_, v) => v),
     save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
+    findOne: jest.fn().mockResolvedValue(null),
   })),
 };
 
@@ -85,6 +86,7 @@ describe('ContractService', () => {
     const manager = {
       create: jest.fn().mockImplementation((_, v) => v),
       save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
+      findOne: jest.fn().mockResolvedValue(null),
     };
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.create(dto as any, 1);
@@ -101,6 +103,7 @@ describe('ContractService', () => {
     const manager = {
       create: jest.fn().mockImplementation((_, v) => v),
       save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
+      findOne: jest.fn().mockResolvedValue(null),
     };
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.create(dto as any, 1);
@@ -117,6 +120,7 @@ describe('ContractService', () => {
     const manager = {
       create: jest.fn().mockImplementation((_, v) => v),
       save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
+      findOne: jest.fn().mockResolvedValue(null),
     };
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.create(dto as any, 1);

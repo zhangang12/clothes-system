@@ -7,8 +7,9 @@ import { Contract, ContractStatus } from './contract.entity';
 import { ContractMaterial } from './contract-material.entity';
 import { ContractPortalLog, PortalOperatorType } from './contract-portal-log.entity';
 import { OrderMaterial } from '../order/order-material.entity';
+import { OrderMain } from '../order/order-main.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
-import { ContractPortalStatus, ContractType } from '@i9/types';
+import { ContractPortalStatus, ContractType, OrderStatus } from '@i9/types';
 
 // 账期规则（06-对账付款设计稿 v1.4「v1.3 业务定」+ 补充确认清单 C）：材料 = 发货日+90天，加工 = 发货日+45天（可人工改）
 const DEFAULT_ACCOUNT_PERIOD_DAYS: Record<ContractType, number> = {
@@ -108,6 +109,15 @@ export class ContractService {
         remark: m.remark,
       }));
       await manager.save(ContractMaterial, materials);
+
+      // 生成合同后订单自动置「已生成合同」（设计稿 合同 A9）：仅从「已下单」推进，补料合同不改订单态
+      if (dto.order_id && dto.type !== ContractType.SUPPLEMENT) {
+        const order = await manager.findOne(OrderMain, { where: { id: dto.order_id, deleted: 0 } });
+        if (order && order.status === OrderStatus.CONFIRMED) {
+          order.status = OrderStatus.CONTRACTED;
+          await manager.save(OrderMain, order);
+        }
+      }
 
       return contract;
     });

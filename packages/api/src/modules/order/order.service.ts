@@ -10,7 +10,7 @@ import { OrderShipment } from './order-shipment.entity';
 import { Quotation } from '../quote/quotation.entity';
 import { QuotationItem } from '../quote/quotation-item.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
-import { OrderStatus } from '@i9/types';
+import { OrderStatus, QuoteStatus } from '@i9/types';
 import { CreateOrderDto, CreateOrderMaterialDto, AddShipmentDto } from './dto/create-order.dto';
 import { QueryOrderDto } from './dto/query-order.dto';
 
@@ -181,8 +181,14 @@ export class OrderService {
     if (order.status === OrderStatus.DONE) {
       throw new BadRequestException('订单已完成，无法继续推进');
     }
-    order.status = STATUS_TRANSITIONS[order.status];
-    return this.orderRepo.save(order);
+    const next = STATUS_TRANSITIONS[order.status];
+    order.status = next;
+    const saved = await this.orderRepo.save(order);
+    // 下单（→已下单）时反写关联报价「已成单」（设计稿 订单 D2/A8）
+    if (next === OrderStatus.CONFIRMED && order.quote_id) {
+      await this.quoteRepo.update({ id: order.quote_id }, { status: QuoteStatus.ORDERED });
+    }
+    return saved;
   }
 
   async addShipment(id: number, dto: AddShipmentDto, createdBy: number): Promise<OrderShipment> {
