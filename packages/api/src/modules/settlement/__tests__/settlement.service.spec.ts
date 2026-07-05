@@ -8,6 +8,7 @@ import { SettlementCost } from '../settlement-cost.entity';
 import { SettlementReceipt } from '../settlement-receipt.entity';
 import { OrderMain } from '../../order/order-main.entity';
 import { OrderShipment } from '../../order/order-shipment.entity';
+import { Reconciliation } from '../../reconciliation/reconciliation.entity';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
 import { SettlementStatus } from '@i9/types';
 
@@ -59,6 +60,9 @@ const mockOrderRepo = {
 const mockShipmentRepo = {
   find: jest.fn().mockResolvedValue([]),
 };
+const mockReconcileRepo = {
+  find: jest.fn().mockResolvedValue([]),
+};
 const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn().mockResolvedValue(1) };
 const mockDataSource = {
   transaction: jest.fn().mockImplementation((cb) => cb(makeManager())),
@@ -80,6 +84,7 @@ describe('SettlementService', () => {
         { provide: getRepositoryToken(SettlementReceipt), useValue: mockReceiptRepo },
         { provide: getRepositoryToken(OrderMain), useValue: mockOrderRepo },
         { provide: getRepositoryToken(OrderShipment), useValue: mockShipmentRepo },
+        { provide: getRepositoryToken(Reconciliation), useValue: mockReconcileRepo },
         { provide: NumberingService, useValue: new NumberingService(mockRedis as any) },
         { provide: DataSource, useValue: mockDataSource },
         { provide: REDIS_CLIENT, useValue: mockRedis },
@@ -181,6 +186,20 @@ describe('SettlementService', () => {
       finance_fee: 980, // 14000×0.07
       net_profit_ex_refund: 3020, // (14000−10000) − 0 − 980
       net_profit: 3820, // 3020 + 800
+    });
+  });
+
+  // UT-SLT-14: 无手工成本时自动从对账付款按款号汇总总货款(设计稿 D4/D6)
+  it('UT-SLT-14 auto-aggregates goods_amount_tax from confirmed reconciliations by 款号', async () => {
+    mockOrderRepo.findOne.mockResolvedValueOnce({ id: 10, style_no: 'V27.230', currency: 'CNY', deleted: 0 });
+    mockReconcileRepo.find.mockResolvedValueOnce([{ total_amount: 11300 }, { total_amount: 2260 }]); // 含税合计13560
+    const dto = { order_id: 10, receipt_usd: 1000, exchange_rate: 7 };
+    const manager = makeManager();
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await service.create(dto as any, 1);
+    expect(manager.save.mock.calls[0][1]).toMatchObject({
+      goods_amount_tax: 13560,
+      goods_amount_extax: 12000, // 13560/1.13
     });
   });
 

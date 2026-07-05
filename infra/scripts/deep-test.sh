@@ -1184,7 +1184,7 @@ test_payment_ext() {
 }
 
 test_settlement_ext() {
-  local cid oid sid sid2 sid3
+  local cid oid sid sid2 sid3 aggFid aggOid aggCt aggRc aggSfx
 
   cid=$(fx_customer); oid=$(fx_order_producing "$cid")
 
@@ -1251,6 +1251,21 @@ test_settlement_ext() {
   # ── GET不存在的大id→404 ──
   api GET "/settlements/99999999"
   expect_code 404 "GET不存在结算(大id)应404"
+
+  # ── 结算成本自动从对账付款按款号汇总(设计稿 D4/D6：成本明细源自对账付款)──
+  aggFid=$(fx_factory); aggSfx="AGG${SFX}${RANDOM}"
+  api POST /orders "{\"customer_id\":${cid:-0},\"qty_total\":100,\"style_no\":\"${aggSfx}\",\"materials\":[{\"item_name\":\"面料\",\"net_usage\":1,\"unit_price\":8}]}"
+  aggOid=$(echo "$RESP" | jval data.id)
+  api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${aggFid:-0},\"order_id\":${aggOid:-0},\"materials\":[{\"item_name\":\"面料\",\"unit_price\":8,\"qty\":1130}]}"
+  aggCt=$(echo "$RESP" | jval data.id)
+  api POST /reconciliations "{\"type\":\"CONTRACT\",\"contract_id\":${aggCt:-0},\"factory_id\":${aggFid:-0},\"shipments\":[{\"shipment_id\":1,\"item_name\":\"面料\",\"snapshot_unit_price\":8,\"qty\":1130}]}" "$TOKEN_FINANCE"
+  aggRc=$(echo "$RESP" | jval data.id)
+  api PATCH "/reconciliations/${aggRc:-0}/confirm" '' "$TOKEN_FINANCE"
+  expect_ok "对账确认(款号${aggSfx},含税9040)"
+  api POST /settlements "{\"order_id\":${aggOid:-0}}" "$TOKEN_FINANCE"
+  expect_ok "结算不给成本→自动从对账付款汇总"
+  expect_num data.goods_amount_tax 9040 "结算总货款自动汇总(含税8×1130)"
+  expect_num data.goods_amount_extax 8000 "总货款不含税=9040/1.13"
 }
 
 test_portal_ext() {

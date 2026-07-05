@@ -53,6 +53,13 @@ export class SettlementController {
     return this.service.addReceipt(id, dto);
   }
 
+  @Patch(':id/refresh-cost')
+  @Roles(UserRole.ADMIN, UserRole.FINANCE)
+  @ApiOperation({ summary: '刷新付款汇总（按款号重算总货款）' })
+  refreshCost(@Param('id', ParseIntPipe) id: number) {
+    return this.service.refreshCost(id);
+  }
+
   @Patch(':id/confirm')
   @Roles(UserRole.ADMIN, UserRole.FINANCE)
   @ApiOperation({ summary: '确认结算单（DRAFT→CONFIRMED）' })

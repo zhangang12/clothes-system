@@ -7,6 +7,7 @@ import { SettlementCost } from './settlement-cost.entity';
 import { SettlementReceipt } from './settlement-receipt.entity';
 import { OrderMain } from '../order/order-main.entity';
 import { OrderShipment } from '../order/order-shipment.entity';
+import { Reconciliation, ReconciliationStatus } from '../reconciliation/reconciliation.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { CreateSettlementDto } from './dto/create-settlement.dto';
 import { AddCostDto } from './dto/add-cost.dto';
@@ -83,9 +84,22 @@ export class SettlementService {
     @InjectRepository(SettlementReceipt) private readonly receiptRepo: Repository<SettlementReceipt>,
     @InjectRepository(OrderMain) private readonly orderRepo: Repository<OrderMain>,
     @InjectRepository(OrderShipment) private readonly shipmentRepo: Repository<OrderShipment>,
+    @InjectRepository(Reconciliation) private readonly reconcileRepo: Repository<Reconciliation>,
     private readonly numbering: NumberingService,
     private readonly dataSource: DataSource,
   ) {}
+
+  // 按款号从已确认/已付对账付款汇总总货款(含税)——成本明细只读、源自对账付款（设计稿 D4/D6）
+  private async aggregateGoodsTax(styleNo?: string): Promise<number> {
+    if (!styleNo) return 0;
+    const recons = await this.reconcileRepo.find({
+      where: [
+        { style_no: styleNo, status: ReconciliationStatus.CONFIRMED, deleted: 0 },
+        { style_no: styleNo, status: ReconciliationStatus.PAID, deleted: 0 },
+      ],
+    });
+    return r4(recons.reduce((s, r) => s + +r.total_amount, 0));
+  }
 
   // 把 settlement 上现存的财务录入 + 货款/期间费用重算所有派生量，写回实体（不落库）
   private applyDerived(settlement: Settlement, goodsAmountTax: number, goodsAmountExtax: number) {
@@ -129,9 +143,14 @@ export class SettlementService {
     const shipments = await this.shipmentRepo.find({ where: { order_id: dto.order_id } });
     const shippedQty = shipments.reduce((sum, s) => sum + s.qty, 0);
 
+    // 无手工成本明细/总货款时，自动从对账付款按款号汇总（设计稿 D4/D6：成本明细源自对账付款、只读）
+    const fallbackTax = (!dto.costs?.length && dto.goods_amount_tax == null)
+      ? await this.aggregateGoodsTax(order.style_no)
+      : (dto.goods_amount_tax ?? 0);
+
     return this.dataSource.transaction(async (manager) => {
       const costs = dto.costs ?? [];
-      const { goodsAmountTax, goodsAmountExtax } = goodsSplit(costs, dto.goods_amount_tax ?? 0);
+      const { goodsAmountTax, goodsAmountExtax } = goodsSplit(costs, fallbackTax);
 
       const draft = manager.create(Settlement, {
         settlement_no,
@@ -259,6 +278,23 @@ export class SettlementService {
       const costs = await manager.find(SettlementCost, { where: { settlement_id: id } });
       const { goodsAmountTax, goodsAmountExtax } = goodsSplit(costs, +(settlement.goods_amount_tax ?? 0));
       this.applyDerived(settlement, goodsAmountTax, goodsAmountExtax);
+      return manager.save(Settlement, settlement);
+    });
+  }
+
+  // 刷新付款汇总：按款号重新从对账付款汇总总货款并重算（设计稿：刷新付款汇总后联动重算）
+  async refreshCost(id: number): Promise<Settlement> {
+    return this.dataSource.transaction(async (manager) => {
+      const settlement = await manager.findOne(Settlement, {
+        where: { id, deleted: 0 },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!settlement) throw new NotFoundException(`结算单 #${id} 不存在`);
+      if (settlement.status !== SettlementStatus.DRAFT) {
+        throw new BadRequestException('只有草稿状态才可刷新付款汇总');
+      }
+      const goodsAmountTax = await this.aggregateGoodsTax(settlement.style_no);
+      this.applyDerived(settlement, goodsAmountTax, r4(goodsAmountTax / VAT_DIVISOR));
       return manager.save(Settlement, settlement);
     });
   }
