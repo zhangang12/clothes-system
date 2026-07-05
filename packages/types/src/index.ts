@@ -111,12 +111,28 @@ export const QUOTE_STATUS_LABEL: Record<QuoteStatus, string> = {
 // 费用明细新建自动带 6 行（客户报价设计稿 §费用明细）
 export const DEFAULT_QUOTE_FEES = ['加工费', '线', '包装', '样衣费', '测试费', '运费'];
 
+// 订单状态机（订单设计稿 §B：草稿/已下单/已生成合同/生产中/已完成）
 export enum OrderStatus {
-  DRAFT = 'DRAFT',
-  CONFIRMED = 'CONFIRMED',
-  PRODUCING = 'PRODUCING',
-  SHIPPED = 'SHIPPED',
-  DONE = 'DONE',
+  DRAFT = 'DRAFT',           // 草稿
+  CONFIRMED = 'CONFIRMED',   // 已下单
+  CONTRACTED = 'CONTRACTED', // 已生成合同
+  PRODUCING = 'PRODUCING',   // 生产中
+  DONE = 'DONE',             // 已完成
+}
+
+export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
+  [OrderStatus.DRAFT]: '草稿',
+  [OrderStatus.CONFIRMED]: '已下单',
+  [OrderStatus.CONTRACTED]: '已生成合同',
+  [OrderStatus.PRODUCING]: '生产中',
+  [OrderStatus.DONE]: '已完成',
+};
+
+// 材料拆分模式（订单设计稿 §用料核算）
+export enum OrderSplitMode {
+  NONE = 'NONE',       // 不拆
+  BY_SIZE = 'BY_SIZE', // 按尺码
+  BY_COLOR = 'BY_COLOR', // 按颜色
 }
 
 export enum ContractType {

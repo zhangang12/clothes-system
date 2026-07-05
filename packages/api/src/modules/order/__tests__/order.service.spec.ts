@@ -7,6 +7,8 @@ import { OrderMain } from '../order-main.entity';
 import { OrderSizeMatrix } from '../order-size-matrix.entity';
 import { OrderMaterial } from '../order-material.entity';
 import { OrderShipment } from '../order-shipment.entity';
+import { Quotation } from '../../quote/quotation.entity';
+import { QuotationItem } from '../../quote/quotation-item.entity';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
 import { OrderStatus } from '@i9/types';
 
@@ -44,6 +46,8 @@ const mockShipmentRepo = {
   save: jest.fn().mockImplementation((v) => Promise.resolve({ ...v, id: 1 })),
   find: jest.fn().mockResolvedValue([]),
 };
+const mockQuoteRepo = { findOne: jest.fn() };
+const mockQuoteItemRepo = { find: jest.fn().mockResolvedValue([]) };
 const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn().mockResolvedValue(1), expire: jest.fn() };
 const mockDataSource = {
   transaction: jest.fn().mockImplementation((cb) => cb({
@@ -64,6 +68,8 @@ describe('OrderService', () => {
         { provide: getRepositoryToken(OrderSizeMatrix), useValue: mockMatrixRepo },
         { provide: getRepositoryToken(OrderMaterial), useValue: mockMaterialRepo },
         { provide: getRepositoryToken(OrderShipment), useValue: mockShipmentRepo },
+        { provide: getRepositoryToken(Quotation), useValue: mockQuoteRepo },
+        { provide: getRepositoryToken(QuotationItem), useValue: mockQuoteItemRepo },
         { provide: NumberingService, useValue: new NumberingService(mockRedis as any) },
         { provide: DataSource, useValue: mockDataSource },
         { provide: REDIS_CLIENT, useValue: mockRedis },
@@ -95,13 +101,13 @@ describe('OrderService', () => {
     expect(result.status).toBe(OrderStatus.CONFIRMED);
   });
 
-  // UT-ORD-03: advanceStatus CONFIRMED → PRODUCING
-  it('UT-ORD-03 advanceStatus transitions CONFIRMED→PRODUCING', async () => {
+  // UT-ORD-03: advanceStatus CONFIRMED → CONTRACTED（已下单→已生成合同）
+  it('UT-ORD-03 advanceStatus transitions CONFIRMED→CONTRACTED', async () => {
     const order = makeOrder({ status: OrderStatus.CONFIRMED });
     mockOrderRepo.findOne.mockResolvedValue(order);
-    mockOrderRepo.save.mockResolvedValue({ ...order, status: OrderStatus.PRODUCING });
+    mockOrderRepo.save.mockResolvedValue({ ...order, status: OrderStatus.CONTRACTED });
     const result = await service.advanceStatus(1);
-    expect(result.status).toBe(OrderStatus.PRODUCING);
+    expect(result.status).toBe(OrderStatus.CONTRACTED);
   });
 
   // UT-ORD-04: advanceStatus throws when DONE
@@ -134,20 +140,37 @@ describe('OrderService', () => {
     await expect(service.findOne(99)).rejects.toThrow(NotFoundException);
   });
 
-  // UT-ORD-08: loss_rate correctly computes loss_usage (net_usage / (1 - loss_rate/100))
-  it('UT-ORD-08 loss_usage = net_usage / (1 - loss_rate/100) during create', async () => {
+  // UT-ORD-08: 采购量 = 大货总数 × 单件耗用 × (1+损耗%)（订单设计稿公式）
+  it('UT-ORD-08 采购量=大货总数×单件耗用×(1+损耗%) during create', async () => {
     const dto = {
       customer_id: 3, style_name: 'Test', qty_total: 100, unit_price: 10,
       materials: [{ item_name: '面料A', unit: 'M', net_usage: 1.5, loss_rate: 10, unit_price: 20 }],
     };
-    const capturedMaterial: any = {};
     const manager = {
-      create: jest.fn().mockImplementation((_, v) => { if (v.net_usage !== undefined) Object.assign(capturedMaterial, v); return v; }),
+      create: jest.fn().mockImplementation((_, v) => v),
       save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
     };
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.create(dto as any, 1);
-    // loss_usage = 1.5 / (1 - 10/100) = 1.5 / 0.9 = 1.6667
-    expect(capturedMaterial.loss_usage).toBeCloseTo(1.6667, 2);
+    const captured = mockMaterialRepo.create.mock.calls[0][0];
+    // loss_usage(含损单件) = 1.5 × 1.1 = 1.65；采购量 = 100 × 1.65 = 165
+    expect(captured.loss_usage).toBeCloseTo(1.65, 2);
+    expect(captured.total_purchase).toBeCloseTo(165, 2);
+  });
+
+  // UT-ORD-09: 整数类材料（个/条）采购量向上取整（1454×1.03=1497.62→1498）
+  it('UT-ORD-09 整数类材料采购量向上取整', async () => {
+    const dto = {
+      customer_id: 3, qty_total: 1454, unit_price: 1,
+      materials: [{ item_name: 'YKK拉链', unit: '条', net_usage: 1, loss_rate: 3 }],
+    };
+    const manager = {
+      create: jest.fn().mockImplementation((_, v) => v),
+      save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
+    };
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await service.create(dto as any, 1);
+    const captured = mockMaterialRepo.create.mock.calls[0][0];
+    expect(captured.total_purchase).toBe(1498);
   });
 });

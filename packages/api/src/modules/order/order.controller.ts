@@ -44,9 +44,16 @@ export class OrderController {
     return this.service.update(id, dto);
   }
 
+  @Patch(':id/import-quote/:quoteId')
+  @Roles(UserRole.ADMIN, UserRole.BUSINESS)
+  @ApiOperation({ summary: '从报价一键导入（基础字段+材料明细，快照）' })
+  importFromQuote(@Param('id', ParseIntPipe) id: number, @Param('quoteId', ParseIntPipe) quoteId: number) {
+    return this.service.importFromQuote(id, quoteId);
+  }
+
   @Patch(':id/advance')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
-  @ApiOperation({ summary: '推进订单状态（DRAFT→CONFIRMED→PRODUCING→SHIPPED→DONE）' })
+  @ApiOperation({ summary: '推进订单状态（草稿→已下单→已生成合同→生产中→已完成）' })
   advanceStatus(@Param('id', ParseIntPipe) id: number) {
     return this.service.advanceStatus(id);
   }

@@ -80,8 +80,8 @@ fx_factory()  { api POST /factories "{\"name\":\"F_${SFX}_${RANDOM}\",\"type\":\
 fx_sample()   { api POST /samples "{\"middlemanId\":$1,\"styleNo\":\"S_$SFX\",\"materials\":[{\"itemName\":\"面料\",\"part\":\"主面料\"}]}"; echo "$RESP" | jval data.id; }
 fx_quote()    { api POST /quotes "{\"middlemanId\":$1,\"styleNo\":\"K_$SFX\",\"currency\":\"USD\",\"exchangeRate\":7,\"profitRate\":10,\"items\":[{\"itemName\":\"面料\",\"unit\":\"米\",\"quoteUsage\":1.5,\"rmbPrice\":8,\"lossRate\":5}]}"; echo "$RESP" | jval data.id; }
 fx_order()    { api POST /orders "{\"customer_id\":$1,\"qty_total\":1000,\"currency\":\"USD\",\"unit_price\":12,\"materials\":[{\"item_name\":\"面料\",\"net_usage\":1.5,\"loss_rate\":5,\"unit_price\":8}]}"; echo "$RESP" | jval data.id; }
-# 订单推进到 PRODUCING（可发货）：DRAFT→CONFIRMED→PRODUCING
-fx_order_producing() { local oid; oid=$(fx_order "$1"); api PATCH "/orders/$oid/advance" ''; api PATCH "/orders/$oid/advance" ''; echo "$oid"; }
+# 订单推进到 PRODUCING（可发货）：DRAFT→已下单→已生成合同→生产中（3次advance）
+fx_order_producing() { local oid; oid=$(fx_order "$1"); api PATCH "/orders/$oid/advance" ''; api PATCH "/orders/$oid/advance" ''; api PATCH "/orders/$oid/advance" ''; echo "$oid"; }
 fx_contract() { api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":$1,\"order_id\":$2,\"currency\":\"CNY\",\"materials\":[{\"item_name\":\"面料\",\"unit_price\":8,\"qty\":1500}]}"; echo "$RESP" | jval data.id; }
 
 echo "=================================================================="
@@ -282,16 +282,18 @@ test_order() {
   api GET "/orders/${oid:-0}"
   expect_eq data.status DRAFT "新建订单DRAFT"
   expect_num data.total_amount 12000 "订单总额=单价12×数量1000"
-  expect_num data.materials.0.loss_usage 1.5789 "含损用量=净用量÷(1-损耗率)"
-  expect_num data.materials.0.total_purchase 1578.9 "总采购量=含损用量×数量"
-  expect_num data.materials.0.budget 12631.2 "预算=总采购量×单价"
+  expect_num data.materials.0.loss_usage 1.575 "含损单件耗用=单件×(1+损耗%)=1.5×1.05"
+  expect_num data.materials.0.total_purchase 1575 "系统采购量=大货总数×单件×(1+损耗)=1000×1.575"
+  expect_num data.materials.0.budget 12600 "预算=最终采购量×单价=1575×8"
   api POST "/orders/${oid:-0}/shipments" '{"shipment_date":"2026-09-01","qty":100}'
   expect_code 400 "DRAFT订单发货应400"
-  api PATCH "/orders/${oid:-0}/advance" ''; expect_ok "订单推进1(DRAFT→CONFIRMED)"
-  api PATCH "/orders/${oid:-0}/advance" ''; expect_ok "订单推进2(CONFIRMED→PRODUCING)"
-  api GET "/orders/${oid:-0}"; expect_eq data.status PRODUCING "推进两次后PRODUCING"
+  api PATCH "/orders/${oid:-0}/advance" ''; expect_ok "订单推进1(草稿→已下单)"
+  api PATCH "/orders/${oid:-0}/advance" ''; expect_ok "订单推进2(已下单→已生成合同)"
+  api GET "/orders/${oid:-0}"; expect_eq data.status CONTRACTED "推进两次后已生成合同"
+  api PATCH "/orders/${oid:-0}/advance" ''; expect_ok "订单推进3(已生成合同→生产中)"
+  api GET "/orders/${oid:-0}"; expect_eq data.status PRODUCING "推进三次后生产中"
   api POST "/orders/${oid:-0}/shipments" '{"shipment_date":"2026-09-01","qty":500}'
-  expect_ok "PRODUCING订单可发货"
+  expect_ok "生产中订单可发货"
 }
 
 test_contract() {
@@ -300,7 +302,7 @@ test_contract() {
   # 快照联动（Phase 3）：材料合同不传 materials 时，自动从订单已核算的用料清单带出
   api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${fid:-0},\"order_id\":${oid:-0}}"
   expect_ok "不传materials时自动从order_material带出(快照联动)"
-  expect_num data.total_amount 12631.2 "自动带出总额=单价8×含损采购量1578.9"
+  expect_num data.total_amount 12600 "自动带出总额=单价8×系统采购量1575"
   # 真正无可带出记录时才报错：手工建一个不含 materials 的裸订单
   api POST /orders "{\"customer_id\":${cid:-0},\"qty_total\":100,\"unit_price\":5}"
   oidBare=$(echo "$RESP" | jval data.id)
@@ -750,16 +752,16 @@ test_order_ext() {
   api POST /orders "{\"customer_id\":${cid:-0},\"qty_total\":1000,\"materials\":[{\"item_name\":\"面料A\",\"net_usage\":2,\"loss_rate\":20,\"sort_order\":0},{\"item_name\":\"辅料B\",\"net_usage\":3,\"loss_rate\":25,\"sort_order\":1}]}"
   m2oid=$(echo "$RESP" | jval data.id)
   api GET "/orders/${m2oid:-0}"
-  expect_num data.materials.0.loss_usage 2.5 "料0含损=2÷(1-20%)=2.5"
-  expect_num data.materials.1.loss_usage 4 "料1含损=3÷(1-25%)=4"
+  expect_num data.materials.0.loss_usage 2.4 "料0含损单件=2×(1+20%)=2.4"
+  expect_num data.materials.1.loss_usage 3.75 "料1含损单件=3×(1+25%)=3.75"
 
   # ── 一路 advance 到 DONE；DONE 再 advance→400；DONE 发货→400 ──
   doid=$(fx_order "$cid")
-  api PATCH "/orders/${doid:-0}/advance" ''; expect_ok "推进1 DRAFT→CONFIRMED"
-  api PATCH "/orders/${doid:-0}/advance" ''; expect_ok "推进2 CONFIRMED→PRODUCING"
-  api PATCH "/orders/${doid:-0}/advance" ''; expect_ok "推进3 PRODUCING→SHIPPED"
-  api PATCH "/orders/${doid:-0}/advance" ''; expect_ok "推进4 SHIPPED→DONE"
-  api GET "/orders/${doid:-0}"; expect_eq data.status DONE "四次推进后状态=DONE"
+  api PATCH "/orders/${doid:-0}/advance" ''; expect_ok "推进1 草稿→已下单"
+  api PATCH "/orders/${doid:-0}/advance" ''; expect_ok "推进2 已下单→已生成合同"
+  api PATCH "/orders/${doid:-0}/advance" ''; expect_ok "推进3 已生成合同→生产中"
+  api PATCH "/orders/${doid:-0}/advance" ''; expect_ok "推进4 生产中→已完成"
+  api GET "/orders/${doid:-0}"; expect_eq data.status DONE "四次推进后状态=DONE(已完成)"
   api PATCH "/orders/${doid:-0}/advance" ''; expect_code 400 "终态DONE再推进(非法转移)→400"
   api POST "/orders/${doid:-0}/shipments" '{"shipment_date":"2026-09-01","qty":10}'
   expect_code 400 "终态DONE订单发货→400"

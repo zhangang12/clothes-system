@@ -11,6 +11,14 @@ export class CreateOrderMaterialDto {
   @MaxLength(100)
   item_name: string;
 
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) part?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) width?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) color?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) composition?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) supplier?: string;
+  @ApiPropertyOptional({ description: 'NONE/BY_SIZE/BY_COLOR' }) @IsOptional() @IsString() @MaxLength(10) split_mode?: string;
+  @ApiPropertyOptional({ description: '最终采购量（业务微调，超±10%需确认）' }) @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 4 }) @Min(0) final_purchase?: number;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -72,6 +80,13 @@ export class CreateOrderDto {
   @IsString()
   @MaxLength(100)
   style_name?: string;
+
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) style_no?: string;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() buyer_id?: number;
+  @ApiPropertyOptional({ example: 0, description: '佣金%' }) @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) commission_rate?: number;
+  @ApiPropertyOptional({ description: '生产工厂ID' }) @IsOptional() @Type(() => Number) @IsInt() factory_id?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) salesperson?: string;
+  @ApiPropertyOptional({ description: '整单核算模式 NONE/BY_SIZE/BY_COLOR' }) @IsOptional() @IsString() @MaxLength(10) split_mode?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
