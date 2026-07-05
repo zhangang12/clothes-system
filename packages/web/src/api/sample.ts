@@ -5,21 +5,25 @@ export const sampleApi = {
   list: (params?: Record<string, unknown>) =>
     http.get<unknown, { data: any }>('/samples', { params }),
   get: (id: number) =>
-    http.get<unknown, { data: SampleGarment }>(`/samples/${id}`),
+    http.get<unknown, { data: any }>(`/samples/${id}`),
   getVersionHistory: (id: number) =>
     http.get<unknown, { data: any[] }>(`/samples/${id}/versions`),
   create: (dto: Record<string, unknown>) =>
     http.post<unknown, { data: SampleGarment }>('/samples', dto),
   update: (id: number, dto: Record<string, unknown>) =>
     http.put<unknown, { data: SampleGarment }>(`/samples/${id}`, dto),
-  assign: (id: number, patternmaker_id: number) =>
-    http.patch<unknown, { data: SampleGarment }>(`/samples/${id}/assign`, { patternmaker_id }),
-  submit: (id: number, data: { remark?: string; attachments?: string[] }) =>
-    http.patch<unknown, { data: SampleGarment }>(`/samples/${id}/submit`, data),
-  reject: (id: number, reject_reason: string) =>
-    http.patch<unknown, { data: SampleGarment }>(`/samples/${id}/reject`, { reject_reason }),
-  confirm: (id: number) =>
-    http.patch<unknown, { data: SampleGarment }>(`/samples/${id}/confirm`),
+  // 推送版师 / 填材料寄出单号 → 打样中
+  push: (id: number, dto: { patternmakerId?: number; patternmakerName?: string; materialShipNo?: string }) =>
+    http.patch<unknown, { data: SampleGarment }>(`/samples/${id}/push`, dto),
+  // 版师视图保存：实际耗用/拉链长度/寄回单号/件数/工时单价
+  patternmakerSave: (id: number, dto: { materials?: any[]; returnNo?: string; pieceCount?: number; laborUnitPrice?: number }) =>
+    http.patch<unknown, { data: SampleGarment }>(`/samples/${id}/patternmaker`, dto),
+  ship: (id: number, dto: { shipSampleDate?: string } = {}) =>
+    http.patch<unknown, { data: SampleGarment }>(`/samples/${id}/ship`, dto),
+  complete: (id: number) =>
+    http.patch<unknown, { data: SampleGarment }>(`/samples/${id}/complete`),
+  copy: (id: number) =>
+    http.post<unknown, { data: SampleGarment }>(`/samples/${id}/copy`),
   remove: (id: number) =>
     http.delete(`/samples/${id}`),
 };
