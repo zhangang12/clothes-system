@@ -215,6 +215,23 @@ describe('ContractService', () => {
     await expect(service.push(1, 'admin')).rejects.toThrow(BadRequestException);
   });
 
+  // UT-CON-04c: recall transitions PUSHED → DRAFT, marks revised, logs RECALL
+  it('UT-CON-04c recall transitions PUSHED→DRAFT, sets revised, writes RECALL log', async () => {
+    const contract = makeContract({ portal_status: ContractPortalStatus.PUSHED });
+    mockRepo.findOne.mockResolvedValue(contract);
+    mockRepo.save.mockResolvedValue({ ...contract, portal_status: ContractPortalStatus.DRAFT, revised: 1 });
+    await service.recall(1, 'admin');
+    expect(mockRepo.save).toHaveBeenCalledWith(expect.objectContaining({ portal_status: ContractPortalStatus.DRAFT, revised: 1 }));
+    expect(mockLogRepo.save).toHaveBeenCalledWith(expect.objectContaining({ action: 'RECALL' }));
+  });
+
+  // UT-CON-04d: recall throws if not PUSHED (已盖章不可撤回)
+  it('UT-CON-04d recall throws BadRequest if not PUSHED', async () => {
+    const contract = makeContract({ portal_status: ContractPortalStatus.STAMPED });
+    mockRepo.findOne.mockResolvedValue(contract);
+    await expect(service.recall(1, 'admin')).rejects.toThrow(BadRequestException);
+  });
+
   // UT-CON-05: stamp creates snapshot_json and transitions PUSHED → STAMPED
   it('UT-CON-05 stamp creates snapshot_json and transitions PUSHED→STAMPED', async () => {
     const contract = makeContract({ portal_status: ContractPortalStatus.PUSHED });

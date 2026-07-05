@@ -59,6 +59,13 @@ export class ContractController {
     return this.service.push(id, req.user.username);
   }
 
+  @Patch(':id/recall')
+  @Roles(UserRole.ADMIN, UserRole.BUSINESS)
+  @ApiOperation({ summary: '撤销推送（PUSHED→DRAFT，供应商未盖章前可撤回修改后重推）' })
+  recall(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.service.recall(id, req.user.username);
+  }
+
   @Patch(':id/approve')
   @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
   @ApiOperation({ summary: '主管审批超阈值合同（待审批→已审批）' })

@@ -2,6 +2,15 @@
   <div class="contract-detail" v-if="contract.id">
     <van-nav-bar title="合同详情" left-arrow @click-left="$router.back()" />
 
+    <!-- 撤销重推提示：内部撤回修改后重新推送，供应商需重新核对盖章 -->
+    <van-notice-bar
+      v-if="Number(contract.revised) === 1 && contract.portal_status === 'PUSHED'"
+      left-icon="info-o"
+      color="#b12b2b"
+      background="#fff1f0"
+      text="合同已更新，请重新核对材料明细与金额后再盖章"
+    />
+
     <!-- 状态徽标 + 四步顺序锁定进度（供应商门户设计稿 §B：🔖盖章→📦发货→🧾对账→💵开票）-->
     <div class="status-banner">当前状态：<b>{{ portalStatusLabel(contract.portal_status) }}</b></div>
     <van-steps :active="currentStep" active-color="#1E3A5F" class="steps-bar">
@@ -83,12 +92,18 @@
 
     <!-- Action Buttons -->
     <div class="action-area">
+      <div v-if="contract.portal_status === 'PUSHED'" class="terms-agree">
+        <van-checkbox v-model="agreedTerms" shape="square" icon-size="18px">
+          我已阅读并同意合同条款
+        </van-checkbox>
+      </div>
       <van-button
         v-if="contract.portal_status === 'PUSHED'"
         type="primary"
         block
         round
         size="large"
+        :disabled="!agreedTerms"
         :loading="actioning"
         @click="doStamp"
       >
@@ -178,6 +193,7 @@ const route = useRoute();
 const contract = ref<any>({});
 const loadingDetail = ref(true);
 const actioning = ref(false);
+const agreedTerms = ref(false); // 盖章前须勾选「已阅读并同意合同条款」
 const showShipDialog = ref(false);
 const shipForm = ref({ qty: '', remark: '' });
 const showInvoiceDialog = ref(false);
@@ -218,7 +234,7 @@ function portalStatusLabel(s: string) {
 
 function logActionLabel(action: string) {
   return (
-    { PUSH: '已推送', STAMP: '供应商盖章', SHIP: '确认出货', INVOICE: '上传发票', RECONCILE: '对账完成' } as Record<string, string>
+    { PUSH: '已推送', RECALL: '撤销推送', STAMP: '供应商盖章', SHIP: '确认出货', INVOICE: '上传发票', RECONCILE: '对账完成' } as Record<string, string>
   )[action] ?? action;
 }
 
@@ -239,10 +255,14 @@ async function load() {
 }
 
 async function doStamp() {
-  await showConfirmDialog({ title: '确认盖章', message: '盖章后合同材料明细将被锁定，无法修改，确认盖章？' });
+  if (!agreedTerms.value) {
+    showConfirmDialog({ title: '提示', message: '请先勾选「我已阅读并同意合同条款」后再盖章', showCancelButton: false });
+    return;
+  }
+  await showConfirmDialog({ title: '确认盖章', message: '盖章即视为同意合同条款，盖章后合同材料明细将被锁定，无法修改，确认盖章？' });
   actioning.value = true;
   try {
-    const res = await portalContractApi.stamp(contract.value.id);
+    const res = await portalContractApi.stamp(contract.value.id, agreedTerms.value);
     contract.value = { ...contract.value, ...((res as any).data ?? res) };
     showSuccessToast('盖章成功');
     await load();
@@ -321,6 +341,7 @@ onMounted(load);
   padding: 12px 16px;
   box-shadow: 0 -2px 8px rgba(0,0,0,0.08);
 }
+.terms-agree { display: flex; justify-content: center; margin-bottom: 10px; font-size: 13px; color: #646566; }
 .await-hint { margin-top: 10px; text-align: center; font-size: 13px; color: #969799; }
 .invoice-form { padding: 16px 0; }
 .invoice-upload { padding: 12px 16px 4px; }

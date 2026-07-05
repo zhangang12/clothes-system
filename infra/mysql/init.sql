@@ -491,6 +491,7 @@ CREATE TABLE IF NOT EXISTS `contract` (
   `stamped_at`          DATETIME       DEFAULT NULL COMMENT '供应商盖章时间',
   `stamped_by_supplier` VARCHAR(100)   DEFAULT NULL COMMENT '盖章供应商账号',
   `snapshot_json`       JSON           DEFAULT NULL COMMENT '盖章时快照数据',
+  `revised`             TINYINT        NOT NULL DEFAULT 0 COMMENT '撤销推送后修改重推标记(门户提示合同已更新;盖章后清零)',
   `status`              ENUM('ACTIVE','COMPLETED','CANCELLED') NOT NULL DEFAULT 'ACTIVE',
   `approval_status`     ENUM('NONE','PENDING','APPROVED') NOT NULL DEFAULT 'NONE' COMMENT '金额阈值审批',
   `approved_by`         BIGINT       DEFAULT NULL,

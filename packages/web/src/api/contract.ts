@@ -12,6 +12,8 @@ export const contractApi = {
     http.post<unknown, { data: Contract }>('/contracts', dto),
   push: (id: number) =>
     http.patch<unknown, { data: Contract }>(`/contracts/${id}/push`),
+  recall: (id: number) =>
+    http.patch<unknown, { data: Contract }>(`/contracts/${id}/recall`),
   approve: (id: number) =>
     http.patch<unknown, { data: Contract }>(`/contracts/${id}/approve`),
   remove: (id: number) =>

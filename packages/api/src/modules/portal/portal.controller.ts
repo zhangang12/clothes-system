@@ -8,6 +8,7 @@ import { SupplierGuard } from '../../common/guards/supplier.guard';
 import { PortalService } from './portal.service';
 import { ConfirmShipDto } from './dto/confirm-ship.dto';
 import { UploadInvoiceDto } from './dto/upload-invoice.dto';
+import { StampDto } from './dto/stamp.dto';
 
 @ApiTags('供应商门户')
 @ApiBearerAuth()
@@ -34,9 +35,9 @@ export class PortalController {
   }
 
   @Patch(':id/stamp')
-  @ApiOperation({ summary: '供应商盖章（PUSHED→STAMPED，锁定快照）' })
-  stamp(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
-    return this.service.stamp(id, req.user.username, req.user.factory_id);
+  @ApiOperation({ summary: '供应商盖章（须勾选同意条款；PUSHED→STAMPED，锁定快照）' })
+  stamp(@Param('id', ParseIntPipe) id: number, @Body() dto: StampDto, @Request() req: any) {
+    return this.service.stamp(id, req.user.username, req.user.factory_id, dto.agreed);
   }
 
   @Patch(':id/ship')

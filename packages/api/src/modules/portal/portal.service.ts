@@ -82,7 +82,11 @@ export class PortalService {
     return { ...contract, materials, logs, orderDetail };
   }
 
-  async stamp(id: number, supplierAccount: string, factoryId: number): Promise<Contract> {
+  async stamp(id: number, supplierAccount: string, factoryId: number, agreed = false): Promise<Contract> {
+    // 盖章=电子签约的意思表示，须先勾选「已阅读并同意合同条款」（供应商门户设计稿 §B）
+    if (!agreed) {
+      throw new BadRequestException('请先阅读并勾选「已阅读并同意合同条款」后再盖章');
+    }
     const contract = await this.contractRepo.findOne({ where: { id, factory_id: factoryId, deleted: 0 } });
     if (!contract || !VISIBLE_STATUSES.includes(contract.portal_status)) {
       throw new NotFoundException('合同不存在');
@@ -122,6 +126,7 @@ export class PortalService {
     contract.stamped_at = new Date();
     contract.stamped_by_supplier = supplierAccount;
     contract.snapshot_json = snapshot;
+    contract.revised = 0; // 供应商已对更新后的合同重新盖章确认，清除「已更新」标记
     await this.contractRepo.save(contract);
 
     await this.logRepo.save(
@@ -130,6 +135,7 @@ export class PortalService {
         action: 'STAMP',
         operator: supplierAccount,
         operator_type: PortalOperatorType.SUPPLIER,
+        remark: '已阅读并同意合同条款',
       }),
     );
 

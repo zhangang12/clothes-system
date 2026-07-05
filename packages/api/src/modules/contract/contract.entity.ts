@@ -72,6 +72,10 @@ export class Contract {
   @Column({ type: 'json', nullable: true })
   snapshot_json: Record<string, unknown>;
 
+  // 撤销推送后修改重推标记：门户向供应商提示「合同已更新，请重新核对」，盖章后清零
+  @Column({ type: 'tinyint', default: 0 })
+  revised: number;
+
   @Column({ type: 'enum', enum: ContractStatus, default: ContractStatus.ACTIVE })
   status: ContractStatus;
 

@@ -130,26 +130,34 @@ describe('PortalService', () => {
     materialRepo.find.mockResolvedValue([material]);
     contractRepo.save.mockResolvedValue({ ...contract, portal_status: ContractPortalStatus.STAMPED });
 
-    const result = await service.stamp(1, 'supplier_A', 10);
+    const result = await service.stamp(1, 'supplier_A', 10, true);
     expect(result.portal_status).toBe(ContractPortalStatus.STAMPED);
     expect((contract as any).snapshot_json).toMatchObject({
       contract_no: 'HT-20240101-001',
       materials: [expect.objectContaining({ item_name: '面料A' })],
     });
-    expect(logRepo.create).toHaveBeenCalledWith(expect.objectContaining({ action: 'STAMP' }));
+    expect(logRepo.create).toHaveBeenCalledWith(expect.objectContaining({ action: 'STAMP', remark: '已阅读并同意合同条款' }));
+  });
+
+  // UT-PORTAL-06b: stamp rejected until 已阅读并同意合同条款 勾选（agreed=false）
+  it('UT-PORTAL-06b stamp throws BadRequestException when terms not agreed', async () => {
+    const contract = makeContract({ portal_status: ContractPortalStatus.PUSHED });
+    contractRepo.findOne.mockResolvedValue(contract);
+    await expect(service.stamp(1, 'supplier_A', 10, false)).rejects.toThrow(BadRequestException);
+    expect(contractRepo.save).not.toHaveBeenCalled();
   });
 
   // UT-PORTAL-07: stamp throws if contract is not PUSHED
   it('UT-PORTAL-07 stamp throws BadRequestException if status is not PUSHED', async () => {
     const contract = makeContract({ portal_status: ContractPortalStatus.STAMPED });
     contractRepo.findOne.mockResolvedValue(contract);
-    await expect(service.stamp(1, 'supplier_A', 10)).rejects.toThrow(BadRequestException);
+    await expect(service.stamp(1, 'supplier_A', 10, true)).rejects.toThrow(BadRequestException);
   });
 
   // UT-PORTAL-08: stamp throws NotFoundException for wrong factory
   it('UT-PORTAL-08 stamp throws NotFoundException for wrong factory_id', async () => {
     contractRepo.findOne.mockResolvedValue(null);
-    await expect(service.stamp(1, 'supplier_A', 99)).rejects.toThrow(NotFoundException);
+    await expect(service.stamp(1, 'supplier_A', 99, true)).rejects.toThrow(NotFoundException);
   });
 
   // UT-PORTAL-09: confirmShipping transitions STAMPED → SHIPPING

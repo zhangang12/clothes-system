@@ -348,6 +348,15 @@ test_contract() {
   api PATCH "/contracts/${ctid:-0}/push" ''
   expect_code 400 "重复推送应400(非DRAFT)"
 
+  # ── 撤销推送/改后重推(PUSHED→DRAFT, revised标记, 门户提示「合同已更新」) ──
+  api PATCH "/contracts/${ctid:-0}/recall" '' "$TOKEN_BUSINESS"; expect_ok "撤销推送(PUSHED→DRAFT,BUSINESS可操作)"
+  api GET "/contracts/${ctid:-0}"; expect_eq data.portal_status DRAFT "撤销后portal_status=DRAFT"
+  expect_num data.revised 1 "撤销后revised=1(已修订标记)"
+  api PATCH "/contracts/${ctid:-0}/recall" '' "$TOKEN_BUSINESS"
+  expect_code 400 "非PUSHED撤销推送应400"
+  api PATCH "/contracts/${ctid:-0}/push" ''; expect_ok "改后重推(DRAFT→PUSHED)"
+  api GET "/contracts/${ctid:-0}"; expect_num data.revised 1 "重推后revised仍=1(门户提示合同已更新)"
+
   # ── 推送前校验门户账号：未开通账号的工厂,合同推送应拦截(设计稿 A5 死流程防护) ──
   api POST /factories "{\"name\":\"NoAcc_${SFX}_${RANDOM}\",\"type\":\"FABRIC\",\"contacts\":[{\"name\":\"李\"}]}"
   local noAccFid noAccCt
@@ -483,8 +492,13 @@ test_portal() {
   expect_ok "供应商查看合同列表"
   api GET "/portal/contracts/${ctid:-0}" '' "$TOKEN_SUP"
   expect_ok "供应商查看合同详情"
-  api PATCH "/portal/contracts/${ctid:-0}/stamp" '' "$TOKEN_SUP"
-  expect_ok "供应商盖章(PUSHED→STAMPED)"
+  # 盖章须勾选「已阅读并同意合同条款」（供应商门户设计稿 §B）
+  api PATCH "/portal/contracts/${ctid:-0}/stamp" '{"agreed":false}' "$TOKEN_SUP"
+  expect_code 400 "未勾选同意条款盖章应400(agreed=false)"
+  api PATCH "/portal/contracts/${ctid:-0}/stamp" '{}' "$TOKEN_SUP"
+  expect_code 400 "缺同意条款字段盖章应400"
+  api PATCH "/portal/contracts/${ctid:-0}/stamp" '{"agreed":true}' "$TOKEN_SUP"
+  expect_ok "供应商盖章(勾选同意条款;PUSHED→STAMPED)"
   api PATCH "/portal/contracts/${ctid:-0}/ship" '{"remark":"已发货"}' "$TOKEN_SUP"
   expect_ok "供应商确认发货(STAMPED→SHIPPING)"
   # 四步顺序锁定：未对账直接开票应拦截（设计稿 门户 B2/E4）
@@ -501,7 +515,7 @@ test_portal() {
   expect_ok "供应商开票(对账后放行,含发票号/金额/附件URL)"
   api GET "/portal/contracts/${ctid:-0}" '' "$TOKEN_SUP"
   [[ "$RESP" == *"附件:/api/v1/uploads"* ]] && ok "开票附件URL写入门户流水备注" || bad "开票备注未含附件URL ${RESP:0:160}"
-  api PATCH "/portal/contracts/${ctid:-0}/stamp" '' "$TOKEN_SUP"
+  api PATCH "/portal/contracts/${ctid:-0}/stamp" '{"agreed":true}' "$TOKEN_SUP"
   expect_code 400 "重复盖章应400(非PUSHED)"
 }
 
@@ -1351,7 +1365,7 @@ test_portal_ext() {
   api PATCH "/contracts/${ctA:-0}/push" ''
   api GET "/portal/contracts/${ctA:-0}" '' "$TOKEN_SUP"
   expect_code 404 "供应商无法查看其它工厂合同详情(数据隔离)"
-  api PATCH "/portal/contracts/${ctA:-0}/stamp" '' "$TOKEN_SUP"
+  api PATCH "/portal/contracts/${ctA:-0}/stamp" '{"agreed":true}' "$TOKEN_SUP"
   expect_code 404 "供应商无法盖章其它工厂合同(数据隔离)"
 
   # ── 工厂1合同：状态机非法/次要转移 ──
@@ -1365,7 +1379,7 @@ test_portal_ext() {
   api PATCH "/portal/contracts/${ctB:-0}/invoice" '{"invoice_no":"INV-EXT-0"}' "$TOKEN_SUP"
   expect_code 400 "未盖章直接开票应400"
   # 盖章 → STAMPED(setup)
-  api PATCH "/portal/contracts/${ctB:-0}/stamp" '' "$TOKEN_SUP"
+  api PATCH "/portal/contracts/${ctB:-0}/stamp" '{"agreed":true}' "$TOKEN_SUP"
   # STAMPED 未对账 → 开票应400(开票须对账后)
   api PATCH "/portal/contracts/${ctB:-0}/invoice" '{"invoice_no":"INV-EXT-1"}' "$TOKEN_SUP"
   expect_code 400 "已盖章未对账开票应400(开票须对账后)"
@@ -1383,7 +1397,7 @@ test_portal_ext() {
   expect_num data.shipments.0.snapshot_unit_price 8 "发货批次1锁定单价=合同单价8"
   [[ -n "$(echo "$RESP" | jval data.due_date)" && "$(echo "$RESP" | jval data.due_date)" != null ]] && ok "发货回写到期日due_date(账期驱动)" || bad "发货未回写到期日due_date"
   # SHIPPING 已发货 → 再盖章应400
-  api PATCH "/portal/contracts/${ctB:-0}/stamp" '' "$TOKEN_SUP"
+  api PATCH "/portal/contracts/${ctB:-0}/stamp" '{"agreed":true}' "$TOKEN_SUP"
   expect_code 400 "已发货后再盖章应400"
   # 续批发货累计(qty=30,累计90/100)应放行(批次累计)
   api PATCH "/portal/contracts/${ctB:-0}/ship" '{"qty":30}' "$TOKEN_SUP"
@@ -1421,7 +1435,7 @@ test_portal_ext() {
   # ── 不存在的大 id → 404 ──
   api GET "/portal/contracts/999999999" '' "$TOKEN_SUP"
   expect_code 404 "查看不存在合同详情应404"
-  api PATCH "/portal/contracts/999999999/stamp" '' "$TOKEN_SUP"
+  api PATCH "/portal/contracts/999999999/stamp" '{"agreed":true}' "$TOKEN_SUP"
   expect_code 404 "盖章不存在合同应404"
 
   # ── 列表查询：分页与状态筛选 ──

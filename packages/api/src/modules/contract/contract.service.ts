@@ -267,6 +267,27 @@ export class ContractService {
     return contract;
   }
 
+  // 撤销推送（PUSHED → DRAFT）：供应商尚未盖章前可撤回修改，修改后重推门户提示「合同已更新」
+  async recall(id: number, operatorUsername: string): Promise<Contract> {
+    const contract = await this.repo.findOne({ where: { id, deleted: 0 } });
+    if (!contract) throw new NotFoundException(`合同 #${id} 不存在`);
+    if (contract.portal_status !== ContractPortalStatus.PUSHED) {
+      throw new BadRequestException('只有已推送（供应商未盖章）状态才可撤销推送');
+    }
+    contract.portal_status = ContractPortalStatus.DRAFT;
+    contract.revised = 1; // 标记为已修订，重推后门户提示供应商合同已更新
+    await this.repo.save(contract);
+
+    await this.logRepo.save(this.logRepo.create({
+      contract_id: id,
+      action: 'RECALL',
+      operator: operatorUsername,
+      operator_type: PortalOperatorType.INTERNAL,
+    }));
+
+    return contract;
+  }
+
   // 主管审批（超阈值合同）：待审批 → 已审批，放行推送
   async approveContract(id: number, approverId: number): Promise<Contract> {
     const contract = await this.repo.findOne({ where: { id, deleted: 0 } });
