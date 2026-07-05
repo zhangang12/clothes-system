@@ -2,10 +2,10 @@
   <div class="portal-contracts">
     <van-tabs v-model:active="activeTab" sticky @change="onTabChange">
       <van-tab title="全部" name="" />
-      <van-tab title="待确认" name="PUSHED" />
-      <van-tab title="已盖章" name="STAMPED" />
-      <van-tab title="出货中" name="SHIPPING" />
-      <van-tab title="已对账" name="RECONCILED" />
+      <van-tab title="待盖章" name="PUSHED" />
+      <van-tab title="待发货" name="STAMPED" />
+      <van-tab title="待对账" name="SHIPPING" />
+      <van-tab title="待开票" name="RECONCILED" />
     </van-tabs>
 
     <van-pull-refresh v-model="refreshing" @refresh="onRefresh">
@@ -51,7 +51,7 @@ const page = ref(1);
 const PAGE_SIZE = 20;
 
 function statusLabel(s: string) {
-  return ({ PUSHED: '待确认', STAMPED: '已盖章', SHIPPING: '出货中', RECONCILED: '已对账' } as Record<string, string>)[s] ?? s;
+  return ({ PUSHED: '待盖章', STAMPED: '待发货', SHIPPING: '待对账', RECONCILED: '待开票', COMPLETED: '已完成' } as Record<string, string>)[s] ?? s;
 }
 function statusTagType(s: string): any {
   return ({ PUSHED: 'warning', STAMPED: 'primary', SHIPPING: 'success', RECONCILED: '' } as Record<string, string>)[s] ?? 'default';

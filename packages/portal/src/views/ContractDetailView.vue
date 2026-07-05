@@ -2,12 +2,13 @@
   <div class="contract-detail" v-if="contract.id">
     <van-nav-bar title="合同详情" left-arrow @click-left="$router.back()" />
 
-    <!-- Progress Stepper -->
-    <van-steps :active="currentStep" active-color="#07c160" class="steps-bar">
-      <van-step>待确认</van-step>
-      <van-step>已盖章</van-step>
-      <van-step>出货中</van-step>
-      <van-step>已对账</van-step>
+    <!-- 状态徽标 + 四步顺序锁定进度（供应商门户设计稿 §B：🔖盖章→📦发货→🧾对账→💵开票）-->
+    <div class="status-banner">当前状态：<b>{{ portalStatusLabel(contract.portal_status) }}</b></div>
+    <van-steps :active="currentStep" active-color="#1E3A5F" class="steps-bar">
+      <van-step>🔖 盖章</van-step>
+      <van-step>📦 发货</van-step>
+      <van-step>🧾 对账</van-step>
+      <van-step>💵 开票</van-step>
     </van-steps>
 
     <!-- Basic Info -->
@@ -144,6 +145,11 @@ function typeLabel(t: string) {
   return ({ MATERIAL: '面料合同', PROCESS: '加工合同', SUPPLEMENT: '补料合同' } as Record<string, string>)[t] ?? t;
 }
 
+// 门户状态标签（设计稿：待盖章/待发货/待对账/待开票/已完成）
+function portalStatusLabel(s: string) {
+  return ({ PUSHED: '待盖章', STAMPED: '待发货', SHIPPING: '待对账', RECONCILED: '待开票', COMPLETED: '已完成' } as Record<string, string>)[s] ?? s;
+}
+
 function logActionLabel(action: string) {
   return (
     { PUSH: '已推送', STAMP: '供应商盖章', SHIP: '确认出货', INVOICE: '上传发票', RECONCILE: '对账完成' } as Record<string, string>
@@ -206,9 +212,11 @@ onMounted(load);
 </script>
 
 <style scoped>
-.contract-detail { background: #f5f5f5; min-height: 100vh; padding-bottom: 120px; }
+.contract-detail { background: #FBF8F2; min-height: 100vh; padding-bottom: 120px; }
+.status-banner { background: #1E3A5F; color: #fff; padding: 10px 16px; font-size: 14px; }
+.status-banner b { color: #F5EDDC; }
 .steps-bar { background: #fff; margin-bottom: 12px; padding: 16px 0; }
-.amount-value { color: #ee0a24; font-weight: 600; }
+.amount-value { color: #D17A40; font-weight: 600; }
 .material-value { text-align: right; font-size: 12px; color: #646566; }
 .material-amount { font-weight: 600; color: #323233; }
 .action-area {
