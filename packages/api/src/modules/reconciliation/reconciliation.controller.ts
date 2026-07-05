@@ -59,6 +59,13 @@ export class ReconciliationController {
     return this.service.confirm(id);
   }
 
+  @Patch(':id/reject')
+  @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
+  @ApiOperation({ summary: '主管整单退回（PENDING→DRAFT，记录退回批注）' })
+  reject(@Param('id', ParseIntPipe) id: number, @Body('remark') remark?: string) {
+    return this.service.reject(id, remark);
+  }
+
   @Delete(':id')
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: '删除对账单（草稿状态，逻辑删除）' })

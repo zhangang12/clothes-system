@@ -91,6 +91,11 @@
               link type="success" size="small"
               @click="doConfirm(row)"
             >复核确认</el-button>
+            <el-button
+              v-if="row.status === 'PENDING' && canReview"
+              link type="danger" size="small"
+              @click="doReject(row)"
+            >整单退回</el-button>
             <el-popconfirm v-if="row.status === 'DRAFT' && isAdmin" title="确认删除？" @confirm="doRemove(row.id)">
               <template #reference>
                 <el-button link type="danger" size="small">删除</el-button>
@@ -132,6 +137,9 @@
           <el-descriptions-item label="发票金额">{{ detailData.invoice_amount != null ? (+detailData.invoice_amount).toFixed(2) : '--' }}</el-descriptions-item>
           <el-descriptions-item label="发票差额">{{ detailData.invoice_diff != null ? (+detailData.invoice_diff).toFixed(2) : '--' }}</el-descriptions-item>
           <el-descriptions-item label="确认时间">{{ detailData.confirmed_at ?? '--' }}</el-descriptions-item>
+          <el-descriptions-item v-if="detailData.review_remark" label="退回批注" :span="3">
+            <span style="color:var(--el-color-danger)">{{ detailData.review_remark }}</span>
+          </el-descriptions-item>
         </el-descriptions>
         <template v-if="detailData.type === 'LABOR'">
           <el-divider>工时明细（多款合并）</el-divider>
@@ -305,7 +313,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search, Refresh, Plus, Coin } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { reconciliationApi } from '@/api/reconciliation';
@@ -382,6 +390,19 @@ async function doConfirm(row: any) {
   await reconciliationApi.confirm(row.id);
   ElMessage.success('主管复核已确认');
   load();
+}
+
+async function doReject(row: any) {
+  try {
+    const { value } = await ElMessageBox.prompt('请填写退回原因（批注）', '整单退回', {
+      confirmButtonText: '确认退回', cancelButtonText: '取消', inputType: 'textarea',
+    });
+    await reconciliationApi.reject(row.id, value);
+    ElMessage.success('已整单退回，业务员可修改后重新提交');
+    load();
+  } catch (e: any) {
+    if (e !== 'cancel') ElMessage.error(e?.response?.data?.message ?? '退回失败');
+  }
 }
 
 async function doRemove(id: number) {

@@ -560,6 +560,7 @@ CREATE TABLE IF NOT EXISTS `reconciliation` (
   `has_invoice`      TINYINT        NOT NULL DEFAULT 0 COMMENT '1=有票 0=无票',
   `status`           ENUM('DRAFT','PENDING','CONFIRMED','PAID') NOT NULL DEFAULT 'DRAFT',
   `confirmed_at`     DATETIME       DEFAULT NULL,
+  `review_remark`    VARCHAR(500)   DEFAULT NULL COMMENT '主管复核批注/整单退回原因',
   `description`      TEXT           DEFAULT NULL COMMENT '无合同费用说明',
   `created_by`       BIGINT         NOT NULL,
   `created_at`       DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -584,6 +585,7 @@ CREATE TABLE IF NOT EXISTS `reconciliation_shipment` (
   `snapshot_unit_price` DECIMAL(15,4) NOT NULL COMMENT '盖章时快照单价',
   `qty`                DECIMAL(15,4)  NOT NULL,
   `amount`             DECIMAL(15,4)  NOT NULL,
+  `remark`             VARCHAR(200)   DEFAULT NULL COMMENT '逐批批注',
   PRIMARY KEY (`id`),
   KEY `idx_reconcile` (`reconcile_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='对账单发货明细（含快照单价）';

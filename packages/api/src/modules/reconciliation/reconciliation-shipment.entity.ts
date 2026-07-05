@@ -29,4 +29,7 @@ export class ReconciliationShipment {
 
   @Column({ type: 'decimal', precision: 15, scale: 4 })
   amount: number;
+
+  @Column({ length: 200, nullable: true })
+  remark: string; // 逐批批注（复核时对该批次的说明）
 }

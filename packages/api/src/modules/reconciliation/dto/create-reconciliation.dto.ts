@@ -40,6 +40,9 @@ export class CreateShipmentLineDto {
   @IsNumber()
   @Min(0)
   qty: number;
+
+  @IsOptional() @IsString()
+  remark?: string; // 逐批批注
 }
 
 export class CreateReconciliationDto {

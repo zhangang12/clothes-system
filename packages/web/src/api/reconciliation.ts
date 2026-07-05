@@ -14,6 +14,8 @@ export const reconciliationApi = {
     http.patch<unknown, any>(`/reconciliations/${id}/submit`),
   confirm: (id: number) =>
     http.patch<unknown, any>(`/reconciliations/${id}/confirm`),
+  reject: (id: number, remark?: string) =>
+    http.patch<unknown, any>(`/reconciliations/${id}/reject`, { remark }),
   remove: (id: number) =>
     http.delete(`/reconciliations/${id}`),
 };

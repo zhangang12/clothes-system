@@ -209,6 +209,21 @@ describe('ReconciliationService', () => {
     expect(result.status).toBe(ReconciliationStatus.PENDING);
   });
 
+  // UT-REC-17: reject 整单退回 PENDING→DRAFT 并记录退回批注
+  it('UT-REC-17 reject transitions PENDING→DRAFT and records review_remark', async () => {
+    const rec = makeReconciliation({ status: ReconciliationStatus.PENDING });
+    mockReconciliationRepo.findOne.mockResolvedValue(rec);
+    mockReconciliationRepo.save.mockImplementation((r: any) => Promise.resolve(r));
+    const result = await service.reject(1, '金额与合同不符，请核对');
+    expect(result.status).toBe(ReconciliationStatus.DRAFT);
+    expect(result.review_remark).toBe('金额与合同不符，请核对');
+  });
+
+  it('UT-REC-18 reject throws when not PENDING', async () => {
+    mockReconciliationRepo.findOne.mockResolvedValue(makeReconciliation({ status: ReconciliationStatus.DRAFT }));
+    await expect(service.reject(1, 'x')).rejects.toThrow(BadRequestException);
+  });
+
   // UT-REC-04: confirm transitions PENDING → CONFIRMED (主管复核，二级审批)
   it('UT-REC-04 confirm transitions PENDING→CONFIRMED', async () => {
     const rec = makeReconciliation({ status: ReconciliationStatus.PENDING });

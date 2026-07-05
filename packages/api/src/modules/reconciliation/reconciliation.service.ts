@@ -118,6 +118,7 @@ export class ReconciliationService {
             snapshot_unit_price: s.snapshot_unit_price,
             qty: s.qty,
             amount: +(s.snapshot_unit_price * s.qty).toFixed(4),
+            remark: s.remark ?? null,
           }),
         );
         await manager.save(ReconciliationShipment, lines);
@@ -261,6 +262,18 @@ export class ReconciliationService {
       throw new BadRequestException('只有草稿状态才可提交复核');
     }
     rec.status = ReconciliationStatus.PENDING;
+    return this.repo.save(rec);
+  }
+
+  // 主管整单退回：待复核→草稿，记录退回批注（补充确认：可逐批批注、整单退回）
+  async reject(id: number, remark?: string): Promise<Reconciliation> {
+    const rec = await this.repo.findOne({ where: { id, deleted: 0 } });
+    if (!rec) throw new NotFoundException(`对账单 #${id} 不存在`);
+    if (rec.status !== ReconciliationStatus.PENDING) {
+      throw new BadRequestException('只有待复核状态才可整单退回');
+    }
+    rec.status = ReconciliationStatus.DRAFT;
+    rec.review_remark = remark ?? null;
     return this.repo.save(rec);
   }
 
