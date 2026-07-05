@@ -26,6 +26,13 @@ export class ContractController {
     return this.service.create(dto, req.user.id);
   }
 
+  @Post('generate-from-order/:orderId')
+  @Roles(UserRole.ADMIN, UserRole.BUSINESS)
+  @ApiOperation({ summary: '供应商拆单生成材料合同（按订单材料供应商分组）' })
+  generateFromOrder(@Param('orderId', ParseIntPipe) orderId: number, @Request() req: any) {
+    return this.service.generateFromOrder(orderId, req.user.id);
+  }
+
   @Get()
   @ApiOperation({ summary: '合同列表（分页）' })
   findAll(@Query() query: QueryContractDto) {

@@ -928,7 +928,7 @@ test_order_ext() {
 }
 
 test_contract_ext() {
-  local cid fid oid ctid ctdel ctpush ctm no
+  local cid fid oid ctid ctdel ctpush ctm no splitN1 splitN2 splitOid
   cid=$(fx_customer); fid=$(fx_factory); oid=$(fx_order "$cid")
 
   # —— 权限矩阵：写接口换无权角色 → 拒绝 ——
@@ -979,6 +979,16 @@ test_contract_ext() {
   # —— 材料合同账期默认 90 天 ——
   api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${fid:-0},\"order_id\":${oid:-0},\"materials\":[{\"item_name\":\"面料\",\"unit_price\":8,\"qty\":100}]}"
   expect_num data.account_period_days 90 "材料合同账期默认=发货日+90天"
+
+  # —— 供应商拆单生成合同：按材料供应商分组、每供应商一张材料合同（设计稿 合同A1）——
+  splitN1="拆料厂1_${SFX}_${RANDOM}"; splitN2="拆料厂2_${SFX}_${RANDOM}"
+  api POST /factories "{\"name\":\"${splitN1}\",\"type\":\"FABRIC\",\"contacts\":[{\"name\":\"李\"}]}"
+  api POST /factories "{\"name\":\"${splitN2}\",\"type\":\"ACCESSORY\",\"contacts\":[{\"name\":\"王\"}]}"
+  api POST /orders "{\"customer_id\":${cid:-0},\"qty_total\":100,\"materials\":[{\"item_name\":\"面料\",\"supplier\":\"${splitN1}\",\"net_usage\":1,\"unit_price\":8},{\"item_name\":\"拉链\",\"supplier\":\"${splitN2}\",\"net_usage\":1,\"unit_price\":2}]}"
+  splitOid=$(echo "$RESP" | jval data.id)
+  api POST "/contracts/generate-from-order/${splitOid:-0}" ''
+  expect_ok "供应商拆单生成合同应2xx"
+  expect_num data.created 2 "两个供应商各生成一张材料合同(按供应商拆单)"
 
   # —— 比例组合 & 边界值 ——
   api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${fid:-0},\"order_id\":${oid:-0},\"deposit_ratio\":20,\"mid_ratio\":30,\"final_ratio\":50,\"materials\":[{\"item_name\":\"面料\",\"unit_price\":8,\"qty\":100}]}"

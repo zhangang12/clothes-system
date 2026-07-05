@@ -8,6 +8,7 @@ import { ContractMaterial } from './contract-material.entity';
 import { ContractPortalLog, PortalOperatorType } from './contract-portal-log.entity';
 import { OrderMaterial } from '../order/order-material.entity';
 import { OrderMain } from '../order/order-main.entity';
+import { Factory } from '../factory/factory.entity';
 import { SupplierAccount } from '../auth/supplier-account.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { ContractPortalStatus, ContractType, OrderStatus } from '@i9/types';
@@ -29,10 +30,54 @@ export class ContractService {
     @InjectRepository(ContractPortalLog) private readonly logRepo: Repository<ContractPortalLog>,
     @InjectRepository(OrderMaterial) private readonly orderMaterialRepo: Repository<OrderMaterial>,
     @InjectRepository(OrderMain) private readonly orderRepo: Repository<OrderMain>,
+    @InjectRepository(Factory) private readonly factoryRepo: Repository<Factory>,
     @InjectRepository(SupplierAccount) private readonly supplierRepo: Repository<SupplierAccount>,
     private readonly numbering: NumberingService,
     private readonly dataSource: DataSource,
   ) {}
+
+  // 供应商拆单：按订单材料的供应商分组，每个供应商生成一张材料合同（设计稿 合同 A1）
+  async generateFromOrder(orderId: number, createdBy: number) {
+    const order = await this.orderRepo.findOne({ where: { id: orderId, deleted: 0 } });
+    if (!order) throw new NotFoundException(`订单 #${orderId} 不存在`);
+    const materials = await this.orderMaterialRepo.find({ where: { order_id: orderId }, order: { sort_order: 'ASC' } });
+    if (!materials.length) throw new BadRequestException('订单无用料核算记录，无法生成合同');
+
+    // 按供应商名分组
+    const groups = new Map<string, OrderMaterial[]>();
+    for (const m of materials) {
+      const key = (m.supplier || '').trim() || '未指定供应商';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(m);
+    }
+
+    const created: Contract[] = [];
+    const unmatched: string[] = [];
+    for (const [supplier, mats] of groups) {
+      // 供应商名匹配工厂库（供应商须落工厂库，设计稿 订单 B9）
+      const factory = supplier === '未指定供应商'
+        ? null
+        : await this.factoryRepo.findOne({ where: { name: supplier, deleted: 0 } });
+      if (!factory) { unmatched.push(supplier); continue; }
+      const contract = await this.create(
+        {
+          type: ContractType.MATERIAL,
+          factory_id: factory.id,
+          order_id: orderId,
+          currency: order.currency ?? 'CNY',
+          materials: mats.map((m) => ({
+            item_name: m.item_name,
+            unit: m.unit,
+            unit_price: +m.unit_price || 0,
+            qty: +(m.final_purchase ?? m.total_purchase) || 0,
+          })),
+        } as CreateContractDto,
+        createdBy,
+      );
+      created.push(contract);
+    }
+    return { orderId, created: created.length, contracts: created, unmatched };
+  }
 
   async create(dto: CreateContractDto, createdBy: number): Promise<Contract> {
     // 补料合同用「补料-原合同号-序号」独立标识，不占 HT 主序号（设计稿 合同 D1/Q23）

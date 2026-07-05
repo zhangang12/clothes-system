@@ -8,6 +8,7 @@ import { ContractMaterial } from '../contract-material.entity';
 import { ContractPortalLog, PortalOperatorType } from '../contract-portal-log.entity';
 import { OrderMaterial } from '../../order/order-material.entity';
 import { OrderMain } from '../../order/order-main.entity';
+import { Factory } from '../../factory/factory.entity';
 import { SupplierAccount } from '../../auth/supplier-account.entity';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
 import { ContractPortalStatus, ContractType } from '@i9/types';
@@ -51,6 +52,9 @@ const mockSupplierRepo = {
 const mockOrderRepo = {
   findOne: jest.fn().mockResolvedValue({ id: 10, qty_total: 1000, deleted: 0 }),
 };
+const mockFactoryRepo = {
+  findOne: jest.fn().mockResolvedValue({ id: 7, name: '面料厂A', deleted: 0 }),
+};
 const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn().mockResolvedValue(1), expire: jest.fn() };
 const mockDataSource = {
   transaction: jest.fn().mockImplementation((cb) => cb({
@@ -74,6 +78,7 @@ describe('ContractService', () => {
         { provide: getRepositoryToken(ContractPortalLog), useValue: mockLogRepo },
         { provide: getRepositoryToken(OrderMaterial), useValue: mockOrderMaterialRepo },
         { provide: getRepositoryToken(OrderMain), useValue: mockOrderRepo },
+        { provide: getRepositoryToken(Factory), useValue: mockFactoryRepo },
         { provide: getRepositoryToken(SupplierAccount), useValue: mockSupplierRepo },
         { provide: NumberingService, useValue: new NumberingService(mockRedis as any) },
         { provide: DataSource, useValue: mockDataSource },
@@ -162,6 +167,23 @@ describe('ContractService', () => {
     await service.create(dto as any, 1);
     const materialSaveCall = manager.save.mock.calls.find((c: any[]) => Array.isArray(c[1]));
     expect(materialSaveCall[1][0]).toMatchObject({ qty: 1000, qty_source: '大货数' });
+  });
+
+  // UT-CON-15: generateFromOrder 按供应商拆单，每供应商一张合同（设计稿 合同A1）
+  it('UT-CON-15 generateFromOrder splits materials by supplier into per-supplier contracts', async () => {
+    mockOrderRepo.findOne.mockResolvedValueOnce({ id: 10, currency: 'CNY', deleted: 0 });
+    mockOrderMaterialRepo.find.mockResolvedValueOnce([
+      { item_name: '面料A', supplier: '面料厂A', unit_price: 8, total_purchase: 100, sort_order: 0 },
+      { item_name: '面料B', supplier: '面料厂A', unit_price: 5, total_purchase: 50, sort_order: 1 },
+      { item_name: '拉链', supplier: '辅料厂B', unit_price: 2, total_purchase: 200, sort_order: 2 },
+      { item_name: '未知料', supplier: '', unit_price: 1, total_purchase: 10, sort_order: 3 },
+    ]);
+    mockFactoryRepo.findOne
+      .mockResolvedValueOnce({ id: 7, name: '面料厂A', deleted: 0 })
+      .mockResolvedValueOnce({ id: 8, name: '辅料厂B', deleted: 0 });
+    const result = await service.generateFromOrder(10, 1);
+    expect(result.created).toBe(2); // 面料厂A + 辅料厂B
+    expect(result.unmatched).toContain('未指定供应商'); // 空供应商无法匹配工厂
   });
 
   // UT-CON-03: push transitions DRAFT → PUSHED and logs action
