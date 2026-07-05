@@ -93,12 +93,23 @@ export const SAMPLE_STATUS_LABEL: Record<SampleStatus, string> = {
 // 样衣类别（7 类，可多选）
 export const SAMPLE_CATEGORIES = ['销样', '头样', '二样', '三样', '产前样', '船样', '拍照样'];
 
+// 报价状态机（客户报价设计稿 §B：草稿/已报价/客户调整/已成单）
 export enum QuoteStatus {
-  DRAFT = 'DRAFT',
-  SENT = 'SENT',
-  CONFIRMED = 'CONFIRMED',
-  TO_CONTRACT = 'TO_CONTRACT',
+  DRAFT = 'DRAFT',         // 草稿
+  QUOTED = 'QUOTED',       // 已报价
+  ADJUSTING = 'ADJUSTING', // 客户调整
+  ORDERED = 'ORDERED',     // 已成单（转销售合同后）
 }
+
+export const QUOTE_STATUS_LABEL: Record<QuoteStatus, string> = {
+  [QuoteStatus.DRAFT]: '草稿',
+  [QuoteStatus.QUOTED]: '已报价',
+  [QuoteStatus.ADJUSTING]: '客户调整',
+  [QuoteStatus.ORDERED]: '已成单',
+};
+
+// 费用明细新建自动带 6 行（客户报价设计稿 §费用明细）
+export const DEFAULT_QUOTE_FEES = ['加工费', '线', '包装', '样衣费', '测试费', '运费'];
 
 export enum OrderStatus {
   DRAFT = 'DRAFT',
@@ -393,37 +404,65 @@ export interface SampleVersion {
   createdAt: string;
 }
 
-// ---------- 报价 ----------
+// ---------- 客户报价（设计稿：18 主字段 + 报价明细/费用明细双子表 + 报价合计3字段） ----------
+// 报价明细（从样衣导入）12 字段
 export interface QuotationItem {
   id?: number;
-  sortOrder: number;
-  itemName: string;
-  unit?: string;
-  usageQty?: number;
-  unitPrice?: number;
-  lossRate: number;
-  lossPrice?: number;  // 含损单价，后端计算
-  totalUsage?: number;
-  subtotal?: number;
+  sortOrder?: number;
+  part?: string;          // 部位
+  itemName: string;       // 品名（必填）
+  width?: string;         // 门幅
+  color?: string;         // 颜色
+  supplier?: string;      // 供应商（PDF 默认隐藏）
+  unit?: string;          // 计量单位
+  quoteUsage?: number;    // 报价耗用（从样衣实际耗用带入，可改，独立快照）
+  rmbPrice?: number;      // 人民币单价
+  usdPrice?: number;      // 美金单价（自动=人民币单价/汇率）
+  lossRate?: number;      // 损耗%（默认 3）
+  lossAmount?: number;    // 含损金额（自动=人民币单价×报价耗用×(1+损耗)）
+  remark?: string;
+}
+
+// 费用明细 4 字段
+export interface QuotationFee {
+  id?: number;
+  sortOrder?: number;
+  feeName: string;        // 费用名称
+  rmbPrice?: number;      // 人民币单价
+  usdPrice?: number;      // 美金单价（自动=人民币单价/汇率）
+  quoteUsage?: number;    // 报价耗用（默认 1）
 }
 
 export interface Quotation {
   id: number;
-  quoteNo: string;
-  customerId: number;
-  customerName?: string;
-  sampleId?: number;
-  styleName?: string;
-  globalLossRate: number;
-  unitPrice?: number;
-  currency: string;
-  grossMargin?: number;
-  totalQty?: number;
-  totalAmount?: number;
+  quoteNo: string;                 // Q-YYYYMMDD-序号
+  inquiryDate?: string;            // 询价日期（默认今天）
+  sampleId?: number;               // 关联样衣
+  sampleNo?: string;
+  middlemanId: number;             // 中间商（客户资料）
+  middlemanName?: string;          // 自动带出
+  buyerId?: number;                // 最终买家
+  buyerName?: string;
+  buyerNo?: string;                // 自动带出
+  styleNo?: string;                // 客户款号
+  middlemanContact?: string;       // 中间商联系人
+  settlementCategory?: string;     // 结算类别（自动）
+  currency: string;                // 外销币种（默认 USD）
+  exchangeRate?: number;           // 汇率（>0）
+  tradeCountry?: string;           // 贸易国别
+  settlementMethod?: string;       // 结汇方式
+  priceTerms?: string;             // 价格条款
+  salesperson?: string;            // 外销员（默认当前登录人）
+  profitRate?: number;             // 利润率%
+  quoteQty?: number;               // 报价数量
+  image1?: string; image2?: string;
+  rmbTotal?: number;               // 报价人民币价格（含利润率，自动）
+  usdTotal?: number;               // 报价美元价格（自动）
+  totalRemark?: string;            // 备注说明
+  customerId?: number;             // 兼容：主客户(=中间商)
   status: QuoteStatus;
-  items: QuotationItem[];
-  sentAt?: string;
-  confirmedAt?: string;
+  items?: QuotationItem[];
+  fees?: QuotationFee[];
   createdAt: string;
 }
 

@@ -78,7 +78,7 @@ TOKEN_SUP=$(echo "$RESP" | jval data.access_token)
 fx_customer() { api POST /customers "{\"name\":\"C_${SFX}_${RANDOM}\",\"type\":\"MIDDLEMAN\",\"grade\":\"A\",\"currency\":\"USD\",\"contacts\":[{\"name\":\"张三\",\"mobile\":\"13900000000\"}]}"; echo "$RESP" | jval data.id; }
 fx_factory()  { api POST /factories "{\"name\":\"F_${SFX}_${RANDOM}\",\"type\":\"FABRIC\",\"contacts\":[{\"name\":\"张三\",\"mobile\":\"13900000000\"}]}"; echo "$RESP" | jval data.id; }
 fx_sample()   { api POST /samples "{\"middlemanId\":$1,\"styleNo\":\"S_$SFX\",\"materials\":[{\"itemName\":\"面料\",\"part\":\"主面料\"}]}"; echo "$RESP" | jval data.id; }
-fx_quote()    { api POST /quotes "{\"customer_id\":$1,\"currency\":\"USD\",\"global_loss_rate\":5,\"gross_margin\":30,\"total_qty\":1000,\"items\":[{\"item_name\":\"面料\",\"unit\":\"米\",\"usage_qty\":1.5,\"unit_price\":8,\"loss_rate\":5},{\"item_name\":\"加工\",\"unit_price\":3}]}"; echo "$RESP" | jval data.id; }
+fx_quote()    { api POST /quotes "{\"middlemanId\":$1,\"styleNo\":\"K_$SFX\",\"currency\":\"USD\",\"exchangeRate\":7,\"profitRate\":10,\"items\":[{\"itemName\":\"面料\",\"unit\":\"米\",\"quoteUsage\":1.5,\"rmbPrice\":8,\"lossRate\":5}]}"; echo "$RESP" | jval data.id; }
 fx_order()    { api POST /orders "{\"customer_id\":$1,\"qty_total\":1000,\"currency\":\"USD\",\"unit_price\":12,\"materials\":[{\"item_name\":\"面料\",\"net_usage\":1.5,\"loss_rate\":5,\"unit_price\":8}]}"; echo "$RESP" | jval data.id; }
 # 订单推进到 PRODUCING（可发货）：DRAFT→CONFIRMED→PRODUCING
 fx_order_producing() { local oid; oid=$(fx_order "$1"); api PATCH "/orders/$oid/advance" ''; api PATCH "/orders/$oid/advance" ''; echo "$oid"; }
@@ -251,21 +251,25 @@ test_sample() {
 test_quote() {
   local cid qid q2
   cid=$(fx_customer)
-  api POST /quotes '{"currency":"USD","items":[{"item_name":"x","unit_price":5}]}'
-  expect_code 400 "报价缺customer_id应400"
-  api POST /quotes "{\"customer_id\":${cid:-0},\"items\":[{\"item_name\":\"x\",\"unit_price\":-1}]}"
-  expect_code 400 "报价负单价应400"
-  api POST /quotes "{\"customer_id\":${cid:-0},\"items\":[{\"item_name\":\"x\",\"unit_price\":5,\"loss_rate\":150}]}"
-  expect_code 400 "报价损耗率>99.99应400"
+  api POST /quotes '{"currency":"USD","items":[{"itemName":"x","rmbPrice":5}]}'
+  expect_code 400 "报价缺middlemanId应400"
+  api POST /quotes "{\"middlemanId\":${cid:-0},\"styleNo\":\"x\",\"items\":[{\"itemName\":\"x\",\"rmbPrice\":-1}]}"
+  expect_code 400 "报价负人民币单价应400"
+  api POST /quotes "{\"middlemanId\":${cid:-0},\"styleNo\":\"x\",\"items\":[{\"itemName\":\"x\",\"rmbPrice\":5,\"lossRate\":150}]}"
+  expect_code 400 "报价损耗率>100应400"
   qid=$(fx_quote "$cid")
   [[ -n "$qid" ]] && ok "创建报价 id=$qid" || bad "创建报价失败 ${RESP:0:120}"
   api GET "/quotes/${qid:-0}"
-  expect_num data.total_amount 13.296 "报价合计=Σ含损小计(8÷0.95×1.5÷0.95)"
+  # 含损金额=8×1.5×(1+5%)=12.6；报价人民币价格=12.6×(1+10%)=13.86（设计稿公式）
+  expect_num data.rmb_total 13.86 "报价人民币价格=(8×1.5×1.05)×1.1=13.86"
+  expect_eq data.fees.0.fee_name 加工费 "费用明细新建自动带首行=加工费"
   q2=$(fx_quote "$cid")
-  api PATCH "/quotes/${q2:-0}/confirm" ''
-  expect_code 400 "草稿未发送直接确认应400"
-  api PATCH "/quotes/${q2:-0}/send" ''; expect_ok "报价发送"
-  api PATCH "/quotes/${q2:-0}/confirm" ''; expect_ok "报价确认(SENT→CONFIRMED)"
+  api PATCH "/quotes/${q2:-0}/adjust" ''
+  expect_code 400 "草稿直接客户调整应400"
+  api PATCH "/quotes/${q2:-0}/submit" ''; expect_ok "发出报价(草稿→已报价)"
+  api GET "/quotes/${q2:-0}"; expect_eq data.status QUOTED "已报价QUOTED"
+  api PATCH "/quotes/${q2:-0}/adjust" ''; expect_ok "客户调整(已报价→客户调整)"
+  api GET "/quotes/${q2:-0}"; expect_eq data.status ADJUSTING "客户调整ADJUSTING"
 }
 
 test_order() {
@@ -650,63 +654,62 @@ test_quote_ext() {
   local cid qa qb qm qd big
   cid=$(fx_customer)
 
-  # ── 次要状态机:全流程转合同 DRAFT→SENT→CONFIRMED→TO_CONTRACT(补主状态机终点)──
+  # ── 全流程转合同 草稿→已报价→转销售合同(已成单)──
   qa=$(fx_quote "$cid")
-  api PATCH "/quotes/${qa:-0}/send" ''
-  api PATCH "/quotes/${qa:-0}/confirm" ''
+  api PATCH "/quotes/${qa:-0}/submit" ''
   api PATCH "/quotes/${qa:-0}/to-contract" ''
-  expect_ok "报价转合同(CONFIRMED→TO_CONTRACT)应2xx"
+  expect_ok "报价转销售合同(已报价→已成单)应2xx"
   api GET "/quotes/${qa:-0}"
-  expect_eq data.status TO_CONTRACT "转合同后状态为TO_CONTRACT"
+  expect_eq data.status ORDERED "转合同后状态为ORDERED(已成单)"
 
-  # ── 幂等/终态:TO_CONTRACT 上再转合同、再编辑均应400 ──
+  # ── 幂等/终态:ORDERED 上再转合同、再编辑均应400 ──
   api PATCH "/quotes/${qa:-0}/to-contract" ''
-  expect_code 400 "已转合同再转合同应400(终态幂等)"
-  api PUT "/quotes/${qa:-0}" "{\"style_name\":\"改\"}"
-  expect_code 400 "非草稿(TO_CONTRACT)编辑应400(仅DRAFT可编辑)"
+  expect_code 400 "已成单再转合同应400(终态幂等)"
+  api PUT "/quotes/${qa:-0}" "{\"styleNo\":\"改\"}"
+  expect_code 400 "已成单编辑应400(仅草稿/客户调整可编辑)"
 
-  # ── 非法转移:SENT 未确认直接转合同应400 ──
+  # ── 非法转移:草稿未发出直接转合同应400 ──
   qb=$(fx_quote "$cid")
-  api PATCH "/quotes/${qb:-0}/send" ''
   api PATCH "/quotes/${qb:-0}/to-contract" ''
-  expect_code 400 "SENT未确认直接转合同应400(非法转移)"
+  expect_code 400 "草稿未发出直接转合同应400(非法转移)"
 
-  # ── 多费用项合计手算:total_amount=Σ含损小计 ──
-  # 面料 10×2/(1-0)=20; 辅料 5/(1-.2)×4/(1-.2)=6.25×5=31.25; 加工无用量=0 → 51.25
-  api POST /quotes "{\"customer_id\":${cid:-0},\"currency\":\"USD\",\"global_loss_rate\":0,\"gross_margin\":35,\"total_qty\":500,\"items\":[{\"item_name\":\"面料\",\"unit\":\"米\",\"usage_qty\":2,\"unit_price\":10,\"loss_rate\":0},{\"item_name\":\"辅料\",\"usage_qty\":4,\"unit_price\":5,\"loss_rate\":20},{\"item_name\":\"加工\",\"unit_price\":3}]}"
+  # ── 多明细+费用合计手算(设计稿公式)──
+  # 面料 10×2×(1+0%)=20; 辅料 5×4×(1+20%)=24; 含损合计=44
+  # 费用:加工8×1 + 运费2×1 = 10; (44+10)×(1+利润10%)=59.4
+  api POST /quotes "{\"middlemanId\":${cid:-0},\"styleNo\":\"M_$SFX\",\"currency\":\"USD\",\"exchangeRate\":6,\"profitRate\":10,\"items\":[{\"itemName\":\"面料\",\"unit\":\"米\",\"quoteUsage\":2,\"rmbPrice\":10,\"lossRate\":0},{\"itemName\":\"辅料\",\"quoteUsage\":4,\"rmbPrice\":5,\"lossRate\":20}],\"fees\":[{\"feeName\":\"加工费\",\"rmbPrice\":8,\"quoteUsage\":1},{\"feeName\":\"运费\",\"rmbPrice\":2,\"quoteUsage\":1}]}"
   qm=$(echo "$RESP" | jval data.id)
   api GET "/quotes/${qm:-0}"
-  expect_num data.total_amount 51.25 "多费用项合计=20+31.25+0(含损小计求和)"
-  expect_num data.gross_margin 35 "gross_margin 存储并回显=35"
-  expect_num data.items.1.subtotal 31.25 "辅料含损小计=6.25×5"
+  expect_num data.rmb_total 59.4 "报价人民币价格=(44含损+10费用)×1.1=59.4"
+  expect_num data.items.1.loss_amount 24 "辅料含损金额=5×4×1.2=24"
+  expect_num data.usd_total 9.9 "报价美元价格=59.4/6=9.9"
 
   # ── CRUD:草稿编辑 PUT 后 GET 详情验证字段确实变化 ──
   qd=$(fx_quote "$cid")
-  api PUT "/quotes/${qd:-0}" "{\"style_name\":\"改款EXT${SFX}\",\"remark\":\"改备注\"}"
+  api PUT "/quotes/${qd:-0}" "{\"styleNo\":\"改款EXT${SFX}\",\"totalRemark\":\"改备注\"}"
   expect_ok "草稿报价编辑应2xx"
   api GET "/quotes/${qd:-0}"
-  expect_eq data.style_name "改款EXT${SFX}" "编辑后GET详情款名已变更"
+  expect_eq data.style_no "改款EXT${SFX}" "编辑后GET详情款号已变更"
 
-  # ── 输入校验:费用项缺 item_name(@IsString 必填)应400 ──
-  api POST /quotes "{\"customer_id\":${cid:-0},\"items\":[{\"unit_price\":5}]}"
-  expect_code 400 "费用项缺item_name应400"
-  # ── 边界:item_name 超@MaxLength(100)应400 ──
+  # ── 输入校验:报价明细缺 itemName(@IsString 必填)应400 ──
+  api POST /quotes "{\"middlemanId\":${cid:-0},\"styleNo\":\"x\",\"items\":[{\"rmbPrice\":5}]}"
+  expect_code 400 "报价明细缺itemName应400"
+  # ── 边界:itemName 超@MaxLength(100)应400 ──
   big=$(printf 'X%.0s' $(seq 1 101))
-  api POST /quotes "{\"customer_id\":${cid:-0},\"items\":[{\"item_name\":\"$big\",\"unit_price\":5}]}"
-  expect_code 400 "费用项item_name超100字符应400"
+  api POST /quotes "{\"middlemanId\":${cid:-0},\"styleNo\":\"x\",\"items\":[{\"itemName\":\"$big\",\"rmbPrice\":5}]}"
+  expect_code 400 "报价明细itemName超100字符应400"
 
   # ── 权限矩阵:写接口对无权角色(非ADMIN/BUSINESS)应拒绝 ──
-  api POST /quotes "{\"customer_id\":${cid:-0},\"items\":[{\"item_name\":\"x\",\"unit_price\":5}]}" "$TOKEN_FINANCE"
+  api POST /quotes "{\"middlemanId\":${cid:-0},\"styleNo\":\"x\",\"items\":[{\"itemName\":\"x\",\"rmbPrice\":5}]}" "$TOKEN_FINANCE"
   expect_deny "FINANCE创建报价应被拒(不在@Roles)"
-  api PATCH "/quotes/${qm:-0}/send" '' "$TOKEN_PM"
-  expect_deny "打版师发送报价应被拒(不在@Roles)"
+  api PATCH "/quotes/${qm:-0}/submit" '' "$TOKEN_PM"
+  expect_deny "打版师发出报价应被拒(不在@Roles)"
 
   # ── 列表:分页返回2xx且结构含分页 + status 筛选 ──
   api GET "/quotes?page=1&size=2"
   expect_ok "报价列表分页page=1&size=2应2xx"
   expect_num size 2 "分页结构顶层含size=2"
-  api GET "/quotes?status=TO_CONTRACT&page=1&size=5"
-  expect_ok "报价按status=TO_CONTRACT筛选应2xx"
+  api GET "/quotes?status=ORDERED&page=1&size=5"
+  expect_ok "报价按status=ORDERED筛选应2xx"
 
   # ── GET 不存在大id应404 ──
   api GET /quotes/99999999
