@@ -9,6 +9,8 @@ export const orderApi = {
     http.post<unknown, { data: any }>('/orders', dto),
   update: (id: number, dto: Record<string, unknown>) =>
     http.put<unknown, { data: any }>(`/orders/${id}`, dto),
+  importFromQuote: (id: number, quoteId: number) =>
+    http.patch<unknown, { data: any }>(`/orders/${id}/import-quote/${quoteId}`),
   advance: (id: number) =>
     http.patch<unknown, { data: any }>(`/orders/${id}/advance`),
   addShipment: (id: number, dto: Record<string, unknown>) =>
