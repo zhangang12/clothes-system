@@ -68,15 +68,15 @@ describe('CustomerService', () => {
   });
 
   describe('create()', () => {
-    it('UT-CUS-01: generates CN-prefixed customer_no and created_by', async () => {
+    it('UT-CUS-01: generates CM-prefixed customer_no (中间商) and created_by', async () => {
       mockRedis.incr.mockResolvedValue(3);
       const result = await service.create(
         { name: '美国ABC公司', type: CustomerType.MIDDLEMAN, grade: CustomerGrade.A, currency: 'USD', contacts: CONTACTS } as any,
         42,
       );
       const savedArg = mockManager.save.mock.calls[0][1];
-      expect(savedArg).toMatchObject({ customer_no: 'CN003', created_by: 42 });
-      expect(result.customer_no).toBe('CN003');
+      expect(savedArg).toMatchObject({ customer_no: 'CM003', created_by: 42 });
+      expect(result.customer_no).toBe('CM003');
     });
 
     it('UT-CUS-14: throws when type=BUYER without related middleman (联动校验 D.4)', async () => {

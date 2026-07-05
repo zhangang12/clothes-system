@@ -95,7 +95,9 @@ export class CustomerService {
     this.validateType(dto);
     this.assertContacts(dto.contacts);
     if (dto.name) await this.assertNameUnique(dto.name);
-    const customer_no = await this.numbering.nextGlobal(NUM_PREFIX.CUSTOMER);
+    // 客户编号按类型前缀：中间商 CM- / 最终买家 FE-（设计稿 A8）
+    const numPrefix = dto.type === CustomerType.BUYER ? NUM_PREFIX.CUSTOMER_BUYER : NUM_PREFIX.CUSTOMER_MIDDLEMAN;
+    const customer_no = await this.numbering.nextGlobal(numPrefix);
     const base = this.mapDto(dto);
     if (base.develop_date === undefined || base.develop_date === null) {
       base.develop_date = new Date().toISOString().slice(0, 10);

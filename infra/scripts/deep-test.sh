@@ -122,10 +122,16 @@ test_customer() {
   api POST /customers "{\"name\":\"$nm\",\"type\":\"MIDDLEMAN\",\"grade\":\"B\",\"currency\":\"USD\",\"contacts\":[{\"name\":\"李\"}]}" "$TOKEN_PM"
   expect_deny "PATTERNMAKER 创建客户应被拒(不在@Roles)"
 
-  # BUSINESS 属于允许角色，合法创建应 2xx
+  # BUSINESS 属于允许角色，合法创建应 2xx；中间商编号 CM- 前缀（设计稿 A8）
   api POST /customers "{\"name\":\"$nm\",\"type\":\"MIDDLEMAN\",\"grade\":\"B\",\"currency\":\"USD\",\"contacts\":[{\"name\":\"李\",\"mobile\":\"139\"}]}" "$TOKEN_BUSINESS"
   expect_ok "BUSINESS 合法创建客户应2xx"
+  expect_match data.customer_no '^CM[0-9]+' "中间商客户编号CM-前缀"
   cid=$(echo "$RESP" | jval data.id)
+
+  # 最终买家编号 FE- 前缀
+  api POST /customers "{\"name\":\"买家_${SFX}_${RANDOM}\",\"type\":\"BUYER\",\"relatedMiddleman\":\"$nm\",\"currency\":\"USD\",\"contacts\":[{\"name\":\"王\",\"mobile\":\"138\"}]}" "$TOKEN_BUSINESS"
+  expect_ok "最终买家创建应2xx(带关联中间商)"
+  expect_match data.customer_no '^FE[0-9]+' "最终买家客户编号FE-前缀"
 
   # ---- 详情字段与输入一致 ----
   api GET "/customers/${cid:-0}"
