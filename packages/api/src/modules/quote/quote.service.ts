@@ -10,7 +10,8 @@ import { Customer } from '../customer/customer.entity';
 import { SampleGarment } from '../sample/sample-garment.entity';
 import { SampleMaterial } from '../sample/sample-material.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
-import { QuoteStatus, SampleStatus, DEFAULT_QUOTE_FEES } from '@i9/types';
+import { SysConfigService } from '../../common/config/sys-config.service';
+import { QuoteStatus, SampleStatus, DEFAULT_QUOTE_FEES, ApprovalStatus, APPROVAL_THRESHOLD_KEYS } from '@i9/types';
 import { CreateQuoteDto, CreateQuoteItemDto, CreateQuoteFeeDto } from './dto/create-quote.dto';
 import { QueryQuoteDto } from './dto/query-quote.dto';
 
@@ -33,6 +34,7 @@ export class QuoteService {
     @InjectRepository(SampleGarment) private readonly sampleRepo: Repository<SampleGarment>,
     @InjectRepository(SampleMaterial) private readonly sampleMaterialRepo: Repository<SampleMaterial>,
     private readonly numbering: NumberingService,
+    private readonly config: SysConfigService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -215,7 +217,31 @@ export class QuoteService {
     if (![QuoteStatus.DRAFT, QuoteStatus.ADJUSTING].includes(quote.status)) {
       throw new BadRequestException('只有草稿/客户调整状态可发出报价');
     }
+    // 金额阈值审批：报价合计超阈值需主管审批后方可发出（设计稿 审批矩阵，阈值可配）
+    if (quote.approval_status !== ApprovalStatus.APPROVED) {
+      const threshold = await this.config.getNumber(APPROVAL_THRESHOLD_KEYS.QUOTE);
+      if (threshold > 0 && +quote.rmb_total > threshold) {
+        if (quote.approval_status !== ApprovalStatus.PENDING) {
+          quote.approval_status = ApprovalStatus.PENDING;
+          await this.quoteRepo.save(quote);
+        }
+        throw new BadRequestException(`报价金额 ${quote.rmb_total} 超过审批阈值 ${threshold}，需主管审批后方可发出报价`);
+      }
+    }
     quote.status = QuoteStatus.QUOTED;
+    return this.quoteRepo.save(quote);
+  }
+
+  // 主管审批（超阈值报价）：待审批 → 已审批，放行报价
+  async approveQuote(id: number, approverId: number): Promise<Quotation> {
+    const quote = await this.quoteRepo.findOne({ where: { id, deleted: 0 } });
+    if (!quote) throw new NotFoundException(`报价单 #${id} 不存在`);
+    if (quote.approval_status !== ApprovalStatus.PENDING) {
+      throw new BadRequestException('该报价无待审批项（未超阈值或已审批）');
+    }
+    quote.approval_status = ApprovalStatus.APPROVED;
+    quote.approved_by = approverId;
+    quote.approved_at = new Date();
     return this.quoteRepo.save(quote);
   }
 

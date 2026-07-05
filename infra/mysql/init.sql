@@ -325,6 +325,9 @@ CREATE TABLE IF NOT EXISTS `quotation` (
   `usd_total`        DECIMAL(16,2)  DEFAULT NULL COMMENT '报价美元价格',
   `total_remark`     TEXT           DEFAULT NULL COMMENT '备注说明',
   `status`           ENUM('DRAFT','QUOTED','ADJUSTING','ORDERED') NOT NULL DEFAULT 'DRAFT',
+  `approval_status`  ENUM('NONE','PENDING','APPROVED') NOT NULL DEFAULT 'NONE' COMMENT '金额阈值审批',
+  `approved_by`      BIGINT       DEFAULT NULL,
+  `approved_at`      DATETIME     DEFAULT NULL,
   `remark`           TEXT           DEFAULT NULL,
   `created_by`       BIGINT         NOT NULL,
   `created_at`       DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -400,6 +403,9 @@ CREATE TABLE IF NOT EXISTS `order_main` (
   `att_packing`    TEXT          DEFAULT NULL COMMENT '附件·包装资料',
   `att_filling`    TEXT          DEFAULT NULL COMMENT '附件·填充量',
   `status`         ENUM('DRAFT','CONFIRMED','CONTRACTED','PRODUCING','DONE') NOT NULL DEFAULT 'DRAFT',
+  `approval_status` ENUM('NONE','PENDING','APPROVED') NOT NULL DEFAULT 'NONE' COMMENT '金额阈值审批',
+  `approved_by`    BIGINT        DEFAULT NULL,
+  `approved_at`    DATETIME      DEFAULT NULL,
   `remark`         TEXT          DEFAULT NULL,
   `created_by`     BIGINT        NOT NULL,
   `created_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -486,6 +492,9 @@ CREATE TABLE IF NOT EXISTS `contract` (
   `stamped_by_supplier` VARCHAR(100)   DEFAULT NULL COMMENT '盖章供应商账号',
   `snapshot_json`       JSON           DEFAULT NULL COMMENT '盖章时快照数据',
   `status`              ENUM('ACTIVE','COMPLETED','CANCELLED') NOT NULL DEFAULT 'ACTIVE',
+  `approval_status`     ENUM('NONE','PENDING','APPROVED') NOT NULL DEFAULT 'NONE' COMMENT '金额阈值审批',
+  `approved_by`         BIGINT       DEFAULT NULL,
+  `approved_at`         DATETIME     DEFAULT NULL,
   `remark`              TEXT           DEFAULT NULL,
   `created_by`          BIGINT         NOT NULL,
   `created_at`          DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -735,6 +744,9 @@ INSERT IGNORE INTO `sys_config` (`cfg_key`,`cfg_value`,`remark`) VALUES
 ('vat_diff_rate',    '0',    '增值税率差%（用于退税计算）'),
 ('default_deposit_ratio', '30', '默认定金比例%'),
 ('default_mid_ratio',     '40', '默认中期款比例%'),
-('default_final_ratio',   '30', '默认尾款比例%');
+('default_final_ratio',   '30', '默认尾款比例%'),
+('approval.quote.threshold',    '0', '报价审批阈值(人民币合计,0=不启用)'),
+('approval.order.threshold',    '0', '订单审批阈值(订单金额,0=不启用)'),
+('approval.contract.threshold', '0', '合同审批阈值(合同金额,0=不启用)');
 
 SET FOREIGN_KEY_CHECKS = 1;

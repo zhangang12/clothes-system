@@ -1,5 +1,24 @@
 <template>
   <div class="page-container">
+    <!-- 金额审批阈值配置（管理员，0=不启用） -->
+    <el-card v-if="isAdmin">
+      <template #header><div class="card-header"><span>金额审批阈值（超阈值需主管审批，0=不启用）</span></div></template>
+      <el-form inline>
+        <el-form-item label="报价阈值(¥)">
+          <el-input-number v-model="thresholds.quote" :min="0" :controls="false" style="width:140px" />
+        </el-form-item>
+        <el-form-item label="订单阈值">
+          <el-input-number v-model="thresholds.order" :min="0" :controls="false" style="width:140px" />
+        </el-form-item>
+        <el-form-item label="合同阈值">
+          <el-input-number v-model="thresholds.contract" :min="0" :controls="false" style="width:140px" />
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" :loading="savingThreshold" @click="saveThresholds">保存阈值</el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
     <!-- 转化漏斗 -->
     <el-card v-loading="loading.funnel">
       <template #header><div class="card-header"><span>转化漏斗（样衣 → 报价 → 订单成单）</span></div></template>
@@ -83,7 +102,16 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue';
+import { ElMessage } from 'element-plus';
 import { statsApi } from '@/api/stats';
+import { configApi } from '@/api/config';
+import { useAuthStore } from '@/stores/auth';
+import { UserRole } from '@i9/types';
+
+const authStore = useAuthStore();
+const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
+const thresholds = reactive({ quote: 0, order: 0, contract: 0 });
+const savingThreshold = ref(false);
 
 const loading = reactive({ funnel: false, win: false, profit: false });
 const funnel = ref<any>({});
@@ -126,7 +154,22 @@ async function loadProfit() {
   try { profitRows.value = unwrap(await statsApi.profit(profitDim.value)) ?? []; } finally { loading.profit = false; }
 }
 
-onMounted(() => { loadFunnel(); loadWin(); loadProfit(); });
+async function loadThresholds() {
+  const t = unwrap(await configApi.getThresholds());
+  if (t) Object.assign(thresholds, { quote: +t.quote || 0, order: +t.order || 0, contract: +t.contract || 0 });
+}
+async function saveThresholds() {
+  savingThreshold.value = true;
+  try {
+    await configApi.setThresholds({ quote: thresholds.quote, order: thresholds.order, contract: thresholds.contract });
+    ElMessage.success('审批阈值已保存');
+  } finally { savingThreshold.value = false; }
+}
+
+onMounted(() => {
+  loadFunnel(); loadWin(); loadProfit();
+  if (isAdmin.value) loadThresholds();
+});
 </script>
 
 <style scoped>

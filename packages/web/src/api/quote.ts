@@ -14,6 +14,8 @@ export const quoteApi = {
     http.patch<unknown, { data: Quotation }>(`/quotes/${id}/import-sample/${sampleId}`),
   submit: (id: number) =>
     http.patch<unknown, { data: Quotation }>(`/quotes/${id}/submit`),
+  approve: (id: number) =>
+    http.patch<unknown, { data: Quotation }>(`/quotes/${id}/approve`),
   adjust: (id: number) =>
     http.patch<unknown, { data: Quotation }>(`/quotes/${id}/adjust`),
   toContract: (id: number) =>

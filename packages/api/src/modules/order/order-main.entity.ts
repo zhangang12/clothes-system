@@ -1,5 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
-import { OrderStatus } from '@i9/types';
+import { OrderStatus, ApprovalStatus } from '@i9/types';
 
 @Entity('order_main')
 export class OrderMain {
@@ -81,6 +81,16 @@ export class OrderMain {
 
   @Column({ type: 'enum', enum: OrderStatus, default: OrderStatus.DRAFT })
   status: OrderStatus;
+
+  // 金额阈值审批（total_amount 超阈值时订单需主管审批后方可「已下单」）
+  @Column({ type: 'enum', enum: ApprovalStatus, default: ApprovalStatus.NONE })
+  approval_status: ApprovalStatus;
+
+  @Column({ type: 'bigint', nullable: true })
+  approved_by: number;
+
+  @Column({ type: 'datetime', nullable: true })
+  approved_at: Date;
 
   @Column({ type: 'text', nullable: true })
   remark: string;

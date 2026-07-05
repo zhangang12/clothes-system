@@ -11,6 +11,7 @@ import { OrderMain } from '../../order/order-main.entity';
 import { Factory } from '../../factory/factory.entity';
 import { SupplierAccount } from '../../auth/supplier-account.entity';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
+import { SysConfigService } from '../../../common/config/sys-config.service';
 import { ContractPortalStatus, ContractType } from '@i9/types';
 
 const makeContract = (overrides = {}): any => ({
@@ -81,6 +82,7 @@ describe('ContractService', () => {
         { provide: getRepositoryToken(Factory), useValue: mockFactoryRepo },
         { provide: getRepositoryToken(SupplierAccount), useValue: mockSupplierRepo },
         { provide: NumberingService, useValue: new NumberingService(mockRedis as any) },
+        { provide: SysConfigService, useValue: { getNumber: jest.fn().mockResolvedValue(0) } },
         { provide: DataSource, useValue: mockDataSource },
         { provide: REDIS_CLIENT, useValue: mockRedis },
       ],

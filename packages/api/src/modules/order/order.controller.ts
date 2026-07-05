@@ -53,9 +53,16 @@ export class OrderController {
 
   @Patch(':id/advance')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
-  @ApiOperation({ summary: '推进订单状态（草稿→已下单→已生成合同→生产中→已完成）' })
+  @ApiOperation({ summary: '推进订单状态（草稿→已下单→…；下单超阈值需先审批）' })
   advanceStatus(@Param('id', ParseIntPipe) id: number) {
     return this.service.advanceStatus(id);
+  }
+
+  @Patch(':id/approve')
+  @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
+  @ApiOperation({ summary: '主管审批超阈值订单（待审批→已审批）' })
+  approve(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.service.approveOrder(id, req.user.id);
   }
 
   @Post(':id/shipments')

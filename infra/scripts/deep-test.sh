@@ -1454,6 +1454,29 @@ test_stats() {
   expect_deny "版师查利润汇总应拒绝(仅财务/管理)"
 }
 
+test_approval() {
+  # 金额阈值审批（设计稿 审批矩阵，阈值可配）：设低阈值→报价超阈值需主管审批
+  local cid qid
+  cid=$(fx_customer); qid=$(fx_quote "$cid")
+  api PUT /config/thresholds '{"quote":1}' "$TOKEN_ADMIN"
+  expect_ok "管理员设置报价审批阈值=1"
+  api PATCH "/quotes/${qid:-0}/submit" '' "$TOKEN_BUSINESS"
+  expect_code 400 "报价超阈值发出应400(需主管审批)"
+  api GET "/quotes/${qid:-0}"; expect_eq data.approval_status PENDING "超阈值报价置待审批"
+  api PATCH "/quotes/${qid:-0}/approve" '' "$TOKEN_BUSINESS"
+  expect_deny "业务审批报价应拒绝(仅主管/管理员)"
+  api PATCH "/quotes/${qid:-0}/approve" '' "$TOKEN_SUPERVISOR"
+  expect_ok "主管审批超阈值报价"
+  api GET "/quotes/${qid:-0}"; expect_eq data.approval_status APPROVED "审批后置已审批"
+  api PATCH "/quotes/${qid:-0}/submit" '' "$TOKEN_BUSINESS"
+  expect_ok "审批后报价可发出"
+  api GET "/quotes/${qid:-0}"; expect_eq data.status QUOTED "审批后报价已发出QUOTED"
+  api PUT /config/thresholds '{"quote":0}' "$TOKEN_ADMIN"
+  expect_ok "复位报价阈值为0(不启用)"
+  api PUT /config/thresholds '{"quote":5}' "$TOKEN_BUSINESS"
+  expect_deny "非管理员改审批阈值应拒绝"
+}
+
 # ── 执行所有模块（基础 + 扩展）────────────────────────────────
 group "1. 鉴权与权限基线";        test_auth;           test_auth_ext
 group "2. 客户";                  test_customer;       test_customer_ext
@@ -1468,6 +1491,7 @@ group "10. 结算 · 业务计算";       test_settlement;     test_settlement_e
 group "11. 供应商门户 · 端到端";   test_portal;         test_portal_ext
 group "12. 文件上传";              test_upload
 group "13. 报表统计";              test_stats
+group "14. 金额阈值审批";          test_approval
 
 echo ""
 echo "=================================================================="

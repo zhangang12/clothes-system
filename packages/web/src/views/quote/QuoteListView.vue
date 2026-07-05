@@ -45,17 +45,19 @@
         <el-table-column label="美金总计" width="120" align="right">
           <template #default="{ row }">{{ row.usd_total != null ? `$ ${Number(row.usd_total).toLocaleString()}` : '-' }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="100">
+        <el-table-column label="状态" width="120">
           <template #default="{ row }">
             <span v-if="row.status === 'ORDERED'" class="ordered">{{ statusLabel(row.status) }}</span>
             <el-tag v-else :type="statusTag(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
+            <el-tag v-if="row.approval_status === 'PENDING'" type="warning" size="small" style="margin-left:4px">待审批</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="salesperson" label="业务员" width="90"><template #default="{ row }">{{ row.salesperson || '-' }}</template></el-table-column>
-        <el-table-column label="操作" width="130" fixed="right">
+        <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
             <el-button link size="small" @click="copyRow(row)">复制</el-button>
+            <el-button v-if="row.approval_status === 'PENDING' && canReview" link type="success" size="small" @click="doApprove(row)">审批</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -82,6 +84,7 @@ import { UserRole, QUOTE_STATUS_LABEL } from '@i9/types';
 const router = useRouter();
 const authStore = useAuthStore();
 const canEdit = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.BUSINESS));
+const canReview = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.SUPERVISOR));
 const statuses = Object.entries(QUOTE_STATUS_LABEL).map(([value, label]) => ({ value, label }));
 const statusLabel = (s: string) => (QUOTE_STATUS_LABEL as any)[s] ?? s;
 const statusTag = (s: string) => ({ DRAFT: 'info', QUOTED: 'primary', ADJUSTING: 'warning' } as any)[s] ?? 'info';
@@ -109,6 +112,10 @@ function goEdit(row: any) { router.push({ name: 'QuoteEdit', params: { id: row.i
 async function copyRow(row: any) {
   try { await quoteApi.copy(row.id); ElMessage.success('已复制为新报价（草稿）'); load(); }
   catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '复制失败'); }
+}
+async function doApprove(row: any) {
+  try { await quoteApi.approve(row.id); ElMessage.success('已审批，报价可发出'); load(); }
+  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '审批失败'); }
 }
 function copyOne() { copyRow(selected.value[0]); }
 async function batchRemove() {

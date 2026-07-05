@@ -53,9 +53,16 @@ export class QuoteController {
 
   @Patch(':id/submit')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
-  @ApiOperation({ summary: '发出报价（草稿/客户调整→已报价）' })
+  @ApiOperation({ summary: '发出报价（草稿/客户调整→已报价；超阈值需先审批）' })
   submit(@Param('id', ParseIntPipe) id: number) {
     return this.service.submitQuote(id);
+  }
+
+  @Patch(':id/approve')
+  @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
+  @ApiOperation({ summary: '主管审批超阈值报价（待审批→已审批）' })
+  approve(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.service.approveQuote(id, req.user.id);
   }
 
   @Patch(':id/adjust')

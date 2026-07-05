@@ -10,6 +10,7 @@ import { OrderShipment } from '../order-shipment.entity';
 import { Quotation } from '../../quote/quotation.entity';
 import { QuotationItem } from '../../quote/quotation-item.entity';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
+import { SysConfigService } from '../../../common/config/sys-config.service';
 import { OrderStatus } from '@i9/types';
 
 const makeOrder = (overrides = {}): any => ({
@@ -71,6 +72,7 @@ describe('OrderService', () => {
         { provide: getRepositoryToken(Quotation), useValue: mockQuoteRepo },
         { provide: getRepositoryToken(QuotationItem), useValue: mockQuoteItemRepo },
         { provide: NumberingService, useValue: new NumberingService(mockRedis as any) },
+        { provide: SysConfigService, useValue: { getNumber: jest.fn().mockResolvedValue(0) } },
         { provide: DataSource, useValue: mockDataSource },
         { provide: REDIS_CLIENT, useValue: mockRedis },
       ],

@@ -1,5 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
-import { QuoteStatus } from '@i9/types';
+import { QuoteStatus, ApprovalStatus } from '@i9/types';
 
 @Entity('quotation')
 export class Quotation {
@@ -85,6 +85,16 @@ export class Quotation {
 
   @Column({ type: 'enum', enum: QuoteStatus, default: QuoteStatus.DRAFT })
   status: QuoteStatus;
+
+  // 金额阈值审批（rmb_total 超阈值时报价需主管审批后方可置「已报价」）
+  @Column({ type: 'enum', enum: ApprovalStatus, default: ApprovalStatus.NONE })
+  approval_status: ApprovalStatus;
+
+  @Column({ type: 'bigint', nullable: true })
+  approved_by: number;
+
+  @Column({ type: 'datetime', nullable: true })
+  approved_at: Date;
 
   @Column({ type: 'text', nullable: true })
   remark: string;

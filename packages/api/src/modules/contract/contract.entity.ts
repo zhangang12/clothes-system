@@ -1,5 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
-import { ContractType, ContractPortalStatus } from '@i9/types';
+import { ContractType, ContractPortalStatus, ApprovalStatus } from '@i9/types';
 
 export enum ContractStatus {
   ACTIVE = 'ACTIVE',
@@ -74,6 +74,16 @@ export class Contract {
 
   @Column({ type: 'enum', enum: ContractStatus, default: ContractStatus.ACTIVE })
   status: ContractStatus;
+
+  // 金额阈值审批（total_amount 超阈值时合同需主管审批后方可推送供应商）
+  @Column({ type: 'enum', enum: ApprovalStatus, default: ApprovalStatus.NONE })
+  approval_status: ApprovalStatus;
+
+  @Column({ type: 'bigint', nullable: true })
+  approved_by: number;
+
+  @Column({ type: 'datetime', nullable: true })
+  approved_at: Date;
 
   @Column({ type: 'text', nullable: true })
   remark: string;

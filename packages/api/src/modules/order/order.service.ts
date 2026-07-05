@@ -10,7 +10,8 @@ import { OrderShipment } from './order-shipment.entity';
 import { Quotation } from '../quote/quotation.entity';
 import { QuotationItem } from '../quote/quotation-item.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
-import { OrderStatus, QuoteStatus } from '@i9/types';
+import { SysConfigService } from '../../common/config/sys-config.service';
+import { OrderStatus, QuoteStatus, ApprovalStatus, APPROVAL_THRESHOLD_KEYS } from '@i9/types';
 import { CreateOrderDto, CreateOrderMaterialDto, AddShipmentDto } from './dto/create-order.dto';
 import { QueryOrderDto } from './dto/query-order.dto';
 
@@ -44,6 +45,7 @@ export class OrderService {
     @InjectRepository(Quotation) private readonly quoteRepo: Repository<Quotation>,
     @InjectRepository(QuotationItem) private readonly quoteItemRepo: Repository<QuotationItem>,
     private readonly numbering: NumberingService,
+    private readonly config: SysConfigService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -187,6 +189,17 @@ export class OrderService {
       throw new BadRequestException('订单已完成，无法继续推进');
     }
     const next = STATUS_TRANSITIONS[order.status];
+    // 金额阈值审批：下单（草稿→已下单）时订单金额超阈值需主管审批（设计稿 审批矩阵，阈值可配）
+    if (order.status === OrderStatus.DRAFT && order.approval_status !== ApprovalStatus.APPROVED) {
+      const threshold = await this.config.getNumber(APPROVAL_THRESHOLD_KEYS.ORDER);
+      if (threshold > 0 && +order.total_amount > threshold) {
+        if (order.approval_status !== ApprovalStatus.PENDING) {
+          order.approval_status = ApprovalStatus.PENDING;
+          await this.orderRepo.save(order);
+        }
+        throw new BadRequestException(`订单金额 ${order.total_amount} 超过审批阈值 ${threshold}，需主管审批后方可下单`);
+      }
+    }
     order.status = next;
     const saved = await this.orderRepo.save(order);
     // 下单（→已下单）时反写关联报价「已成单」（设计稿 订单 D2/A8）
@@ -194,6 +207,19 @@ export class OrderService {
       await this.quoteRepo.update({ id: order.quote_id }, { status: QuoteStatus.ORDERED });
     }
     return saved;
+  }
+
+  // 主管审批（超阈值订单）：待审批 → 已审批，放行下单
+  async approveOrder(id: number, approverId: number): Promise<OrderMain> {
+    const order = await this.orderRepo.findOne({ where: { id, deleted: 0 } });
+    if (!order) throw new NotFoundException(`订单 #${id} 不存在`);
+    if (order.approval_status !== ApprovalStatus.PENDING) {
+      throw new BadRequestException('该订单无待审批项（未超阈值或已审批）');
+    }
+    order.approval_status = ApprovalStatus.APPROVED;
+    order.approved_by = approverId;
+    order.approved_at = new Date();
+    return this.orderRepo.save(order);
   }
 
   async addShipment(id: number, dto: AddShipmentDto, createdBy: number): Promise<OrderShipment> {

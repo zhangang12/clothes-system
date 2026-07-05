@@ -165,6 +165,20 @@ export enum PaymentApprovalStatus {
   PAID = 'PAID',
 }
 
+// 金额阈值审批（报价/订单/合同金额超阈值需主管审批，阈值可配；设计稿 样衣确认清单·审批矩阵 rec:0）
+export enum ApprovalStatus {
+  NONE = 'NONE',         // 未触发审批（金额未超阈值或阈值未配）
+  PENDING = 'PENDING',   // 超阈值，待主管审批
+  APPROVED = 'APPROVED', // 主管已审批，放行
+}
+
+// 阈值配置键（存于 sys_config）
+export const APPROVAL_THRESHOLD_KEYS = {
+  QUOTE: 'approval.quote.threshold',
+  ORDER: 'approval.order.threshold',
+  CONTRACT: 'approval.contract.threshold',
+} as const;
+
 export enum SettlementStatus {
   DRAFT = 'DRAFT',
   CONFIRMED = 'CONFIRMED',

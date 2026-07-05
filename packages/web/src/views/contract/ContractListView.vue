@@ -29,11 +29,12 @@
         <el-table-column label="合同金额" width="130" align="right"><template #default="{ row }">{{ row.currency }} {{ (+row.total_amount).toFixed(2) }}</template></el-table-column>
         <el-table-column label="定金/中期/尾款" width="150" align="center"><template #default="{ row }">{{ row.deposit_ratio }}/{{ row.mid_ratio }}/{{ row.final_ratio }}%</template></el-table-column>
         <el-table-column prop="account_period_days" label="账期(天)" width="90" align="right" />
-        <el-table-column label="门户状态" width="110"><template #default="{ row }"><el-tag :type="portalTagType(row.portal_status)" size="small">{{ portalLabel(row.portal_status) }}</el-tag></template></el-table-column>
+        <el-table-column label="门户状态" width="140"><template #default="{ row }"><el-tag :type="portalTagType(row.portal_status)" size="small">{{ portalLabel(row.portal_status) }}</el-tag><el-tag v-if="row.approval_status === 'PENDING'" type="warning" size="small" style="margin-left:4px">待审批</el-tag></template></el-table-column>
         <el-table-column prop="stamped_at" label="盖章时间" width="160"><template #default="{ row }">{{ row.stamped_at || '—' }}</template></el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="viewDetail(row)">详情</el-button>
+            <el-button v-if="row.approval_status === 'PENDING' && canReview" link type="success" size="small" @click="doApprove(row)">审批</el-button>
             <el-button v-if="row.portal_status === 'DRAFT' && canEdit" link type="warning" size="small" @click="doPush(row)">推送门户</el-button>
             <el-popconfirm v-if="row.portal_status === 'DRAFT' && isAdmin" title="确认删除？" @confirm="remove(row.id)">
               <template #reference><el-button link type="danger" size="small">删除</el-button></template>
@@ -152,6 +153,7 @@ import { UserRole } from '@i9/types';
 const authStore = useAuthStore();
 const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
 const canEdit = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.BUSINESS));
+const canReview = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.SUPERVISOR));
 const portalStatuses = [{ v: 'DRAFT', l: '草稿' }, { v: 'PUSHED', l: '已推送' }, { v: 'STAMPED', l: '已盖章' }, { v: 'SHIPPING', l: '出货中' }, { v: 'RECONCILED', l: '已对账' }];
 const typeLabel = (t: string) => ({ MATERIAL: '面料合同', PROCESS: '加工合同', SUPPLEMENT: '补料合同' } as any)[t] ?? t;
 const portalLabel = (s: string) => ({ DRAFT: '草稿', PUSHED: '已推送', STAMPED: '已盖章', SHIPPING: '出货中', RECONCILED: '已对账' } as any)[s] ?? s;
@@ -197,6 +199,10 @@ async function viewDetail(row: any) {
   detail.value = d.data ?? d;
   logs.value = (l.data ?? l) ?? [];
   detailVisible.value = true;
+}
+async function doApprove(row: any) {
+  try { await contractApi.approve(row.id); ElMessage.success('已审批，合同可推送'); load(); }
+  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '审批失败'); }
 }
 async function doPush(row: any) {
   try { await contractApi.push(row.id); ElMessage.success('已推送至供应商门户'); load(); }

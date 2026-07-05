@@ -13,6 +13,8 @@ export const orderApi = {
     http.patch<unknown, { data: any }>(`/orders/${id}/import-quote/${quoteId}`),
   advance: (id: number) =>
     http.patch<unknown, { data: any }>(`/orders/${id}/advance`),
+  approve: (id: number) =>
+    http.patch<unknown, { data: any }>(`/orders/${id}/approve`),
   addShipment: (id: number, dto: Record<string, unknown>) =>
     http.post<unknown, { data: any }>(`/orders/${id}/shipments`, dto),
   updateMatrix: (id: number, matrix_data: Record<string, unknown>) =>

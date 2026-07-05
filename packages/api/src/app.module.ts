@@ -16,6 +16,7 @@ import { PaymentModule } from './modules/payment/payment.module';
 import { SettlementModule } from './modules/settlement/settlement.module';
 import { StatsModule } from './modules/stats/stats.module';
 import { NumberingModule } from './common/services/numbering.module';
+import { SysConfigModule } from './common/config/sys-config.module';
 import { FileModule } from './common/services/file.module';
 import { UploadModule } from './modules/upload/upload.module';
 
@@ -42,6 +43,7 @@ import { UploadModule } from './modules/upload/upload.module';
 
     // 公共服务
     NumberingModule,
+    SysConfigModule,
     FileModule,
 
     // 业务模块

@@ -11,7 +11,8 @@ import { OrderMain } from '../order/order-main.entity';
 import { Factory } from '../factory/factory.entity';
 import { SupplierAccount } from '../auth/supplier-account.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
-import { ContractPortalStatus, ContractType, OrderStatus } from '@i9/types';
+import { SysConfigService } from '../../common/config/sys-config.service';
+import { ContractPortalStatus, ContractType, OrderStatus, ApprovalStatus, APPROVAL_THRESHOLD_KEYS } from '@i9/types';
 
 // 账期规则（06-对账付款设计稿 v1.4「v1.3 业务定」+ 补充确认清单 C）：材料 = 发货日+90天，加工 = 发货日+45天（可人工改）
 const DEFAULT_ACCOUNT_PERIOD_DAYS: Record<ContractType, number> = {
@@ -33,6 +34,7 @@ export class ContractService {
     @InjectRepository(Factory) private readonly factoryRepo: Repository<Factory>,
     @InjectRepository(SupplierAccount) private readonly supplierRepo: Repository<SupplierAccount>,
     private readonly numbering: NumberingService,
+    private readonly config: SysConfigService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -228,6 +230,17 @@ export class ContractService {
     if (contract.portal_status !== ContractPortalStatus.DRAFT) {
       throw new BadRequestException('只有草稿状态才可推送');
     }
+    // 金额阈值审批：合同金额超阈值需主管审批后方可推送（设计稿 审批矩阵，阈值可配）
+    if (contract.approval_status !== ApprovalStatus.APPROVED) {
+      const threshold = await this.config.getNumber(APPROVAL_THRESHOLD_KEYS.CONTRACT);
+      if (threshold > 0 && +contract.total_amount > threshold) {
+        if (contract.approval_status !== ApprovalStatus.PENDING) {
+          contract.approval_status = ApprovalStatus.PENDING;
+          await this.repo.save(contract);
+        }
+        throw new BadRequestException(`合同金额 ${contract.total_amount} 超过审批阈值 ${threshold}，需主管审批后方可推送`);
+      }
+    }
     // 推送前校验工厂已绑定门户账号，避免推送后无人能登录处理（设计稿 A5：静默死流程）
     const account = await this.supplierRepo.findOne({ where: { factory_id: contract.factory_id, status: 1 } });
     if (!account) {
@@ -245,6 +258,19 @@ export class ContractService {
     }));
 
     return contract;
+  }
+
+  // 主管审批（超阈值合同）：待审批 → 已审批，放行推送
+  async approveContract(id: number, approverId: number): Promise<Contract> {
+    const contract = await this.repo.findOne({ where: { id, deleted: 0 } });
+    if (!contract) throw new NotFoundException(`合同 #${id} 不存在`);
+    if (contract.approval_status !== ApprovalStatus.PENDING) {
+      throw new BadRequestException('该合同无待审批项（未超阈值或已审批）');
+    }
+    contract.approval_status = ApprovalStatus.APPROVED;
+    contract.approved_by = approverId;
+    contract.approved_at = new Date();
+    return this.repo.save(contract);
   }
 
   // 供应商盖章 — 创建快照快照锁定 (PUSHED → STAMPED)

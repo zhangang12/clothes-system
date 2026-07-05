@@ -53,9 +53,16 @@ export class ContractController {
 
   @Patch(':id/push')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
-  @ApiOperation({ summary: '推送合同至供应商门户（DRAFT→PUSHED）' })
+  @ApiOperation({ summary: '推送合同至供应商门户（DRAFT→PUSHED；超阈值需先审批）' })
   push(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
     return this.service.push(id, req.user.username);
+  }
+
+  @Patch(':id/approve')
+  @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
+  @ApiOperation({ summary: '主管审批超阈值合同（待审批→已审批）' })
+  approve(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.service.approveContract(id, req.user.id);
   }
 
   @Patch(':id/status')

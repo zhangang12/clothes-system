@@ -42,14 +42,18 @@
         <el-table-column label="大货总数" width="90" align="right"><template #default="{ row }">{{ row.qty_total ?? 0 }}</template></el-table-column>
         <el-table-column label="单品单价" width="100" align="right"><template #default="{ row }">{{ row.unit_price != null ? `${row.currency === 'RMB' ? '¥' : '$'}${row.unit_price}` : '-' }}</template></el-table-column>
         <el-table-column prop="delivery_date" label="约定交期" width="110"><template #default="{ row }">{{ row.delivery_date || '-' }}</template></el-table-column>
-        <el-table-column label="状态" width="110">
-          <template #default="{ row }"><el-tag :type="statusTag(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag></template>
+        <el-table-column label="状态" width="130">
+          <template #default="{ row }">
+            <el-tag :type="statusTag(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
+            <el-tag v-if="row.approval_status === 'PENDING'" type="warning" size="small" style="margin-left:4px">待审批</el-tag>
+          </template>
         </el-table-column>
         <el-table-column prop="salesperson" label="业务员" width="90"><template #default="{ row }">{{ row.salesperson || '-' }}</template></el-table-column>
-        <el-table-column label="操作" width="130" fixed="right">
+        <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
             <el-button link size="small" @click="goView(row)">查看</el-button>
+            <el-button v-if="row.approval_status === 'PENDING' && canReview" link type="success" size="small" @click="doApprove(row)">审批</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -77,6 +81,7 @@ const router = useRouter();
 const authStore = useAuthStore();
 const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
 const canEdit = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.BUSINESS));
+const canReview = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.SUPERVISOR));
 const statuses = Object.entries(ORDER_STATUS_LABEL).map(([value, label]) => ({ value, label }));
 const statusLabel = (s: string) => (ORDER_STATUS_LABEL as any)[s] ?? s;
 const statusTag = (s: string) => ({ DRAFT: 'info', CONFIRMED: 'primary', CONTRACTED: 'warning', PRODUCING: 'warning', DONE: 'success' } as any)[s] ?? 'info';
@@ -101,6 +106,10 @@ function reset() { query.keyword = ''; query.status = undefined; query.page = 1;
 function goCreate() { router.push({ name: 'OrderCreate' }); }
 function goEdit(row: any) { router.push({ name: 'OrderEdit', params: { id: row.id } }); }
 function goView(row: any) { router.push({ name: 'OrderView', params: { id: row.id } }); }
+async function doApprove(row: any) {
+  try { await orderApi.approve(row.id); ElMessage.success('已审批，订单可下单'); load(); }
+  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '审批失败'); }
+}
 async function batchRemove() {
   let ok = 0, fail = 0;
   for (const row of selected.value) { try { await orderApi.remove(row.id); ok++; } catch { fail++; } }
