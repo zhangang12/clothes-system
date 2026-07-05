@@ -147,6 +147,15 @@
             </el-table-column>
           </el-table>
         </template>
+        <template v-else-if="detailData.type === 'NO_CONTRACT'">
+          <el-divider>费用明细（无合同空白对账单{{ detailData.sub_type ? '·' + subTypeLabel(detailData.sub_type) : '' }}）</el-divider>
+          <el-table :data="detailData.expenseItems ?? []" border size="small">
+            <el-table-column prop="expense_name" label="费用项目/事由" />
+            <el-table-column prop="style_no" label="相关款号" width="110"><template #default="{ row }">{{ row.style_no || '—' }}</template></el-table-column>
+            <el-table-column prop="amount" label="金额" width="120" align="right"><template #default="{ row }">{{ (+row.amount).toFixed(2) }}</template></el-table-column>
+            <el-table-column prop="attach_url" label="附件" width="90"><template #default="{ row }"><el-link v-if="row.attach_url" :href="row.attach_url" target="_blank" type="primary">查看</el-link><span v-else>—</span></template></el-table-column>
+          </el-table>
+        </template>
         <template v-else>
           <el-divider>出货明细（一单多合同·批次可跳来源合同）</el-divider>
           <el-table :data="detailData.shipments ?? []" border size="small">
@@ -219,7 +228,14 @@
             </el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="合同ID">
+            <el-form-item v-if="createForm.type === 'NO_CONTRACT'" label="费用类型">
+              <el-select v-model="createForm.subType" style="width:100%">
+                <el-option label="费用" value="EXPENSE" />
+                <el-option label="现金无票" value="CASH_NO_INVOICE" />
+                <el-option label="预付款" value="PREPAY" />
+              </el-select>
+            </el-form-item>
+            <el-form-item v-else label="合同ID">
               <el-input-number v-model="createForm.contract_id" :min="1" style="width:100%" />
             </el-form-item>
           </el-col>
@@ -245,24 +261,39 @@
           <el-input v-model="createForm.description" type="textarea" :rows="2" />
         </el-form-item>
 
-        <el-divider>出货明细（一单多合同：每批次可填各自来源合同/款号）</el-divider>
-        <div v-for="(s, idx) in createForm.shipments" :key="idx" class="item-row">
-          <el-row :gutter="8" align="middle">
-            <el-col :span="3"><el-input-number v-model="s.shipment_id" :min="1" :controls="false" placeholder="出货单ID" style="width:100%" /></el-col>
-            <el-col :span="3"><el-input-number v-model="s.contract_id" :min="1" :controls="false" placeholder="合同ID" style="width:100%" /></el-col>
-            <el-col :span="3"><el-input v-model="s.style_no" placeholder="款号" /></el-col>
-            <el-col :span="4"><el-input v-model="s.item_name" placeholder="品名" /></el-col>
-            <el-col :span="4"><el-input-number v-model="s.snapshot_unit_price" :min="0" :precision="4" :controls="false" placeholder="单价" style="width:100%" /></el-col>
-            <el-col :span="3"><el-input-number v-model="s.qty" :min="0" :precision="2" :controls="false" placeholder="数量" style="width:100%" /></el-col>
-            <el-col :span="2">
-              <span class="amount">{{ s.snapshot_unit_price && s.qty ? (s.snapshot_unit_price * s.qty).toFixed(2) : '--' }}</span>
-            </el-col>
-            <el-col :span="2">
-              <el-button link type="danger" @click="removeShipment(idx)">删</el-button>
-            </el-col>
-          </el-row>
-        </div>
-        <el-button style="width:100%;margin-top:8px" @click="addShipment">+ 添加出货行</el-button>
+        <!-- 合同对账：出货明细（一单多合同：每批次可填各自来源合同/款号；仅同一类型合同） -->
+        <template v-if="createForm.type !== 'NO_CONTRACT'">
+          <el-divider>出货明细（一单多合同：每批次可填各自来源合同/款号；仅限同一类型合同）</el-divider>
+          <div v-for="(s, idx) in createForm.shipments" :key="idx" class="item-row">
+            <el-row :gutter="8" align="middle">
+              <el-col :span="3"><el-input-number v-model="s.shipment_id" :min="1" :controls="false" placeholder="出货单ID" style="width:100%" /></el-col>
+              <el-col :span="3"><el-input-number v-model="s.contract_id" :min="1" :controls="false" placeholder="合同ID" style="width:100%" /></el-col>
+              <el-col :span="3"><el-input v-model="s.style_no" placeholder="款号" /></el-col>
+              <el-col :span="4"><el-input v-model="s.item_name" placeholder="品名" /></el-col>
+              <el-col :span="4"><el-input-number v-model="s.snapshot_unit_price" :min="0" :precision="4" :controls="false" placeholder="单价" style="width:100%" /></el-col>
+              <el-col :span="3"><el-input-number v-model="s.qty" :min="0" :precision="2" :controls="false" placeholder="数量" style="width:100%" /></el-col>
+              <el-col :span="2"><span class="amount">{{ s.snapshot_unit_price && s.qty ? (s.snapshot_unit_price * s.qty).toFixed(2) : '--' }}</span></el-col>
+              <el-col :span="2"><el-button link type="danger" @click="removeShipment(idx)">删</el-button></el-col>
+            </el-row>
+          </div>
+          <el-button style="width:100%;margin-top:8px" @click="addShipment">+ 添加出货行</el-button>
+        </template>
+
+        <!-- 无合同空白对账单：费用明细（费用项目/事由·金额·相关款号可空·附件） -->
+        <template v-else>
+          <el-divider>费用明细（无合同空白对账单：费用项目/金额/相关款号/附件）</el-divider>
+          <div v-for="(e, idx) in createForm.expenses" :key="idx" class="item-row">
+            <el-row :gutter="8" align="middle">
+              <el-col :span="8"><el-input v-model="e.expense_name" placeholder="费用项目/事由" /></el-col>
+              <el-col :span="5"><el-input-number v-model="e.amount" :min="0" :precision="2" :controls="false" placeholder="金额" style="width:100%" /></el-col>
+              <el-col :span="5"><el-input v-model="e.style_no" placeholder="相关款号(可空)" /></el-col>
+              <el-col :span="4"><el-input v-model="e.attach_url" placeholder="附件URL(可空)" /></el-col>
+              <el-col :span="2"><el-button link type="danger" @click="removeExpense(idx)">删</el-button></el-col>
+            </el-row>
+          </div>
+          <el-button style="width:100%;margin-top:8px" @click="addExpense">+ 添加费用行</el-button>
+          <div class="labor-sum">合计费用 ¥{{ expenseTotal.toFixed(2) }}</div>
+        </template>
       </el-form>
       <template #footer>
         <el-button @click="createVisible = false">取消</el-button>
@@ -284,7 +315,7 @@ import { UserRole } from '@i9/types';
 
 const authStore = useAuthStore();
 const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
-const canEdit = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.FINANCE));
+const canEdit = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.FINANCE) || authStore.hasRole(UserRole.BUSINESS));
 const canReview = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.SUPERVISOR));
 const canBusiness = computed(() =>
   authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.FINANCE) || authStore.hasRole(UserRole.BUSINESS));
@@ -297,6 +328,9 @@ function statusTagType(s: string): any {
 }
 function typeLabel(t: string) {
   return { CONTRACT: '合同对账', NO_CONTRACT: '非合同对账', LABOR: '工时对账' }[t] ?? t;
+}
+function subTypeLabel(s: string) {
+  return { EXPENSE: '费用', CASH_NO_INVOICE: '现金无票', PREPAY: '预付款' }[s] ?? s;
 }
 function typeTag(t: string): any {
   return { CONTRACT: '', NO_CONTRACT: 'warning', LABOR: 'success' }[t] ?? 'info';
@@ -361,6 +395,7 @@ const createVisible = ref(false);
 const createFormRef = ref<FormInstance>();
 const createForm = reactive({
   type: 'CONTRACT',
+  subType: 'EXPENSE',
   factory_id: undefined as number | undefined,
   contract_id: undefined as number | undefined,
   tax_rate: undefined as number | undefined,
@@ -368,7 +403,9 @@ const createForm = reactive({
   invoice_amount: undefined as number | undefined,
   description: '',
   shipments: [] as any[],
+  expenses: [] as any[],
 });
+const expenseTotal = computed(() => createForm.expenses.reduce((s: number, e: any) => s + (+e.amount || 0), 0));
 const createRules: FormRules = {
   type: [{ required: true, message: '请选择类型', trigger: 'change' }],
   factory_id: [{ required: true, message: '请输入工厂ID', trigger: 'blur' }],
@@ -377,18 +414,27 @@ const createRules: FormRules = {
 function openCreate() { createVisible.value = true; }
 function resetCreateForm() {
   Object.assign(createForm, {
-    type: 'CONTRACT', factory_id: undefined, contract_id: undefined,
-    tax_rate: undefined, invoice_no: '', invoice_amount: undefined, description: '', shipments: [],
+    type: 'CONTRACT', subType: 'EXPENSE', factory_id: undefined, contract_id: undefined,
+    tax_rate: undefined, invoice_no: '', invoice_amount: undefined, description: '', shipments: [], expenses: [],
   });
 }
 function addShipment() {
   createForm.shipments.push({ shipment_id: undefined, contract_id: undefined, style_no: '', item_name: '', snapshot_unit_price: undefined, qty: undefined });
 }
 function removeShipment(idx: number) { createForm.shipments.splice(idx, 1); }
+function addExpense() {
+  createForm.expenses.push({ expense_name: '', amount: undefined, style_no: '', attach_url: '' });
+}
+function removeExpense(idx: number) { createForm.expenses.splice(idx, 1); }
 
 async function doCreate() {
   await createFormRef.value?.validate();
-  if (!createForm.shipments.length) { ElMessage.warning('请至少添加一条出货明细'); return; }
+  const isNoContract = createForm.type === 'NO_CONTRACT';
+  if (isNoContract) {
+    if (!createForm.expenses.length) { ElMessage.warning('请至少添加一条费用明细'); return; }
+  } else if (!createForm.shipments.length) {
+    ElMessage.warning('请至少添加一条出货明细'); return;
+  }
   saving.value = true;
   try {
     await reconciliationApi.create(createForm as any);

@@ -1,6 +1,21 @@
 import { IsEnum, IsNumber, IsOptional, IsString, IsArray, ValidateNested, Min } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ReconcileType } from '@i9/types';
+import { ReconcileType, ReconcileSubType } from '@i9/types';
+
+// 无合同空白对账单·费用明细行（补充确认v1.1）
+export class CreateExpenseLineDto {
+  @IsString()
+  expense_name: string; // 费用项目/事由
+
+  @IsNumber() @Min(0)
+  amount: number;
+
+  @IsOptional() @IsString()
+  style_no?: string;
+
+  @IsOptional() @IsString()
+  attach_url?: string;
+}
 
 export class CreateShipmentLineDto {
   @IsNumber()
@@ -30,6 +45,11 @@ export class CreateShipmentLineDto {
 export class CreateReconciliationDto {
   @IsEnum(ReconcileType)
   type: ReconcileType;
+
+  // 无合同空白对账单子类型：费用/现金无票/预付款（补充确认v1.1）
+  @IsOptional()
+  @IsEnum(ReconcileSubType)
+  subType?: ReconcileSubType;
 
   @IsOptional()
   @IsNumber()
@@ -64,4 +84,11 @@ export class CreateReconciliationDto {
   @ValidateNested({ each: true })
   @Type(() => CreateShipmentLineDto)
   shipments?: CreateShipmentLineDto[];
+
+  // 无合同空白对账单·费用明细
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateExpenseLineDto)
+  expenses?: CreateExpenseLineDto[];
 }

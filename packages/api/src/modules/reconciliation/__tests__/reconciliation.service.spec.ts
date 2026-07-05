@@ -6,9 +6,10 @@ import { ReconciliationService } from '../reconciliation.service';
 import { Reconciliation, ReconciliationStatus } from '../reconciliation.entity';
 import { ReconciliationShipment } from '../reconciliation-shipment.entity';
 import { ReconciliationLaborItem } from '../reconciliation-labor-item.entity';
+import { ReconciliationExpenseItem } from '../reconciliation-expense-item.entity';
 import { SampleGarment } from '../../sample/sample-garment.entity';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
-import { ReconcileType, SampleStatus } from '@i9/types';
+import { ReconcileType, ReconcileSubType, SampleStatus, ContractType } from '@i9/types';
 
 const makeSample = (overrides = {}) => ({
   id: 1, sample_no: 'S001', style_no: 'K-100', patternmaker_id: 7, patternmaker_name: '王版师',
@@ -45,6 +46,7 @@ const makeManager = (findOneResult?: any) => ({
   create: jest.fn().mockImplementation((_, v) => v),
   save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
   findOne: jest.fn().mockResolvedValue(findOneResult),
+  find: jest.fn().mockResolvedValue([]), // 同类型校验 manager.find(Contract) 默认空（无冲突）
 });
 
 const mockReconciliationRepo = {
@@ -59,6 +61,9 @@ const mockShipmentRepo = {
   find: jest.fn().mockResolvedValue([]),
 };
 const mockLaborItemRepo = {
+  find: jest.fn().mockResolvedValue([]),
+};
+const mockExpenseItemRepo = {
   find: jest.fn().mockResolvedValue([]),
 };
 const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn().mockResolvedValue(1) };
@@ -78,6 +83,7 @@ describe('ReconciliationService', () => {
         { provide: getRepositoryToken(Reconciliation), useValue: mockReconciliationRepo },
         { provide: getRepositoryToken(ReconciliationShipment), useValue: mockShipmentRepo },
         { provide: getRepositoryToken(ReconciliationLaborItem), useValue: mockLaborItemRepo },
+        { provide: getRepositoryToken(ReconciliationExpenseItem), useValue: mockExpenseItemRepo },
         { provide: NumberingService, useValue: new NumberingService(mockRedis as any) },
         { provide: DataSource, useValue: mockDataSource },
         { provide: REDIS_CLIENT, useValue: mockRedis },
@@ -153,6 +159,45 @@ describe('ReconciliationService', () => {
     const savedLines = manager.save.mock.calls[1][1];
     expect(savedLines[0]).toMatchObject({ contract_id: 11, style_no: 'K-100' });
     expect(savedLines[1]).toMatchObject({ contract_id: 22, style_no: 'K-200' });
+  });
+
+  // UT-REC-15: 一张对账单不允许混含材料+加工两类合同（补充确认v1.0 B3）
+  it('UT-REC-15 create rejects mixed 材料+加工 contracts in one reconciliation', async () => {
+    const dto = {
+      type: ReconcileType.CONTRACT, factory_id: 5,
+      shipments: [
+        { shipment_id: 1, contract_id: 11, item_name: '面料', snapshot_unit_price: 8, qty: 100 },
+        { shipment_id: 2, contract_id: 22, item_name: '加工', snapshot_unit_price: 5, qty: 100 },
+      ],
+    };
+    const manager = {
+      create: jest.fn().mockImplementation((_: any, v: any) => v),
+      save: jest.fn().mockImplementation((_: any, v: any) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
+      findOne: jest.fn(),
+      find: jest.fn().mockResolvedValue([{ id: 11, type: ContractType.MATERIAL }, { id: 22, type: ContractType.PROCESS }]),
+    };
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await expect(service.create(dto as any, 1)).rejects.toThrow('同一类型合同');
+  });
+
+  // UT-REC-16: 无合同空白对账单——费用明细求和 + 子类型落库（补充确认v1.1）
+  it('UT-REC-16 create NO_CONTRACT sums expenses, sets sub_type, saves expense items', async () => {
+    const dto = {
+      type: ReconcileType.NO_CONTRACT, subType: ReconcileSubType.CASH_NO_INVOICE, factory_id: 5,
+      expenses: [
+        { expense_name: '快递费', amount: 120 },
+        { expense_name: '打样材料', amount: 380, style_no: 'K-100' },
+      ],
+    };
+    const manager = makeManager();
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await service.create(dto as any, 1);
+    const savedRec = manager.save.mock.calls[0][1];
+    expect(savedRec).toMatchObject({ total_amount: 500, sub_type: ReconcileSubType.CASH_NO_INVOICE });
+    // 费用明细两行落库
+    const savedItems = manager.save.mock.calls[1][1];
+    expect(savedItems).toHaveLength(2);
+    expect(savedItems[0]).toMatchObject({ expense_name: '快递费', amount: 120 });
   });
 
   // UT-REC-04a: submit transitions DRAFT → PENDING (业务员初审)

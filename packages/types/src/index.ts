@@ -157,6 +157,19 @@ export enum ReconcileType {
   LABOR = 'LABOR', // 样衣打样工时对账（版师/打样间，多款合并；独立于供应商对账）
 }
 
+// 无合同空白对账单子类型（补充确认v1.1：费用/现金无票/预付款 共用一张空白对账单，用类型区分）
+export enum ReconcileSubType {
+  EXPENSE = 'EXPENSE',                 // 费用
+  CASH_NO_INVOICE = 'CASH_NO_INVOICE', // 现金无票
+  PREPAY = 'PREPAY',                   // 预付款
+}
+
+export const RECONCILE_SUBTYPE_LABEL: Record<ReconcileSubType, string> = {
+  [ReconcileSubType.EXPENSE]: '费用',
+  [ReconcileSubType.CASH_NO_INVOICE]: '现金无票',
+  [ReconcileSubType.PREPAY]: '预付款',
+};
+
 export enum PaymentApprovalStatus {
   DRAFT = 'DRAFT',
   PENDING = 'PENDING',

@@ -19,6 +19,9 @@ export class Reconciliation {
   @Column({ type: 'enum', enum: ReconcileType, default: ReconcileType.CONTRACT })
   type: ReconcileType;
 
+  @Column({ length: 20, nullable: true })
+  sub_type: string; // 无合同空白对账单子类型：EXPENSE/CASH_NO_INVOICE/PREPAY（补充确认v1.1）
+
   @Column({ type: 'bigint', nullable: true })
   contract_id: number;
 

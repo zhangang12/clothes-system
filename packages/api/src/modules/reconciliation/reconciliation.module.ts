@@ -5,9 +5,10 @@ import { ReconciliationService } from './reconciliation.service';
 import { Reconciliation } from './reconciliation.entity';
 import { ReconciliationShipment } from './reconciliation-shipment.entity';
 import { ReconciliationLaborItem } from './reconciliation-labor-item.entity';
+import { ReconciliationExpenseItem } from './reconciliation-expense-item.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Reconciliation, ReconciliationShipment, ReconciliationLaborItem])],
+  imports: [TypeOrmModule.forFeature([Reconciliation, ReconciliationShipment, ReconciliationLaborItem, ReconciliationExpenseItem])],
   controllers: [ReconciliationController],
   providers: [ReconciliationService],
   exports: [ReconciliationService],

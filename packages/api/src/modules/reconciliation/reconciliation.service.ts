@@ -6,11 +6,12 @@ import { Repository, FindOptionsWhere, Like, In, DataSource } from 'typeorm';
 import { Reconciliation, ReconciliationStatus } from './reconciliation.entity';
 import { ReconciliationShipment } from './reconciliation-shipment.entity';
 import { ReconciliationLaborItem } from './reconciliation-labor-item.entity';
+import { ReconciliationExpenseItem } from './reconciliation-expense-item.entity';
 import { Contract } from '../contract/contract.entity';
 import { OrderMain } from '../order/order-main.entity';
 import { SampleGarment } from '../sample/sample-garment.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
-import { ReconcileType, ContractPortalStatus, OrderStatus, SampleStatus } from '@i9/types';
+import { ReconcileType, ContractPortalStatus, OrderStatus, SampleStatus, ContractType } from '@i9/types';
 import { CreateReconciliationDto } from './dto/create-reconciliation.dto';
 import { GenerateLaborDto } from './dto/generate-labor.dto';
 import { QueryReconciliationDto } from './dto/query-reconciliation.dto';
@@ -21,6 +22,7 @@ export class ReconciliationService {
     @InjectRepository(Reconciliation) private readonly repo: Repository<Reconciliation>,
     @InjectRepository(ReconciliationShipment) private readonly shipmentRepo: Repository<ReconciliationShipment>,
     @InjectRepository(ReconciliationLaborItem) private readonly laborItemRepo: Repository<ReconciliationLaborItem>,
+    @InjectRepository(ReconciliationExpenseItem) private readonly expenseItemRepo: Repository<ReconciliationExpenseItem>,
     private readonly numbering: NumberingService,
     private readonly dataSource: DataSource,
   ) {}
@@ -36,7 +38,23 @@ export class ReconciliationService {
 
     return this.dataSource.transaction(async (manager) => {
       const shipmentLines = dto.shipments ?? [];
-      const totalAmount = shipmentLines.reduce((sum, s) => sum + s.snapshot_unit_price * s.qty, 0);
+      const expenseLines = dto.expenses ?? [];
+      // 无合同空白对账单以费用明细求和；合同对账以出货批次求和（补充确认v1.1）
+      const totalAmount = expenseLines.length
+        ? expenseLines.reduce((sum, e) => sum + (+e.amount || 0), 0)
+        : shipmentLines.reduce((sum, s) => sum + s.snapshot_unit_price * s.qty, 0);
+
+      // 一张对账单不允许混含材料+加工两类合同（补充确认v1.0 B3：仅同一类型）
+      const batchContractIds = Array.from(new Set(
+        shipmentLines.map((s) => s.contract_id ?? dto.contract_id).filter(Boolean),
+      )) as number[];
+      if (batchContractIds.length > 1) {
+        const contracts = await manager.find(Contract, { where: { id: In(batchContractIds), deleted: 0 } });
+        const types = Array.from(new Set(contracts.map((c) => c.type)));
+        if (types.length > 1) {
+          throw new BadRequestException('一张对账单只能同一类型合同（材料 或 加工），不可混含');
+        }
+      }
 
       // 款号带出（合同→订单），供对账列表按款号检索（设计稿 对账 A2）
       let styleNo: string | null = null;
@@ -71,6 +89,7 @@ export class ReconciliationService {
         manager.create(Reconciliation, {
           reconcile_no,
           type: dto.type,
+          sub_type: dto.type === ReconcileType.NO_CONTRACT ? (dto.subType ?? null) : null,
           contract_id: dto.contract_id,
           style_no: styleNo,
           factory_id: dto.factory_id,
@@ -102,6 +121,20 @@ export class ReconciliationService {
           }),
         );
         await manager.save(ReconciliationShipment, lines);
+      }
+
+      // 无合同空白对账单·费用明细落库（补充确认v1.1）
+      if (expenseLines.length) {
+        const items = expenseLines.map((e) =>
+          manager.create(ReconciliationExpenseItem, {
+            reconcile_id: reconciliation.id,
+            expense_name: e.expense_name,
+            amount: +(+e.amount).toFixed(4),
+            style_no: e.style_no ?? null,
+            attach_url: e.attach_url ?? null,
+          }),
+        );
+        await manager.save(ReconciliationExpenseItem, items);
       }
 
       return reconciliation;
@@ -213,7 +246,11 @@ export class ReconciliationService {
     const laborItems = reconciliation.type === ReconcileType.LABOR
       ? await this.laborItemRepo.find({ where: { reconcile_id: id } })
       : [];
-    return { ...reconciliation, shipments, laborItems };
+    // 无合同空白对账单带出费用明细（补充确认v1.1）
+    const expenseItems = reconciliation.type === ReconcileType.NO_CONTRACT
+      ? await this.expenseItemRepo.find({ where: { reconcile_id: id } })
+      : [];
+    return { ...reconciliation, shipments, laborItems, expenseItems };
   }
 
   // 业务员初审提交：草稿→待主管复核（设计稿 对账 B1/C1 二级审批）

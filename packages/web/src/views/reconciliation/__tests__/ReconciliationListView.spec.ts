@@ -100,10 +100,10 @@ describe('ReconciliationListView', () => {
     expect(wrapper.text()).toContain('新建对账单');
   });
 
-  it('hides "新建对账单" button for BUSINESS', async () => {
+  it('shows "新建对账单" button for BUSINESS (业务员可新建·补充确认v1.1)', async () => {
     const wrapper = mountView(UserRole.BUSINESS);
     await vi.waitFor(() => expect(mockList).toHaveBeenCalled());
-    expect(wrapper.text()).not.toContain('新建对账单');
+    expect(wrapper.text()).toContain('新建对账单');
   });
 
   it('hides "新建对账单" button for PATTERNMAKER', async () => {

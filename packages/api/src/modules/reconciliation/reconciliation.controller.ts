@@ -20,8 +20,8 @@ export class ReconciliationController {
   constructor(private readonly service: ReconciliationService) {}
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.FINANCE)
-  @ApiOperation({ summary: '创建对账单（含出货明细）' })
+  @Roles(UserRole.ADMIN, UserRole.FINANCE, UserRole.BUSINESS)
+  @ApiOperation({ summary: '创建对账单（含出货明细/无合同费用明细；业务员可建·补充确认v1.1）' })
   create(@Body() dto: CreateReconciliationDto, @Request() req: any) {
     return this.service.create(dto, req.user.id);
   }

@@ -361,8 +361,13 @@ test_contract() {
 test_reconciliation() {
   local fid rid
   fid=$(fx_factory)
-  api POST /reconciliations "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid:-0}}" "$TOKEN_BUSINESS"
-  expect_deny "BUSINESS建对账应拒绝(仅FINANCE/ADMIN)"
+  # 业务员可新建无合同空白对账单(补充确认v1.1);费用明细求和+子类型
+  api POST /reconciliations "{\"type\":\"NO_CONTRACT\",\"subType\":\"CASH_NO_INVOICE\",\"factory_id\":${fid:-0},\"expenses\":[{\"expense_name\":\"快递费\",\"amount\":120},{\"expense_name\":\"打样\",\"amount\":380,\"style_no\":\"K1\"}]}" "$TOKEN_BUSINESS"
+  expect_ok "业务员建无合同空白对账单(补充确认v1.1)"
+  local bid; bid=$(echo "$RESP" | jval data.id)
+  api GET "/reconciliations/${bid:-0}"
+  expect_num data.total_amount 500 "空白对账单费用合计=120+380=500"
+  expect_eq data.sub_type CASH_NO_INVOICE "空白对账单子类型现金无票"
   api POST /reconciliations '{"type":"NO_CONTRACT"}' "$TOKEN_FINANCE"
   expect_code 400 "对账缺factory_id应400"
   api POST /reconciliations "{\"type\":\"BADTYPE\",\"factory_id\":${fid:-0}}" "$TOKEN_FINANCE"
@@ -1144,7 +1149,7 @@ test_reconciliation_ext() {
 
   # ── 权限矩阵：PM建/ FINANCE删/ BUSINESS确认 → 拒绝 ──
   api POST /reconciliations "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid:-0}}" "$TOKEN_PM"
-  expect_deny "PM建对账应拒绝(仅FINANCE/ADMIN)"
+  expect_deny "PM建对账应拒绝(仅FINANCE/ADMIN/BUSINESS)"
   api POST /reconciliations "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid:-0}}" "$TOKEN_FINANCE"
   rid3=$(echo "$RESP" | jval data.id)
   api DELETE "/reconciliations/${rid3:-0}" '' "$TOKEN_FINANCE"

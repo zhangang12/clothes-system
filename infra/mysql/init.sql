@@ -542,6 +542,7 @@ CREATE TABLE IF NOT EXISTS `reconciliation` (
   `id`               BIGINT         NOT NULL AUTO_INCREMENT,
   `reconcile_no`     VARCHAR(30)    NOT NULL COMMENT 'DZ-YYYYMMDD-001 或 DZ-NC-YYYYMMDD-001',
   `type`             ENUM('CONTRACT','NO_CONTRACT','LABOR') NOT NULL DEFAULT 'CONTRACT',
+  `sub_type`         VARCHAR(20)    DEFAULT NULL COMMENT '无合同子类型:EXPENSE/CASH_NO_INVOICE/PREPAY',
   `contract_id`      BIGINT         DEFAULT NULL COMMENT '有合同时关联',
   `style_no`         VARCHAR(200)   DEFAULT NULL COMMENT '款号(合同→订单带出,供检索;工时对账为「款A 等N款」)',
   `factory_id`       BIGINT         DEFAULT NULL COMMENT '供应商对账=加工厂/供应商;工时对账为空',
@@ -586,6 +587,17 @@ CREATE TABLE IF NOT EXISTS `reconciliation_shipment` (
   PRIMARY KEY (`id`),
   KEY `idx_reconcile` (`reconcile_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='对账单发货明细（含快照单价）';
+
+CREATE TABLE IF NOT EXISTS `reconciliation_expense_item` (
+  `id`           BIGINT        NOT NULL AUTO_INCREMENT,
+  `reconcile_id` BIGINT        NOT NULL,
+  `expense_name` VARCHAR(200)  NOT NULL COMMENT '费用项目/事由',
+  `amount`       DECIMAL(15,4) NOT NULL,
+  `style_no`     VARCHAR(60)   DEFAULT NULL COMMENT '相关款号(可空)',
+  `attach_url`   VARCHAR(500)  DEFAULT NULL COMMENT '附件(收据/无票说明)',
+  PRIMARY KEY (`id`),
+  KEY `idx_reconcile` (`reconcile_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='无合同空白对账单·费用明细';
 
 CREATE TABLE IF NOT EXISTS `reconciliation_labor_item` (
   `id`               BIGINT         NOT NULL AUTO_INCREMENT,
