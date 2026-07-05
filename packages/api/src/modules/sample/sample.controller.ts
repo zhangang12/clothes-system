@@ -8,7 +8,9 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@i9/types';
 import { SampleService } from './sample.service';
-import { CreateSampleDto, AssignPatternmakerDto, SubmitVersionDto, RejectSampleDto } from './dto/create-sample.dto';
+import {
+  CreateSampleDto, PushPatternmakerDto, PatternmakerSaveDto, ShipSampleDto,
+} from './dto/create-sample.dto';
 import { QuerySampleDto } from './dto/query-sample.dto';
 
 @ApiTags('样衣管理')
@@ -20,7 +22,7 @@ export class SampleController {
 
   @Post()
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
-  @ApiOperation({ summary: '创建样衣' })
+  @ApiOperation({ summary: '创建样衣（业务视图）' })
   create(@Body() dto: CreateSampleDto, @Request() req: any) {
     return this.service.create(dto, req.user.id);
   }
@@ -32,55 +34,62 @@ export class SampleController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: '样衣详情' })
+  @ApiOperation({ summary: '样衣详情（含材料明细）' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.service.findOne(id);
   }
 
   @Get(':id/versions')
-  @ApiOperation({ summary: '样衣版次历史' })
+  @ApiOperation({ summary: '样衣变更记录' })
   getVersionHistory(@Param('id', ParseIntPipe) id: number) {
     return this.service.getVersionHistory(id);
   }
 
   @Put(':id')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
-  @ApiOperation({ summary: '更新样衣基本信息' })
+  @ApiOperation({ summary: '更新样衣基本信息（业务视图）' })
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: Partial<CreateSampleDto>) {
     return this.service.update(id, dto);
   }
 
-  @Patch(':id/assign')
+  @Patch(':id/push')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
-  @ApiOperation({ summary: '指派版师（PENDING→PATTERN）' })
-  assignPatternmaker(@Param('id', ParseIntPipe) id: number, @Body() dto: AssignPatternmakerDto) {
-    return this.service.assignPatternmaker(id, dto);
+  @ApiOperation({ summary: '推送版师 / 填材料寄出单号（→ 打样中）' })
+  push(@Param('id', ParseIntPipe) id: number, @Body() dto: PushPatternmakerDto, @Request() req: any) {
+    return this.service.pushPatternmaker(id, dto, req.user.id);
   }
 
-  @Patch(':id/submit')
+  @Patch(':id/patternmaker')
   @Roles(UserRole.ADMIN, UserRole.PATTERNMAKER)
-  @ApiOperation({ summary: '提交版次（PATTERN→DONE）' })
-  submitVersion(@Param('id', ParseIntPipe) id: number, @Body() dto: SubmitVersionDto, @Request() req: any) {
-    return this.service.submitVersion(id, dto, req.user.id);
+  @ApiOperation({ summary: '版师视图保存（实际耗用/拉链长度/寄回单号/件数/工时单价）' })
+  patternmakerSave(@Param('id', ParseIntPipe) id: number, @Body() dto: PatternmakerSaveDto, @Request() req: any) {
+    return this.service.patternmakerSave(id, dto, req.user.id);
   }
 
-  @Patch(':id/reject')
+  @Patch(':id/ship')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
-  @ApiOperation({ summary: '驳回版次（DONE→REJECTED）' })
-  reject(@Param('id', ParseIntPipe) id: number, @Body() dto: RejectSampleDto, @Request() req: any) {
-    return this.service.reject(id, dto, req.user.id);
+  @ApiOperation({ summary: '标记已寄出' })
+  ship(@Param('id', ParseIntPipe) id: number, @Body() dto: ShipSampleDto) {
+    return this.service.markShipped(id, dto);
   }
 
-  @Patch(':id/confirm')
+  @Patch(':id/complete')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
-  @ApiOperation({ summary: '确认样衣（DONE→CONFIRMED）' })
-  confirm(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
-    return this.service.confirm(id, req.user.id);
+  @ApiOperation({ summary: '标记已完成' })
+  complete(@Param('id', ParseIntPipe) id: number) {
+    return this.service.complete(id);
+  }
+
+  @Post(':id/copy')
+  @Roles(UserRole.ADMIN, UserRole.BUSINESS)
+  @ApiOperation({ summary: '复制样衣（基本信息+材料明细，新单待派单）' })
+  copy(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.service.copy(id, req.user.id);
   }
 
   @Delete(':id')
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: '删除样衣（逻辑删除）' })
+  @ApiOperation({ summary: '删除样衣（仅待派单，被引用拦截）' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.service.remove(id);
   }

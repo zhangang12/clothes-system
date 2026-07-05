@@ -69,13 +69,29 @@ export enum CustomerGrade {
   C = 'C',
 }
 
+// 样衣状态机（样衣设计稿 §C：待派单/打样中/已寄出/已寄回/已对账/已完成/已成单）
 export enum SampleStatus {
-  PENDING = 'PENDING',       // 待打版
-  PATTERN = 'PATTERN',       // 打版中
-  DONE = 'DONE',             // 打版完成
-  CONFIRMED = 'CONFIRMED',   // 已确认
-  REJECTED = 'REJECTED',     // 已驳回
+  PENDING = 'PENDING',       // 待派单
+  SAMPLING = 'SAMPLING',     // 打样中（材料寄出单号填入/推送版师）
+  SHIPPED = 'SHIPPED',       // 已寄出
+  RETURNED = 'RETURNED',     // 已寄回（版师填寄回单号）
+  RECONCILED = 'RECONCILED', // 已对账（件数+单价填完自动生成对账单）
+  DONE = 'DONE',             // 已完成
+  ORDERED = 'ORDERED',       // 已成单（被客户报价转销售合同后自动置，列表绿色加粗 B1）
 }
+
+export const SAMPLE_STATUS_LABEL: Record<SampleStatus, string> = {
+  [SampleStatus.PENDING]: '待派单',
+  [SampleStatus.SAMPLING]: '打样中',
+  [SampleStatus.SHIPPED]: '已寄出',
+  [SampleStatus.RETURNED]: '已寄回',
+  [SampleStatus.RECONCILED]: '已对账',
+  [SampleStatus.DONE]: '已完成',
+  [SampleStatus.ORDERED]: '已成单',
+};
+
+// 样衣类别（7 类，可多选）
+export const SAMPLE_CATEGORIES = ['销样', '头样', '二样', '三样', '产前样', '船样', '拍照样'];
 
 export enum QuoteStatus {
   DRAFT = 'DRAFT',
@@ -292,39 +308,85 @@ export interface CreateCustomerDto {
   expresses?: CustomerExpress[];
 }
 
-// ---------- 样衣 ----------
+// ---------- 样衣（样衣设计稿：14 主字段 + 材料明细子表 + 寄样跟踪） ----------
+export interface SampleMaterial {
+  id?: number;
+  sortOrder?: number;
+  arrangeDate?: string;   // 安排日期
+  itemName?: string;      // 品名（每款单独录入，不从面料库选）
+  width?: string;         // 门幅
+  colors?: string;        // 颜色（动态多列，逗号分隔）
+  part?: string;          // 部位
+  composition?: string;   // 成份
+  codeBand?: string;      // 码带
+  zipperLength?: string;  // 拉链长度（版师填）
+  puller?: string;        // 拉头
+  qty?: number;           // 数量
+  size?: string;          // 尺寸(长×宽)
+  refPrice?: number;      // 参考价格
+  actualUsage?: number;   // 实际耗用（版师填）
+  supplierId?: number;    // 供应商编号（工厂资料）
+  supplierName?: string;  // 供应商名称（自动带出）
+  image?: string;         // 图片
+  remark?: string;
+}
+
 export interface SampleGarment {
   id: number;
-  sampleNo: string;
-  customerId: number;
-  customerName?: string;
-  styleName: string;
-  season?: string;
-  category?: string;
-  processReq?: string;
-  patternmakerId?: number;
+  sampleNo: string;                // S-YYYYMMDD-序号
+  categories?: string;             // 样衣类别（7 类多选，逗号分隔）
+  middlemanId?: number;            // 中间商编号（客户资料·中间商）
+  middlemanName?: string;          // 中间商名称（自动带出）
+  styleNo: string;                 // 客户款号（必填，业务直接录入）
+  buyerId?: number;                // 关联最终买家
+  buyerName?: string;
+  buyerNo?: string;                // 关联最终买家编号（自动带出）
+  patternmakerId?: number;         // 制版师
   patternmakerName?: string;
-  version: number;
+  maker?: string;                  // 制单人员（默认当前登录人）
+  makeDate?: string;               // 制单日期（今天）
+  shipSampleDate?: string;         // 寄样日期
+  recipient?: string;              // 收件人
+  fileLocation?: string;           // 文件位置
+  garmentRemark?: string;          // 成衣备注
+  image1?: string; image2?: string; image3?: string;
+  // 寄样跟踪
+  materialShipNo?: string;         // 材料寄出单号（触发推送版师）
+  materialShipDate?: string;       // 材料寄出日期（自动）
+  returnNo?: string;               // 寄回快递单号（版师填）
+  returnDate?: string;             // 寄回日期（自动）
+  pieceCount?: number;             // 件数（版师填）
+  laborUnitPrice?: number;         // 版师工时单价 CNY（版师填）
+  laborAmount?: number;            // 工时金额 CNY = 件数 × 单价
   status: SampleStatus;
-  rejectReason?: string;
-  confirmedAt?: string;
+  customerId?: number;             // 兼容：主客户（=中间商）
+  version: number;
   createdBy: number;
   createdAt: string;
+  materials?: SampleMaterial[];
 }
 
 export interface CreateSampleDto {
-  customerId: number;
-  styleName: string;
-  season?: string;
-  category?: string;
-  processReq?: string;
+  categories?: string;
+  middlemanId?: number;
+  customerId?: number;
+  styleNo: string;
+  buyerId?: number;
+  patternmakerId?: number;
+  maker?: string;
+  shipSampleDate?: string;
+  recipient?: string;
+  fileLocation?: string;
+  garmentRemark?: string;
+  image1?: string; image2?: string; image3?: string;
+  materials?: SampleMaterial[];
 }
 
 export interface SampleVersion {
   id: number;
   sampleId: number;
   version: number;
-  action: 'SUBMIT' | 'REJECT' | 'CONFIRM';
+  action: string;
   operatorId: number;
   operatorName?: string;
   remark?: string;

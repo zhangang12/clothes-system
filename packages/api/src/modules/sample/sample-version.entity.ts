@@ -1,9 +1,12 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
 
+// 变更记录动作（样衣设计稿 §A 变更记录分组）
 export enum SampleAction {
-  SUBMIT = 'SUBMIT',
-  REJECT = 'REJECT',
-  CONFIRM = 'CONFIRM',
+  PUSH = 'PUSH',                           // 推送版师
+  PATTERNMAKER_SAVE = 'PATTERNMAKER_SAVE', // 版师保存
+  SHIP = 'SHIP',                           // 已寄出
+  COMPLETE = 'COMPLETE',                   // 已完成
+  COPY = 'COPY',                           // 复制
 }
 
 @Entity('sample_version')
@@ -17,8 +20,8 @@ export class SampleVersion {
   @Column({ type: 'int' })
   version: number;
 
-  @Column({ type: 'enum', enum: SampleAction })
-  action: SampleAction;
+  @Column({ length: 40 })
+  action: string;
 
   @Column({ type: 'bigint' })
   operator_id: number;

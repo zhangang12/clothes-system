@@ -77,7 +77,7 @@ TOKEN_SUP=$(echo "$RESP" | jval data.access_token)
 # ── fixtures（用 admin 建前置数据，返回新 id 到 stdout）───────
 fx_customer() { api POST /customers "{\"name\":\"C_${SFX}_${RANDOM}\",\"type\":\"MIDDLEMAN\",\"grade\":\"A\",\"currency\":\"USD\",\"contacts\":[{\"name\":\"张三\",\"mobile\":\"13900000000\"}]}"; echo "$RESP" | jval data.id; }
 fx_factory()  { api POST /factories "{\"name\":\"F_${SFX}_${RANDOM}\",\"type\":\"FABRIC\",\"contacts\":[{\"name\":\"张三\",\"mobile\":\"13900000000\"}]}"; echo "$RESP" | jval data.id; }
-fx_sample()   { api POST /samples "{\"customer_id\":$1,\"style_name\":\"S_$SFX\"}"; echo "$RESP" | jval data.id; }
+fx_sample()   { api POST /samples "{\"middlemanId\":$1,\"styleNo\":\"S_$SFX\",\"materials\":[{\"itemName\":\"面料\",\"part\":\"主面料\"}]}"; echo "$RESP" | jval data.id; }
 fx_quote()    { api POST /quotes "{\"customer_id\":$1,\"currency\":\"USD\",\"global_loss_rate\":5,\"gross_margin\":30,\"total_qty\":1000,\"items\":[{\"item_name\":\"面料\",\"unit\":\"米\",\"usage_qty\":1.5,\"unit_price\":8,\"loss_rate\":5},{\"item_name\":\"加工\",\"unit_price\":3}]}"; echo "$RESP" | jval data.id; }
 fx_order()    { api POST /orders "{\"customer_id\":$1,\"qty_total\":1000,\"currency\":\"USD\",\"unit_price\":12,\"materials\":[{\"item_name\":\"面料\",\"net_usage\":1.5,\"loss_rate\":5,\"unit_price\":8}]}"; echo "$RESP" | jval data.id; }
 # 订单推进到 PRODUCING（可发货）：DRAFT→CONFIRMED→PRODUCING
@@ -222,22 +222,30 @@ test_sample() {
   local cid sid
   cid=$(fx_customer); sid=$(fx_sample "$cid")
   api GET "/samples/${sid:-0}"
-  expect_eq data.status PENDING "新建样衣状态PENDING"
-  api PATCH "/samples/${sid:-0}/submit" '{"remark":"x"}'
-  expect_code 400 "未派工直接提交应400"
-  api PATCH "/samples/${sid:-0}/assign" '{"patternmaker_id":1}'
-  expect_ok "指派版师"
-  api GET "/samples/${sid:-0}"; expect_eq data.status PATTERN "派工后PATTERN"
-  api PATCH "/samples/${sid:-0}/submit" '{"remark":"完成"}'
-  expect_ok "打版提交"
-  api GET "/samples/${sid:-0}"; expect_eq data.status DONE "提交后DONE"
-  api PATCH "/samples/${sid:-0}/confirm" ''
-  expect_ok "样衣确认"
-  api GET "/samples/${sid:-0}"; expect_eq data.status CONFIRMED "确认后CONFIRMED"
-  api PATCH "/samples/${sid:-0}/confirm" ''
-  expect_code 400 "已确认再确认应400"
-  api POST /samples '{"customer_id":999999,"style_name":"x"}'
-  if [[ "$CODE" =~ ^(400|404)$ ]]; then ok "非法customer_id建样衣应400/404 [$CODE]"; else bad "非法customer_id应400/404 实得$CODE"; fi
+  expect_eq data.status PENDING "新建样衣状态PENDING(待派单)"
+  # 材料明细回读：至少 1 行
+  api GET "/samples/${sid:-0}"; expect_eq data.materials.0.item_name "面料" "材料明细首行品名回读"
+  # 推送版师（填材料寄出单号）→ 打样中
+  api PATCH "/samples/${sid:-0}/push" '{"patternmakerId":1,"materialShipNo":"SF-'"$SFX"'"}'
+  expect_ok "推送版师(填材料寄出单号)"
+  api GET "/samples/${sid:-0}"; expect_eq data.status SAMPLING "推送后打样中SAMPLING"
+  # 版师填件数+工时单价 → 工时金额 + 已对账
+  api PATCH "/samples/${sid:-0}/patternmaker" '{"pieceCount":3,"laborUnitPrice":50}' "$TOKEN_PM"
+  expect_ok "版师填件数+单价"
+  api GET "/samples/${sid:-0}"; expect_eq data.status RECONCILED "件数单价填完已对账RECONCILED"
+  expect_num data.labor_amount 150 "工时金额=件数×单价=150"
+  # 版师只填件数不填单价应 400
+  api PATCH "/samples/${sid:-0}/patternmaker" '{"pieceCount":5}' "$TOKEN_PM"
+  expect_code 400 "版师仅填件数缺单价应400"
+  # 完成
+  api PATCH "/samples/${sid:-0}/complete" ''
+  api GET "/samples/${sid:-0}"; expect_eq data.status DONE "完成后DONE(已完成)"
+  # 非法中间商建样衣
+  api POST /samples '{"middlemanId":999999,"styleNo":"x","materials":[{"itemName":"面料"}]}'
+  if [[ "$CODE" =~ ^(400|404)$ ]]; then ok "非法中间商建样衣应400/404 [$CODE]"; else bad "非法中间商应400/404 实得$CODE"; fi
+  # 材料明细为空应 400
+  api POST /samples "{\"middlemanId\":${cid:-0},\"styleNo\":\"NoMat\",\"materials\":[]}"
+  expect_code 400 "样衣材料明细为空应400"
 }
 
 test_quote() {
@@ -571,67 +579,49 @@ test_factory_ext() {
 }
 
 test_sample_ext() {
-  local cid rr newname big sid_r sid_p sid_pat sid_del
+  local cid newname big sid_r sid_p sid_del sid_cp
 
   cid=$(fx_customer)
-  rr="reject_${SFX}"
   newname="U_${SFX}"
 
-  # ── reject 流程：读前置状态(DONE)，构造到 DONE 再驳回 ──────────────
+  # ── 修改守卫：SAMPLING 可改，RECONCILED(版师填件数单价后)不可改 ──────
   sid_r=$(fx_sample "$cid")
-  api PATCH "/samples/${sid_r:-0}/assign" '{"patternmaker_id":1}'
-  api PATCH "/samples/${sid_r:-0}/submit" '{"remark":"v1"}' "$TOKEN_PM"
-  expect_ok "版师提交版次(PATTERN→DONE)"
-  api PUT "/samples/${sid_r:-0}" '{"style_name":"x"}'
-  expect_code 400 "打版完成状态不可修改基本信息"
-  api PATCH "/samples/${sid_r:-0}/reject" "{\"reject_reason\":\"$rr\"}"
-  expect_ok "驳回打版完成样衣(DONE→REJECTED)"
-  api GET "/samples/${sid_r:-0}"
-  expect_eq data.status REJECTED "驳回后状态变REJECTED"
-  expect_eq data.version 2 "驳回后版次+1"
-  expect_eq data.reject_reason "$rr" "驳回原因已记录"
+  api PATCH "/samples/${sid_r:-0}/push" '{"patternmakerId":1,"materialShipNo":"SF1"}'
+  api PUT "/samples/${sid_r:-0}" "{\"styleNo\":\"$newname\"}"
+  expect_ok "打样中样衣允许修改基本信息"
+  api GET "/samples/${sid_r:-0}"; expect_eq data.style_no "$newname" "更新后GET款号确实变化"
+  api PATCH "/samples/${sid_r:-0}/patternmaker" '{"pieceCount":2,"laborUnitPrice":40}' "$TOKEN_PM"
+  api PUT "/samples/${sid_r:-0}" '{"styleNo":"x"}'
+  expect_code 400 "已对账状态不可修改基本信息"
 
-  # ── 终态幂等：对已驳回记录重复驳回 ────────────────────────────────
-  api PATCH "/samples/${sid_r:-0}/reject" "{\"reject_reason\":\"$rr\"}"
-  expect_code 400 "重复驳回已驳回样衣应400"
+  # ── 复制：新单待派单，款号沿用 ────────────────────────────────────
+  api POST "/samples/${sid_r:-0}/copy" ''
+  expect_ok "复制样衣"
+  sid_cp=$(echo "$RESP" | jval data.id)
+  api GET "/samples/${sid_cp:-0}"
+  expect_eq data.status PENDING "复制新单状态待派单PENDING"
+  expect_eq data.style_no "$newname" "复制沿用款号"
 
-  # ── 被驳回后重新走流程：assign 仅 PENDING，故不可再指派 ───────────
-  api PATCH "/samples/${sid_r:-0}/assign" '{"patternmaker_id":1}'
-  expect_code 400 "已驳回样衣不能再指派(非PENDING)"
-
-  # ── PUT 更新仅特定状态：REJECTED 允许改，更新后 GET 验证字段变化 ───
-  api PUT "/samples/${sid_r:-0}" "{\"style_name\":\"$newname\"}"
-  expect_ok "已驳回样衣允许修改基本信息"
-  api GET "/samples/${sid_r:-0}"
-  expect_eq data.style_name "$newname" "更新后GET字段确实变化"
-
-  # ── PENDING 样衣：非法转移 + 越界值 + 权限 ────────────────────────
+  # ── 删除规则：仅待派单可删 ───────────────────────────────────────
   sid_p=$(fx_sample "$cid")
-  api PATCH "/samples/${sid_p:-0}/reject" "{\"reject_reason\":\"$rr\"}"
-  expect_code 400 "PENDING状态直接驳回应400"
-  api PATCH "/samples/${sid_p:-0}/assign" '{"patternmaker_id":0}'
-  expect_code 400 "指派版师id=0越界(<Min1)应400"
-  api PATCH "/samples/${sid_p:-0}/assign" '{"patternmaker_id":1}' "$TOKEN_FINANCE"
-  expect_deny "财务指派版师应拒绝"
+  api PATCH "/samples/${sid_p:-0}/push" '{"materialShipNo":"SF2"}'
+  api DELETE "/samples/${sid_p:-0}"
+  expect_code 400 "非待派单样衣删除应400(仅待派单可删)"
 
-  # ── PATTERN 样衣：重复指派非法转移 ───────────────────────────────
-  sid_pat=$(fx_sample "$cid")
-  api PATCH "/samples/${sid_pat:-0}/assign" '{"patternmaker_id":1}'
-  api PATCH "/samples/${sid_pat:-0}/assign" '{"patternmaker_id":2}'
-  expect_code 400 "PATTERN状态再次指派应400"
+  # ── 版师接口权限：财务无权 ───────────────────────────────────────
+  api PATCH "/samples/${sid_r:-0}/patternmaker" '{"pieceCount":1,"laborUnitPrice":1}' "$TOKEN_FINANCE"
+  expect_deny "财务调用版师保存应拒绝(仅版师/管理员)"
 
-  # ── 不存在的大 id：GET / assign / submit 均 404 ───────────────────
+  # ── 不存在的大 id：GET / push 均 404 ─────────────────────────────
   api GET "/samples/99999999"
   expect_code 404 "GET不存在样衣应404"
-  api PATCH "/samples/99999999/assign" '{"patternmaker_id":1}'
-  expect_code 404 "指派不存在样衣应404"
-  api PATCH "/samples/99999999/submit" '{"remark":"x"}' "$TOKEN_PM"
-  expect_code 404 "提交不存在样衣应404"
+  api PATCH "/samples/99999999/push" '{"materialShipNo":"x"}'
+  expect_code 404 "推送不存在样衣应404"
 
-  # ── 软删除完整性：DELETE 后详情不可见 ────────────────────────────
+  # ── 软删除完整性：DELETE 待派单后详情不可见 ──────────────────────
   sid_del=$(fx_sample "$cid")
   api DELETE "/samples/${sid_del:-0}"
-  expect_ok "逻辑删除样衣"
+  expect_ok "逻辑删除待派单样衣"
   api GET "/samples/${sid_del:-0}"
   expect_code 404 "软删除后详情应404"
 
@@ -639,22 +629,20 @@ test_sample_ext() {
   api GET "/samples?page=1&size=2"
   expect_ok "样衣分页查询2xx"
   expect_eq size 2 "分页返回size=2"
-  api GET "/samples?status=REJECTED&customer_id=${cid:-0}"
-  expect_eq data.0.status REJECTED "按状态+客户筛选命中REJECTED"
+  api GET "/samples?status=RECONCILED&customer_id=${cid:-0}"
+  expect_ok "按状态+客户筛选2xx"
   api GET "/samples?status=BOGUS"
   expect_code 400 "非法status枚举筛选应400"
 
-  # ── 边界：超 MaxLength(100) 的 style_name ────────────────────────
+  # ── 边界：超 MaxLength(100) 的 styleNo ───────────────────────────
   big=$(printf 'x%.0s' {1..101})
-  api POST /samples "{\"customer_id\":${cid:-0},\"style_name\":\"$big\"}"
-  expect_code 400 "style_name超100字符应400"
+  api POST /samples "{\"middlemanId\":${cid:-0},\"styleNo\":\"$big\",\"materials\":[{\"itemName\":\"面料\"}]}"
+  expect_code 400 "styleNo超100字符应400"
 
   # ── 权限矩阵：各写接口换无权角色 ─────────────────────────────────
-  api POST /samples "{\"customer_id\":${cid:-0},\"style_name\":\"deny\"}" "$TOKEN_FINANCE"
+  api POST /samples "{\"middlemanId\":${cid:-0},\"styleNo\":\"deny\",\"materials\":[{\"itemName\":\"面料\"}]}" "$TOKEN_FINANCE"
   expect_deny "财务创建样衣应拒绝"
-  api PATCH "/samples/${sid_pat:-0}/submit" '{"remark":"x"}' "$TOKEN_BUSINESS"
-  expect_deny "业务提交版次应拒绝(仅版师/管理员)"
-  api DELETE "/samples/${sid_p:-0}" '' "$TOKEN_BUSINESS"
+  api DELETE "/samples/${sid_cp:-0}" '' "$TOKEN_BUSINESS"
   expect_deny "业务删除样衣应拒绝(仅管理员)"
 }
 
