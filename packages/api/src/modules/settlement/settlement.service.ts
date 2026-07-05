@@ -137,10 +137,11 @@ export class SettlementService {
   }
 
   async create(dto: CreateSettlementDto, createdBy: number): Promise<Settlement> {
-    const settlement_no = await this.numbering.next(NUM_PREFIX.SETTLEMENT);
-
     const order = await this.orderRepo.findOne({ where: { id: dto.order_id, deleted: 0 } });
     if (!order) throw new NotFoundException(`订单 #${dto.order_id} 不存在`);
+
+    // 结算单编号 JS-款号-序号（结算串流程 rec：按款号，便于按款检索）
+    const settlement_no = await this.numbering.nextWithSegment(NUM_PREFIX.SETTLEMENT, order.style_no || 'NA');
 
     const shipments = await this.shipmentRepo.find({ where: { order_id: dto.order_id } });
     const shippedQty = shipments.reduce((sum, s) => sum + s.qty, 0);
