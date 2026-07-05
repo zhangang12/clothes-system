@@ -52,7 +52,8 @@ CREATE TABLE IF NOT EXISTS `supplier_account` (
 CREATE TABLE IF NOT EXISTS `factory` (
   `id`             BIGINT        NOT NULL AUTO_INCREMENT,
   `factory_no`     VARCHAR(20)   NOT NULL COMMENT '厂商编号 S001（自动生成/大写/唯一）',
-  `type`           ENUM('FABRIC','ACCESSORY','OUTSOURCE','FORWARDER','TESTING','EXPORT','OTHER') NOT NULL DEFAULT 'FABRIC' COMMENT '工厂类型',
+  `type`           ENUM('FABRIC','ACCESSORY','OUTSOURCE','FORWARDER','TESTING','EXPORT','OTHER') NOT NULL DEFAULT 'FABRIC' COMMENT '工厂主身份',
+  `extra_types`    VARCHAR(100)   DEFAULT NULL COMMENT '附加身份(逗号分隔,工厂双身份)',
   `can_invoice`    TINYINT       NOT NULL DEFAULT 1 COMMENT '能否开票 1=是 0=否',
   `name`           VARCHAR(100)  NOT NULL COMMENT '厂商名称（唯一）',
   `short_name`     VARCHAR(50)   DEFAULT NULL COMMENT '简称',

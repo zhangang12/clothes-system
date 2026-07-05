@@ -8,6 +8,13 @@ import { Contract } from '../../contract/contract.entity';
 import { FactoryService } from '../factory.service';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
 
+const makeQb = () => ({
+  select: jest.fn().mockReturnThis(),
+  where: jest.fn().mockReturnThis(),
+  andWhere: jest.fn().mockReturnThis(),
+  orderBy: jest.fn().mockReturnThis(),
+  getMany: jest.fn().mockResolvedValue([]),
+});
 const mockRepo = {
   create: jest.fn().mockImplementation((v) => v),
   save: jest.fn(),
@@ -15,6 +22,7 @@ const mockRepo = {
   findAndCount: jest.fn(),
   find: jest.fn(),
   count: jest.fn(),
+  createQueryBuilder: jest.fn(() => makeQb()),
 };
 const mockContactRepo = {
   create: jest.fn().mockImplementation((v) => v),
@@ -171,20 +179,22 @@ describe('FactoryService', () => {
   });
 
   describe('listForSelect()', () => {
-    it('UT-FAC-11: returns only enabled (status=1, deleted=0) factories', async () => {
-      mockRepo.find.mockResolvedValue([{ id: 1, factory_no: 'S001', name: '工厂A' }]);
+    it('UT-FAC-11: returns only enabled (status=1, deleted=0), no type filter', async () => {
+      const qb = makeQb();
+      mockRepo.createQueryBuilder.mockReturnValueOnce(qb);
       await service.listForSelect();
-      expect(mockRepo.find).toHaveBeenCalledWith(expect.objectContaining({
-        where: expect.objectContaining({ status: 1, deleted: 0 }),
-      }));
+      expect(qb.where).toHaveBeenCalledWith(expect.stringContaining('f.status = 1'));
+      expect(qb.andWhere).not.toHaveBeenCalled();
     });
 
-    it('UT-FAC-12: filters by type when provided', async () => {
-      mockRepo.find.mockResolvedValue([]);
+    it('UT-FAC-12: filters by type via 主身份 OR 附加身份 (工厂双身份)', async () => {
+      const qb = makeQb();
+      mockRepo.createQueryBuilder.mockReturnValueOnce(qb);
       await service.listForSelect('OUTSOURCE');
-      expect(mockRepo.find).toHaveBeenCalledWith(expect.objectContaining({
-        where: expect.objectContaining({ type: 'OUTSOURCE' }),
-      }));
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('FIND_IN_SET'),
+        { type: 'OUTSOURCE' },
+      );
     });
   });
 });

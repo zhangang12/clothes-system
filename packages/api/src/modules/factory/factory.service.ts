@@ -26,6 +26,7 @@ export class FactoryService {
   private mapDto(dto: Partial<CreateFactoryDto>): Partial<Factory> {
     const e: Partial<Factory> = {};
     if (dto.type !== undefined) e.type = dto.type;
+    if (dto.extraTypes !== undefined) e.extra_types = (dto.extraTypes ?? []).join(',') || null;
     if (dto.canInvoice !== undefined) e.can_invoice = dto.canInvoice ? 1 : 0;
     if (dto.name !== undefined) e.name = dto.name;
     if (dto.shortName !== undefined) e.short_name = dto.shortName;
@@ -202,12 +203,14 @@ export class FactoryService {
 
   // 下拉选择：仅返回启用的工厂
   async listForSelect(type?: string) {
-    const where: FindOptionsWhere<Factory> = { status: 1, deleted: 0 };
-    if (type) Object.assign(where, { type });
-    return this.repo.find({
-      where,
-      select: ['id', 'factory_no', 'name', 'short_name', 'type'],
-      order: { factory_no: 'ASC' },
-    });
+    const qb = this.repo
+      .createQueryBuilder('f')
+      .select(['f.id', 'f.factory_no', 'f.name', 'f.short_name', 'f.type', 'f.extra_types'])
+      .where('f.status = 1 AND f.deleted = 0');
+    // 工厂双身份：主身份 或 附加身份 命中即返回（设计稿 A4）
+    if (type) {
+      qb.andWhere('(f.type = :type OR FIND_IN_SET(:type, f.extra_types))', { type });
+    }
+    return qb.orderBy('f.factory_no', 'ASC').getMany();
   }
 }

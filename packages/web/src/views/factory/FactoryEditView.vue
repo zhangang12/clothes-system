@@ -24,8 +24,15 @@
           </el-col>
           <el-col :span="8">
             <el-form-item label="工厂类型" prop="type" required>
-              <el-select v-model="form.type" placeholder="请选择" style="width:100%">
+              <el-select v-model="form.type" placeholder="主身份" style="width:100%">
                 <el-option v-for="t in factoryTypes" :key="t.value" :label="t.label" :value="t.value" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="附加身份">
+              <el-select v-model="form.extraTypes" multiple collapse-tags placeholder="双身份(选填)" style="width:100%">
+                <el-option v-for="t in factoryTypes" :key="t.value" :label="t.label" :value="t.value" :disabled="t.value === form.type" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -201,7 +208,7 @@ const factoryTypes = Object.entries(FACTORY_TYPE_LABEL).map(([value, label]) => 
 
 const emptyContact = () => ({ name: '', department: '', title: '', phone: '', mobile: '', email: '', remark: '' });
 const form = reactive<any>({
-  factoryNo: '', type: '', canInvoice: true, name: '', province: '', city: '',
+  factoryNo: '', type: '', extraTypes: [], canInvoice: true, name: '', province: '', city: '',
   address: '', businessScope: '', developDate: new Date().toISOString().slice(0, 10),
   bankName: '', bankAccount: '', taxNo: '', invoicePhone: '', invoiceAddress: '',
   bankName2: '', bankAccount2: '', taxNo2: '', invoicePhone2: '', invoiceAddress2: '',
@@ -237,7 +244,7 @@ async function load() {
   const res: any = await factoryApi.get(editId.value);
   const d = res.data ?? res;
   Object.assign(form, {
-    factoryNo: d.factory_no, type: d.type, canInvoice: d.can_invoice !== 0, name: d.name,
+    factoryNo: d.factory_no, type: d.type, extraTypes: d.extra_types ? String(d.extra_types).split(',').filter(Boolean) : [], canInvoice: d.can_invoice !== 0, name: d.name,
     province: d.province ?? '', city: d.city ?? '', address: d.address ?? '',
     businessScope: d.business_scope ?? '', developDate: d.develop_date ?? '',
     bankName: d.bank_name ?? '', bankAccount: d.bank_account ?? '', taxNo: d.tax_no ?? '',
@@ -258,7 +265,7 @@ async function load() {
 function buildDto() {
   const num = (v: any) => (v === '' || v == null ? undefined : Number(v));
   return {
-    type: form.type, canInvoice: form.canInvoice, name: form.name,
+    type: form.type, extraTypes: form.extraTypes ?? [], canInvoice: form.canInvoice, name: form.name,
     province: form.province || undefined, city: form.city || undefined,
     address: form.address || undefined, businessScope: form.businessScope || undefined,
     developDate: form.developDate || undefined,

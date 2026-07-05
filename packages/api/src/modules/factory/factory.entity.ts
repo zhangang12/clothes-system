@@ -10,7 +10,10 @@ export class Factory {
   factory_no: string;
 
   @Column({ type: 'enum', enum: FactoryType, default: FactoryType.FABRIC })
-  type: FactoryType;
+  type: FactoryType; // 主身份
+
+  @Column({ length: 100, nullable: true })
+  extra_types: string; // 附加身份（逗号分隔 FactoryType，工厂双身份：如材料供应商+加工厂，设计稿 A4）
 
   @Column({ type: 'tinyint', default: 1 })
   can_invoice: number;

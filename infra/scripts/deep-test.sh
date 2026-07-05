@@ -646,6 +646,13 @@ test_factory_ext() {
   expect_ok "批量导入客户应2xx"
   expect_num data.created 2 "客户导入成功2条(有效行)"
   expect_num data.failedCount 1 "客户导入失败1条(缺联系人)"
+
+  # ── 工厂双身份：FABRIC主身份 + OUTSOURCE附加身份，委外加工商下拉应命中（设计稿 A4）──
+  local dualName; dualName="双身份厂_${SFX}_${RANDOM}"
+  api POST /factories "{\"name\":\"${dualName}\",\"type\":\"FABRIC\",\"extraTypes\":[\"OUTSOURCE\"],\"contacts\":[{\"name\":\"李\"}]}"
+  expect_ok "创建双身份工厂(FABRIC+OUTSOURCE)"
+  api GET "/factories/select?type=OUTSOURCE"
+  [[ "$RESP" == *"${dualName}"* ]] && ok "双身份工厂在委外加工商下拉命中(附加身份)" || bad "双身份工厂未在OUTSOURCE下拉命中"
 }
 
 test_sample_ext() {
