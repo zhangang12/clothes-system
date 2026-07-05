@@ -14,6 +14,7 @@ import { PortalModule } from './modules/portal/portal.module';
 import { ReconciliationModule } from './modules/reconciliation/reconciliation.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { SettlementModule } from './modules/settlement/settlement.module';
+import { StatsModule } from './modules/stats/stats.module';
 import { NumberingModule } from './common/services/numbering.module';
 import { FileModule } from './common/services/file.module';
 import { UploadModule } from './modules/upload/upload.module';
@@ -55,6 +56,7 @@ import { UploadModule } from './modules/upload/upload.module';
     ReconciliationModule,
     PaymentModule,
     SettlementModule,
+    StatsModule,
     UploadModule,
   ],
 })

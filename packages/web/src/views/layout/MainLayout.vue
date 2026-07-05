@@ -19,6 +19,7 @@
         <el-menu-item index="/reconciliations"><el-icon><DataAnalysis /></el-icon>对账管理</el-menu-item>
         <el-menu-item index="/payments"><el-icon><CreditCard /></el-icon>付款管理</el-menu-item>
         <el-menu-item index="/settlements"><el-icon><TrendCharts /></el-icon>结算清单</el-menu-item>
+        <el-menu-item index="/reports"><el-icon><PieChart /></el-icon>报表统计</el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>
@@ -62,6 +63,7 @@ const titleMap: Record<string, string> = {
   '/reconciliations': '对账管理',
   '/payments': '付款管理',
   '/settlements': '结算清单',
+  '/reports': '报表统计',
 };
 const pageTitle = computed(() => titleMap[route.path] || '');
 

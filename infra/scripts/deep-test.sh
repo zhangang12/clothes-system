@@ -1439,6 +1439,21 @@ test_upload() {
   [[ "$code" == "404" ]] && ok "读取不存在文件应404 [$code]" || bad "读取不存在应404 实得$code"
 }
 
+test_stats() {
+  # 报表/KPI：转化漏斗 + 成单率 + 利润汇总（设计稿 样衣确认清单 rec:0）
+  api GET "/stats/funnel"
+  expect_ok "转化漏斗2xx"
+  local s; s=$(echo "$RESP" | jval data.samples)
+  [[ "$s" =~ ^[0-9]+$ ]] && ok "漏斗返回样衣数(数值)=$s" || bad "漏斗样衣数应为数值 ${RESP:0:120}"
+  api GET "/stats/win-rate?dimension=salesperson"; expect_ok "成单率(业务员)2xx"
+  api GET "/stats/win-rate?dimension=customer";    expect_ok "成单率(客户)2xx"
+  api GET "/stats/profit?dimension=style";         expect_ok "利润汇总(款号)2xx"
+  api GET "/stats/profit?dimension=month";         expect_ok "利润汇总(月份)2xx"
+  # 利润仅 ADMIN/FINANCE/主管：版师(打样)查利润应被拒
+  api GET "/stats/profit" '' "$TOKEN_PM"
+  expect_deny "版师查利润汇总应拒绝(仅财务/管理)"
+}
+
 # ── 执行所有模块（基础 + 扩展）────────────────────────────────
 group "1. 鉴权与权限基线";        test_auth;           test_auth_ext
 group "2. 客户";                  test_customer;       test_customer_ext
@@ -1452,6 +1467,7 @@ group "9. 付款 · 审批流";          test_payment;        test_payment_ext
 group "10. 结算 · 业务计算";       test_settlement;     test_settlement_ext
 group "11. 供应商门户 · 端到端";   test_portal;         test_portal_ext
 group "12. 文件上传";              test_upload
+group "13. 报表统计";              test_stats
 
 echo ""
 echo "=================================================================="

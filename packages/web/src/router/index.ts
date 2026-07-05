@@ -40,6 +40,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'reconciliations', name: 'Reconciliations', component: () => import('../views/reconciliation/ReconciliationListView.vue') },
       { path: 'payments', name: 'Payments', component: () => import('../views/payment/PaymentListView.vue') },
       { path: 'settlements', name: 'Settlements', component: () => import('../views/settlement/SettlementListView.vue') },
+      { path: 'reports', name: 'Reports', component: () => import('../views/report/ReportView.vue') },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/' },
