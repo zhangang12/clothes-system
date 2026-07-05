@@ -47,6 +47,12 @@ export class ReconciliationService {
           styleNo = order?.style_no ?? null;
         }
       }
+      // 一单多合同：无单一合同、但批次各自带款号时，汇总款号（款A、款B / 款A 等N款）供检索
+      if (!styleNo) {
+        const batchStyles = Array.from(new Set(shipmentLines.map((s) => s.style_no).filter(Boolean))) as string[];
+        if (batchStyles.length === 1) styleNo = batchStyles[0];
+        else if (batchStyles.length > 1) styleNo = `${batchStyles[0]} 等${batchStyles.length}款`;
+      }
 
       // 对账单编号 DZ-款号-序号；无合同 DZ-费用-序号（设计稿 补充确认 A2）
       const seg = dto.type === ReconcileType.NO_CONTRACT ? '费用' : (styleNo || 'NA');
@@ -87,6 +93,8 @@ export class ReconciliationService {
           manager.create(ReconciliationShipment, {
             reconcile_id: reconciliation.id,
             shipment_id: s.shipment_id,
+            contract_id: s.contract_id ?? dto.contract_id ?? null,
+            style_no: s.style_no ?? null,
             item_name: s.item_name,
             snapshot_unit_price: s.snapshot_unit_price,
             qty: s.qty,

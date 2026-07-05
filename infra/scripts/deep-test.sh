@@ -370,6 +370,13 @@ test_reconciliation() {
   api POST /reconciliations "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid:-0},\"description\":\"测试对账\"}" "$TOKEN_FINANCE"
   rid=$(echo "$RESP" | jval data.id)
   [[ -n "$rid" ]] && ok "FINANCE创建对账 id=$rid" || bad "创建对账失败 ${RESP:0:120}"
+  # ── 一单多合同：无单一合同头,批次各自带来源合同/款号,款号汇总（设计稿 对账·一单多合同）──
+  api POST /reconciliations "{\"type\":\"CONTRACT\",\"factory_id\":${fid:-0},\"shipments\":[{\"shipment_id\":1,\"contract_id\":11,\"style_no\":\"KA\",\"item_name\":\"面料\",\"snapshot_unit_price\":8,\"qty\":100},{\"shipment_id\":2,\"contract_id\":22,\"style_no\":\"KB\",\"item_name\":\"辅料\",\"snapshot_unit_price\":5,\"qty\":50}]}" "$TOKEN_FINANCE"
+  expect_ok "一单多合同对账创建(批次带各自来源合同/款号)"
+  mrid=$(echo "$RESP" | jval data.id)
+  api GET "/reconciliations/${mrid:-0}"
+  expect_eq data.style_no "KA 等2款" "一单多合同款号汇总为「KA 等2款」"
+  expect_num data.total_amount 1050 "一单多合同金额=8*100+5*50=1050"
   # 二级审批：业务员(财务)提交初审 → 主管复核确认（设计稿 对账 B1/C1）
   api PATCH "/reconciliations/${rid:-0}/submit" '' "$TOKEN_FINANCE"
   expect_ok "对账提交复核(DRAFT→PENDING)"

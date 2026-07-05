@@ -568,6 +568,8 @@ CREATE TABLE IF NOT EXISTS `reconciliation_shipment` (
   `id`                 BIGINT         NOT NULL AUTO_INCREMENT,
   `reconcile_id`       BIGINT         NOT NULL,
   `shipment_id`        BIGINT         NOT NULL COMMENT '关联出货记录',
+  `contract_id`        BIGINT         DEFAULT NULL COMMENT '一单多合同:本批次来源合同',
+  `style_no`           VARCHAR(60)    DEFAULT NULL COMMENT '一单多合同:本批次款号',
   `item_name`          VARCHAR(100)   NOT NULL COMMENT '材料名（快照）',
   `snapshot_unit_price` DECIMAL(15,4) NOT NULL COMMENT '盖章时快照单价',
   `qty`                DECIMAL(15,4)  NOT NULL,

@@ -148,9 +148,15 @@
           </el-table>
         </template>
         <template v-else>
-          <el-divider>出货明细</el-divider>
+          <el-divider>出货明细（一单多合同·批次可跳来源合同）</el-divider>
           <el-table :data="detailData.shipments ?? []" border size="small">
-            <el-table-column prop="shipment_id" label="出货单ID" width="100" />
+            <el-table-column prop="shipment_id" label="出货单ID" width="90" />
+            <el-table-column prop="contract_id" label="来源合同" width="90">
+              <template #default="{ row }">{{ row.contract_id ?? '—' }}</template>
+            </el-table-column>
+            <el-table-column prop="style_no" label="款号" width="90">
+              <template #default="{ row }">{{ row.style_no ?? '—' }}</template>
+            </el-table-column>
             <el-table-column prop="item_name" label="品名" />
             <el-table-column prop="snapshot_unit_price" label="单价" width="100" align="right">
               <template #default="{ row }">{{ (+row.snapshot_unit_price).toFixed(4) }}</template>
@@ -239,18 +245,20 @@
           <el-input v-model="createForm.description" type="textarea" :rows="2" />
         </el-form-item>
 
-        <el-divider>出货明细</el-divider>
+        <el-divider>出货明细（一单多合同：每批次可填各自来源合同/款号）</el-divider>
         <div v-for="(s, idx) in createForm.shipments" :key="idx" class="item-row">
           <el-row :gutter="8" align="middle">
-            <el-col :span="4"><el-input-number v-model="s.shipment_id" :min="1" placeholder="出货单ID" style="width:100%" /></el-col>
-            <el-col :span="6"><el-input v-model="s.item_name" placeholder="品名" /></el-col>
-            <el-col :span="5"><el-input-number v-model="s.snapshot_unit_price" :min="0" :precision="4" placeholder="单价" style="width:100%" /></el-col>
-            <el-col :span="4"><el-input-number v-model="s.qty" :min="0" :precision="2" placeholder="数量" style="width:100%" /></el-col>
-            <el-col :span="3">
+            <el-col :span="3"><el-input-number v-model="s.shipment_id" :min="1" :controls="false" placeholder="出货单ID" style="width:100%" /></el-col>
+            <el-col :span="3"><el-input-number v-model="s.contract_id" :min="1" :controls="false" placeholder="合同ID" style="width:100%" /></el-col>
+            <el-col :span="3"><el-input v-model="s.style_no" placeholder="款号" /></el-col>
+            <el-col :span="4"><el-input v-model="s.item_name" placeholder="品名" /></el-col>
+            <el-col :span="4"><el-input-number v-model="s.snapshot_unit_price" :min="0" :precision="4" :controls="false" placeholder="单价" style="width:100%" /></el-col>
+            <el-col :span="3"><el-input-number v-model="s.qty" :min="0" :precision="2" :controls="false" placeholder="数量" style="width:100%" /></el-col>
+            <el-col :span="2">
               <span class="amount">{{ s.snapshot_unit_price && s.qty ? (s.snapshot_unit_price * s.qty).toFixed(2) : '--' }}</span>
             </el-col>
             <el-col :span="2">
-              <el-button link type="danger" @click="removeShipment(idx)">删除</el-button>
+              <el-button link type="danger" @click="removeShipment(idx)">删</el-button>
             </el-col>
           </el-row>
         </div>
@@ -374,7 +382,7 @@ function resetCreateForm() {
   });
 }
 function addShipment() {
-  createForm.shipments.push({ shipment_id: undefined, item_name: '', snapshot_unit_price: undefined, qty: undefined });
+  createForm.shipments.push({ shipment_id: undefined, contract_id: undefined, style_no: '', item_name: '', snapshot_unit_price: undefined, qty: undefined });
 }
 function removeShipment(idx: number) { createForm.shipments.splice(idx, 1); }
 

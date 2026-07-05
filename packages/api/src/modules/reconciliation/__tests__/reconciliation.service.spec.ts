@@ -135,6 +135,26 @@ describe('ReconciliationService', () => {
     expect(manager.save.mock.calls[0][1]).toMatchObject({ tax_amount: 130 });
   });
 
+  // UT-REC-14: 一单多合同 — 无单一合同头时按批次款号汇总，且每批次落库来源合同/款号
+  it('UT-REC-14 create supports 一单多合同 (per-batch contract linkage + summarized style)', async () => {
+    const dto = {
+      type: ReconcileType.CONTRACT,
+      factory_id: 5,
+      shipments: [
+        { shipment_id: 1, contract_id: 11, style_no: 'K-100', item_name: '面料A', snapshot_unit_price: 10, qty: 100 },
+        { shipment_id: 2, contract_id: 22, style_no: 'K-200', item_name: '面料B', snapshot_unit_price: 20, qty: 50 },
+      ],
+    };
+    const manager = makeManager();
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await service.create(dto as any, 1);
+    const savedRec = manager.save.mock.calls[0][1];
+    expect(savedRec.style_no).toContain('等2款');
+    const savedLines = manager.save.mock.calls[1][1];
+    expect(savedLines[0]).toMatchObject({ contract_id: 11, style_no: 'K-100' });
+    expect(savedLines[1]).toMatchObject({ contract_id: 22, style_no: 'K-200' });
+  });
+
   // UT-REC-04a: submit transitions DRAFT → PENDING (业务员初审)
   it('UT-REC-04a submit transitions DRAFT→PENDING', async () => {
     const rec = makeReconciliation({ status: ReconciliationStatus.DRAFT });
