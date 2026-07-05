@@ -84,3 +84,9 @@ export class CreateCustomerDto {
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => CustomerExpressDto)
   expresses?: CustomerExpressDto[];
 }
+
+export class ImportCustomerDto {
+  @ApiProperty({ type: [CreateCustomerDto], description: 'CSV 前端解析后的客户行' })
+  @IsArray() @ValidateNested({ each: true }) @Type(() => CreateCustomerDto)
+  rows: CreateCustomerDto[];
+}

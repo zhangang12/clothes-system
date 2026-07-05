@@ -113,6 +113,21 @@ export class CustomerService {
     });
   }
 
+  // 批量导入（Excel→CSV 前端解析后逐行入库，返回每行结果）
+  async importBatch(rows: CreateCustomerDto[], createdBy: number) {
+    const failed: Array<{ index: number; name?: string; error: string }> = [];
+    let created = 0;
+    for (let i = 0; i < rows.length; i++) {
+      try {
+        await this.create(rows[i], createdBy);
+        created += 1;
+      } catch (e: any) {
+        failed.push({ index: i + 1, name: rows[i]?.name, error: e?.message ?? '未知错误' });
+      }
+    }
+    return { total: rows.length, created, failedCount: failed.length, failed };
+  }
+
   async findAll(query: QueryCustomerDto) {
     const { page = 1, size = 20, keyword, type, grade, status } = query;
     const base: FindOptionsWhere<Customer> = {

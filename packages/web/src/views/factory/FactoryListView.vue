@@ -5,7 +5,7 @@
       <div class="toolbar">
         <div class="tools-left">
           <el-button v-if="canEdit" type="primary" :icon="Plus" @click="goCreate">新建</el-button>
-          <el-button type="warning" plain :icon="Upload" @click="importTip">导入工厂资料</el-button>
+          <el-button type="warning" plain :icon="Upload" @click="showImport = true">导入工厂资料</el-button>
           <el-button plain :icon="Download" @click="exportCsv">导出</el-button>
           <el-button v-if="isAdmin" type="danger" plain :icon="Delete" :disabled="!selected.length" @click="batchRemove">
             删除{{ selected.length ? `(${selected.length})` : '' }}
@@ -91,6 +91,9 @@
       </div>
       <div class="tip">💡「最后交易日期」超过 90 天未更新的记录以红色标记，提示关注长期无往来厂商。</div>
     </div>
+
+    <csv-import-dialog v-model="showImport" title="工厂资料"
+      :template-headers="importHeaders" :parse-row="parseFactoryRow" :submit="submitImport" @done="load" />
   </div>
 </template>
 
@@ -103,6 +106,7 @@ import { factoryApi } from '@/api/factory';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole, FACTORY_TYPE_LABEL } from '@i9/types';
 import type { Factory } from '@i9/types';
+import CsvImportDialog from '@/components/CsvImportDialog.vue';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -169,7 +173,28 @@ async function batchRemove() {
   ElMessage[fail ? 'warning' : 'success'](`删除完成：成功 ${ok} 条${fail ? `，被引用拦截 ${fail} 条` : ''}`);
   load();
 }
-function importTip() { ElMessage.info('Excel 批量导入向导（上传→列映射→数据校验→入库）'); }
+// ── Excel/CSV 批量导入 ──
+const showImport = ref(false);
+const importHeaders = ['厂商名称', '工厂类型', '联系人姓名', '联系人手机', '所在省份', '所在城市', '详细地址', '业务范围'];
+const TYPE_BY_LABEL: Record<string, string> = Object.fromEntries(
+  Object.entries(FACTORY_TYPE_LABEL).map(([code, label]) => [label, code]),
+);
+function parseFactoryRow(c: Record<string, string>) {
+  const name = c['厂商名称'];
+  const type = TYPE_BY_LABEL[c['工厂类型']];
+  const contactName = c['联系人姓名'];
+  if (!name) return { row: null, error: '厂商名称必填' };
+  if (!type) return { row: null, error: `工厂类型无效(${c['工厂类型'] || '空'})` };
+  if (!contactName) return { row: null, error: '联系人姓名必填' };
+  return {
+    row: {
+      name, type, province: c['所在省份'] || undefined, city: c['所在城市'] || undefined,
+      address: c['详细地址'] || undefined, businessScope: c['业务范围'] || undefined,
+      contacts: [{ name: contactName, mobile: c['联系人手机'] || undefined }],
+    },
+  };
+}
+const submitImport = (rows: any[]) => factoryApi.importBatch(rows);
 function exportCsv() {
   const cols = ['factory_no', 'name', 'type', 'province', 'city', 'status'];
   const head = ['编号', '厂商名称', '类型', '省份', '城市', '状态'];

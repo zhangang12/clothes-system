@@ -11,6 +11,8 @@ export const customerApi = {
     http.get<unknown, { data: Customer }>(`/customers/${id}`),
   create: (dto: CreateCustomerDto) =>
     http.post<unknown, { data: Customer }>('/customers', dto),
+  importBatch: (rows: any[]) =>
+    http.post<unknown, { data: any }>('/customers/import', { rows }),
   update: (id: number, dto: Partial<CreateCustomerDto>) =>
     http.put<unknown, { data: Customer }>(`/customers/${id}`, dto),
   toggleStatus: (id: number) =>

@@ -582,6 +582,12 @@ test_factory_ext() {
   # PATCH status @Roles(ADMIN)：业务员可建工厂但无权切换状态
   api PATCH "/factories/${fid:-0}/status" "" "$TOKEN_BUSINESS"
   expect_deny "业务员切换工厂状态应被拒绝(仅ADMIN)"
+
+  # ── 批量导入：2 条有效 + 1 条缺联系人(应记失败) ──
+  api POST /factories/import "{\"rows\":[{\"name\":\"Imp1_${SFX}_${RANDOM}\",\"type\":\"FABRIC\",\"contacts\":[{\"name\":\"李\"}]},{\"name\":\"Imp2_${SFX}_${RANDOM}\",\"type\":\"OUTSOURCE\",\"contacts\":[{\"name\":\"王\"}]},{\"name\":\"ImpBad_${SFX}\",\"type\":\"FABRIC\"}]}"
+  expect_ok "批量导入工厂应2xx"
+  expect_num data.created 2 "导入成功2条(有效行)"
+  expect_num data.failedCount 1 "导入失败1条(缺联系人)"
 }
 
 test_sample_ext() {

@@ -4,7 +4,7 @@
       <div class="toolbar">
         <div class="tools-left">
           <el-button v-if="canEdit" type="primary" :icon="Plus" @click="goCreate">新建</el-button>
-          <el-button type="warning" plain :icon="Upload" @click="importTip">导入客户资料</el-button>
+          <el-button type="warning" plain :icon="Upload" @click="showImport = true">导入客户资料</el-button>
           <el-button v-if="isAdmin" type="warning" plain :icon="Key" :disabled="!selected.length" @click="grantTip">批量授权机密权限</el-button>
           <el-button plain :icon="Download" @click="exportCsv">导出</el-button>
           <el-button v-if="isAdmin" type="danger" plain :icon="Delete" :disabled="!selected.length" @click="batchRemove">
@@ -87,6 +87,9 @@
       </div>
       <div class="tip">🔒 客户资料属机密单据：未授权用户看不到该客户行，且不会在报价/合同的客户下拉中列出。</div>
     </div>
+
+    <csv-import-dialog v-model="showImport" title="客户资料"
+      :template-headers="importHeaders" :parse-row="parseCustomerRow" :submit="submitImport" @done="load" />
   </div>
 </template>
 
@@ -99,6 +102,7 @@ import { customerApi } from '@/api/customer';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole, CUSTOMER_TYPE_LABEL } from '@i9/types';
 import type { Customer } from '@i9/types';
+import CsvImportDialog from '@/components/CsvImportDialog.vue';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -142,7 +146,29 @@ async function batchRemove() {
   ElMessage[fail ? 'warning' : 'success'](`删除完成：成功 ${ok} 条${fail ? `，被引用拦截 ${fail} 条` : ''}`);
   load();
 }
-function importTip() { ElMessage.info('Excel 批量导入向导（上传→列映射→数据校验→入库）'); }
+// ── Excel/CSV 批量导入 ──
+const showImport = ref(false);
+const importHeaders = ['客户名称', '客户类型', '信用等级', '贸易国别', '所在城市', '详细地址', '联系人姓名', '联系人手机', '币种'];
+const TYPE_BY_LABEL: Record<string, string> = Object.fromEntries(
+  Object.entries(CUSTOMER_TYPE_LABEL).map(([code, label]) => [label, code]),
+);
+const GRADE_BY_LABEL: Record<string, string> = { A级: 'A', B级: 'B', C级: 'C', A: 'A', B: 'B', C: 'C' };
+function parseCustomerRow(c: Record<string, string>) {
+  const type = TYPE_BY_LABEL[c['客户类型']];
+  const contactName = c['联系人姓名'];
+  if (!type) return { row: null, error: `客户类型无效(需 中间商/最终买家)` };
+  if (!contactName) return { row: null, error: '联系人姓名必填' };
+  if (type === 'BUYER') return { row: null, error: '最终买家需在编辑页选关联中间商，暂不支持导入' };
+  return {
+    row: {
+      name: c['客户名称'] || undefined, type, grade: GRADE_BY_LABEL[c['信用等级']] || undefined,
+      tradeCountry: c['贸易国别'] || undefined, city: c['所在城市'] || undefined, address: c['详细地址'] || undefined,
+      currency: c['币种'] || undefined,
+      contacts: [{ name: contactName, mobile: c['联系人手机'] || undefined }],
+    },
+  };
+}
+const submitImport = (rows: any[]) => customerApi.importBatch(rows);
 function grantTip() { ElMessage.info(`批量授权机密权限：当前选中 ${selected.value.length} 个客户`); }
 function exportCsv() {
   const cols = ['customer_no', 'name', 'type', 'trade_country', 'price_terms', 'grade', 'status'];

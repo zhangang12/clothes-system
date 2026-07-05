@@ -8,7 +8,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@i9/types';
 import { CustomerService } from './customer.service';
-import { CreateCustomerDto } from './dto/create-customer.dto';
+import { CreateCustomerDto, ImportCustomerDto } from './dto/create-customer.dto';
 import { QueryCustomerDto } from './dto/query-customer.dto';
 
 @ApiTags('客户管理')
@@ -23,6 +23,13 @@ export class CustomerController {
   @ApiOperation({ summary: '创建客户' })
   create(@Body() dto: CreateCustomerDto, @Request() req: any) {
     return this.service.create(dto, req.user.id);
+  }
+
+  @Post('import')
+  @Roles(UserRole.ADMIN, UserRole.BUSINESS)
+  @ApiOperation({ summary: '批量导入客户（CSV 前端解析后逐行入库）' })
+  importBatch(@Body() dto: ImportCustomerDto, @Request() req: any) {
+    return this.service.importBatch(dto.rows, req.user.id);
   }
 
   @Get()

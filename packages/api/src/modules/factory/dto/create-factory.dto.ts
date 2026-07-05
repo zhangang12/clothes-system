@@ -62,3 +62,9 @@ export class CreateFactoryDto {
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => FactoryContactDto)
   contacts?: FactoryContactDto[];
 }
+
+export class ImportFactoryDto {
+  @ApiProperty({ type: [CreateFactoryDto], description: 'CSV 前端解析后的工厂行' })
+  @IsArray() @ValidateNested({ each: true }) @Type(() => CreateFactoryDto)
+  rows: CreateFactoryDto[];
+}

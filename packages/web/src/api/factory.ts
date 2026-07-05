@@ -17,6 +17,8 @@ export const factoryApi = {
     http.get<unknown, { data: Factory }>(`/factories/${id}`),
   create: (dto: CreateFactoryDto) =>
     http.post<unknown, { data: Factory }>('/factories', dto),
+  importBatch: (rows: any[]) =>
+    http.post<unknown, { data: any }>('/factories/import', { rows }),
   update: (id: number, dto: Partial<CreateFactoryDto>) =>
     http.put<unknown, { data: Factory }>(`/factories/${id}`, dto),
   toggleStatus: (id: number) =>

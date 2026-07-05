@@ -8,7 +8,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@i9/types';
 import { FactoryService } from './factory.service';
-import { CreateFactoryDto } from './dto/create-factory.dto';
+import { CreateFactoryDto, ImportFactoryDto } from './dto/create-factory.dto';
 import { QueryFactoryDto } from './dto/query-factory.dto';
 
 @ApiTags('工厂管理')
@@ -23,6 +23,13 @@ export class FactoryController {
   @ApiOperation({ summary: '创建工厂' })
   create(@Body() dto: CreateFactoryDto, @Request() req: any) {
     return this.service.create(dto, req.user.id);
+  }
+
+  @Post('import')
+  @Roles(UserRole.ADMIN, UserRole.BUSINESS)
+  @ApiOperation({ summary: '批量导入工厂（CSV 前端解析后逐行入库）' })
+  importBatch(@Body() dto: ImportFactoryDto, @Request() req: any) {
+    return this.service.importBatch(dto.rows, req.user.id);
   }
 
   @Get()
