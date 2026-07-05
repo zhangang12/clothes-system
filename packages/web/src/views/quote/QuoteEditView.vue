@@ -65,6 +65,14 @@
         </el-row>
       </section-block>
 
+      <!-- 图片信息 -->
+      <section-block title="▣ 图片信息" badge="2 字段 · 截图/拖拽">
+        <el-row :gutter="16">
+          <el-col :span="8"><el-form-item label="图片1"><file-upload v-model="form.image1" :disabled="readonly" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="图片2"><file-upload v-model="form.image2" :disabled="readonly" /></el-form-item></el-col>
+        </el-row>
+      </section-block>
+
       <!-- 报价明细 -->
       <section-block title="▣ 报价明细（从样衣导入）" badge="12 字段">
         <div v-if="!readonly" class="subtable-ops">
@@ -141,6 +149,7 @@ import { ElSelect, ElOption } from 'element-plus';
 import { quoteApi } from '@/api/quote';
 import { customerApi } from '@/api/customer';
 import { sampleApi } from '@/api/sample';
+import FileUpload from '@/components/FileUpload.vue';
 import { QUOTE_STATUS_LABEL } from '@i9/types';
 import { TRADE_COUNTRIES, DICT_PRICE_TERMS, DICT_SETTLEMENT } from '@/constants/regions';
 
@@ -178,6 +187,7 @@ const form = reactive<any>({
   middlemanId: undefined, buyerId: undefined, styleNo: '', middlemanContact: '',
   currency: 'USD', exchangeRate: 7, tradeCountry: '', settlementMethod: '', priceTerms: '',
   salesperson: '', profitRate: 0, quoteQty: '', totalRemark: '', status: '',
+  image1: '', image2: '',
   items: [emptyItem()], fees: DEFAULT_FEES.map((n) => emptyFee(n)),
 });
 
@@ -238,7 +248,7 @@ async function load() {
     middlemanContact: d.middleman_contact ?? '', currency: d.currency ?? 'USD', exchangeRate: d.exchange_rate ?? 7,
     tradeCountry: d.trade_country ?? '', settlementMethod: d.settlement_method ?? '', priceTerms: d.price_terms ?? '',
     salesperson: d.salesperson ?? '', profitRate: d.profit_rate ?? 0, quoteQty: d.quote_qty ?? '',
-    totalRemark: d.total_remark ?? '', status: d.status,
+    totalRemark: d.total_remark ?? '', status: d.status, image1: d.image1 ?? '', image2: d.image2 ?? '',
     items: d.items?.length ? d.items.map((i: any) => ({
       part: i.part, itemName: i.item_name, width: i.width, color: i.color, supplier: i.supplier,
       unit: i.unit, quoteUsage: i.quote_usage, rmbPrice: i.rmb_price, lossRate: i.loss_rate, remark: i.remark,
@@ -255,7 +265,7 @@ function buildDto() {
     currency: form.currency, exchangeRate: num(form.exchangeRate), tradeCountry: form.tradeCountry || undefined,
     settlementMethod: form.settlementMethod || undefined, priceTerms: form.priceTerms || undefined,
     salesperson: form.salesperson || undefined, profitRate: num(form.profitRate) ?? 0, quoteQty: num(form.quoteQty),
-    totalRemark: form.totalRemark || undefined,
+    totalRemark: form.totalRemark || undefined, image1: form.image1 || undefined, image2: form.image2 || undefined,
     items: form.items.filter((i: any) => i.itemName).map((i: any, idx: number) => ({
       part: i.part, itemName: i.itemName, width: i.width, color: i.color, supplier: i.supplier, unit: i.unit,
       quoteUsage: num(i.quoteUsage), rmbPrice: num(i.rmbPrice), lossRate: num(i.lossRate) ?? 3, remark: i.remark, sortOrder: idx,
