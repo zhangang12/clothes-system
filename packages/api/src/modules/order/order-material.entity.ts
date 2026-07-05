@@ -53,6 +53,9 @@ export class OrderMaterial {
   @Column({ type: 'decimal', precision: 15, scale: 4, nullable: true })
   final_purchase: number; // 最终采购量（业务微调，超±10%需确认）
 
+  @Column({ type: 'tinyint', nullable: true })
+  round_up: number; // 行内取整覆盖：1=强制取整/0=不取整/null=按单位自动（Q43）
+
   @Column({ type: 'decimal', precision: 15, scale: 4, nullable: true })
   unit_price: number;
 

@@ -97,6 +97,7 @@
             <el-table-column label="成份" width="100"><template #default="{ row }"><el-input v-model="row.composition" size="small" /></template></el-table-column>
             <el-table-column label="供应商" min-width="110"><template #default="{ row }"><el-input v-model="row.supplier" size="small" /></template></el-table-column>
             <el-table-column label="单位" width="70"><template #default="{ row }"><el-input v-model="row.unit" size="small" /></template></el-table-column>
+            <el-table-column label="取整" width="92"><template #default="{ row }"><el-select v-model="row.roundUp" size="small" style="width:100%" clearable placeholder="自动"><el-option label="强制取整" :value="1" /><el-option label="不取整" :value="0" /></el-select></template></el-table-column>
             <el-table-column label="单件耗用" width="90"><template #default="{ row }"><el-input v-model="row.netUsage" size="small" /></template></el-table-column>
             <el-table-column label="损耗%" width="80"><template #default="{ row }"><el-input v-model="row.lossRate" size="small" /></template></el-table-column>
             <el-table-column label="拆分" width="100"><template #default="{ row }"><el-select v-model="row.splitMode" size="small" style="width:100%"><el-option label="不拆" value="NONE" /><el-option label="按尺码" value="BY_SIZE" /><el-option label="按颜色" value="BY_COLOR" /></el-select></template></el-table-column>
@@ -166,10 +167,10 @@ const modeLabel = computed(() => (readonly.value ? '查看' : editId.value ? '�
 
 const quotes = ref<any[]>([]);
 const factories = ref<any[]>([]);
-const INT_UNITS = ['个', '条', '只', '件', '粒', '套', 'pcs', 'PCS'];
+const INT_UNITS = ['个', '条', '只', '件', '粒', '套', '对', 'pcs', 'PCS', 'PC'];
 
 const emptySize = () => ({ style: '', color: '', size: '', po: '', dest: '', qty: '' });
-const emptyMat = () => ({ itemName: '', part: '', width: '', color: '', composition: '', supplier: '', unit: '', netUsage: '', lossRate: 3, splitMode: 'NONE', finalPurchase: '', remark: '' });
+const emptyMat = () => ({ itemName: '', part: '', width: '', color: '', composition: '', supplier: '', unit: '', netUsage: '', lossRate: 3, splitMode: 'NONE', finalPurchase: '', roundUp: null, remark: '' });
 const form = reactive<any>({
   orderNo: '', quoteId: undefined, customerPo: '', styleNo: '', unitPrice: '', currency: 'USD',
   deliveryDate: '', commissionRate: 0, factoryId: undefined, middlemanName: '', buyerName: '',
@@ -183,7 +184,10 @@ const statusLabel = computed(() => (ORDER_STATUS_LABEL as any)[form.status] ?? '
 function sysPurchase(row: any) {
   const per = (Number(row.netUsage) || 0) * (1 + (Number(row.lossRate) || 0) / 100);
   let v = qtyTotal.value * per;
-  v = row.unit && INT_UNITS.includes(row.unit) ? Math.ceil(v) : +v.toFixed(2);
+  const shouldRound = row.roundUp === 1 || row.roundUp === 0
+    ? row.roundUp === 1
+    : !!(row.unit && INT_UNITS.includes(row.unit));
+  v = shouldRound ? Math.ceil(v) : +v.toFixed(2);
   return v;
 }
 function deviated(row: any) {
@@ -234,7 +238,7 @@ async function load() {
     materials: d.materials?.length ? d.materials.map((m: any) => ({
       itemName: m.item_name, part: m.part, width: m.width, color: m.color, composition: m.composition,
       supplier: m.supplier, unit: m.unit, netUsage: m.net_usage, lossRate: m.loss_rate, splitMode: m.split_mode ?? 'NONE',
-      finalPurchase: m.final_purchase ?? '', remark: m.remark,
+      finalPurchase: m.final_purchase ?? '', roundUp: m.round_up ?? null, remark: m.remark,
     })) : [emptyMat()],
   });
 }
@@ -254,7 +258,8 @@ function buildDto() {
     materials: form.materials.filter((m: any) => m.itemName).map((m: any, i: number) => ({
       item_name: m.itemName, part: m.part, width: m.width, color: m.color, composition: m.composition,
       supplier: m.supplier, unit: m.unit, net_usage: num(m.netUsage), loss_rate: num(m.lossRate) ?? 3,
-      split_mode: m.splitMode, final_purchase: num(m.finalPurchase), sort_order: i,
+      split_mode: m.splitMode, final_purchase: num(m.finalPurchase),
+      round_up: m.roundUp === 1 || m.roundUp === 0 ? m.roundUp : undefined, sort_order: i,
     })),
   };
 }

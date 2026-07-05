@@ -435,6 +435,7 @@ CREATE TABLE IF NOT EXISTS `order_material` (
   `qty`            INT            DEFAULT NULL COMMENT '大货总数',
   `total_purchase` DECIMAL(15,4)  DEFAULT NULL COMMENT '系统采购量=大货总数×单件×(1+损耗);整数类进1',
   `final_purchase` DECIMAL(15,4)  DEFAULT NULL COMMENT '最终采购量(微调,超±10%确认)',
+  `round_up`       TINYINT        DEFAULT NULL COMMENT '行内取整覆盖 1=强制取整/0=不取整/null=按单位自动',
   `unit_price`     DECIMAL(15,4)  DEFAULT NULL COMMENT '采购单价',
   `budget`         DECIMAL(15,4)  DEFAULT NULL COMMENT '预算=最终采购量×单价',
   `sort_order`     INT            NOT NULL DEFAULT 0,

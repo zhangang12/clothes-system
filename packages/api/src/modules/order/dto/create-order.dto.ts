@@ -1,6 +1,6 @@
 import {
   IsString, IsOptional, IsInt, IsNumber, IsArray, IsDateString,
-  MaxLength, Min, ValidateNested,
+  MaxLength, Min, ValidateNested, IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -18,6 +18,7 @@ export class CreateOrderMaterialDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) supplier?: string;
   @ApiPropertyOptional({ description: 'NONE/BY_SIZE/BY_COLOR' }) @IsOptional() @IsString() @MaxLength(10) split_mode?: string;
   @ApiPropertyOptional({ description: '最终采购量（业务微调，超±10%需确认）' }) @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 4 }) @Min(0) final_purchase?: number;
+  @ApiPropertyOptional({ description: '行内取整覆盖 1=强制取整/0=不取整（缺省按单位自动）' }) @IsOptional() @Type(() => Number) @IsIn([0, 1]) round_up?: number;
 
   @ApiPropertyOptional()
   @IsOptional()

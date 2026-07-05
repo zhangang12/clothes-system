@@ -803,6 +803,14 @@ test_order_ext() {
   expect_num data.materials.0.loss_usage 2.4 "料0含损单件=2×(1+20%)=2.4"
   expect_num data.materials.1.loss_usage 3.75 "料1含损单件=3×(1+25%)=3.75"
 
+  # ── 取整覆盖 + 离散单位「对」自动取整（设计稿 E5/Q43）──
+  api POST /orders "{\"customer_id\":${cid:-0},\"qty_total\":100,\"materials\":[{\"item_name\":\"米强制\",\"unit\":\"米\",\"net_usage\":1.235,\"loss_rate\":0,\"round_up\":1},{\"item_name\":\"对自动\",\"unit\":\"对\",\"net_usage\":1.235,\"loss_rate\":0},{\"item_name\":\"个关闭\",\"unit\":\"个\",\"net_usage\":1.235,\"loss_rate\":0,\"round_up\":0}]}"
+  local roid; roid=$(echo "$RESP" | jval data.id)
+  api GET "/orders/${roid:-0}"
+  expect_num data.materials.0.total_purchase 124 "米单位round_up=1强制向上取整(123.5→124)"
+  expect_num data.materials.1.total_purchase 124 "对单位默认离散取整(123.5→124)"
+  expect_num data.materials.2.total_purchase 123.5 "个单位round_up=0关闭取整(123.5)"
+
   # ── 一路 advance 到 DONE；DONE 再 advance→400；DONE 发货→400 ──
   doid=$(fx_order "$cid")
   api PATCH "/orders/${doid:-0}/advance" ''; expect_ok "推进1 草稿→已下单"
@@ -876,6 +884,10 @@ test_order_ext() {
   wf_oid=$(fx_order "$cid")
   api PATCH "/orders/${wf_oid:-0}/import-quote/${wf_qid:-0}" ''
   expect_ok "订单从报价导入(建立quote_id关联)"
+  api GET "/orders/${wf_oid:-0}"
+  expect_eq data.currency CNY "导入后币种默认RMB(CNY)"
+  local wfUp; wfUp=$(echo "$RESP" | jval data.unit_price)
+  [[ -n "$wfUp" && "$wfUp" != "0" ]] && ok "报价人民币价→订单单品单价($wfUp)" || bad "导入未回填单品单价 实得$wfUp"
   api PATCH "/orders/${wf_oid:-0}/advance" ''; expect_ok "订单下单(草稿→已下单)"
   api GET "/quotes/${wf_qid:-0}"
   expect_eq data.status ORDERED "下单自动反写关联报价「已成单」"

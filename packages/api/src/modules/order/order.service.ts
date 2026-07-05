@@ -22,14 +22,15 @@ const STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus> = {
   [OrderStatus.DONE]: OrderStatus.DONE,
 };
 
-// 整数类材料（单位 个/条 等）：损耗后向上取整、保留整数（订单设计稿批注）
-const INT_UNITS = ['个', '条', '只', '件', '粒', '套', 'pcs', 'PCS', 'PC'];
+// 整数类材料（离散单位 个/条/件/套/对 等）：损耗后向上取整、保留整数（订单设计稿 E5/Q43）
+const INT_UNITS = ['个', '条', '只', '件', '粒', '套', '对', 'pcs', 'PCS', 'PC'];
 
-// 采购量 = 大货总数 × 单件耗用 × (1 + 损耗%)；整数类材料向上取整
-export function calcPurchase(qtyTotal = 0, netUsage = 0, lossRate = 0, unit?: string) {
+// 采购量 = 大货总数 × 单件耗用 × (1 + 损耗%)；roundUp 显式覆盖单位判断（行内手动取整，Q43）
+export function calcPurchase(qtyTotal = 0, netUsage = 0, lossRate = 0, unit?: string, roundUp?: boolean) {
   const perUnit = netUsage * (1 + lossRate / 100);
   let total = qtyTotal * perUnit;
-  total = unit && INT_UNITS.includes(unit) ? Math.ceil(total) : +total.toFixed(4);
+  const shouldRound = roundUp !== undefined ? roundUp : !!(unit && INT_UNITS.includes(unit));
+  total = shouldRound ? Math.ceil(total) : +total.toFixed(4);
   return { perUnit: +perUnit.toFixed(4), total };
 }
 
@@ -49,7 +50,8 @@ export class OrderService {
   private buildMaterials(orderId: number, qtyTotal: number, materials: CreateOrderMaterialDto[]): OrderMaterial[] {
     return materials.map((m, idx) => {
       const lossRate = m.loss_rate ?? 3;
-      const { perUnit, total } = calcPurchase(qtyTotal, m.net_usage ?? 0, lossRate, m.unit);
+      const roundOverride = m.round_up == null ? undefined : m.round_up === 1;
+      const { perUnit, total } = calcPurchase(qtyTotal, m.net_usage ?? 0, lossRate, m.unit, roundOverride);
       const finalPurchase = m.final_purchase ?? total;
       const budget = m.unit_price ? +(finalPurchase * m.unit_price).toFixed(4) : null;
       return this.materialRepo.create({
@@ -57,7 +59,7 @@ export class OrderService {
         part: m.part, width: m.width, color: m.color, composition: m.composition, supplier: m.supplier,
         split_mode: m.split_mode ?? 'NONE', unit: m.unit, net_usage: m.net_usage, loss_rate: lossRate,
         loss_usage: perUnit, qty: qtyTotal, total_purchase: total, final_purchase: finalPurchase,
-        unit_price: m.unit_price, budget, sort_order: m.sort_order ?? idx,
+        round_up: m.round_up ?? null, unit_price: m.unit_price, budget, sort_order: m.sort_order ?? idx,
       });
     });
   }
@@ -163,6 +165,9 @@ export class OrderService {
       order.buyer_id = quote.buyer_id;
       order.buyer_name = quote.buyer_name;
       if (!order.style_no) order.style_no = quote.style_no;
+      // 导入默认币种 RMB、报价人民币价→订单单品单价（设计稿 订单 A3/Q3，可改）
+      order.currency = 'CNY';
+      if (quote.rmb_total != null) order.unit_price = +(+quote.rmb_total).toFixed(4);
       await manager.save(OrderMain, order);
       await manager.delete(OrderMaterial, { order_id: id });
       const materials = this.buildMaterials(id, order.qty_total, items.map((it) => ({
