@@ -79,6 +79,7 @@ import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { Search, Plus, Download, Delete, CopyDocument, ArrowDown, Printer } from '@element-plus/icons-vue';
 import { printQuote } from '@/utils/quotePrint';
+import { companyApi } from '@/api/company';
 import { quoteApi } from '@/api/quote';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole, QUOTE_STATUS_LABEL } from '@i9/types';
@@ -119,10 +120,14 @@ async function doApprove(row: any) {
   try { await quoteApi.approve(row.id); ElMessage.success('已审批，报价可发出'); load(); }
   catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '审批失败'); }
 }
+let cachedCompany: any = null;
 async function printRow(row: any) {
   try {
     const res: any = await quoteApi.get(row.id);
-    printQuote(res.data ?? res);
+    if (cachedCompany === null) {
+      try { cachedCompany = (await companyApi.getDefault() as any)?.data ?? null; } catch { cachedCompany = undefined; }
+    }
+    printQuote(res.data ?? res, cachedCompany || undefined);
   } catch (e: any) { ElMessage.error(e?.message ?? e?.response?.data?.message ?? '打印失败'); }
 }
 function copyOne() { copyRow(selected.value[0]); }

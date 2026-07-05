@@ -1477,6 +1477,22 @@ test_approval() {
   expect_deny "非管理员改审批阈值应拒绝"
 }
 
+test_company() {
+  # 本司主体（PDF抬头/合同甲方取数；多主体+默认）
+  api GET "/company-profiles"; expect_ok "本司主体列表2xx"
+  api GET "/company-profiles/default"; expect_ok "默认本司主体2xx"
+  local s; s=$(echo "$RESP" | jval data.name)
+  [[ -n "$s" ]] && ok "默认主体有公司名=$s" || bad "默认主体应有公司名 ${RESP:0:120}"
+  api POST "/company-profiles" '{"name":"新主体B"}' "$TOKEN_BUSINESS"
+  expect_deny "业务新增本司主体应拒绝(仅管理员)"
+  api POST "/company-profiles" "{\"name\":\"新主体_${SFX}\",\"isDefault\":true}" "$TOKEN_ADMIN"
+  expect_ok "管理员新增本司主体并设默认"
+  local nid; nid=$(echo "$RESP" | jval data.id)
+  api GET "/company-profiles/default"; expect_eq data.id "${nid:-0}" "新建默认主体成为默认"
+  api PATCH "/company-profiles/1/set-default" '' "$TOKEN_ADMIN"
+  expect_ok "复位默认主体回1"
+}
+
 # ── 执行所有模块（基础 + 扩展）────────────────────────────────
 group "1. 鉴权与权限基线";        test_auth;           test_auth_ext
 group "2. 客户";                  test_customer;       test_customer_ext
@@ -1492,6 +1508,7 @@ group "11. 供应商门户 · 端到端";   test_portal;         test_portal_ext
 group "12. 文件上传";              test_upload
 group "13. 报表统计";              test_stats
 group "14. 金额阈值审批";          test_approval
+group "15. 本司主体";              test_company
 
 echo ""
 echo "=================================================================="

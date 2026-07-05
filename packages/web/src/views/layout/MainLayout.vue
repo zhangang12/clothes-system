@@ -11,6 +11,7 @@
           <template #title><el-icon><Setting /></el-icon>基础资料</template>
           <el-menu-item index="/factories">工厂管理</el-menu-item>
           <el-menu-item index="/customers">客户管理</el-menu-item>
+          <el-menu-item index="/company-profiles">本司主体</el-menu-item>
         </el-sub-menu>
         <el-menu-item index="/samples"><el-icon><Shirt /></el-icon>样衣管理</el-menu-item>
         <el-menu-item index="/quotes"><el-icon><Document /></el-icon>客户报价</el-menu-item>
@@ -64,6 +65,7 @@ const titleMap: Record<string, string> = {
   '/payments': '付款管理',
   '/settlements': '结算清单',
   '/reports': '报表统计',
+  '/company-profiles': '本司主体',
 };
 const pageTitle = computed(() => titleMap[route.path] || '');
 

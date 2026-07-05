@@ -749,4 +749,30 @@ INSERT IGNORE INTO `sys_config` (`cfg_key`,`cfg_value`,`remark`) VALUES
 ('approval.order.threshold',    '0', '订单审批阈值(订单金额,0=不启用)'),
 ('approval.contract.threshold', '0', '合同审批阈值(合同金额,0=不启用)');
 
+-- ============================================================
+-- 本司主体（我方公司，多主体+默认，供PDF抬头/合同甲方/结算收款取数）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `company_profile` (
+  `id`           BIGINT       NOT NULL AUTO_INCREMENT,
+  `name`         VARCHAR(100) NOT NULL COMMENT '公司全称(PDF抬头/合同甲方/开票抬头)',
+  `short_name`   VARCHAR(50)  DEFAULT NULL,
+  `address`      VARCHAR(200) DEFAULT NULL,
+  `phone`        VARCHAR(30)  DEFAULT NULL,
+  `tax_no`       VARCHAR(30)  DEFAULT NULL COMMENT '税号',
+  `bank_name`    VARCHAR(100) DEFAULT NULL,
+  `bank_account` VARCHAR(40)  DEFAULT NULL,
+  `legal_rep`    VARCHAR(50)  DEFAULT NULL COMMENT '法定代表人',
+  `logo_url`     VARCHAR(500) DEFAULT NULL,
+  `is_default`   TINYINT      NOT NULL DEFAULT 0 COMMENT '1=默认主体',
+  `remark`       VARCHAR(200) DEFAULT NULL,
+  `deleted`      TINYINT      NOT NULL DEFAULT 0,
+  `created_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_default` (`is_default`,`deleted`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='本司主体';
+
+INSERT IGNORE INTO `company_profile` (`id`,`name`,`short_name`,`is_default`) VALUES
+(1, 'I9 服装制造有限公司', 'I9', 1);
+
 SET FOREIGN_KEY_CHECKS = 1;

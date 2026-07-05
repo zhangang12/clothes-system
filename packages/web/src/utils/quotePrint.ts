@@ -1,8 +1,8 @@
 // 报价单打印/导出 PDF —— 浏览器原生打印（A4，可"另存为 PDF"），中文字体天然支持、无第三方依赖
 // 设计稿 G2/G3：公司抬头 + 客户 + 报价明细/费用 + 人民币/美金合计 + 业务员 + 有效期；对客隐藏供应商/成本（脱敏）
 
-// 抬头公司名（本司主体未建模，作为模板常量，落地时按需替换）
-const COMPANY_NAME = 'I9 服装制造有限公司';
+// 抬头默认公司名（当未传入本司主体时兜底）
+const DEFAULT_COMPANY = 'I9 服装制造有限公司';
 
 const esc = (v: unknown): string =>
   String(v ?? '')
@@ -27,7 +27,8 @@ function validUntil(inquiry?: string): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} 前有效`;
 }
 
-export function printQuote(detail: any): void {
+export function printQuote(detail: any, company?: { name?: string }): void {
+  const companyName = company?.name || DEFAULT_COMPANY;
   const items: any[] = detail.items ?? [];
   const fees: any[] = detail.fees ?? [];
 
@@ -78,7 +79,7 @@ export function printQuote(detail: any): void {
   @media screen { body { max-width:820px; margin:20px auto; } }
 </style></head><body onload="window.print()">
   <div class="head">
-    <div class="company">${esc(COMPANY_NAME)}</div>
+    <div class="company">${esc(companyName)}</div>
     <div class="title">报价单<small>QUOTATION</small></div>
   </div>
   <div class="meta">

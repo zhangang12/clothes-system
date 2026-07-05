@@ -1,7 +1,7 @@
 // 采购/加工合同打印/导出 PDF —— 浏览器原生打印（A4，可"另存为 PDF"）
 // 设计稿 G2/G3：抬头 + 甲乙双方 + 货物明细 + 金额 + 付款条件（定金/中期/尾款）+ 账期/交期
 
-const COMPANY_NAME = 'I9 服装制造有限公司';
+const DEFAULT_COMPANY = 'I9 服装制造有限公司';
 
 const esc = (v: unknown): string =>
   String(v ?? '')
@@ -14,7 +14,15 @@ const n2 = (v: unknown): string => {
 const typeLabel = (t: string): string =>
   ({ MATERIAL: '材料采购合同', PROCESS: '加工合同', SUPPLEMENT: '补料合同' } as Record<string, string>)[t] ?? '合同';
 
-export function printContract(detail: any, factoryName?: string): void {
+export function printContract(
+  detail: any,
+  factoryName?: string,
+  company?: { name?: string; bank_name?: string; bank_account?: string },
+): void {
+  const companyName = company?.name || DEFAULT_COMPANY;
+  const bankLine = company?.bank_name
+    ? `<div><b>甲方开户行：</b>${esc(company.bank_name)}　账号：${esc(company.bank_account) || '—'}</div>`
+    : '';
   const mats: any[] = detail.materials ?? [];
   const rows = mats.map((m, i) => `
     <tr>
@@ -51,14 +59,15 @@ export function printContract(detail: any, factoryName?: string): void {
   @media screen { body { max-width:820px; margin:20px auto; } }
 </style></head><body onload="window.print()">
   <div class="head">
-    <div class="company">${esc(COMPANY_NAME)}</div>
+    <div class="company">${esc(companyName)}</div>
     <div class="title">${esc(typeLabel(detail.type))}</div>
   </div>
   <div class="meta">
     <div><b>合同编号：</b>${esc(detail.contract_no)}</div>
     <div><b>币种：</b>${esc(detail.currency) || '—'}</div>
-    <div><b>甲方（委托方）：</b>${esc(COMPANY_NAME)}</div>
+    <div><b>甲方（委托方）：</b>${esc(companyName)}</div>
     <div><b>乙方（供应商）：</b>${esc(factoryName) || ('工厂#' + esc(detail.factory_id))}</div>
+    ${bankLine}
     <div><b>最后发货日：</b>${detail.last_ship_date ? esc(String(detail.last_ship_date).slice(0, 10)) : '—'}</div>
     <div><b>账期：</b>${detail.account_period_days != null ? esc(detail.account_period_days) + ' 天' : '—'}</div>
   </div>

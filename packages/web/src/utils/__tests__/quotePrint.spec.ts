@@ -22,7 +22,8 @@ describe('printQuote', () => {
         supplier: '机密供应商XYZ', quote_usage: 1.5, rmb_price: 8, loss_amount: 12.6 }],
       fees: [{ fee_name: '打样费', rmb_price: 50, quote_usage: 1 }],
     };
-    const html = captureHtml(() => printQuote(detail));
+    const html = captureHtml(() => printQuote(detail, { name: '本司主体测试公司' }));
+    expect(html).toContain('本司主体测试公司'); // 抬头取本司主体
     expect(html).toContain('Q-2026-01');
     expect(html).toContain('中间商甲');
     expect(html).toContain('主面料');

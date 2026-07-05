@@ -148,6 +148,7 @@ import type { FormInstance, FormRules } from 'element-plus';
 import { contractApi } from '@/api/contract';
 import { factoryApi } from '@/api/factory';
 import { printContract } from '@/utils/contractPrint';
+import { companyApi } from '@/api/company';
 import { orderApi } from '@/api/order';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole } from '@i9/types';
@@ -206,13 +207,17 @@ async function doApprove(row: any) {
   try { await contractApi.approve(row.id); ElMessage.success('已审批，合同可推送'); load(); }
   catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '审批失败'); }
 }
+let cachedCompany: any = null;
 async function printRow(row: any) {
   try {
     if (!factories.value.length) await loadRefs();
     const res: any = await contractApi.get(row.id);
     const detail = res.data ?? res;
     const fname = factories.value.find((f: any) => f.id === detail.factory_id)?.name;
-    printContract(detail, fname);
+    if (cachedCompany === null) {
+      try { cachedCompany = (await companyApi.getDefault() as any)?.data ?? null; } catch { cachedCompany = undefined; }
+    }
+    printContract(detail, fname, cachedCompany || undefined);
   } catch (e: any) { ElMessage.error(e?.message ?? e?.response?.data?.message ?? '打印失败'); }
 }
 async function doPush(row: any) {
