@@ -30,11 +30,6 @@ export class ReconciliationService {
       }
     }
 
-    const prefix = dto.type === ReconcileType.NO_CONTRACT
-      ? `${NUM_PREFIX.RECONCILIATION}-NC`
-      : NUM_PREFIX.RECONCILIATION;
-    const reconcile_no = await this.numbering.next(prefix);
-
     return this.dataSource.transaction(async (manager) => {
       const shipmentLines = dto.shipments ?? [];
       const totalAmount = shipmentLines.reduce((sum, s) => sum + s.snapshot_unit_price * s.qty, 0);
@@ -48,6 +43,10 @@ export class ReconciliationService {
           styleNo = order?.style_no ?? null;
         }
       }
+
+      // 对账单编号 DZ-款号-序号；无合同 DZ-费用-序号（设计稿 补充确认 A2）
+      const seg = dto.type === ReconcileType.NO_CONTRACT ? '费用' : (styleNo || 'NA');
+      const reconcile_no = await this.numbering.nextWithSegment(NUM_PREFIX.RECONCILIATION, seg);
 
       const hasInvoice = dto.invoice_no ? 1 : 0;
       const taxAmount = dto.tax_rate && totalAmount

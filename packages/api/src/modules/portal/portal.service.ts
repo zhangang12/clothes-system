@@ -8,6 +8,7 @@ import { OrderMain } from '../order/order-main.entity';
 import { OrderMaterial } from '../order/order-material.entity';
 import { OrderSizeMatrix } from '../order/order-size-matrix.entity';
 import { ContractPortalStatus, ContractType } from '@i9/types';
+import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { UploadInvoiceDto } from './dto/upload-invoice.dto';
 
 const VISIBLE_STATUSES = [
@@ -26,6 +27,7 @@ export class PortalService {
     @InjectRepository(OrderMain) private readonly orderRepo: Repository<OrderMain>,
     @InjectRepository(OrderMaterial) private readonly orderMaterialRepo: Repository<OrderMaterial>,
     @InjectRepository(OrderSizeMatrix) private readonly matrixRepo: Repository<OrderSizeMatrix>,
+    private readonly numbering: NumberingService,
   ) {}
 
   async getContracts(factoryId: number, page = 1, size = 20, portalStatus?: string) {
@@ -157,7 +159,14 @@ export class PortalService {
         throw new BadRequestException(`本次发货后累计 ${newShipped} 超过合同量 ${contractQty}，如确需超发请勾选确认`);
       }
       contract.shipped_qty = newShipped;
-      parts.push(`本次发货:${dto.qty}`, `累计:${newShipped}/${contractQty}`);
+      // 发货单号 FH-款号-序号（设计稿 补充确认 A2）
+      let styleNo = '';
+      if (contract.order_id) {
+        const order = await this.orderRepo.findOne({ where: { id: contract.order_id, deleted: 0 } });
+        styleNo = order?.style_no || '';
+      }
+      const shipNo = await this.numbering.nextWithSegment(NUM_PREFIX.SHIPMENT, styleNo);
+      parts.push(`发货单:${shipNo}`, `本次发货:${dto.qty}`, `累计:${newShipped}/${contractQty}`);
     }
     if (dto.remark) parts.push(dto.remark);
 

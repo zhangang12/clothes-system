@@ -1074,6 +1074,7 @@ test_reconciliation_ext() {
   knCtid=$(echo "$RESP" | jval data.id)
   api POST /reconciliations "{\"type\":\"CONTRACT\",\"contract_id\":${knCtid:-0},\"factory_id\":${fid:-0},\"shipments\":[{\"shipment_id\":1,\"item_name\":\"面料\",\"snapshot_unit_price\":8,\"qty\":100}]}" "$TOKEN_FINANCE"
   expect_eq data.style_no "${knSfx}" "对账单从合同→订单带出款号"
+  expect_match data.reconcile_no "^DZ-${knSfx}-" "对账单编号=DZ-款号-序号(设计稿A2)"
   api GET "/reconciliations?keyword=${knSfx}" '' "$TOKEN_FINANCE"
   expect_num total 1 "按款号检索对账单命中1条"
 
@@ -1319,6 +1320,8 @@ test_portal_ext() {
   # 确认发货(首批 qty=60/合同量100) → SHIPPING(setup)
   api PATCH "/portal/contracts/${ctB:-0}/ship" '{"qty":60,"remark":"首批"}' "$TOKEN_SUP"
   expect_ok "首批发货60(STAMPED→SHIPPING)"
+  api GET "/portal/contracts/${ctB:-0}" '' "$TOKEN_SUP"
+  [[ "$RESP" == *"发货单:FH-"* ]] && ok "发货生成发货单号FH-(设计稿A2)" || bad "发货未生成FH发货单号"
   # SHIPPING 已发货 → 再盖章应400
   api PATCH "/portal/contracts/${ctB:-0}/stamp" '' "$TOKEN_SUP"
   expect_code 400 "已发货后再盖章应400"

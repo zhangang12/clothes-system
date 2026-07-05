@@ -15,6 +15,7 @@ export const NUM_PREFIX = {
   CONTRACT: 'HT',
   PAYMENT: 'PR',
   RECONCILIATION: 'DZ',
+  SHIPMENT: 'FH',   // 发货单 FH-款号-序号（设计稿 补充确认 A2）
   SETTLEMENT: 'JS',
 } as const;
 
@@ -39,6 +40,23 @@ export class NumberingService {
       key,
     ) as number;
     return `${prefix}-${ymd}-${String(seq).padStart(3, '0')}`;
+  }
+
+  /**
+   * 生成带自定义段的流水号，格式：{prefix}-{segment}-{3位序号}
+   * 用于 款号维度 编号：对账单 DZ-款号-序号、发货单 FH-款号-序号（设计稿 补充确认 A2）
+   */
+  async nextWithSegment(prefix: string, segment: string): Promise<string> {
+    const seg = (segment && String(segment).trim()) || 'NA';
+    const key = `seq:${prefix}:${seg}`;
+    const seq = await this.redis.eval(
+      `local v = redis.call('INCR', KEYS[1])
+       if v == 1 then redis.call('EXPIRE', KEYS[1], 2592000) end
+       return v`,
+      1,
+      key,
+    ) as number;
+    return `${prefix}-${seg}-${String(seq).padStart(3, '0')}`;
   }
 
   /**
