@@ -199,13 +199,20 @@ export class OrderService {
   async addShipment(id: number, dto: AddShipmentDto, createdBy: number): Promise<OrderShipment> {
     const order = await this.orderRepo.findOne({ where: { id, deleted: 0 } });
     if (!order) throw new NotFoundException(`订单 #${id} 不存在`);
-    if (order.status !== OrderStatus.PRODUCING && order.status !== OrderStatus.DONE) {
-      throw new BadRequestException('只有生产中或已完成状态可以添加出货记录');
+    // 发货可在「已生成合同/生产中」进行；已完成为终态不可再发货（设计稿 订单 D1）
+    if (order.status !== OrderStatus.CONTRACTED && order.status !== OrderStatus.PRODUCING) {
+      throw new BadRequestException('只有已生成合同或生产中状态可以添加出货记录');
     }
-    return this.shipmentRepo.save(this.shipmentRepo.create({
+    const shipment = await this.shipmentRepo.save(this.shipmentRepo.create({
       order_id: id, shipment_date: dto.shipment_date as any, qty: dto.qty,
       cartons: dto.cartons, tracking_no: dto.tracking_no, remark: dto.remark, created_by: createdBy,
     }));
+    // 发货自动驱动订单进入「生产中」（下游事件回写，业务无需手动推进）
+    if (order.status === OrderStatus.CONTRACTED) {
+      order.status = OrderStatus.PRODUCING;
+      await this.orderRepo.save(order);
+    }
+    return shipment;
   }
 
   async updateMatrix(id: number, matrix_data: Record<string, unknown>): Promise<OrderSizeMatrix> {

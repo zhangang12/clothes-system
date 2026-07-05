@@ -893,8 +893,22 @@ test_order_ext() {
   expect_eq data.status ORDERED "下单自动反写关联报价「已成单」"
   api POST /contracts "{\"type\":\"MATERIAL\",\"factory_id\":${wf_fid:-0},\"order_id\":${wf_oid:-0},\"materials\":[{\"item_name\":\"面料\",\"unit_price\":8,\"qty\":100}]}"
   expect_ok "从已下单订单生成材料合同"
+  local wf_ct wf_rc
+  wf_ct=$(echo "$RESP" | jval data.id)
   api GET "/orders/${wf_oid:-0}"
   expect_eq data.status CONTRACTED "生成合同后订单自动「已生成合同」"
+  # 发货驱动订单「生产中」(设计稿 订单 D1：后两态由下游回写)
+  api POST "/orders/${wf_oid:-0}/shipments" '{"shipment_date":"2026-10-01","qty":50}'
+  expect_ok "已生成合同订单发货"
+  api GET "/orders/${wf_oid:-0}"
+  expect_eq data.status PRODUCING "发货自动驱动订单「生产中」"
+  # 对账确认驱动订单「已完成」
+  api POST /reconciliations "{\"type\":\"CONTRACT\",\"contract_id\":${wf_ct:-0},\"factory_id\":${wf_fid:-0},\"shipments\":[{\"shipment_id\":1,\"item_name\":\"面料\",\"snapshot_unit_price\":8,\"qty\":100}]}" "$TOKEN_FINANCE"
+  wf_rc=$(echo "$RESP" | jval data.id)
+  api PATCH "/reconciliations/${wf_rc:-0}/confirm" '' "$TOKEN_FINANCE"
+  expect_ok "对账确认(wf)"
+  api GET "/orders/${wf_oid:-0}"
+  expect_eq data.status DONE "对账确认驱动订单「已完成」"
 }
 
 test_contract_ext() {

@@ -8,7 +8,7 @@ import { ReconciliationShipment } from './reconciliation-shipment.entity';
 import { Contract } from '../contract/contract.entity';
 import { OrderMain } from '../order/order-main.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
-import { ReconcileType, ContractPortalStatus } from '@i9/types';
+import { ReconcileType, ContractPortalStatus, OrderStatus } from '@i9/types';
 import { CreateReconciliationDto } from './dto/create-reconciliation.dto';
 import { QueryReconciliationDto } from './dto/query-reconciliation.dto';
 
@@ -152,9 +152,19 @@ export class ReconciliationService {
       // 对账确认后推进合同门户至「已对账」，解锁供应商开票（设计稿 门户 B2/E4：开票须对账后）
       if (rec.type === ReconcileType.CONTRACT && rec.contract_id) {
         const contract = await manager.findOne(Contract, { where: { id: rec.contract_id, deleted: 0 } });
-        if (contract && contract.portal_status === ContractPortalStatus.SHIPPING) {
-          contract.portal_status = ContractPortalStatus.RECONCILED;
-          await manager.save(Contract, contract);
+        if (contract) {
+          if (contract.portal_status === ContractPortalStatus.SHIPPING) {
+            contract.portal_status = ContractPortalStatus.RECONCILED;
+            await manager.save(Contract, contract);
+          }
+          // 对账确认驱动订单进入「已完成」（设计稿 订单 D1：后两态由下游回写）
+          if (contract.order_id) {
+            const order = await manager.findOne(OrderMain, { where: { id: contract.order_id, deleted: 0 } });
+            if (order && order.status === OrderStatus.PRODUCING) {
+              order.status = OrderStatus.DONE;
+              await manager.save(OrderMain, order);
+            }
+          }
         }
       }
 
