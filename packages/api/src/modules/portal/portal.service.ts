@@ -132,16 +132,38 @@ export class PortalService {
     return contract;
   }
 
-  async confirmShipping(id: number, supplierAccount: string, factoryId: number, remark?: string): Promise<Contract> {
+  async confirmShipping(
+    id: number,
+    supplierAccount: string,
+    factoryId: number,
+    dto: { remark?: string; qty?: number; force?: boolean } = {},
+  ): Promise<Contract> {
     const contract = await this.contractRepo.findOne({ where: { id, factory_id: factoryId, deleted: 0 } });
     if (!contract || !VISIBLE_STATUSES.includes(contract.portal_status)) {
       throw new NotFoundException('合同不存在');
     }
-    if (contract.portal_status !== ContractPortalStatus.STAMPED) {
-      throw new BadRequestException('只有已盖章状态才可确认出货');
+    // 发货可在「已盖章」（首批）或「发货中」（续批）进行（设计稿 门户 B3：批次累计）
+    if (contract.portal_status !== ContractPortalStatus.STAMPED && contract.portal_status !== ContractPortalStatus.SHIPPING) {
+      throw new BadRequestException('只有已盖章或发货中状态才可确认出货');
     }
 
-    contract.portal_status = ContractPortalStatus.SHIPPING;
+    const parts: string[] = [];
+    if (dto.qty != null) {
+      const materials = await this.materialRepo.find({ where: { contract_id: id } });
+      const contractQty = materials.reduce((s, m) => s + +m.qty, 0);
+      const newShipped = +(+(contract.shipped_qty ?? 0) + dto.qty).toFixed(4);
+      // 超合同量拦截，需超发确认（设计稿 门户 C4）
+      if (contractQty > 0 && newShipped > contractQty + 0.01 && !dto.force) {
+        throw new BadRequestException(`本次发货后累计 ${newShipped} 超过合同量 ${contractQty}，如确需超发请勾选确认`);
+      }
+      contract.shipped_qty = newShipped;
+      parts.push(`本次发货:${dto.qty}`, `累计:${newShipped}/${contractQty}`);
+    }
+    if (dto.remark) parts.push(dto.remark);
+
+    if (contract.portal_status === ContractPortalStatus.STAMPED) {
+      contract.portal_status = ContractPortalStatus.SHIPPING;
+    }
     await this.contractRepo.save(contract);
 
     await this.logRepo.save(
@@ -150,7 +172,7 @@ export class PortalService {
         action: 'SHIP',
         operator: supplierAccount,
         operator_type: PortalOperatorType.SUPPLIER,
-        remark,
+        remark: parts.length ? parts.join(' · ') : undefined,
       }),
     );
 

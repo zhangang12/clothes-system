@@ -96,15 +96,15 @@
       </van-button>
 
       <van-button
-        v-if="contract.portal_status === 'STAMPED'"
+        v-if="['STAMPED', 'SHIPPING'].includes(contract.portal_status)"
         type="success"
         block
         round
         size="large"
         :loading="actioning"
-        @click="doConfirmShip"
+        @click="showShipDialog = true"
       >
-        确认出货
+        {{ contract.portal_status === 'STAMPED' ? '确认出货' : '继续发货（累计 ' + (contract.shipped_qty || 0) + '）' }}
       </van-button>
 
       <van-button
@@ -118,8 +118,23 @@
       >
         上传发票
       </van-button>
-      <div v-else-if="contract.portal_status === 'SHIPPING'" class="await-hint">已发货，待内部对账后可开票</div>
+      <div v-if="contract.portal_status === 'SHIPPING'" class="await-hint">可分批继续发货；待内部对账后可开票</div>
     </div>
+
+    <!-- Shipping Dialog（批次累计 + 超发确认，设计稿 门户 B3/C4）-->
+    <van-dialog
+      v-model:show="showShipDialog"
+      title="确认出货"
+      show-cancel-button
+      :before-close="handleShipClose"
+    >
+      <div class="invoice-form">
+        <van-cell v-if="contract.ship_to_address" title="收货地址" :label="contract.ship_to_address" />
+        <van-cell title="累计已发" :value="String(contract.shipped_qty || 0)" />
+        <van-field v-model="shipForm.qty" label="本次实发" type="number" placeholder="本次发货数量（选填）" />
+        <van-field v-model="shipForm.remark" label="备注" placeholder="可选" />
+      </div>
+    </van-dialog>
 
     <!-- Invoice Upload Dialog -->
     <van-dialog
@@ -163,6 +178,8 @@ const route = useRoute();
 const contract = ref<any>({});
 const loadingDetail = ref(true);
 const actioning = ref(false);
+const showShipDialog = ref(false);
+const shipForm = ref({ qty: '', remark: '' });
 const showInvoiceDialog = ref(false);
 const invoiceForm = ref({ invoice_no: '', invoice_amount: '', remark: '', invoice_url: '' });
 const invoiceFiles = ref<any[]>([]);
@@ -234,15 +251,34 @@ async function doStamp() {
   }
 }
 
-async function doConfirmShip() {
-  await showConfirmDialog({ title: '确认出货', message: '确认已开始出货？' });
-  actioning.value = true;
+async function handleShipClose(action: string) {
+  if (action === 'cancel') return true;
+  const payload = {
+    qty: shipForm.value.qty ? Number(shipForm.value.qty) : undefined,
+    remark: shipForm.value.remark || undefined,
+  };
   try {
-    await portalContractApi.confirmShip(contract.value.id);
+    await portalContractApi.confirmShip(contract.value.id, payload);
     showSuccessToast('已确认出货');
+    shipForm.value = { qty: '', remark: '' };
     await load();
-  } finally {
-    actioning.value = false;
+    return true;
+  } catch (e: any) {
+    // 超合同量 → 二次确认后 force 放行（设计稿 门户 C4）
+    const msg = String(e?.response?.data?.msg || e?.message || '');
+    if (msg.includes('超过合同量')) {
+      try {
+        await showConfirmDialog({ title: '超发确认', message: '本次发货将超过合同量，确认超发？' });
+        await portalContractApi.confirmShip(contract.value.id, { ...payload, force: true });
+        showSuccessToast('已确认超发出货');
+        shipForm.value = { qty: '', remark: '' };
+        await load();
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    return false;
   }
 }
 

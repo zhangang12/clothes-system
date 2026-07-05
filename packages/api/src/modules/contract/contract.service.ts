@@ -109,6 +109,7 @@ export class ContractService {
         mid_ratio,
         final_ratio,
         last_ship_date: dto.last_ship_date as any,
+        ship_to_address: dto.ship_to_address,
         account_period_days: dto.account_period_days ?? DEFAULT_ACCOUNT_PERIOD_DAYS[dto.type],
         remark: dto.remark,
         created_by: createdBy,

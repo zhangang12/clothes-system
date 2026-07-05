@@ -46,7 +46,7 @@ export class PortalController {
     @Request() req: any,
     @Body() dto: ConfirmShipDto,
   ) {
-    return this.service.confirmShipping(id, req.user.username, req.user.factory_id, dto.remark);
+    return this.service.confirmShipping(id, req.user.username, req.user.factory_id, dto);
   }
 
   @Patch(':id/invoice')

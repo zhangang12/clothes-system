@@ -1284,14 +1284,21 @@ test_portal_ext() {
   # STAMPED 未对账 → 开票应400(开票须对账后)
   api PATCH "/portal/contracts/${ctB:-0}/invoice" '{"invoice_no":"INV-EXT-1"}' "$TOKEN_SUP"
   expect_code 400 "已盖章未对账开票应400(开票须对账后)"
-  # 确认发货 → SHIPPING(setup)
-  api PATCH "/portal/contracts/${ctB:-0}/ship" '{"remark":"发货"}' "$TOKEN_SUP"
+  # 确认发货(首批 qty=60/合同量100) → SHIPPING(setup)
+  api PATCH "/portal/contracts/${ctB:-0}/ship" '{"qty":60,"remark":"首批"}' "$TOKEN_SUP"
+  expect_ok "首批发货60(STAMPED→SHIPPING)"
   # SHIPPING 已发货 → 再盖章应400
   api PATCH "/portal/contracts/${ctB:-0}/stamp" '' "$TOKEN_SUP"
   expect_code 400 "已发货后再盖章应400"
-  # SHIPPING 已发货 → 重复确认发货应400
-  api PATCH "/portal/contracts/${ctB:-0}/ship" '{"remark":"再发货"}' "$TOKEN_SUP"
-  expect_code 400 "已发货后重复确认发货应400"
+  # 续批发货累计(qty=30,累计90/100)应放行(批次累计)
+  api PATCH "/portal/contracts/${ctB:-0}/ship" '{"qty":30}' "$TOKEN_SUP"
+  expect_ok "续批发货累计应放行(90/100)"
+  # 超合同量(再30→120>100)未确认应400
+  api PATCH "/portal/contracts/${ctB:-0}/ship" '{"qty":30}' "$TOKEN_SUP"
+  expect_code 400 "超合同量发货未确认应400"
+  # 超发确认 force=true 放行
+  api PATCH "/portal/contracts/${ctB:-0}/ship" '{"qty":30,"force":true}' "$TOKEN_SUP"
+  expect_ok "超发确认(force)放行"
   # SHIPPING 未对账 → 开票仍应400
   api PATCH "/portal/contracts/${ctB:-0}/invoice" '{"invoice_no":"INV-EXT-2"}' "$TOKEN_SUP"
   expect_code 400 "已发货未对账开票应400(开票须对账后)"

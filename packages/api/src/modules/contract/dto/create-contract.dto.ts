@@ -102,6 +102,12 @@ export class CreateContractDto {
   @IsDateString()
   last_ship_date?: string;
 
+  @ApiPropertyOptional({ description: '收货地址（发货时带给供应商）' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  ship_to_address?: string;
+
   @ApiPropertyOptional({ example: 45 })
   @IsOptional()
   @Type(() => Number)

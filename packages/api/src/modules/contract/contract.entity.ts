@@ -45,6 +45,12 @@ export class Contract {
   @Column({ type: 'date', nullable: true })
   last_ship_date: Date;
 
+  @Column({ length: 200, nullable: true })
+  ship_to_address: string; // 收货地址（发货时带入，设计稿 门户 C1）
+
+  @Column({ type: 'decimal', precision: 15, scale: 4, default: 0 })
+  shipped_qty: number; // 累计已发数量（批次累计，设计稿 门户 B3）
+
   @Column({ type: 'int', default: 90 })
   account_period_days: number; // 账期天数（材料90/加工45，发货日+账期=到期日）
 
