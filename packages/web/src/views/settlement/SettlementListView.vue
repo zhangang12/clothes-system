@@ -3,7 +3,7 @@
     <el-card class="search-card">
       <el-form :model="query" inline>
         <el-form-item label="关键词">
-          <el-input v-model="query.keyword" placeholder="结算单编号" clearable style="width:180px" @clear="load" />
+          <el-input v-model="query.keyword" placeholder="结算单号 / 款号" clearable style="width:180px" @clear="load" />
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="query.status" clearable placeholder="全部" style="width:110px" @change="load">
@@ -32,11 +32,17 @@
       <el-table :data="list" v-loading="loading" border stripe>
         <el-table-column prop="settlement_no" label="结算单编号" width="180" />
         <el-table-column prop="order_id" label="订单ID" width="80" align="center" />
-        <el-table-column prop="revenue" label="应收收入" width="120" align="right">
-          <template #default="{ row }">{{ (+row.revenue).toFixed(2) }}</template>
+        <el-table-column prop="style_no" label="款号" width="120" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.style_no || '—' }}</template>
         </el-table-column>
-        <el-table-column prop="total_cost" label="总成本" width="110" align="right">
-          <template #default="{ row }">{{ (+row.total_cost).toFixed(2) }}</template>
+        <el-table-column prop="settle_amount" label="结算金额" width="120" align="right">
+          <template #default="{ row }">{{ (+(row.settle_amount ?? row.revenue ?? 0)).toFixed(2) }}</template>
+        </el-table-column>
+        <el-table-column prop="goods_amount_tax" label="总货款(含税)" width="120" align="right">
+          <template #default="{ row }">{{ (+(row.goods_amount_tax ?? row.total_cost ?? 0)).toFixed(2) }}</template>
+        </el-table-column>
+        <el-table-column prop="gross_margin" label="毛利率" width="90" align="right">
+          <template #default="{ row }">{{ row.gross_margin != null ? (+row.gross_margin).toFixed(2) + '%' : '—' }}</template>
         </el-table-column>
         <el-table-column prop="net_profit" label="含退税净利" width="120" align="right">
           <template #default="{ row }">
@@ -95,13 +101,34 @@
               {{ detailData.status === 'CONFIRMED' ? '已确认' : '草稿' }}
             </el-tag>
           </el-descriptions-item>
+          <el-descriptions-item label="款号">{{ detailData.style_no || '—' }}</el-descriptions-item>
           <el-descriptions-item label="出货件数">{{ detailData.shipped_qty ?? 0 }}</el-descriptions-item>
-          <el-descriptions-item label="货款(应收收入)">{{ (+detailData.revenue).toFixed(2) }}</el-descriptions-item>
-          <el-descriptions-item label="总成本">{{ (+detailData.total_cost).toFixed(2) }}</el-descriptions-item>
-          <el-descriptions-item label="成本单价">{{ detailData.cost_per_unit != null ? (+detailData.cost_per_unit).toFixed(4) : '—' }}</el-descriptions-item>
-          <el-descriptions-item label="毛利">{{ (+detailData.gross_profit).toFixed(2) }}</el-descriptions-item>
+          <el-descriptions-item label="结算汇率">{{ detailData.exchange_rate != null ? (+detailData.exchange_rate).toFixed(4) : '—' }}</el-descriptions-item>
+        </el-descriptions>
+
+        <el-divider content-position="left">成本明细（对账付款汇总）</el-divider>
+        <el-descriptions :column="3" border size="small">
+          <el-descriptions-item label="总货款(含税)">{{ money(detailData.goods_amount_tax ?? detailData.total_cost) }}</el-descriptions-item>
+          <el-descriptions-item label="总货款(不含税)">{{ money(detailData.goods_amount_extax) }}</el-descriptions-item>
+          <el-descriptions-item label="—"><span style="color:#999">含税÷1.13（无票行按含税全额）</span></el-descriptions-item>
+          <el-descriptions-item label="成本单价(含税)">{{ num4(detailData.cost_per_unit_tax) }}</el-descriptions-item>
+          <el-descriptions-item label="成本单价(不含税)">{{ num4(detailData.cost_per_unit_extax ?? detailData.cost_per_unit) }}</el-descriptions-item>
+          <el-descriptions-item label="美金单价">{{ num4(detailData.usd_unit_price) }}</el-descriptions-item>
+        </el-descriptions>
+
+        <el-divider content-position="left">财务收汇 · 毛利对比</el-divider>
+        <el-descriptions :column="3" border size="small">
+          <el-descriptions-item label="发票金额$">{{ money(detailData.invoice_amount_usd) }}</el-descriptions-item>
+          <el-descriptions-item label="实际收汇$">{{ money(detailData.receipt_usd) }}</el-descriptions-item>
+          <el-descriptions-item label="结算金额¥">{{ money(detailData.settle_amount ?? detailData.revenue) }}</el-descriptions-item>
+          <el-descriptions-item label="毛利">{{ money(detailData.gross_profit) }}</el-descriptions-item>
           <el-descriptions-item label="毛利率">{{ detailData.gross_margin != null ? `${(+detailData.gross_margin).toFixed(2)}%` : '—' }}</el-descriptions-item>
-          <el-descriptions-item label="退税">{{ (+detailData.tax_refund).toFixed(2) }}</el-descriptions-item>
+          <el-descriptions-item label="财务及管理费(7%)">{{ money(detailData.finance_fee) }}</el-descriptions-item>
+          <el-descriptions-item label="期间费用合计">{{ money(periodFeeTotal(detailData)) }}</el-descriptions-item>
+          <el-descriptions-item label="出口退税">{{ money(detailData.tax_refund) }}</el-descriptions-item>
+          <el-descriptions-item label="保本汇率(含税/不含税)">
+            {{ num4(detailData.breakeven_rate_tax) }} / {{ num4(detailData.breakeven_rate_extax) }}
+          </el-descriptions-item>
           <el-descriptions-item label="含退税净利">
             <span :class="{ 'text-danger': +detailData.net_profit < 0, 'text-success': +detailData.net_profit > 0 }">
               {{ (+detailData.net_profit).toFixed(2) }}
@@ -114,9 +141,9 @@
           </el-descriptions-item>
         </el-descriptions>
 
-        <el-divider content-position="left">费用明细</el-divider>
+        <el-divider content-position="left">成本明细行（对账付款汇总·含税）</el-divider>
         <div class="detail-toolbar" v-if="detailData.status === 'DRAFT' && canEdit">
-          <el-button size="small" type="primary" @click="openAddCost">+ 添加费用</el-button>
+          <el-button size="small" type="primary" @click="openAddCost">+ 添加成本行</el-button>
         </div>
         <el-table :data="detailData.costs ?? []" border size="small">
           <el-table-column prop="cost_name" label="费用名称" />
@@ -154,15 +181,41 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="应收收入" prop="revenue">
-              <el-input-number v-model="createForm.revenue" :min="0" :precision="2" style="width:100%" />
+            <el-form-item label="结算汇率" prop="exchange_rate">
+              <el-input-number v-model="createForm.exchange_rate" :min="0" :precision="4" placeholder="收汇后填" style="width:100%" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="发票金额$">
+              <el-input-number v-model="createForm.invoice_amount_usd" :min="0" :precision="2" style="width:100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="实际收汇$">
+              <el-input-number v-model="createForm.receipt_usd" :min="0" :precision="2" style="width:100%" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-divider>期间费用（进净利扣减）</el-divider>
+        <el-row :gutter="12">
+          <el-col :span="6"><el-form-item label="运杂费" label-width="56px"><el-input-number v-model="createForm.freight_fee" :min="0" :precision="2" :controls="false" style="width:100%" /></el-form-item></el-col>
+          <el-col :span="6"><el-form-item label="快邮费" label-width="56px"><el-input-number v-model="createForm.express_fee" :min="0" :precision="2" :controls="false" style="width:100%" /></el-form-item></el-col>
+          <el-col :span="6"><el-form-item label="打样费" label-width="56px"><el-input-number v-model="createForm.sample_fee" :min="0" :precision="2" :controls="false" style="width:100%" /></el-form-item></el-col>
+          <el-col :span="6"><el-form-item label="其它" label-width="56px"><el-input-number v-model="createForm.other_fee" :min="0" :precision="2" :controls="false" style="width:100%" /></el-form-item></el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="出口退税">
+              <el-input-number v-model="createForm.tax_refund" :min="0" :precision="2" style="width:100%" />
             </el-form-item>
           </el-col>
         </el-row>
         <el-form-item label="备注">
           <el-input v-model="createForm.description" type="textarea" :rows="2" />
         </el-form-item>
-        <el-divider>费用明细（可选）</el-divider>
+        <el-divider>成本明细（对账付款汇总·含税）</el-divider>
         <div v-for="(c, idx) in createForm.costs" :key="idx" class="item-row">
           <el-row :gutter="8" align="middle">
             <el-col :span="7"><el-input v-model="c.cost_name" placeholder="费用名称" /></el-col>
@@ -296,18 +349,33 @@ const createVisible = ref(false);
 const createFormRef = ref<FormInstance>();
 const createForm = reactive({
   order_id: undefined as number | undefined,
-  revenue: undefined as number | undefined,
+  exchange_rate: undefined as number | undefined,
+  invoice_amount_usd: undefined as number | undefined,
+  receipt_usd: undefined as number | undefined,
+  freight_fee: undefined as number | undefined,
+  express_fee: undefined as number | undefined,
+  sample_fee: undefined as number | undefined,
+  other_fee: undefined as number | undefined,
+  tax_refund: undefined as number | undefined,
   description: '',
   costs: [] as any[],
 });
 const createRules: FormRules = {
   order_id: [{ required: true, message: '请输入订单ID', trigger: 'blur' }],
-  revenue: [{ required: true, message: '请输入应收收入', trigger: 'blur' }],
 };
 function openCreate() { createVisible.value = true; }
 function resetCreateForm() {
-  Object.assign(createForm, { order_id: undefined, revenue: undefined, description: '', costs: [] });
+  Object.assign(createForm, {
+    order_id: undefined, exchange_rate: undefined, invoice_amount_usd: undefined, receipt_usd: undefined,
+    freight_fee: undefined, express_fee: undefined, sample_fee: undefined, other_fee: undefined,
+    tax_refund: undefined, description: '', costs: [],
+  });
 }
+// 展示辅助
+const money = (v: any) => (v == null ? '—' : (+v).toFixed(2));
+const num4 = (v: any) => (v == null ? '—' : (+v).toFixed(4));
+const periodFeeTotal = (d: any) =>
+  (+(d?.freight_fee ?? 0)) + (+(d?.express_fee ?? 0)) + (+(d?.sample_fee ?? 0)) + (+(d?.other_fee ?? 0));
 function addCostLine() { createForm.costs.push({ cost_name: '', amount: undefined, has_invoice: 1 }); }
 function removeCostLine(idx: number) { createForm.costs.splice(idx, 1); }
 async function doCreate() {

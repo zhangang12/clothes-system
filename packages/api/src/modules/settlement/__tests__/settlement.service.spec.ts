@@ -13,13 +13,19 @@ import { SettlementStatus } from '@i9/types';
 
 const makeSettlement = (overrides = {}): any => ({
   id: 1,
-  settlement_no: 'SL2024010100001',
+  settlement_no: 'JS-20240101-001',
   order_id: 10,
   status: SettlementStatus.DRAFT,
-  revenue: 10000,
-  total_cost: 6000,
-  net_profit: 4000,
-  net_profit_ex_refund: 4000,
+  shipped_qty: 0,
+  exchange_rate: 0,
+  receipt_usd: 0,
+  invoice_amount_usd: 0,
+  goods_amount_tax: 0,
+  freight_fee: 0,
+  express_fee: 0,
+  sample_fee: 0,
+  other_fee: 0,
+  tax_refund: 0,
   deleted: 0,
   ...overrides,
 });
@@ -48,7 +54,7 @@ const mockReceiptRepo = {
   find: jest.fn().mockResolvedValue([]),
 };
 const mockOrderRepo = {
-  findOne: jest.fn().mockResolvedValue({ id: 10, currency: 'USD', deleted: 0 }),
+  findOne: jest.fn().mockResolvedValue({ id: 10, style_no: 'V27.230', currency: 'USD', deleted: 0 }),
 };
 const mockShipmentRepo = {
   find: jest.fn().mockResolvedValue([]),
@@ -64,7 +70,7 @@ describe('SettlementService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     mockDataSource.transaction.mockImplementation((cb) => cb(makeManager()));
-    mockOrderRepo.findOne.mockResolvedValue({ id: 10, currency: 'USD', deleted: 0 });
+    mockOrderRepo.findOne.mockResolvedValue({ id: 10, style_no: 'V27.230', currency: 'USD', deleted: 0 });
     mockShipmentRepo.find.mockResolvedValue([]);
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -83,70 +89,98 @@ describe('SettlementService', () => {
     service = module.get<SettlementService>(SettlementService);
   });
 
-  // UT-SLT-01: create computes net_profit = revenue - total_cost
-  it('UT-SLT-01 create computes net_profit = revenue - total_cost', async () => {
+  // UT-SLT-01: full 毛利对比链 —— 结算金额=收汇×汇率, 毛利=结算金额−不含税货款, 财务费7%, 净利=毛利−期间费用−财务费, 保本汇率
+  it('UT-SLT-01 computes settle_amount/gross_profit/finance_fee(7%)/net_profit/break-even rates', async () => {
+    mockShipmentRepo.find.mockResolvedValueOnce([{ qty: 300 }, { qty: 200 }]); // 出货件数 500
     const dto = {
       order_id: 10,
-      revenue: 10000,
-      costs: [
-        { cost_name: '面料费', amount: 4000 },
-        { cost_name: '加工费', amount: 2000 },
-      ],
+      goods_amount_tax: 11300, // 不含税=10000
+      receipt_usd: 2000,
+      exchange_rate: 7, // 结算金额=14000
+      invoice_amount_usd: 2500, // 美金单价=5
+      freight_fee: 100,
+      express_fee: 50,
+      sample_fee: 30,
+      other_fee: 20, // 期间费用合计=200
+      tax_refund: 300,
     };
     const manager = makeManager();
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.create(dto as any, 1);
-    // First save call is the settlement, net_profit should be 10000-6000=4000
     expect(manager.save.mock.calls[0][1]).toMatchObject({
-      revenue: 10000, total_cost: 6000, net_profit: 4000,
+      style_no: 'V27.230',
+      shipped_qty: 500,
+      goods_amount_tax: 11300,
+      goods_amount_extax: 10000, // 11300/1.13
+      cost_per_unit_tax: 22.6, // 11300/500
+      cost_per_unit_extax: 20, // 10000/500
+      usd_unit_price: 5, // 2500/500
+      settle_amount: 14000, // 2000×7
+      gross_profit: 4000, // 14000−10000
+      finance_fee: 980, // 14000×0.07
+      net_profit_ex_refund: 2820, // 4000−200−980
+      net_profit: 3120, // 2820+300
+      breakeven_rate_tax: 4.52, // 22.6/5
+      breakeven_rate_extax: 4, // 20/5
     });
   });
 
-  // UT-SLT-02: create with no costs → total_cost=0, net_profit=revenue
-  it('UT-SLT-02 create with no costs sets total_cost=0 and net_profit=revenue', async () => {
-    const dto = { order_id: 10, revenue: 5000 };
+  // UT-SLT-02: 无收汇/汇率 → 结算金额=0，毛利=−不含税货款，净利为负
+  it('UT-SLT-02 with no receipt/rate → settle_amount=0 and negative gross/net', async () => {
+    const dto = { order_id: 10, goods_amount_tax: 1130 };
     const manager = makeManager();
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.create(dto as any, 1);
-    expect(manager.save.mock.calls[0][1]).toMatchObject({ total_cost: 0, net_profit: 5000 });
+    expect(manager.save.mock.calls[0][1]).toMatchObject({
+      goods_amount_extax: 1000,
+      settle_amount: 0,
+      gross_profit: -1000,
+      finance_fee: 0,
+      net_profit_ex_refund: -1000,
+    });
   });
 
   // UT-SLT-11: create throws NotFoundException when order does not exist
   it('UT-SLT-11 create throws NotFoundException for missing order', async () => {
     mockOrderRepo.findOne.mockResolvedValueOnce(null);
-    await expect(service.create({ order_id: 999, revenue: 1000 } as any, 1)).rejects.toThrow(NotFoundException);
+    await expect(service.create({ order_id: 999 } as any, 1)).rejects.toThrow(NotFoundException);
   });
 
-  // UT-SLT-12: create inherits currency from order and sums shipped_qty from shipments
-  it('UT-SLT-12 create inherits order currency and sums shipped_qty from order_shipment', async () => {
-    mockOrderRepo.findOne.mockResolvedValueOnce({ id: 10, currency: 'USD', deleted: 0 });
-    mockShipmentRepo.find.mockResolvedValueOnce([{ qty: 300 }, { qty: 200 }]);
-    const dto = { order_id: 10, revenue: 10000, costs: [{ cost_name: '面料费', amount: 5000 }] };
+  // UT-SLT-12: 成本明细无票计税 —— 有票不含税=含税÷1.13, 无票按含税全额进不含税
+  it('UT-SLT-12 cost lines: invoiced ÷1.13, non-invoiced full into ex-tax; currency & qty from order/shipments', async () => {
+    mockShipmentRepo.find.mockResolvedValueOnce([{ qty: 300 }, { qty: 200 }]); // 500
+    const dto = {
+      order_id: 10,
+      receipt_usd: 1000,
+      exchange_rate: 7,
+      costs: [
+        { cost_name: '面料', amount: 1130, has_invoice: 1 }, // 不含税 1000
+        { cost_name: '现金采购', amount: 500, has_invoice: 0 }, // 无票 → 全额 500
+      ],
+    };
     const manager = makeManager();
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.create(dto as any, 1);
     expect(manager.save.mock.calls[0][1]).toMatchObject({
       currency: 'USD',
       shipped_qty: 500,
-      cost_per_unit: 10, // 5000/500
-      gross_profit: 5000, // 10000-5000
-      gross_margin: 50, // 5000/10000*100
+      goods_amount_tax: 1630, // 1130+500
+      goods_amount_extax: 1500, // 1000 + 500(无票)
+      cost_per_unit_extax: 3, // 1500/500
+      gross_profit: 5500, // 7000 − 1500
     });
   });
 
-  // UT-SLT-13: create includes tax_refund in net_profit but not net_profit_ex_refund
-  it('UT-SLT-13 create adds tax_refund into net_profit (含退税) but excludes from net_profit_ex_refund', async () => {
-    const dto = {
-      order_id: 10, revenue: 10000, tax_refund: 800,
-      costs: [{ cost_name: '面料费', amount: 6000 }],
-    };
+  // UT-SLT-13: 出口退税进含退税净利、不进不含退税净利；均建立在正确基数(毛利−期间费用−财务费)之上
+  it('UT-SLT-13 tax_refund into net_profit(含退税) only; base excludes finance fee bug', async () => {
+    const dto = { order_id: 10, goods_amount_tax: 11300, receipt_usd: 2000, exchange_rate: 7, tax_refund: 800 };
     const manager = makeManager();
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.create(dto as any, 1);
     expect(manager.save.mock.calls[0][1]).toMatchObject({
-      tax_refund: 800,
-      net_profit: 4800, // (10000-6000)+800
-      net_profit_ex_refund: 4000, // 10000-6000
+      finance_fee: 980, // 14000×0.07
+      net_profit_ex_refund: 3020, // (14000−10000) − 0 − 980
+      net_profit: 3820, // 3020 + 800
     });
   });
 
@@ -176,16 +210,22 @@ describe('SettlementService', () => {
     await expect(service.addCost(1, { cost_name: '运费', amount: 100 })).rejects.toThrow(BadRequestException);
   });
 
-  // UT-SLT-06: addCost recalculates net_profit
-  it('UT-SLT-06 addCost recalculates net_profit after adding cost', async () => {
-    const s = makeSettlement({ revenue: 10000, total_cost: 6000, net_profit: 4000 });
-    const existingCosts = [{ amount: 4000 }, { amount: 2000 }, { amount: 500 }];
+  // UT-SLT-06: addCost recompute —— 用结算单已存的收汇/汇率重算总货款与派生量
+  it('UT-SLT-06 addCost recomputes goods total & derived from stored receipt/rate', async () => {
+    const s = makeSettlement({ receipt_usd: 1000, exchange_rate: 1, shipped_qty: 0 });
+    const existingCosts = [{ amount: 1130, has_invoice: 1 }]; // 含税1130 → 不含税1000
     const manager = makeManager(s, existingCosts);
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
-    await service.addCost(1, { cost_name: '运费', amount: 500 });
-    // After recalc: total_cost=6500, net_profit=3500
+    await service.addCost(1, { cost_name: '面料', amount: 1130, has_invoice: 1 });
     const saveCall = manager.save.mock.calls.find((c: any[]) => c[0] === Settlement);
-    expect(saveCall[1]).toMatchObject({ total_cost: 6500, net_profit: 3500 });
+    expect(saveCall[1]).toMatchObject({
+      goods_amount_tax: 1130,
+      goods_amount_extax: 1000,
+      settle_amount: 1000, // 1000×1
+      gross_profit: 0, // 1000−1000
+      finance_fee: 70, // 1000×0.07
+      net_profit_ex_refund: -70, // 0−0−70
+    });
   });
 
   // UT-SLT-07: remove throws if not DRAFT
@@ -209,14 +249,16 @@ describe('SettlementService', () => {
     await expect(service.findOne(99)).rejects.toThrow(NotFoundException);
   });
 
-  // UT-SLT-10: addReceipt stores receipt for valid settlement
-  it('UT-SLT-10 addReceipt stores receipt linked to settlement', async () => {
-    const s = makeSettlement({ status: SettlementStatus.DRAFT });
-    mockRepo.findOne.mockResolvedValue(s);
+  // UT-SLT-10: addReceipt stores 逐笔收汇 and累计驱动结算金额重算
+  it('UT-SLT-10 addReceipt stores receipt and accumulates receipt_usd', async () => {
+    const s = makeSettlement({ status: SettlementStatus.DRAFT, exchange_rate: 7 });
+    const manager = makeManager(s, [{ amount: 5000 }]); // 累计收汇 5000
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     const dto = { amount: 5000, receipt_date: '2024-03-01', remark: '首期回款' };
     await service.addReceipt(1, dto as any);
-    expect(mockReceiptRepo.save).toHaveBeenCalledWith(expect.objectContaining({
-      settlement_id: 1, amount: 5000,
-    }));
+    const receiptSave = manager.save.mock.calls.find((c: any[]) => c[0] === SettlementReceipt);
+    expect(receiptSave[1]).toMatchObject({ settlement_id: 1, amount: 5000 });
+    const settleSave = manager.save.mock.calls.find((c: any[]) => c[0] === Settlement);
+    expect(settleSave[1]).toMatchObject({ receipt_usd: 5000, settle_amount: 35000 }); // 5000×7
   });
 });

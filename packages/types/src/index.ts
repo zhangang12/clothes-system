@@ -557,24 +557,41 @@ export interface PaymentRequest {
 
 // ---------- 结算 ----------
 export interface SettlementProfit {
-  grossProfit: number;
-  grossMargin: number;
-  taxRefund: number;
-  netProfit: number;          // 含退税
-  netProfitExRefund: number;  // 不含退税
+  grossProfit: number;        // 毛利=结算金额−总货款不含税
+  grossMargin?: number;       // 毛利率%
+  financeFee: number;         // 财务及管理费=结算金额×7%
+  taxRefund: number;          // 出口退税
+  netProfit: number;          // 净利(含退税)=净利+退税
+  netProfitExRefund: number;  // 净利(不含退税)=毛利−期间费用−财务费7%
 }
 
 export interface Settlement {
   id: number;
-  jsNo: string;
+  jsNo: string;               // 结算单号
   orderId: number;
+  styleNo?: string;           // 款号
   orderNo?: string;
-  shippedQty: number;
+  shippedQty: number;         // 出货件数（船务）
   currency: string;
-  exchangeRate?: number;
-  revenue: number;
-  costTotal: number;
-  costPerUnit?: number;
+  exchangeRate?: number;      // 结算汇率
+  // 成本明细（对账付款汇总）
+  goodsAmountTax: number;     // 总货款(含税)
+  goodsAmountExtax: number;   // 总货款(不含税)
+  costPerUnitTax?: number;    // 成本单价(含税)
+  costPerUnitExtax?: number;  // 成本单价(不含税)
+  // 财务收汇
+  invoiceAmountUsd: number;   // 发票金额(USD)
+  receiptUsd: number;         // 实际收汇金额(USD)
+  usdUnitPrice?: number;      // 美金单价=发票金额÷出货件数
+  // 期间费用（进净利扣减）
+  freightFee: number;         // 运杂费
+  expressFee: number;         // 快邮费
+  sampleFee: number;          // 打样费
+  otherFee: number;           // 其它费用
+  // 毛利对比
+  settleAmount: number;       // 结算金额(RMB)=实际收汇×结算汇率
+  breakevenRateTax?: number;  // 保本汇率(含税)
+  breakevenRateExtax?: number;// 保本汇率(不含税)
   profit: SettlementProfit;
   status: SettlementStatus;
   confirmedAt?: string;

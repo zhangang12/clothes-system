@@ -373,21 +373,36 @@ test_payment() {
 test_settlement() {
   local cid oid sid
   cid=$(fx_customer); oid=$(fx_order_producing "$cid")
-  api POST /settlements "{\"order_id\":${oid:-0},\"revenue\":10000}" "$TOKEN_PM"
+  api POST /settlements "{\"order_id\":${oid:-0}}" "$TOKEN_PM"
   expect_deny "PATTERNMAKER建结算应拒绝"
-  api POST /settlements '{"revenue":10000}' "$TOKEN_FINANCE"
+  api POST /settlements '{"receipt_usd":1000}' "$TOKEN_FINANCE"
   expect_code 400 "结算缺order_id应400"
-  api POST /settlements "{\"order_id\":${oid:-0},\"revenue\":10000,\"costs\":[{\"cost_name\":\"面料\",\"amount\":6000,\"has_invoice\":1},{\"cost_name\":\"加工\",\"amount\":1500}]}" "$TOKEN_FINANCE"
+  api POST /settlements "{\"order_id\":${oid:-0},\"revenue\":10000}" "$TOKEN_FINANCE"
+  expect_code 400 "结算含未知字段revenue应400(whitelist)"
+  # 船务出货 1000 件（成本单价/保本汇率口径）
+  api POST "/orders/${oid:-0}/shipments" '{"shipment_date":"2026-06-01","qty":1000}' "$TOKEN_BUSINESS"
+  expect_ok "船务登记出货1000件"
+  # 财务口径：总货款含税11300(不含税10000)，收汇2000×汇率7=结算金额14000，期间费用合计200，退税300
+  api POST /settlements "{\"order_id\":${oid:-0},\"receipt_usd\":2000,\"exchange_rate\":7,\"invoice_amount_usd\":2500,\"freight_fee\":100,\"express_fee\":50,\"sample_fee\":30,\"other_fee\":20,\"tax_refund\":300,\"costs\":[{\"cost_name\":\"面料\",\"amount\":11300,\"has_invoice\":1}]}" "$TOKEN_FINANCE"
   sid=$(echo "$RESP" | jval data.id)
   [[ -n "$sid" ]] && ok "FINANCE创建结算 id=$sid" || bad "创建结算失败 ${RESP:0:120}"
-  expect_num data.total_cost 7500 "总成本=6000+1500"
-  expect_num data.net_profit 2500 "净利=收入10000-成本7500"
+  expect_num data.goods_amount_tax 11300 "总货款含税=11300"
+  expect_num data.goods_amount_extax 10000 "总货款不含税=11300÷1.13=10000"
+  expect_num data.settle_amount 14000 "结算金额=收汇2000×汇率7"
+  expect_num data.finance_fee 980 "财务及管理费=结算金额14000×7%=980"
+  expect_num data.gross_profit 4000 "毛利=结算金额14000−不含税10000"
+  expect_num data.net_profit_ex_refund 2820 "不含退税净利=毛利4000−期间费用200−财务费980"
+  expect_num data.net_profit 3120 "含退税净利=2820+退税300"
+  expect_num data.cost_per_unit_extax 10 "成本单价不含税=10000÷出货件数1000"
+  expect_num data.breakeven_rate_extax 4 "保本汇率不含税=成本单价10÷美金单价2.5"
   expect_match data.settlement_no '[0-9]{8}' "结算单号含日期"
-  api POST "/settlements/${sid:-0}/costs" '{"cost_name":"物流","amount":500,"has_invoice":0}' "$TOKEN_FINANCE"
-  expect_ok "追加成本500"
+  # 追加无票成本500→全额进不含税：含税11800、不含税10500，毛利重算
+  api POST "/settlements/${sid:-0}/costs" '{"cost_name":"现金采购","amount":500,"has_invoice":0}' "$TOKEN_FINANCE"
+  expect_ok "追加成本500(无票)"
   api GET "/settlements/${sid:-0}"
-  expect_num data.total_cost 8000 "追加后总成本=8000"
-  expect_num data.net_profit 2000 "追加后净利=2000"
+  expect_num data.goods_amount_tax 11800 "追加后总货款含税=11800"
+  expect_num data.goods_amount_extax 10500 "追加后不含税=10000+500(无票全额)"
+  expect_num data.gross_profit 3500 "重算毛利=14000−10500"
   api PATCH "/settlements/${sid:-0}/confirm" '' "$TOKEN_FINANCE"
   expect_ok "结算确认"
   api GET "/settlements/${sid:-0}"; expect_eq data.status CONFIRMED "确认后CONFIRMED"
@@ -1060,18 +1075,21 @@ test_settlement_ext() {
 
   cid=$(fx_customer); oid=$(fx_order_producing "$cid")
 
-  # ── 多明细累计 + has_invoice(有票/无票)均计入 + net_profit_ex_refund(读service公式) ──
-  api POST /settlements "{\"order_id\":${oid:-0},\"revenue\":20000,\"costs\":[{\"cost_name\":\"面料\",\"amount\":10000,\"has_invoice\":1},{\"cost_name\":\"加工\",\"amount\":3000,\"has_invoice\":0},{\"cost_name\":\"物流\",\"amount\":2000}]}" "$TOKEN_FINANCE"
+  # ── 多明细·无票计税：有票÷1.13进不含税、无票按含税全额进不含税 ──
+  api POST /settlements "{\"order_id\":${oid:-0},\"receipt_usd\":3000,\"exchange_rate\":7,\"costs\":[{\"cost_name\":\"面料\",\"amount\":11300,\"has_invoice\":1},{\"cost_name\":\"加工\",\"amount\":3000,\"has_invoice\":0},{\"cost_name\":\"物流\",\"amount\":2260}]}" "$TOKEN_FINANCE"
   sid=$(echo "$RESP" | jval data.id)
   [[ -n "$sid" ]] && ok "FINANCE多明细结算创建 id=$sid" || bad "多明细结算创建失败 ${RESP:0:120}"
-  expect_num data.total_cost 15000 "3笔成本累计=15000(有票/无票均计入total_cost)"
-  expect_num data.net_profit_ex_refund 5000 "net_profit_ex_refund=收入20000-成本15000=5000"
+  expect_num data.goods_amount_tax 16560 "总货款含税=11300+3000+2260"
+  expect_num data.goods_amount_extax 15000 "不含税=10000(票)+3000(无票全额)+2000(票)"
+  expect_num data.net_profit_ex_refund 4530 "不含退税净利=毛利(21000-15000)-财务费(21000×7%=1470)=4530"
 
-  # ── 登记回款→2xx，POST后再GET详情验证回款已落库 ──
+  # ── 登记回款→累计驱动结算金额重算；POST后再GET详情验证回款已落库 ──
   api POST "/settlements/${sid:-0}/receipts" '{"amount":8000,"receipt_date":"2026-06-15","remark":"首款"}' "$TOKEN_FINANCE"
   expect_ok "FINANCE登记回款应2xx"
   api GET "/settlements/${sid:-0}"
   expect_num data.receipts.0.amount 8000 "GET详情回款记录已落库=8000"
+  expect_num data.receipt_usd 8000 "实际收汇=逐笔累计=8000"
+  expect_num data.settle_amount 56000 "结算金额随收汇重算=8000×7"
 
   # ── 按order_id筛选 + 分页结构(data即items数组, size顶层回显) ──
   api GET "/settlements?order_id=${oid:-0}&page=1&size=2"
@@ -1079,14 +1097,16 @@ test_settlement_ext() {
   expect_num size 2 "分页size顶层回显=2(结构含分页)"
   expect_eq data.0.order_id "${oid:-0}" "筛选结果首条order_id匹配"
 
-  # ── revenue=0(仅@IsNumber无@IsPositive)允许, 净利可为负 ──
+  # ── 无收汇/汇率(草稿)允许, 结算金额=0、净利可为负 ──
   oid=$(fx_order_producing "$cid")  # 一订单仅一结算(uk_order)，每个结算换新订单
-  api POST /settlements "{\"order_id\":${oid:-0},\"revenue\":0,\"costs\":[{\"cost_name\":\"样品费\",\"amount\":500}]}" "$TOKEN_FINANCE"
-  expect_ok "revenue=0应允许创建"
-  expect_num data.net_profit -500 "revenue=0净利=0-500=-500"
+  api POST /settlements "{\"order_id\":${oid:-0},\"costs\":[{\"cost_name\":\"样品费\",\"amount\":565}]}" "$TOKEN_FINANCE"
+  expect_ok "无收汇/汇率草稿应允许创建"
+  expect_num data.settle_amount 0 "无收汇→结算金额=0"
+  expect_num data.goods_amount_extax 500 "样品费565÷1.13=500"
+  expect_num data.net_profit_ex_refund -500 "净利=毛利(0-500)-0-0=-500"
 
   # ── 边界:成本amount=0违反@IsPositive→400 ──
-  api POST /settlements "{\"order_id\":${oid:-0},\"revenue\":1000,\"costs\":[{\"cost_name\":\"零费\",\"amount\":0}]}" "$TOKEN_FINANCE"
+  api POST /settlements "{\"order_id\":${oid:-0},\"costs\":[{\"cost_name\":\"零费\",\"amount\":0}]}" "$TOKEN_FINANCE"
   expect_code 400 "成本amount=0违反@IsPositive应400"
 
   # ── 权限矩阵:写接口换无权角色 ──
@@ -1097,7 +1117,7 @@ test_settlement_ext() {
 
   # ── 次要状态机:确认后的受限/放行操作 ──
   oid=$(fx_order_producing "$cid")
-  api POST /settlements "{\"order_id\":${oid:-0},\"revenue\":9000,\"costs\":[{\"cost_name\":\"面料\",\"amount\":4000}]}" "$TOKEN_FINANCE"
+  api POST /settlements "{\"order_id\":${oid:-0},\"receipt_usd\":1200,\"exchange_rate\":7,\"costs\":[{\"cost_name\":\"面料\",\"amount\":4000}]}" "$TOKEN_FINANCE"
   sid2=$(echo "$RESP" | jval data.id)
   api PATCH "/settlements/${sid2:-0}/confirm" '' "$TOKEN_FINANCE"
   expect_ok "FINANCE确认草稿结算应2xx"
@@ -1108,7 +1128,7 @@ test_settlement_ext() {
 
   # ── 软删除DRAFT + 删除后GET详情→404 ──
   oid=$(fx_order_producing "$cid")
-  api POST /settlements "{\"order_id\":${oid:-0},\"revenue\":1000}" "$TOKEN_FINANCE"
+  api POST /settlements "{\"order_id\":${oid:-0},\"goods_amount_tax\":1130}" "$TOKEN_FINANCE"
   sid3=$(echo "$RESP" | jval data.id)
   api DELETE "/settlements/${sid3:-0}"
   expect_ok "ADMIN删除草稿结算应2xx"

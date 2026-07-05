@@ -13,13 +13,66 @@ import { AddCostDto } from './dto/add-cost.dto';
 import { AddReceiptDto } from './dto/add-receipt.dto';
 import { QuerySettlementDto } from './dto/query-settlement.dto';
 
-// 结算成本单价/毛利/毛利率计算（系统开发手册·核心业务规则）
-function calcDerived(revenue: number, totalCost: number, shippedQty: number, taxRefund: number) {
-  const grossProfit = +(revenue - totalCost).toFixed(4);
-  const grossMargin = revenue > 0 ? +((grossProfit / revenue) * 100).toFixed(2) : undefined;
-  const costPerUnit = shippedQty > 0 ? +(totalCost / shippedQty).toFixed(4) : undefined;
-  const netProfit = +(grossProfit + taxRefund).toFixed(4);
-  return { grossProfit, grossMargin, costPerUnit, netProfit, netProfitExRefund: grossProfit };
+// ── 结算清单财务口径（07-结算清单设计稿 §毛利对比）──
+const VAT_DIVISOR = 1.13; // 增值税 13% → 不含税 = 含税 ÷ 1.13
+const FINANCE_FEE_RATE = 0.07; // 财务及管理费 = 结算金额 × 7%（比例可配置）
+const r4 = (n: number) => +Number(n).toFixed(4);
+const r2 = (n: number) => +Number(n).toFixed(2);
+
+interface CostLike {
+  amount: number;
+  has_invoice?: number;
+}
+
+// 总货款含税/不含税（无票计税：有票按不含税=含税÷1.13计入，无票按含税全额计入，防毛利虚高）
+function goodsSplit(costs: CostLike[], fallbackTax = 0) {
+  if (costs.length) {
+    const tax = costs.reduce((s, c) => s + +c.amount, 0);
+    const extax = costs.reduce((s, c) => s + (c.has_invoice === 0 ? +c.amount : +c.amount / VAT_DIVISOR), 0);
+    return { goodsAmountTax: r4(tax), goodsAmountExtax: r4(extax) };
+  }
+  return { goodsAmountTax: r4(fallbackTax), goodsAmountExtax: r4(fallbackTax / VAT_DIVISOR) };
+}
+
+interface DerivedInput {
+  goodsAmountTax: number; // 总货款含税
+  goodsAmountExtax: number; // 总货款不含税
+  shippedQty: number; // 出货件数（来自船务）
+  receiptUsd: number; // 实际收汇金额 USD
+  invoiceAmountUsd: number; // 发票金额 USD
+  exchangeRate: number; // 结算汇率
+  periodFeeTotal: number; // 期间费用合计（运杂+快邮+打样+其它）
+  taxRefund: number; // 出口退税
+}
+
+// 结算派生量：结算金额→毛利→财务费→净利→成本单价→保本汇率（设计稿逐式）
+function calcDerived(i: DerivedInput) {
+  const costPerUnitTax = i.shippedQty > 0 ? r4(i.goodsAmountTax / i.shippedQty) : undefined; // 成本单价含税
+  const costPerUnitExtax = i.shippedQty > 0 ? r4(i.goodsAmountExtax / i.shippedQty) : undefined; // 成本单价不含税
+  const usdUnitPrice = i.shippedQty > 0 ? r4(i.invoiceAmountUsd / i.shippedQty) : undefined; // 美金单价 = 发票金额÷出货件数
+  const settleAmount = r4(i.receiptUsd * i.exchangeRate); // 结算金额(RMB) = 实际收汇×结算汇率
+  const grossProfit = r4(settleAmount - i.goodsAmountExtax); // 毛利 = 结算金额 − 总货款不含税
+  const grossMargin = settleAmount > 0 ? r2((grossProfit / settleAmount) * 100) : undefined;
+  const financeFee = r4(settleAmount * FINANCE_FEE_RATE); // 财务及管理费 = 结算金额×7%
+  const netProfitExRefund = r4(grossProfit - i.periodFeeTotal - financeFee); // 净利(不含退税) = 毛利 − 期间费用 − 财务费
+  const netProfit = r4(netProfitExRefund + i.taxRefund); // 净利(含退税) = 净利 + 出口退税
+  const breakevenRateTax =
+    usdUnitPrice && usdUnitPrice > 0 && costPerUnitTax != null ? r4(costPerUnitTax / usdUnitPrice) : undefined; // 保本汇率(含税)
+  const breakevenRateExtax =
+    usdUnitPrice && usdUnitPrice > 0 && costPerUnitExtax != null ? r4(costPerUnitExtax / usdUnitPrice) : undefined; // 保本汇率(不含税)
+  return {
+    costPerUnitTax,
+    costPerUnitExtax,
+    usdUnitPrice,
+    settleAmount,
+    grossProfit,
+    grossMargin,
+    financeFee,
+    netProfitExRefund,
+    netProfit,
+    breakevenRateTax,
+    breakevenRateExtax,
+  };
 }
 
 @Injectable()
@@ -34,6 +87,39 @@ export class SettlementService {
     private readonly dataSource: DataSource,
   ) {}
 
+  // 把 settlement 上现存的财务录入 + 货款/期间费用重算所有派生量，写回实体（不落库）
+  private applyDerived(settlement: Settlement, goodsAmountTax: number, goodsAmountExtax: number) {
+    const periodFeeTotal =
+      +(settlement.freight_fee ?? 0) + +(settlement.express_fee ?? 0) + +(settlement.sample_fee ?? 0) + +(settlement.other_fee ?? 0);
+    const d = calcDerived({
+      goodsAmountTax,
+      goodsAmountExtax,
+      shippedQty: settlement.shipped_qty ?? 0,
+      receiptUsd: +(settlement.receipt_usd ?? 0),
+      invoiceAmountUsd: +(settlement.invoice_amount_usd ?? 0),
+      exchangeRate: +(settlement.exchange_rate ?? 0),
+      periodFeeTotal,
+      taxRefund: +(settlement.tax_refund ?? 0),
+    });
+    settlement.goods_amount_tax = goodsAmountTax;
+    settlement.goods_amount_extax = goodsAmountExtax;
+    settlement.cost_per_unit_tax = d.costPerUnitTax;
+    settlement.cost_per_unit_extax = d.costPerUnitExtax;
+    settlement.usd_unit_price = d.usdUnitPrice;
+    settlement.settle_amount = d.settleAmount;
+    settlement.finance_fee = d.financeFee;
+    settlement.gross_profit = d.grossProfit;
+    settlement.gross_margin = d.grossMargin;
+    settlement.breakeven_rate_tax = d.breakevenRateTax;
+    settlement.breakeven_rate_extax = d.breakevenRateExtax;
+    settlement.net_profit = d.netProfit;
+    settlement.net_profit_ex_refund = d.netProfitExRefund;
+    // 兼容旧列语义：revenue=结算金额, total_cost=总货款含税, cost_per_unit=不含税成本单价
+    settlement.revenue = d.settleAmount;
+    settlement.total_cost = goodsAmountTax;
+    settlement.cost_per_unit = d.costPerUnitExtax;
+  }
+
   async create(dto: CreateSettlementDto, createdBy: number): Promise<Settlement> {
     const settlement_no = await this.numbering.next(NUM_PREFIX.SETTLEMENT);
 
@@ -45,39 +131,37 @@ export class SettlementService {
 
     return this.dataSource.transaction(async (manager) => {
       const costs = dto.costs ?? [];
-      const totalCost = costs.reduce((sum, c) => sum + c.amount, 0);
-      const taxRefund = dto.tax_refund ?? 0;
-      const derived = calcDerived(dto.revenue, totalCost, shippedQty, taxRefund);
+      const { goodsAmountTax, goodsAmountExtax } = goodsSplit(costs, dto.goods_amount_tax ?? 0);
 
-      const settlement = await manager.save(
-        Settlement,
-        manager.create(Settlement, {
-          settlement_no,
-          order_id: dto.order_id,
-          shipped_qty: shippedQty,
-          currency: order.currency ?? 'CNY',
-          exchange_rate: dto.exchange_rate,
-          status: SettlementStatus.DRAFT,
-          revenue: +dto.revenue.toFixed(4),
-          total_cost: +totalCost.toFixed(4),
-          cost_per_unit: derived.costPerUnit,
-          gross_profit: derived.grossProfit,
-          gross_margin: derived.grossMargin,
-          tax_refund: +taxRefund.toFixed(4),
-          net_profit: derived.netProfit,
-          net_profit_ex_refund: derived.netProfitExRefund,
-          description: dto.description ?? null,
-          created_by: createdBy,
-          deleted: 0,
-        }),
-      );
+      const draft = manager.create(Settlement, {
+        settlement_no,
+        order_id: dto.order_id,
+        style_no: order.style_no ?? null,
+        shipped_qty: shippedQty,
+        currency: order.currency ?? 'CNY',
+        exchange_rate: dto.exchange_rate ?? null,
+        status: SettlementStatus.DRAFT,
+        invoice_amount_usd: r4(dto.invoice_amount_usd ?? 0),
+        receipt_usd: r4(dto.receipt_usd ?? 0),
+        freight_fee: r4(dto.freight_fee ?? 0),
+        express_fee: r4(dto.express_fee ?? 0),
+        sample_fee: r4(dto.sample_fee ?? 0),
+        other_fee: r4(dto.other_fee ?? 0),
+        tax_refund: r4(dto.tax_refund ?? 0),
+        description: dto.description ?? null,
+        created_by: createdBy,
+        deleted: 0,
+      }) as Settlement;
+      this.applyDerived(draft, goodsAmountTax, goodsAmountExtax);
+
+      const settlement = await manager.save(Settlement, draft);
 
       if (costs.length) {
         const costLines = costs.map((c) =>
           manager.create(SettlementCost, {
             settlement_id: settlement.id,
             cost_name: c.cost_name,
-            amount: +c.amount.toFixed(4),
+            amount: r4(c.amount),
             has_invoice: c.has_invoice ?? 1,
           }),
         );
@@ -95,8 +179,12 @@ export class SettlementService {
       ...(status !== undefined && { status: status as SettlementStatus }),
       ...(order_id !== undefined && { order_id }),
     };
+    // 支持按结算单号或款号检索（设计稿：列表·搜款号带入）
     const where = keyword
-      ? [{ ...base, settlement_no: Like(`%${keyword}%`) }]
+      ? [
+          { ...base, settlement_no: Like(`%${keyword}%`) },
+          { ...base, style_no: Like(`%${keyword}%`) },
+        ]
       : base;
 
     const [items, total] = await this.repo.findAndCount({
@@ -124,7 +212,7 @@ export class SettlementService {
       });
       if (!settlement) throw new NotFoundException(`结算单 #${id} 不存在`);
       if (settlement.status !== SettlementStatus.DRAFT) {
-        throw new BadRequestException('只有草稿状态才可添加费用');
+        throw new BadRequestException('只有草稿状态才可添加成本明细');
       }
 
       await manager.save(
@@ -132,38 +220,47 @@ export class SettlementService {
         manager.create(SettlementCost, {
           settlement_id: id,
           cost_name: dto.cost_name,
-          amount: +dto.amount.toFixed(4),
+          amount: r4(dto.amount),
           has_invoice: dto.has_invoice ?? 1,
         }),
       );
 
       const costs = await manager.find(SettlementCost, { where: { settlement_id: id } });
-      const totalCost = costs.reduce((sum, c) => sum + +c.amount, 0);
-      const derived = calcDerived(+settlement.revenue, totalCost, settlement.shipped_qty ?? 0, +(settlement.tax_refund ?? 0));
-      settlement.total_cost = +totalCost.toFixed(4);
-      settlement.cost_per_unit = derived.costPerUnit;
-      settlement.gross_profit = derived.grossProfit;
-      settlement.gross_margin = derived.grossMargin;
-      settlement.net_profit = derived.netProfit;
-      settlement.net_profit_ex_refund = derived.netProfitExRefund;
+      const { goodsAmountTax, goodsAmountExtax } = goodsSplit(costs);
+      this.applyDerived(settlement, goodsAmountTax, goodsAmountExtax);
       return manager.save(Settlement, settlement);
     });
   }
 
-  async addReceipt(id: number, dto: AddReceiptDto): Promise<void> {
-    const settlement = await this.repo.findOne({ where: { id, deleted: 0 } });
-    if (!settlement) throw new NotFoundException(`结算单 #${id} 不存在`);
-    if (settlement.status !== SettlementStatus.DRAFT) {
-      throw new BadRequestException('只有草稿状态才可添加收款');
-    }
-    await this.receiptRepo.save(
-      this.receiptRepo.create({
-        settlement_id: id,
-        amount: +dto.amount.toFixed(4),
-        receipt_date: dto.receipt_date as any,
-        remark: dto.remark ?? null,
-      }),
-    );
+  async addReceipt(id: number, dto: AddReceiptDto): Promise<Settlement> {
+    return this.dataSource.transaction(async (manager) => {
+      const settlement = await manager.findOne(Settlement, {
+        where: { id, deleted: 0 },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!settlement) throw new NotFoundException(`结算单 #${id} 不存在`);
+      if (settlement.status !== SettlementStatus.DRAFT) {
+        throw new BadRequestException('只有草稿状态才可添加收汇');
+      }
+
+      await manager.save(
+        SettlementReceipt,
+        manager.create(SettlementReceipt, {
+          settlement_id: id,
+          amount: r4(dto.amount),
+          receipt_date: dto.receipt_date as any,
+          remark: dto.remark ?? null,
+        }),
+      );
+
+      // 实际收汇金额(USD) = 逐笔收汇累计，驱动结算金额→毛利→净利重算
+      const receipts = await manager.find(SettlementReceipt, { where: { settlement_id: id } });
+      settlement.receipt_usd = r4(receipts.reduce((s, r) => s + +r.amount, 0));
+      const costs = await manager.find(SettlementCost, { where: { settlement_id: id } });
+      const { goodsAmountTax, goodsAmountExtax } = goodsSplit(costs, +(settlement.goods_amount_tax ?? 0));
+      this.applyDerived(settlement, goodsAmountTax, goodsAmountExtax);
+      return manager.save(Settlement, settlement);
+    });
   }
 
   async confirm(id: number): Promise<Settlement> {
@@ -191,5 +288,4 @@ export class SettlementService {
     settlement.deleted = 1;
     await this.repo.save(settlement);
   }
-
 }
