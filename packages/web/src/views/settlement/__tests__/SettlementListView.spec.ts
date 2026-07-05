@@ -175,10 +175,10 @@ describe('SettlementListView', () => {
     expect(wrapper.text()).toContain('新建结算单');
   });
 
-  it('"新建结算单" is hidden for BUSINESS', async () => {
+  it('"新建结算单" is shown for BUSINESS (出货后业务可建·结算串流程 rec)', async () => {
     const wrapper = mountView(UserRole.BUSINESS);
     await vi.waitFor(() => expect(mockList).toHaveBeenCalled());
-    expect(wrapper.text()).not.toContain('新建结算单');
+    expect(wrapper.text()).toContain('新建结算单');
   });
 
   // ─────────────────────────────── cost lines can be added and removed

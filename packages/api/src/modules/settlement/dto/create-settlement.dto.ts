@@ -16,6 +16,11 @@ export class CreateCostLineDto {
   @IsOptional()
   @IsIn([0, 1])
   has_invoice?: number;
+
+  @ApiPropertyOptional({ description: '该行税率%（有票按此换不含税，缺省13）', default: 13 })
+  @IsOptional()
+  @IsNumber()
+  tax_rate?: number;
 }
 
 export class CreateSettlementDto {

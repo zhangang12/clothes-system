@@ -66,20 +66,27 @@
       <template #header>
         <div class="card-header">
           <span>利润汇总（净利&lt;0 亏损预警）</span>
-          <el-radio-group v-model="profitDim" size="small" @change="loadProfit">
-            <el-radio-button value="style">按款号</el-radio-button>
-            <el-radio-button value="month">按月份</el-radio-button>
-          </el-radio-group>
+          <div>
+            <el-radio-group v-model="profitDim" size="small" @change="loadProfit">
+              <el-radio-button value="style">按款号</el-radio-button>
+              <el-radio-button value="month">按月份</el-radio-button>
+              <el-radio-button value="customer">按客户</el-radio-button>
+            </el-radio-group>
+            <el-button size="small" :icon="Download" style="margin-left:8px" :disabled="!profitRows.length" @click="exportProfit">导出CSV</el-button>
+          </div>
         </div>
       </template>
       <el-table :data="profitRows" border stripe size="small" :row-class-name="lossRow">
-        <el-table-column prop="key" :label="profitDim === 'month' ? '月份' : '款号'" />
+        <el-table-column prop="key" :label="profitDim === 'month' ? '月份' : profitDim === 'customer' ? '客户' : '款号'" />
         <el-table-column prop="count" label="结算单数" width="90" align="right" />
         <el-table-column prop="settleAmount" label="结算金额" width="120" align="right">
           <template #default="{ row }">{{ fmt(row.settleAmount) }}</template>
         </el-table-column>
-        <el-table-column prop="grossProfit" label="毛利" width="110" align="right">
+        <el-table-column prop="grossProfit" label="毛利" width="100" align="right">
           <template #default="{ row }">{{ fmt(row.grossProfit) }}</template>
+        </el-table-column>
+        <el-table-column prop="grossMargin" label="毛利率" width="85" align="right">
+          <template #default="{ row }">{{ row.grossMargin != null ? row.grossMargin + '%' : '—' }}</template>
         </el-table-column>
         <el-table-column prop="netProfit" label="净利(含退税)" width="120" align="right">
           <template #default="{ row }">
@@ -103,6 +110,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
+import { Download } from '@element-plus/icons-vue';
 import { statsApi } from '@/api/stats';
 import { configApi } from '@/api/config';
 import { useAuthStore } from '@/stores/auth';
@@ -118,7 +126,7 @@ const funnel = ref<any>({});
 const winRows = ref<any[]>([]);
 const profitRows = ref<any[]>([]);
 const winDim = ref<'salesperson' | 'customer'>('salesperson');
-const profitDim = ref<'style' | 'month'>('style');
+const profitDim = ref<'style' | 'month' | 'customer'>('style');
 
 const unwrap = (res: any) => res?.data ?? res;
 
@@ -152,6 +160,21 @@ async function loadWin() {
 async function loadProfit() {
   loading.profit = true;
   try { profitRows.value = unwrap(await statsApi.profit(profitDim.value)) ?? []; } finally { loading.profit = false; }
+}
+
+function exportProfit() {
+  const dimLabel = profitDim.value === 'month' ? '月份' : profitDim.value === 'customer' ? '客户' : '款号';
+  const header = [dimLabel, '结算单数', '结算金额', '毛利', '毛利率%', '净利(含退税)', '净利(不含退税)', '亏损'];
+  const rows = profitRows.value.map((r: any) => [
+    r.key, r.count, r.settleAmount, r.grossProfit, r.grossMargin, r.netProfit, r.netProfitExRefund, r.loss ? '亏损' : '',
+  ]);
+  const csv = [header, ...rows]
+    .map((line) => line.map((c: any) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `利润汇总-${dimLabel}.csv`; a.click();
+  URL.revokeObjectURL(url);
 }
 
 async function loadThresholds() {

@@ -22,8 +22,8 @@ export class SettlementController {
   constructor(private readonly service: SettlementService) {}
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.FINANCE)
-  @ApiOperation({ summary: '创建结算单（含费用明细）' })
+  @Roles(UserRole.ADMIN, UserRole.FINANCE, UserRole.BUSINESS)
+  @ApiOperation({ summary: '创建结算单（含费用明细；出货后业务可建·结算串流程 rec）' })
   create(@Body() dto: CreateSettlementDto, @Request() req: any) {
     return this.service.create(dto, req.user.id);
   }

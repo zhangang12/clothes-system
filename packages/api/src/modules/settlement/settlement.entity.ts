@@ -83,7 +83,13 @@ export class Settlement {
   breakeven_rate_extax?: number; // 保本汇率(不含税)
 
   @Column({ type: 'decimal', precision: 15, scale: 4, default: 0 })
-  tax_refund: number; // 出口退税
+  tax_refund: number; // 出口退税（可退税不含税采购额×退税率，自动测算）
+
+  @Column({ length: 20, default: 'ESTIMATED' })
+  refund_status: string; // 退税状态：ESTIMATED 预估 / RECEIVED 到账
+
+  @Column({ length: 100, nullable: true })
+  customer_name: string; // 中间商客户（利润按客户维度汇总用，创建时从订单带出）
 
   @Column({ type: 'decimal', precision: 15, scale: 4, default: 0 })
   net_profit: number; // 净利(含退税)=净利+退税

@@ -8,7 +8,9 @@ import { SettlementReceipt } from './settlement-receipt.entity';
 import { OrderMain } from '../order/order-main.entity';
 import { OrderShipment } from '../order/order-shipment.entity';
 import { Reconciliation, ReconciliationStatus } from '../reconciliation/reconciliation.entity';
+import { ReconciliationExpenseItem } from '../reconciliation/reconciliation-expense-item.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
+import { SysConfigService } from '../../common/config/sys-config.service';
 import { CreateSettlementDto } from './dto/create-settlement.dto';
 import { AddCostDto } from './dto/add-cost.dto';
 import { AddReceiptDto } from './dto/add-receipt.dto';
@@ -23,16 +25,24 @@ const r2 = (n: number) => +Number(n).toFixed(2);
 interface CostLike {
   amount: number;
   has_invoice?: number;
+  tax_rate?: number; // 各行税率%，缺省 13（禁一刀切 1.13）
 }
 
-// 总货款含税/不含税（无票计税：有票按不含税=含税÷1.13计入，无票按含税全额计入，防毛利虚高）
-function goodsSplit(costs: CostLike[], fallbackTax = 0) {
+const extaxOf = (amount: number, hasInvoice: number | undefined, rate: number) =>
+  hasInvoice === 0 ? amount : amount / (1 + rate / 100);
+
+// 总货款含税/不含税（无票计税：有票按各自税率换不含税，无票按含税全额计入，防毛利虚高）
+// 同时返回可退税不含税采购额（仅有票行，供退税测算）
+function goodsSplit(costs: CostLike[], fallbackTax = 0, defaultRate = 13) {
   if (costs.length) {
     const tax = costs.reduce((s, c) => s + +c.amount, 0);
-    const extax = costs.reduce((s, c) => s + (c.has_invoice === 0 ? +c.amount : +c.amount / VAT_DIVISOR), 0);
-    return { goodsAmountTax: r4(tax), goodsAmountExtax: r4(extax) };
+    const extax = costs.reduce((s, c) => s + extaxOf(+c.amount, c.has_invoice, c.tax_rate != null ? +c.tax_rate : defaultRate), 0);
+    const refundableExtax = costs.reduce(
+      (s, c) => s + (c.has_invoice === 0 ? 0 : +c.amount / (1 + (c.tax_rate != null ? +c.tax_rate : defaultRate) / 100)), 0);
+    return { goodsAmountTax: r4(tax), goodsAmountExtax: r4(extax), refundableExtax: r4(refundableExtax) };
   }
-  return { goodsAmountTax: r4(fallbackTax), goodsAmountExtax: r4(fallbackTax / VAT_DIVISOR) };
+  const extax = fallbackTax / (1 + defaultRate / 100);
+  return { goodsAmountTax: r4(fallbackTax), goodsAmountExtax: r4(extax), refundableExtax: r4(extax) };
 }
 
 interface DerivedInput {
@@ -85,7 +95,9 @@ export class SettlementService {
     @InjectRepository(OrderMain) private readonly orderRepo: Repository<OrderMain>,
     @InjectRepository(OrderShipment) private readonly shipmentRepo: Repository<OrderShipment>,
     @InjectRepository(Reconciliation) private readonly reconcileRepo: Repository<Reconciliation>,
+    @InjectRepository(ReconciliationExpenseItem) private readonly expenseItemRepo: Repository<ReconciliationExpenseItem>,
     private readonly numbering: NumberingService,
+    private readonly config: SysConfigService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -101,6 +113,23 @@ export class SettlementService {
       ],
     });
     return r4(recons.reduce((s, r) => s + +r.total_amount, 0));
+  }
+
+  // 期间费用按款号从无合同费用对账归集（结算串流程 rec：账实一致，从对账付款带入）
+  private async aggregatePeriodExpense(styleNo?: string): Promise<number> {
+    if (!styleNo) return 0;
+    // 无合同费用对账单（CONFIRMED/PAID）下、费用明细款号命中该款的金额之和
+    const recons = await this.reconcileRepo.find({
+      where: [
+        { style_no: styleNo, type: ReconcileType.NO_CONTRACT, status: ReconciliationStatus.CONFIRMED, deleted: 0 },
+        { style_no: styleNo, type: ReconcileType.NO_CONTRACT, status: ReconciliationStatus.PAID, deleted: 0 },
+      ],
+    });
+    const headerSum = r4(recons.reduce((s, r) => s + +r.total_amount, 0));
+    // 另计费用明细中单独标注该款号的行（跨款空白对账单场景）
+    const items = await this.expenseItemRepo.find({ where: { style_no: styleNo } });
+    const itemSum = r4(items.reduce((s, it) => s + +it.amount, 0));
+    return r4(Math.max(headerSum, itemSum));
   }
 
   // 把 settlement 上现存的财务录入 + 货款/期间费用重算所有派生量，写回实体（不落库）
@@ -150,15 +179,24 @@ export class SettlementService {
     const fallbackTax = (!dto.costs?.length && dto.goods_amount_tax == null)
       ? await this.aggregateGoodsTax(order.style_no)
       : (dto.goods_amount_tax ?? 0);
+    // 缺省税率/退税率取自配置（禁一刀切 1.13）
+    const vatRate = await this.config.getNumber('vat_rate', 13);
+    const refundRate = await this.config.getNumber('export_refund_rate', 13);
+    // 期间费用未填时，从无合同费用对账按款号归集（账实一致）
+    const noPeriodInput = dto.freight_fee == null && dto.express_fee == null && dto.sample_fee == null && dto.other_fee == null;
+    const aggPeriod = noPeriodInput ? await this.aggregatePeriodExpense(order.style_no) : 0;
 
     return this.dataSource.transaction(async (manager) => {
       const costs = dto.costs ?? [];
-      const { goodsAmountTax, goodsAmountExtax } = goodsSplit(costs, fallbackTax);
+      const { goodsAmountTax, goodsAmountExtax, refundableExtax } = goodsSplit(costs, fallbackTax, vatRate);
+      // 退税额自动测算：可退税不含税采购额 × 退税率（未手填时用测算值）
+      const taxRefund = dto.tax_refund != null ? +dto.tax_refund : r4(refundableExtax * refundRate / 100);
 
       const draft = manager.create(Settlement, {
         settlement_no,
         order_id: dto.order_id,
         style_no: order.style_no ?? null,
+        customer_name: order.middleman_name ?? null,
         shipped_qty: shippedQty,
         currency: order.currency ?? 'CNY',
         exchange_rate: dto.exchange_rate ?? null,
@@ -168,8 +206,9 @@ export class SettlementService {
         freight_fee: r4(dto.freight_fee ?? 0),
         express_fee: r4(dto.express_fee ?? 0),
         sample_fee: r4(dto.sample_fee ?? 0),
-        other_fee: r4(dto.other_fee ?? 0),
-        tax_refund: r4(dto.tax_refund ?? 0),
+        other_fee: r4(dto.other_fee ?? aggPeriod), // 期间费用归集值落 other_fee
+        tax_refund: r4(taxRefund),
+        refund_status: 'ESTIMATED',
         description: dto.description ?? null,
         created_by: createdBy,
         deleted: 0,
@@ -185,6 +224,7 @@ export class SettlementService {
             cost_name: c.cost_name,
             amount: r4(c.amount),
             has_invoice: c.has_invoice ?? 1,
+            tax_rate: c.tax_rate ?? vatRate,
           }),
         );
         await manager.save(SettlementCost, costLines);

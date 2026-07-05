@@ -9,8 +9,13 @@ import { SettlementReceipt } from '../settlement-receipt.entity';
 import { OrderMain } from '../../order/order-main.entity';
 import { OrderShipment } from '../../order/order-shipment.entity';
 import { Reconciliation } from '../../reconciliation/reconciliation.entity';
+import { ReconciliationExpenseItem } from '../../reconciliation/reconciliation-expense-item.entity';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
+import { SysConfigService } from '../../../common/config/sys-config.service';
 import { SettlementStatus } from '@i9/types';
+
+const mockConfig = { getNumber: jest.fn((_k: string, fb: number) => Promise.resolve(fb)) };
+const mockExpenseItemRepo = { find: jest.fn().mockResolvedValue([]) };
 
 const makeSettlement = (overrides = {}): any => ({
   id: 1,
@@ -85,6 +90,8 @@ describe('SettlementService', () => {
         { provide: getRepositoryToken(OrderMain), useValue: mockOrderRepo },
         { provide: getRepositoryToken(OrderShipment), useValue: mockShipmentRepo },
         { provide: getRepositoryToken(Reconciliation), useValue: mockReconcileRepo },
+        { provide: getRepositoryToken(ReconciliationExpenseItem), useValue: mockExpenseItemRepo },
+        { provide: SysConfigService, useValue: mockConfig },
         { provide: NumberingService, useValue: new NumberingService(mockRedis as any) },
         { provide: DataSource, useValue: mockDataSource },
         { provide: REDIS_CLIENT, useValue: mockRedis },

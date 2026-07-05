@@ -7,8 +7,8 @@
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="query.status" clearable placeholder="全部" style="width:110px" @change="load">
-            <el-option label="草稿" value="DRAFT" />
-            <el-option label="已确认" value="CONFIRMED" />
+            <el-option label="待收汇" value="DRAFT" />
+            <el-option label="已结算" value="CONFIRMED" />
           </el-select>
         </el-form-item>
         <el-form-item label="订单ID">
@@ -25,7 +25,7 @@
       <template #header>
         <div class="card-header">
           <span>结算单列表</span>
-          <el-button v-if="canEdit" type="primary" :icon="Plus" @click="openCreate">新建结算单</el-button>
+          <el-button v-if="canCreate" type="primary" :icon="Plus" @click="openCreate">新建结算单</el-button>
         </div>
       </template>
 
@@ -54,7 +54,7 @@
         <el-table-column prop="status" label="状态" width="90">
           <template #default="{ row }">
             <el-tag :type="row.status === 'CONFIRMED' ? 'success' : 'info'" size="small">
-              {{ row.status === 'CONFIRMED' ? '已确认' : '草稿' }}
+              {{ row.status === 'CONFIRMED' ? '已结算' : '待收汇' }}
             </el-tag>
           </template>
         </el-table-column>
@@ -98,7 +98,7 @@
           <el-descriptions-item label="订单ID">{{ detailData.order_id }}</el-descriptions-item>
           <el-descriptions-item label="状态">
             <el-tag :type="detailData.status === 'CONFIRMED' ? 'success' : 'info'" size="small">
-              {{ detailData.status === 'CONFIRMED' ? '已确认' : '草稿' }}
+              {{ detailData.status === 'CONFIRMED' ? '已结算' : '待收汇' }}
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="款号">{{ detailData.style_no || '—' }}</el-descriptions-item>
@@ -125,7 +125,7 @@
           <el-descriptions-item label="毛利率">{{ detailData.gross_margin != null ? `${(+detailData.gross_margin).toFixed(2)}%` : '—' }}</el-descriptions-item>
           <el-descriptions-item label="财务及管理费(7%)">{{ money(detailData.finance_fee) }}</el-descriptions-item>
           <el-descriptions-item label="期间费用合计">{{ money(periodFeeTotal(detailData)) }}</el-descriptions-item>
-          <el-descriptions-item label="出口退税">{{ money(detailData.tax_refund) }}</el-descriptions-item>
+          <el-descriptions-item label="出口退税">{{ money(detailData.tax_refund) }}<el-tag size="small" :type="detailData.refund_status === 'RECEIVED' ? 'success' : 'info'" style="margin-left:6px">{{ detailData.refund_status === 'RECEIVED' ? '已到账' : '预估' }}</el-tag></el-descriptions-item>
           <el-descriptions-item label="保本汇率(含税/不含税)">
             {{ num4(detailData.breakeven_rate_tax) }} / {{ num4(detailData.breakeven_rate_extax) }}
           </el-descriptions-item>
@@ -218,15 +218,18 @@
         <el-divider>成本明细（对账付款汇总·含税）</el-divider>
         <div v-for="(c, idx) in createForm.costs" :key="idx" class="item-row">
           <el-row :gutter="8" align="middle">
-            <el-col :span="7"><el-input v-model="c.cost_name" placeholder="费用名称" /></el-col>
-            <el-col :span="6">
-              <el-input-number v-model="c.amount" :min="0" :precision="2" placeholder="金额" style="width:100%" />
+            <el-col :span="6"><el-input v-model="c.cost_name" placeholder="费用名称" /></el-col>
+            <el-col :span="5">
+              <el-input-number v-model="c.amount" :min="0" :precision="2" :controls="false" placeholder="金额" style="width:100%" />
             </el-col>
             <el-col :span="5">
               <el-select v-model="c.has_invoice" style="width:100%">
                 <el-option :value="1" label="有发票" />
                 <el-option :value="0" label="无发票" />
               </el-select>
+            </el-col>
+            <el-col :span="5">
+              <el-input-number v-model="c.tax_rate" :min="0" :max="100" :precision="2" :controls="false" :disabled="!c.has_invoice" placeholder="税率%" style="width:100%" />
             </el-col>
             <el-col :span="3">
               <el-button link type="danger" @click="removeCostLine(idx)">删除</el-button>
@@ -296,6 +299,8 @@ import { UserRole } from '@i9/types';
 const authStore = useAuthStore();
 const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
 const canEdit = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.FINANCE));
+// 出货后业务可建结算单（结算串流程 rec）；确认/编辑仍限财务/管理
+const canCreate = computed(() => canEdit.value || authStore.hasRole(UserRole.BUSINESS));
 
 const loading = ref(false);
 const saving = ref(false);
@@ -376,7 +381,7 @@ const money = (v: any) => (v == null ? '—' : (+v).toFixed(2));
 const num4 = (v: any) => (v == null ? '—' : (+v).toFixed(4));
 const periodFeeTotal = (d: any) =>
   (+(d?.freight_fee ?? 0)) + (+(d?.express_fee ?? 0)) + (+(d?.sample_fee ?? 0)) + (+(d?.other_fee ?? 0));
-function addCostLine() { createForm.costs.push({ cost_name: '', amount: undefined, has_invoice: 1 }); }
+function addCostLine() { createForm.costs.push({ cost_name: '', amount: undefined, has_invoice: 1, tax_rate: 13 }); }
 function removeCostLine(idx: number) { createForm.costs.splice(idx, 1); }
 async function doCreate() {
   await createFormRef.value?.validate();

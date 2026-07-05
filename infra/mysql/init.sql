@@ -696,7 +696,9 @@ CREATE TABLE IF NOT EXISTS `settlement` (
   `gross_margin`         DECIMAL(8,2)   DEFAULT NULL COMMENT '毛利率%',
   `breakeven_rate_tax`   DECIMAL(10,4)  DEFAULT NULL COMMENT '保本汇率(含税)=成本单价含税÷美金单价',
   `breakeven_rate_extax` DECIMAL(10,4)  DEFAULT NULL COMMENT '保本汇率(不含税)',
-  `tax_refund`           DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '出口退税',
+  `tax_refund`           DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '出口退税(可退税不含税采购额×退税率,自动测算)',
+  `refund_status`        VARCHAR(20)    NOT NULL DEFAULT 'ESTIMATED' COMMENT '退税状态:ESTIMATED预估/RECEIVED到账',
+  `customer_name`        VARCHAR(100)   DEFAULT NULL COMMENT '中间商客户(利润按客户维度汇总)',
   `net_profit`           DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '净利(含退税)=净利+退税',
   `net_profit_ex_refund` DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '净利(不含退税)=毛利−期间费用−财务费7%',
   `revenue`              DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '兼容列=结算金额',
@@ -721,6 +723,7 @@ CREATE TABLE IF NOT EXISTS `settlement_cost` (
   `cost_name`       VARCHAR(100)   NOT NULL COMMENT '成本项名称',
   `amount`          DECIMAL(15,4)  NOT NULL COMMENT '金额',
   `has_invoice`     TINYINT        NOT NULL DEFAULT 1 COMMENT '1=有票 0=无票',
+  `tax_rate`        DECIMAL(5,2)   NOT NULL DEFAULT 13 COMMENT '该行税率%(有票按此换不含税)',
   `created_at`      DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_settlement` (`settlement_id`)

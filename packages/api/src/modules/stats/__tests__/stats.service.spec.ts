@@ -68,5 +68,19 @@ describe('StatsService', () => {
     expect(rows[0].loss).toBe(true);
     const k100 = rows.find((r) => r.key === 'K-100');
     expect(k100).toMatchObject({ count: 2, settleAmount: 1500, netProfit: 280, loss: false });
+    // 毛利率% = 毛利/结算金额 = 400/1500
+    expect(k100!.grossMargin).toBe(26.7);
+  });
+
+  it('UT-STAT-04 profit by customer dimension groups by customer_name', async () => {
+    mockSettlementRepo.find.mockResolvedValue([
+      { customer_name: '中间商甲', settle_amount: 1000, gross_profit: 300, net_profit: 200, net_profit_ex_refund: 150 },
+      { customer_name: '中间商甲', settle_amount: 500, gross_profit: 100, net_profit: 80, net_profit_ex_refund: 50 },
+      { customer_name: null, settle_amount: 200, gross_profit: 20, net_profit: 10, net_profit_ex_refund: 5 },
+    ]);
+    const rows = await service.profit('customer');
+    const jia = rows.find((r) => r.key === '中间商甲');
+    expect(jia).toMatchObject({ count: 2, settleAmount: 1500, netProfit: 280 });
+    expect(rows.find((r) => r.key === '未指定客户')).toBeTruthy();
   });
 });

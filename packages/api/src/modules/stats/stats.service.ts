@@ -58,8 +58,8 @@ export class StatsService {
       .sort((a, b) => b.total - a.total);
   }
 
-  // 利润汇总：按款号 或 按月份，净利<0 标亏损预警
-  async profit(dimension: 'style' | 'month') {
+  // 利润汇总：按款号 / 月份 / 客户，含毛利率%，净利<0 标亏损预警
+  async profit(dimension: 'style' | 'month' | 'customer') {
     const settlements = await this.settlementRepo.find({ where: { deleted: 0 } });
     const map = new Map<string, {
       key: string; count: number; settleAmount: number;
@@ -72,6 +72,8 @@ export class StatsService {
         key = d && !isNaN(d.getTime())
           ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
           : '未知';
+      } else if (dimension === 'customer') {
+        key = s.customer_name || '未指定客户';
       } else {
         key = s.style_no || '未指定';
       }
@@ -91,6 +93,7 @@ export class StatsService {
         count: r.count,
         settleAmount: +r.settleAmount.toFixed(2),
         grossProfit: +r.grossProfit.toFixed(2),
+        grossMargin: r.settleAmount > 0 ? +((r.grossProfit / r.settleAmount) * 100).toFixed(1) : 0, // 毛利率%
         netProfit: +r.netProfit.toFixed(2),
         netProfitExRefund: +r.netProfitExRefund.toFixed(2),
         loss: r.netProfit < 0, // 亏损预警

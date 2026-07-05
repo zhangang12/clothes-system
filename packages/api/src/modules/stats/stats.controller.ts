@@ -30,9 +30,10 @@ export class StatsController {
 
   @Get('profit')
   @Roles(UserRole.ADMIN, UserRole.FINANCE, UserRole.SUPERVISOR)
-  @ApiOperation({ summary: '利润汇总（按款号/月份，净利<0亏损预警）' })
-  @ApiQuery({ name: 'dimension', required: false, enum: ['style', 'month'] })
+  @ApiOperation({ summary: '利润汇总（按款号/月份/客户，含毛利率%，净利<0亏损预警）' })
+  @ApiQuery({ name: 'dimension', required: false, enum: ['style', 'month', 'customer'] })
   profit(@Query('dimension') dimension?: string) {
-    return this.service.profit(dimension === 'month' ? 'month' : 'style');
+    const dim = dimension === 'month' ? 'month' : dimension === 'customer' ? 'customer' : 'style';
+    return this.service.profit(dim);
   }
 }

@@ -1462,6 +1462,7 @@ test_stats() {
   api GET "/stats/win-rate?dimension=customer";    expect_ok "成单率(客户)2xx"
   api GET "/stats/profit?dimension=style";         expect_ok "利润汇总(款号)2xx"
   api GET "/stats/profit?dimension=month";         expect_ok "利润汇总(月份)2xx"
+  api GET "/stats/profit?dimension=customer";      expect_ok "利润汇总(客户)2xx"
   # 利润仅 ADMIN/FINANCE/主管：版师(打样)查利润应被拒
   api GET "/stats/profit" '' "$TOKEN_PM"
   expect_deny "版师查利润汇总应拒绝(仅财务/管理)"
