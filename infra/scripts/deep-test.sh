@@ -1017,6 +1017,12 @@ test_reconciliation_ext() {
   api GET "/reconciliations?keyword=${knSfx}" '' "$TOKEN_FINANCE"
   expect_num total 1 "按款号检索对账单命中1条"
 
+  # ── 发票号查重：同一发票号不可重复对账（防重复付，设计稿 G3）──
+  api POST /reconciliations "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid:-0},\"invoice_no\":\"DUP-${SFX}\",\"invoice_amount\":50,\"shipments\":[{\"shipment_id\":1,\"item_name\":\"D\",\"snapshot_unit_price\":10,\"qty\":5}]}" "$TOKEN_FINANCE"
+  expect_ok "首次用发票号DUP建对账"
+  api POST /reconciliations "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid:-0},\"invoice_no\":\"DUP-${SFX}\",\"shipments\":[]}" "$TOKEN_FINANCE"
+  expect_code 400 "重复发票号对账应400(防重复付)"
+
   # ── 边界：空明细数组可建且总额0 ──
   api POST /reconciliations "{\"type\":\"NO_CONTRACT\",\"factory_id\":${fid:-0},\"shipments\":[]}" "$TOKEN_FINANCE"
   expect_ok "空明细数组可建"

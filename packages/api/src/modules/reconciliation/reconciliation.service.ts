@@ -22,6 +22,14 @@ export class ReconciliationService {
   ) {}
 
   async create(dto: CreateReconciliationDto, createdBy: number): Promise<Reconciliation> {
+    // 发票号全局查重，防止同一发票重复对账/重复付款（设计稿 G3）
+    if (dto.invoice_no) {
+      const dup = await this.repo.findOne({ where: { invoice_no: dto.invoice_no, deleted: 0 } });
+      if (dup) {
+        throw new BadRequestException(`发票号 ${dto.invoice_no} 已被对账单 ${dup.reconcile_no} 使用（防重复付）`);
+      }
+    }
+
     const prefix = dto.type === ReconcileType.NO_CONTRACT
       ? `${NUM_PREFIX.RECONCILIATION}-NC`
       : NUM_PREFIX.RECONCILIATION;
