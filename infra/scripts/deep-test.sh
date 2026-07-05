@@ -412,8 +412,10 @@ test_portal() {
   expect_ok "供应商盖章(PUSHED→STAMPED)"
   api PATCH "/portal/contracts/${ctid:-0}/ship" '{"remark":"已发货"}' "$TOKEN_SUP"
   expect_ok "供应商确认发货(STAMPED→SHIPPING)"
-  api PATCH "/portal/contracts/${ctid:-0}/invoice" '{"invoice_no":"INV-P1","invoice_amount":12000}' "$TOKEN_SUP"
-  expect_ok "供应商开票"
+  api PATCH "/portal/contracts/${ctid:-0}/invoice" '{"invoice_no":"INV-P1","invoice_amount":12000,"invoice_url":"/api/v1/uploads/file?p=misc/2026/01/inv.pdf"}' "$TOKEN_SUP"
+  expect_ok "供应商开票(含发票号/金额/附件URL)"
+  api GET "/portal/contracts/${ctid:-0}" '' "$TOKEN_SUP"
+  [[ "$RESP" == *"附件:/api/v1/uploads"* ]] && ok "开票附件URL写入门户流水备注" || bad "开票备注未含附件URL ${RESP:0:160}"
   api PATCH "/portal/contracts/${ctid:-0}/stamp" '' "$TOKEN_SUP"
   expect_code 400 "重复盖章应400(非PUSHED)"
 }
@@ -583,11 +585,17 @@ test_factory_ext() {
   api PATCH "/factories/${fid:-0}/status" "" "$TOKEN_BUSINESS"
   expect_deny "业务员切换工厂状态应被拒绝(仅ADMIN)"
 
-  # ── 批量导入：2 条有效 + 1 条缺联系人(应记失败) ──
+  # ── 批量导入·工厂：2 条有效 + 1 条缺联系人(应记失败) ──
   api POST /factories/import "{\"rows\":[{\"name\":\"Imp1_${SFX}_${RANDOM}\",\"type\":\"FABRIC\",\"contacts\":[{\"name\":\"李\"}]},{\"name\":\"Imp2_${SFX}_${RANDOM}\",\"type\":\"OUTSOURCE\",\"contacts\":[{\"name\":\"王\"}]},{\"name\":\"ImpBad_${SFX}\",\"type\":\"FABRIC\"}]}"
   expect_ok "批量导入工厂应2xx"
   expect_num data.created 2 "导入成功2条(有效行)"
   expect_num data.failedCount 1 "导入失败1条(缺联系人)"
+
+  # ── 批量导入·客户：2 条有效 + 1 条缺联系人(应记失败) ──
+  api POST /customers/import "{\"rows\":[{\"name\":\"CImp1_${SFX}_${RANDOM}\",\"type\":\"MIDDLEMAN\",\"grade\":\"A\",\"currency\":\"USD\",\"contacts\":[{\"name\":\"李\"}]},{\"name\":\"CImp2_${SFX}_${RANDOM}\",\"type\":\"MIDDLEMAN\",\"grade\":\"B\",\"currency\":\"USD\",\"contacts\":[{\"name\":\"王\"}]},{\"name\":\"CImpBad_${SFX}\",\"type\":\"MIDDLEMAN\",\"grade\":\"A\",\"currency\":\"USD\"}]}"
+  expect_ok "批量导入客户应2xx"
+  expect_num data.created 2 "客户导入成功2条(有效行)"
+  expect_num data.failedCount 1 "客户导入失败1条(缺联系人)"
 }
 
 test_sample_ext() {
