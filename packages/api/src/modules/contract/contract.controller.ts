@@ -8,6 +8,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@i9/types';
 import { ContractService } from './contract.service';
+import { maskContract } from '../../common/masking/field-mask';
 import { ContractStatus } from './contract.entity';
 import { CreateContractDto } from './dto/create-contract.dto';
 import { QueryContractDto } from './dto/query-contract.dto';
@@ -34,15 +35,15 @@ export class ContractController {
   }
 
   @Get()
-  @ApiOperation({ summary: '合同列表（分页）' })
-  findAll(@Query() query: QueryContractDto) {
-    return this.service.findAll(query);
+  @ApiOperation({ summary: '合同列表（分页；版师/打样脱敏供应商成本）' })
+  async findAll(@Query() query: QueryContractDto, @Request() req: any) {
+    return maskContract(await this.service.findAll(query), req.user.role);
   }
 
   @Get(':id')
-  @ApiOperation({ summary: '合同详情（含材料明细）' })
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.service.findOne(id);
+  @ApiOperation({ summary: '合同详情（含材料明细；版师/打样脱敏供应商成本）' })
+  async findOne(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return maskContract(await this.service.findOne(id), req.user.role);
   }
 
   @Get(':id/logs')

@@ -8,6 +8,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@i9/types';
 import { SettlementService } from './settlement.service';
+import { maskSettlement } from '../../common/masking/field-mask';
 import { CreateSettlementDto } from './dto/create-settlement.dto';
 import { AddCostDto } from './dto/add-cost.dto';
 import { AddReceiptDto } from './dto/add-receipt.dto';
@@ -28,15 +29,15 @@ export class SettlementController {
   }
 
   @Get()
-  @ApiOperation({ summary: '结算单列表（分页）' })
-  findAll(@Query() query: QuerySettlementDto) {
-    return this.service.findAll(query);
+  @ApiOperation({ summary: '结算单列表（分页；成本/毛利限财务/管理）' })
+  async findAll(@Query() query: QuerySettlementDto, @Request() req: any) {
+    return maskSettlement(await this.service.findAll(query), req.user.role);
   }
 
   @Get(':id')
-  @ApiOperation({ summary: '结算单详情（含费用明细、回款记录）' })
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.service.findOne(id);
+  @ApiOperation({ summary: '结算单详情（含费用/回款；成本/毛利限财务/管理）' })
+  async findOne(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return maskSettlement(await this.service.findOne(id), req.user.role);
   }
 
   @Post(':id/costs')

@@ -1493,6 +1493,22 @@ test_company() {
   expect_ok "复位默认主体回1"
 }
 
+test_masking() {
+  # 字段级角色脱敏（设计稿 F 系列 rec:0）：版师/打样不见对客单价与毛利
+  local cid qid
+  cid=$(fx_customer); qid=$(fx_quote "$cid")
+  api GET "/quotes/${qid:-0}" '' "$TOKEN_ADMIN"
+  local at; at=$(echo "$RESP" | jval data.rmb_total)
+  [[ -n "$at" && "$at" != "0" ]] && ok "管理员可见报价对客合计=$at" || bad "管理员应见报价合计 ${RESP:0:120}"
+  api GET "/quotes/${qid:-0}" '' "$TOKEN_PM"
+  expect_eq data.rmb_total "" "版师看报价对客合计应脱敏为空"
+  api GET "/quotes/${qid:-0}" '' "$TOKEN_SAMPLE"
+  expect_eq data.rmb_total "" "打样看报价对客合计应脱敏为空"
+  api GET "/quotes/${qid:-0}" '' "$TOKEN_BUSINESS"
+  local bt; bt=$(echo "$RESP" | jval data.rmb_total)
+  [[ -n "$bt" && "$bt" != "0" ]] && ok "业务(非maker)可见报价对客合计=$bt" || bad "业务应见报价合计 ${RESP:0:120}"
+}
+
 # ── 执行所有模块（基础 + 扩展）────────────────────────────────
 group "1. 鉴权与权限基线";        test_auth;           test_auth_ext
 group "2. 客户";                  test_customer;       test_customer_ext
@@ -1509,6 +1525,7 @@ group "12. 文件上传";              test_upload
 group "13. 报表统计";              test_stats
 group "14. 金额阈值审批";          test_approval
 group "15. 本司主体";              test_company
+group "16. 字段级脱敏";            test_masking
 
 echo ""
 echo "=================================================================="

@@ -8,6 +8,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@i9/types';
 import { QuoteService } from './quote.service';
+import { maskQuote } from '../../common/masking/field-mask';
 import { CreateQuoteDto } from './dto/create-quote.dto';
 import { QueryQuoteDto } from './dto/query-quote.dto';
 
@@ -26,15 +27,15 @@ export class QuoteController {
   }
 
   @Get()
-  @ApiOperation({ summary: '报价单列表（分页）' })
-  findAll(@Query() query: QueryQuoteDto) {
-    return this.service.findAll(query);
+  @ApiOperation({ summary: '报价单列表（分页；版师/打样脱敏对客单价）' })
+  async findAll(@Query() query: QueryQuoteDto, @Request() req: any) {
+    return maskQuote(await this.service.findAll(query), req.user.role);
   }
 
   @Get(':id')
-  @ApiOperation({ summary: '报价单详情（含报价明细+费用明细）' })
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.service.findOne(id);
+  @ApiOperation({ summary: '报价单详情（含明细；版师/打样脱敏对客单价）' })
+  async findOne(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return maskQuote(await this.service.findOne(id), req.user.role);
   }
 
   @Put(':id')

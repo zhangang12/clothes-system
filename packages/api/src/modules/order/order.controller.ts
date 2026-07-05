@@ -8,6 +8,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@i9/types';
 import { OrderService } from './order.service';
+import { maskOrder } from '../../common/masking/field-mask';
 import { CreateOrderDto, AddShipmentDto } from './dto/create-order.dto';
 import { QueryOrderDto } from './dto/query-order.dto';
 
@@ -26,15 +27,15 @@ export class OrderController {
   }
 
   @Get()
-  @ApiOperation({ summary: '订单列表（分页）' })
-  findAll(@Query() query: QueryOrderDto) {
-    return this.service.findAll(query);
+  @ApiOperation({ summary: '订单列表（分页；版师/打样脱敏对客单价）' })
+  async findAll(@Query() query: QueryOrderDto, @Request() req: any) {
+    return maskOrder(await this.service.findAll(query), req.user.role);
   }
 
   @Get(':id')
-  @ApiOperation({ summary: '订单详情（含用料/出货/尺码矩阵）' })
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.service.findOne(id);
+  @ApiOperation({ summary: '订单详情（含用料/出货/尺码矩阵；版师/打样脱敏对客单价）' })
+  async findOne(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return maskOrder(await this.service.findOne(id), req.user.role);
   }
 
   @Put(':id')
