@@ -4,6 +4,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PortalService } from '../portal.service';
 import { Contract } from '../../contract/contract.entity';
 import { ContractMaterial } from '../../contract/contract-material.entity';
+import { ContractShipment } from '../../contract/contract-shipment.entity';
 import { ContractPortalLog } from '../../contract/contract-portal-log.entity';
 import { OrderMain } from '../../order/order-main.entity';
 import { OrderMaterial } from '../../order/order-material.entity';
@@ -65,6 +66,7 @@ describe('PortalService', () => {
         PortalService,
         { provide: getRepositoryToken(Contract), useValue: contractRepo },
         { provide: getRepositoryToken(ContractMaterial), useValue: materialRepo },
+        { provide: getRepositoryToken(ContractShipment), useValue: makeRepo() },
         { provide: getRepositoryToken(ContractPortalLog), useValue: logRepo },
         { provide: getRepositoryToken(OrderMain), useValue: makeRepo() },
         { provide: getRepositoryToken(OrderMaterial), useValue: makeRepo() },

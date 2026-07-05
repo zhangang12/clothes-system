@@ -169,7 +169,10 @@
           <el-table :data="detailData.shipments ?? []" border size="small">
             <el-table-column prop="shipment_id" label="出货单ID" width="90" />
             <el-table-column prop="contract_id" label="来源合同" width="90">
-              <template #default="{ row }">{{ row.contract_id ?? '—' }}</template>
+              <template #default="{ row }">
+                <el-link v-if="row.contract_id" type="primary" @click="goContract(row.contract_id)">#{{ row.contract_id }}</el-link>
+                <span v-else>—</span>
+              </template>
             </el-table-column>
             <el-table-column prop="style_no" label="款号" width="90">
               <template #default="{ row }">{{ row.style_no ?? '—' }}</template>
@@ -313,6 +316,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search, Refresh, Plus, Coin } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
@@ -322,7 +326,14 @@ import { useAuthStore } from '@/stores/auth';
 import { UserRole } from '@i9/types';
 
 const authStore = useAuthStore();
+const router = useRouter();
 const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
+
+// 发货批次合同号可点跳合同管理（对账付款串流程 B7/C12）
+function goContract(contractId: number) {
+  detailVisible.value = false;
+  router.push({ name: 'Contracts', query: { open: String(contractId) } });
+}
 const canEdit = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.FINANCE) || authStore.hasRole(UserRole.BUSINESS));
 const canReview = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.SUPERVISOR));
 const canBusiness = computed(() =>

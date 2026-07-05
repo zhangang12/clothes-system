@@ -5,6 +5,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, Like, DataSource } from 'typeorm';
 import { Contract, ContractStatus } from './contract.entity';
 import { ContractMaterial } from './contract-material.entity';
+import { ContractShipment } from './contract-shipment.entity';
 import { ContractPortalLog, PortalOperatorType } from './contract-portal-log.entity';
 import { OrderMaterial } from '../order/order-material.entity';
 import { OrderMain } from '../order/order-main.entity';
@@ -28,6 +29,7 @@ export class ContractService {
   constructor(
     @InjectRepository(Contract) private readonly repo: Repository<Contract>,
     @InjectRepository(ContractMaterial) private readonly materialRepo: Repository<ContractMaterial>,
+    @InjectRepository(ContractShipment) private readonly shipmentRepo: Repository<ContractShipment>,
     @InjectRepository(ContractPortalLog) private readonly logRepo: Repository<ContractPortalLog>,
     @InjectRepository(OrderMaterial) private readonly orderMaterialRepo: Repository<OrderMaterial>,
     @InjectRepository(OrderMain) private readonly orderRepo: Repository<OrderMain>,
@@ -220,7 +222,12 @@ export class ContractService {
       where: { contract_id: id },
       order: { sort_order: 'ASC' },
     });
-    return { ...contract, materials };
+    const shipments = await this.shipmentRepo.find({ where: { contract_id: id }, order: { id: 'ASC' } });
+    // 合同量 vs 累计实发 vs 差额（对账付款串流程 C12）
+    const contractQty = +materials.reduce((s, m) => s + +m.qty, 0).toFixed(4);
+    const shippedQty = +(+(contract.shipped_qty ?? 0)).toFixed(4);
+    const qtyStats = { contractQty, shippedQty, diffQty: +(contractQty - shippedQty).toFixed(4) };
+    return { ...contract, materials, shipments, qtyStats };
   }
 
   // 推送给供应商门户 (DRAFT → PUSHED)

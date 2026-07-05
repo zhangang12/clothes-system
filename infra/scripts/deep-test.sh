@@ -1374,6 +1374,14 @@ test_portal_ext() {
   expect_ok "首批发货60(STAMPED→SHIPPING)"
   api GET "/portal/contracts/${ctB:-0}" '' "$TOKEN_SUP"
   [[ "$RESP" == *"发货单:FH-"* ]] && ok "发货生成发货单号FH-(设计稿A2)" || bad "发货未生成FH发货单号"
+  # 发货核对：内部合同详情回带 qtyStats（合同量/累计实发/差额）+ 逐批锁价 + 到期日（对账付款串流程 B8/C12/D15）
+  api GET "/contracts/${ctB:-0}"
+  expect_num data.qtyStats.contractQty 100 "合同详情qtyStats.合同量=100"
+  expect_num data.qtyStats.shippedQty 60 "合同详情qtyStats.累计实发=60(首批)"
+  expect_num data.qtyStats.diffQty 40 "合同详情qtyStats.差额=40"
+  expect_num data.shipments.0.qty 60 "发货批次1数量=60"
+  expect_num data.shipments.0.snapshot_unit_price 8 "发货批次1锁定单价=合同单价8"
+  [[ -n "$(echo "$RESP" | jval data.due_date)" && "$(echo "$RESP" | jval data.due_date)" != null ]] && ok "发货回写到期日due_date(账期驱动)" || bad "发货未回写到期日due_date"
   # SHIPPING 已发货 → 再盖章应400
   api PATCH "/portal/contracts/${ctB:-0}/stamp" '' "$TOKEN_SUP"
   expect_code 400 "已发货后再盖章应400"

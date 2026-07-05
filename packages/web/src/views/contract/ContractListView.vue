@@ -100,6 +100,31 @@
           <el-descriptions-item label="盖章时间">{{ detail.stamped_at || '—' }}</el-descriptions-item>
         </el-descriptions>
 
+        <h4 class="sec">发货核对（合同量 / 累计实发 / 差额 · 到期日）</h4>
+        <el-descriptions :column="4" border size="small">
+          <el-descriptions-item label="合同量">{{ detail.qtyStats?.contractQty ?? '—' }}</el-descriptions-item>
+          <el-descriptions-item label="累计实发">{{ detail.qtyStats?.shippedQty ?? 0 }}</el-descriptions-item>
+          <el-descriptions-item label="差额">
+            <span :class="{ 'text-danger': (detail.qtyStats?.diffQty ?? 0) < 0 }">{{ detail.qtyStats?.diffQty ?? '—' }}</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="到期日">
+            <span :class="{ 'text-danger': isOverdue(detail) }">{{ detail.due_date ? String(detail.due_date).slice(0, 10) : '—' }}</span>
+            <el-tag v-if="isOverdue(detail)" type="danger" size="small" style="margin-left:4px">逾期</el-tag>
+          </el-descriptions-item>
+        </el-descriptions>
+
+        <template v-if="detail.shipments?.length">
+          <h4 class="sec">发货批次（逐批锁价）</h4>
+          <el-table :data="detail.shipments" size="small" border>
+            <el-table-column prop="ship_no" label="发货单号" width="150" />
+            <el-table-column prop="qty" label="数量" width="80" align="right" />
+            <el-table-column prop="snapshot_unit_price" label="锁定单价" width="100" align="right">
+              <template #default="{ row }">{{ row.snapshot_unit_price != null ? (+row.snapshot_unit_price).toFixed(4) : '—' }}</template>
+            </el-table-column>
+            <el-table-column prop="ship_date" label="发货日" width="110" />
+          </el-table>
+        </template>
+
         <h4 class="sec">材料明细</h4>
         <el-table :data="detail.materials || []" size="small" border>
           <el-table-column type="index" label="#" width="44" />
@@ -142,6 +167,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue';
+import { useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { Search, Plus, Download } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
@@ -154,9 +180,17 @@ import { useAuthStore } from '@/stores/auth';
 import { UserRole } from '@i9/types';
 
 const authStore = useAuthStore();
+const route = useRoute();
 const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
 const canEdit = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.BUSINESS));
 const canReview = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.SUPERVISOR));
+
+// 到期日逾期判断（今日>到期日 且未结束对账，对账付款串流程 D15）
+function isOverdue(row: any): boolean {
+  if (!row?.due_date) return false;
+  const due = new Date(String(row.due_date).slice(0, 10));
+  return !isNaN(due.getTime()) && due < new Date() && row.portal_status !== 'RECONCILED';
+}
 const portalStatuses = [{ v: 'DRAFT', l: '草稿' }, { v: 'PUSHED', l: '已推送' }, { v: 'STAMPED', l: '已盖章' }, { v: 'SHIPPING', l: '出货中' }, { v: 'RECONCILED', l: '已对账' }];
 const typeLabel = (t: string) => ({ MATERIAL: '面料合同', PROCESS: '加工合同', SUPPLEMENT: '补料合同' } as any)[t] ?? t;
 const portalLabel = (s: string) => ({ DRAFT: '草稿', PUSHED: '已推送', STAMPED: '已盖章', SHIPPING: '出货中', RECONCILED: '已对账' } as any)[s] ?? s;
@@ -191,7 +225,12 @@ async function loadRefs() {
   factories.value = (((fs as any).data ?? fs) as any[]) ?? [];
   orders.value = (os as any).data?.items ?? (os as any).items ?? [];
 }
-onMounted(() => { load(); loadRefs(); });
+onMounted(() => {
+  load();
+  loadRefs();
+  // 从对账"来源合同"链接跳转过来时（query.open=合同ID）自动打开该合同详情
+  if (route.query.open) viewDetail({ id: Number(route.query.open) });
+});
 
 // detail
 const detailVisible = ref(false);

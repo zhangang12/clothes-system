@@ -5,6 +5,7 @@ import { DataSource } from 'typeorm';
 import { ContractService } from '../contract.service';
 import { Contract, ContractStatus } from '../contract.entity';
 import { ContractMaterial } from '../contract-material.entity';
+import { ContractShipment } from '../contract-shipment.entity';
 import { ContractPortalLog, PortalOperatorType } from '../contract-portal-log.entity';
 import { OrderMaterial } from '../../order/order-material.entity';
 import { OrderMain } from '../../order/order-main.entity';
@@ -76,6 +77,7 @@ describe('ContractService', () => {
         ContractService,
         { provide: getRepositoryToken(Contract), useValue: mockRepo },
         { provide: getRepositoryToken(ContractMaterial), useValue: mockMaterialRepo },
+        { provide: getRepositoryToken(ContractShipment), useValue: { find: jest.fn().mockResolvedValue([]) } },
         { provide: getRepositoryToken(ContractPortalLog), useValue: mockLogRepo },
         { provide: getRepositoryToken(OrderMaterial), useValue: mockOrderMaterialRepo },
         { provide: getRepositoryToken(OrderMain), useValue: mockOrderRepo },

@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Contract } from '../contract/contract.entity';
 import { ContractMaterial } from '../contract/contract-material.entity';
+import { ContractShipment } from '../contract/contract-shipment.entity';
 import { ContractPortalLog, PortalOperatorType } from '../contract/contract-portal-log.entity';
 import { OrderMain } from '../order/order-main.entity';
 import { OrderMaterial } from '../order/order-material.entity';
@@ -23,6 +24,7 @@ export class PortalService {
   constructor(
     @InjectRepository(Contract) private readonly contractRepo: Repository<Contract>,
     @InjectRepository(ContractMaterial) private readonly materialRepo: Repository<ContractMaterial>,
+    @InjectRepository(ContractShipment) private readonly shipmentRepo: Repository<ContractShipment>,
     @InjectRepository(ContractPortalLog) private readonly logRepo: Repository<ContractPortalLog>,
     @InjectRepository(OrderMain) private readonly orderRepo: Repository<OrderMain>,
     @InjectRepository(OrderMaterial) private readonly orderMaterialRepo: Repository<OrderMaterial>,
@@ -167,6 +169,25 @@ export class PortalService {
       }
       const shipNo = await this.numbering.nextWithSegment(NUM_PREFIX.SHIPMENT, styleNo);
       parts.push(`发货单:${shipNo}`, `本次发货:${dto.qty}`, `累计:${newShipped}/${contractQty}`);
+
+      // 逐批锁价：本批发货记录当时生效合同单价快照（对账付款串流程 B8）
+      const contractAmount = materials.reduce((s, m) => s + +m.amount, 0);
+      const unitPrice = contractQty > 0 ? +(contractAmount / contractQty).toFixed(4) : null;
+      const shipDate = new Date();
+      const shipDateStr = shipDate.toISOString().slice(0, 10);
+      await this.shipmentRepo.save(this.shipmentRepo.create({
+        contract_id: id, ship_no: shipNo, qty: dto.qty,
+        snapshot_unit_price: unitPrice, amount: unitPrice != null ? +(unitPrice * dto.qty).toFixed(4) : null,
+        ship_date: shipDateStr, operator: supplierAccount,
+      }));
+
+      // 到期日 = 最后一次发货日 + 账期（逾期判断依据，对账付款串流程 D15）
+      contract.last_ship_date = shipDate;
+      if (contract.account_period_days != null) {
+        const due = new Date(shipDate);
+        due.setDate(due.getDate() + contract.account_period_days);
+        contract.due_date = due;
+      }
     }
     if (dto.remark) parts.push(dto.remark);
 

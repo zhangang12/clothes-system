@@ -523,6 +523,20 @@ CREATE TABLE IF NOT EXISTS `contract_material` (
   KEY `idx_contract` (`contract_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='合同材料明细（盖章前可改，盖章后冻结）';
 
+CREATE TABLE IF NOT EXISTS `contract_shipment` (
+  `id`                 BIGINT         NOT NULL AUTO_INCREMENT,
+  `contract_id`        BIGINT         NOT NULL,
+  `ship_no`            VARCHAR(30)    DEFAULT NULL COMMENT '发货单号 FH-款号-序号',
+  `qty`                DECIMAL(15,4)  NOT NULL COMMENT '本批发货数量',
+  `snapshot_unit_price` DECIMAL(15,4) DEFAULT NULL COMMENT '逐批锁定单价(发货当时合同单价快照)',
+  `amount`             DECIMAL(15,4)  DEFAULT NULL COMMENT '本批金额',
+  `ship_date`          DATE           DEFAULT NULL,
+  `operator`           VARCHAR(50)    DEFAULT NULL COMMENT '发货供应商账号',
+  `created_at`         DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_contract` (`contract_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='合同发货批次（逐批锁价）';
+
 CREATE TABLE IF NOT EXISTS `contract_portal_log` (
   `id`           BIGINT        NOT NULL AUTO_INCREMENT,
   `contract_id`  BIGINT        NOT NULL,
