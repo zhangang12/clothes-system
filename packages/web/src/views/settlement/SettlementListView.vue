@@ -38,7 +38,7 @@
         <el-table-column prop="total_cost" label="总成本" width="110" align="right">
           <template #default="{ row }">{{ (+row.total_cost).toFixed(2) }}</template>
         </el-table-column>
-        <el-table-column prop="net_profit" label="净利润" width="120" align="right">
+        <el-table-column prop="net_profit" label="含退税净利" width="120" align="right">
           <template #default="{ row }">
             <span :class="{ 'text-danger': +row.net_profit < 0, 'text-success': +row.net_profit > 0 }">
               {{ (+row.net_profit).toFixed(2) }}
@@ -95,11 +95,21 @@
               {{ detailData.status === 'CONFIRMED' ? '已确认' : '草稿' }}
             </el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="应收收入">{{ (+detailData.revenue).toFixed(2) }}</el-descriptions-item>
+          <el-descriptions-item label="出货件数">{{ detailData.shipped_qty ?? 0 }}</el-descriptions-item>
+          <el-descriptions-item label="货款(应收收入)">{{ (+detailData.revenue).toFixed(2) }}</el-descriptions-item>
           <el-descriptions-item label="总成本">{{ (+detailData.total_cost).toFixed(2) }}</el-descriptions-item>
-          <el-descriptions-item label="净利润">
+          <el-descriptions-item label="成本单价">{{ detailData.cost_per_unit != null ? (+detailData.cost_per_unit).toFixed(4) : '—' }}</el-descriptions-item>
+          <el-descriptions-item label="毛利">{{ (+detailData.gross_profit).toFixed(2) }}</el-descriptions-item>
+          <el-descriptions-item label="毛利率">{{ detailData.gross_margin != null ? `${(+detailData.gross_margin).toFixed(2)}%` : '—' }}</el-descriptions-item>
+          <el-descriptions-item label="退税">{{ (+detailData.tax_refund).toFixed(2) }}</el-descriptions-item>
+          <el-descriptions-item label="含退税净利">
             <span :class="{ 'text-danger': +detailData.net_profit < 0, 'text-success': +detailData.net_profit > 0 }">
               {{ (+detailData.net_profit).toFixed(2) }}
+            </span>
+          </el-descriptions-item>
+          <el-descriptions-item label="不含退税净利">
+            <span :class="{ 'text-danger': +detailData.net_profit_ex_refund < 0, 'text-success': +detailData.net_profit_ex_refund > 0 }">
+              {{ (+detailData.net_profit_ex_refund).toFixed(2) }}
             </span>
           </el-descriptions-item>
         </el-descriptions>
