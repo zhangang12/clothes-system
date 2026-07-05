@@ -4,7 +4,10 @@ import { Repository } from 'typeorm';
 import { Contract } from '../contract/contract.entity';
 import { ContractMaterial } from '../contract/contract-material.entity';
 import { ContractPortalLog, PortalOperatorType } from '../contract/contract-portal-log.entity';
-import { ContractPortalStatus } from '@i9/types';
+import { OrderMain } from '../order/order-main.entity';
+import { OrderMaterial } from '../order/order-material.entity';
+import { OrderSizeMatrix } from '../order/order-size-matrix.entity';
+import { ContractPortalStatus, ContractType } from '@i9/types';
 import { UploadInvoiceDto } from './dto/upload-invoice.dto';
 
 const VISIBLE_STATUSES = [
@@ -20,6 +23,9 @@ export class PortalService {
     @InjectRepository(Contract) private readonly contractRepo: Repository<Contract>,
     @InjectRepository(ContractMaterial) private readonly materialRepo: Repository<ContractMaterial>,
     @InjectRepository(ContractPortalLog) private readonly logRepo: Repository<ContractPortalLog>,
+    @InjectRepository(OrderMain) private readonly orderRepo: Repository<OrderMain>,
+    @InjectRepository(OrderMaterial) private readonly orderMaterialRepo: Repository<OrderMaterial>,
+    @InjectRepository(OrderSizeMatrix) private readonly matrixRepo: Repository<OrderSizeMatrix>,
   ) {}
 
   async getContracts(factoryId: number, page = 1, size = 20, portalStatus?: string) {
@@ -46,7 +52,30 @@ export class PortalService {
       this.materialRepo.find({ where: { contract_id: id }, order: { sort_order: 'ASC' } }),
       this.logRepo.find({ where: { contract_id: id }, order: { created_at: 'ASC' } }),
     ]);
-    return { ...contract, materials, logs };
+    // 加工合同：把订单明细同步给加工厂（材料/尺寸表/数量搭配/纸板/填充量，设计稿 门户 A2）
+    let orderDetail: Record<string, unknown> | null = null;
+    if (contract.type === ContractType.PROCESS && contract.order_id) {
+      const order = await this.orderRepo.findOne({ where: { id: contract.order_id, deleted: 0 } });
+      if (order) {
+        const [orderMaterials, matrix] = await Promise.all([
+          this.orderMaterialRepo.find({ where: { order_id: order.id }, order: { sort_order: 'ASC' } }),
+          this.matrixRepo.findOne({ where: { order_id: order.id } }),
+        ]);
+        orderDetail = {
+          order_no: order.order_no,
+          style_no: order.style_no,
+          qty_total: order.qty_total,
+          att_artwork: order.att_artwork,
+          att_sizechart: order.att_sizechart,
+          att_board: order.att_board,
+          att_packing: order.att_packing,
+          att_filling: order.att_filling,
+          materials: orderMaterials,
+          size_matrix: matrix?.matrix_data ?? null,
+        };
+      }
+    }
+    return { ...contract, materials, logs, orderDetail };
   }
 
   async stamp(id: number, supplierAccount: string, factoryId: number): Promise<Contract> {

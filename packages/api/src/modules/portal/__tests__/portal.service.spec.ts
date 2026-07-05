@@ -5,6 +5,9 @@ import { PortalService } from '../portal.service';
 import { Contract } from '../../contract/contract.entity';
 import { ContractMaterial } from '../../contract/contract-material.entity';
 import { ContractPortalLog } from '../../contract/contract-portal-log.entity';
+import { OrderMain } from '../../order/order-main.entity';
+import { OrderMaterial } from '../../order/order-material.entity';
+import { OrderSizeMatrix } from '../../order/order-size-matrix.entity';
 import { ContractPortalStatus } from '@i9/types';
 
 const makeContract = (overrides = {}) => ({
@@ -62,6 +65,9 @@ describe('PortalService', () => {
         { provide: getRepositoryToken(Contract), useValue: contractRepo },
         { provide: getRepositoryToken(ContractMaterial), useValue: materialRepo },
         { provide: getRepositoryToken(ContractPortalLog), useValue: logRepo },
+        { provide: getRepositoryToken(OrderMain), useValue: makeRepo() },
+        { provide: getRepositoryToken(OrderMaterial), useValue: makeRepo() },
+        { provide: getRepositoryToken(OrderSizeMatrix), useValue: makeRepo() },
       ],
     }).compile();
 

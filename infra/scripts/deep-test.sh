@@ -1254,7 +1254,7 @@ test_settlement_ext() {
 }
 
 test_portal_ext() {
-  local cid oidA oidB fidOther ctA ctB rcidB
+  local cid oidA oidB fidOther ctA ctB rcidB procPortalOid procPortalCt
   cid=$(fx_customer)
   oidA=$(fx_order_producing "$cid")
   oidB=$(fx_order_producing "$cid")
@@ -1305,6 +1305,16 @@ test_portal_ext() {
   expect_ok "对账后开票放行"
   api PATCH "/portal/contracts/${ctB:-0}/invoice" '{"invoice_no":"INV-EXT-3"}' "$TOKEN_SUP"
   expect_ok "重复开票应放行(仅记录日志)"
+
+  # ── 加工厂可见订单明细（加工合同门户同步，设计稿 门户 A2）──
+  procPortalOid=$(fx_order_producing "$cid")
+  api POST /contracts "{\"type\":\"PROCESS\",\"factory_id\":1,\"order_id\":${procPortalOid:-0},\"materials\":[]}"
+  procPortalCt=$(echo "$RESP" | jval data.id)
+  api PATCH "/contracts/${procPortalCt:-0}/push" ''
+  api GET "/portal/contracts/${procPortalCt:-0}" '' "$TOKEN_SUP"
+  expect_ok "供应商查看加工合同详情"
+  expect_num data.orderDetail.qty_total 1000 "加工合同门户返回订单明细·大货总数=1000"
+  [[ -n "$(echo "$RESP" | jval data.orderDetail.materials.0.item_name)" ]] && ok "加工合同门户返回订单材料明细" || bad "加工合同门户未返回订单材料明细"
 
   # ── 不存在的大 id → 404 ──
   api GET "/portal/contracts/999999999" '' "$TOKEN_SUP"

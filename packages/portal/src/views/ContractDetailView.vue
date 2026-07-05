@@ -47,6 +47,23 @@
       </van-cell>
     </van-cell-group>
 
+    <!-- 加工厂订单明细同步（加工合同，设计稿 门户 A2） -->
+    <van-cell-group v-if="contract.orderDetail" title="订单明细（加工同步）" inset>
+      <van-cell title="订单号" :value="contract.orderDetail.order_no" />
+      <van-cell title="款号" :value="contract.orderDetail.style_no || '—'" />
+      <van-cell title="大货总数" :value="String(contract.orderDetail.qty_total ?? 0)" />
+      <van-cell v-if="contract.orderDetail.att_board" title="大货纸板" is-link @click="openAtt(contract.orderDetail.att_board)" value="查看" />
+      <van-cell v-if="contract.orderDetail.att_sizechart" title="尺寸表" is-link @click="openAtt(contract.orderDetail.att_sizechart)" value="查看" />
+      <van-cell v-if="contract.orderDetail.att_filling" title="填充量" is-link @click="openAtt(contract.orderDetail.att_filling)" value="查看" />
+      <van-cell
+        v-for="(m, i) in contract.orderDetail.materials"
+        :key="i"
+        :title="m.item_name"
+        :label="`${m.part || ''} ${m.color || ''} ${m.unit || ''}`"
+        :value="`订量 ${m.final_purchase ?? m.total_purchase ?? 0}`"
+      />
+    </van-cell-group>
+
     <!-- Stamp info (shown after stamping) -->
     <van-cell-group v-if="contract.stamped_at" title="盖章信息" inset>
       <van-cell title="盖章账号" :value="contract.stamped_by_supplier" />
@@ -186,6 +203,12 @@ function logActionLabel(action: string) {
   return (
     { PUSH: '已推送', STAMP: '供应商盖章', SHIP: '确认出货', INVOICE: '上传发票', RECONCILE: '对账完成' } as Record<string, string>
   )[action] ?? action;
+}
+
+// 打开订单附件（纸板/尺寸表/填充量，取第一个 URL）
+function openAtt(urls: string) {
+  const first = (urls || '').split(',')[0];
+  if (first) window.open(first, '_blank');
 }
 
 async function load() {
