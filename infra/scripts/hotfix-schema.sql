@@ -161,6 +161,8 @@ CALL _i9_modify_col('reconciliation','type',"ENUM('CONTRACT','NO_CONTRACT','LABO
 CALL _i9_modify_col('reconciliation','style_no',"VARCHAR(200) DEFAULT NULL COMMENT '款号(合同→订单带出,供检索;工时对账为「款A 等N款」)'");
 -- 工厂放宽为可空（工时对账受款方为版师，无工厂）
 CALL _i9_modify_col('reconciliation','factory_id',"BIGINT DEFAULT NULL COMMENT '供应商对账=加工厂/供应商;工时对账为空'");
+-- 合同号加宽到 40：补料合同号「补料-母合同号-序号」超过 VARCHAR(20) 会插入失败(500)
+CALL _i9_modify_col('contract','contract_no',"VARCHAR(40) NOT NULL COMMENT 'HT-日期-序号；补料为 补料-母合同号-序号'");
 
 -- ═══════════════ 索引 ═══════════════
 CALL _i9_add_index('reconciliation','idx_patternmaker','`patternmaker_id`');

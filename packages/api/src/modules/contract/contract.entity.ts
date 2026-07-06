@@ -12,8 +12,8 @@ export class Contract {
   @PrimaryGeneratedColumn({ type: 'bigint' })
   id: number;
 
-  @Column({ length: 20, unique: true })
-  contract_no: string;
+  @Column({ length: 40, unique: true })
+  contract_no: string; // HT-日期-序号；补料合同为「补料-母合同号-序号」，故留足 40（20 会溢出→500）
 
   @Column({ type: 'enum', enum: ContractType })
   type: ContractType;

@@ -39,6 +39,12 @@
     修复：使容器与 env 一致（`docker compose --env-file .env.production up -d redis` 重建），再 `health.sh` 复核。
 - **systemd 单元判定用 `systemctl cat <unit>.service`**，别用 `grep list-unit-files`（名称格式/分页易误判）。结构升级**不依赖**重启 API。
 
+## 🔎 真机深测发现的典型坑（mock 永远测不出）
+- **组合单号列宽**：`补料-母合同号-序号`、`JS-款号-序号`、`FH-款号-序号` 这类拼接单号很容易超过列宽（`contract_no` 曾为 `VARCHAR(20)`，补料号 21 字符 → 插入 `Data too long` → 建补料合同必 500）。新增/改动带前缀+段的单号时，核对列宽；`nextWithSegment` 已对段限长 20，`contract_no` 已放宽到 40。
+- **响应分页封装**：列表接口返回 `{items,total,page,size}` 会被 `ResponseInterceptor` 展开为顶层 `total/page/size` + `data=items`。断言分页数量用**顶层 `total`**，不是 `data.total`。
+- **DTO 字段命名**：DTO 用 camelCase（`shortName/extraTypes/canInvoice`），`forbidNonWhitelisted` 会拒绝 snake_case 未知字段。写脚本/前端 body 要对齐 DTO。
+- **本地跑真机深测的姿势**（本仓库容器已验证可行）：`apt-get install -y mariadb-server redis-server` 起隔离实例 → 用 HEAD `init.sql` 建库 → `NODE_ENV=production`（synchronize:false，走 init.sql 真结构）起 `node dist/main.js` → `bash infra/scripts/deep-test.sh`。**这一趟能抓到 mock 单测全部漏掉的 schema/列宽/封装/校验问题。**
+
 ## 提交规范
 - 提交署名尾注（每次都加）：
   `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`

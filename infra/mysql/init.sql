@@ -471,7 +471,7 @@ CREATE TABLE IF NOT EXISTS `order_shipment` (
 -- ============================================================
 CREATE TABLE IF NOT EXISTS `contract` (
   `id`                  BIGINT         NOT NULL AUTO_INCREMENT,
-  `contract_no`         VARCHAR(20)    NOT NULL COMMENT 'HT-YYYYMMDD-001',
+  `contract_no`         VARCHAR(40)    NOT NULL COMMENT 'HT-YYYYMMDD-001；补料合同为「补料-母合同号-序号」故留 40',
   `type`                ENUM('MATERIAL','PROCESS','SUPPLEMENT') NOT NULL COMMENT '合同类型',
   `parent_id`           BIGINT         DEFAULT NULL COMMENT '补料合同的父合同',
   `factory_id`          BIGINT         NOT NULL,

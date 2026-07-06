@@ -47,7 +47,9 @@ export class NumberingService {
    * 用于 款号维度 编号：对账单 DZ-款号-序号、发货单 FH-款号-序号（设计稿 补充确认 A2）
    */
   async nextWithSegment(prefix: string, segment: string): Promise<string> {
-    const seg = (segment && String(segment).trim()) || 'NA';
+    // 段(款号等)限长 20：避免嵌入长款号后单号超出列宽(settlement_no/reconcile_no/ship_no 均 VARCHAR(30))插入 500。
+    // 完整款号仍存于各表 style_no 字段，单号中的段仅作可读标签。
+    const seg = ((segment && String(segment).trim()) || 'NA').slice(0, 20);
     const key = `seq:${prefix}:${seg}`;
     const seq = await this.redis.eval(
       `local v = redis.call('INCR', KEYS[1])
