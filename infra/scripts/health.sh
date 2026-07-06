@@ -56,20 +56,23 @@ else
 fi
 
 # ── Redis ─────────────────────────────────────────────────────
-# 区分「容器没起」/「密码不一致」/「无响应」，给出可执行的原因而非笼统 no PONG
-source <(grep -E '^REDIS_PASSWORD=' "$ENV_FILE" 2>/dev/null || echo "REDIS_PASSWORD=")
-if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^i9_redis$'; then
-  check "redis" $FAIL "容器未运行（docker compose up -d 起 redis）"; overall=$FAIL
-else
-  # --no-auth-warning 抑制 -a 的告警；PONG 走 stdout
+# 区分「没起」/「密码不一致」/「无响应」；兼容 Docker 容器 与 本机原生 redis 两种部署
+source <(grep -E '^(REDIS_PASSWORD|REDIS_PORT)=' "$ENV_FILE" 2>/dev/null || echo "REDIS_PASSWORD=")
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^i9_redis$'; then
+  # 容器部署：--no-auth-warning 抑制 -a 告警，PONG 走 stdout
   RPING=$(docker exec i9_redis redis-cli -a "${REDIS_PASSWORD:-}" --no-auth-warning ping 2>/dev/null || true)
-  if [[ "$RPING" == "PONG" ]]; then
-    check "redis" $OK "PONG"
-  elif [[ "$RPING" == *WRONGPASS* || "$RPING" == *NOAUTH* ]]; then
-    check "redis" $FAIL "认证失败：.env.production 的 REDIS_PASSWORD 与运行中的容器不一致"; overall=$FAIL
-  else
-    check "redis" $FAIL "无响应（${RPING:-空}）"; overall=$FAIL
-  fi
+elif command -v redis-cli &>/dev/null; then
+  # 原生部署：直连本机 127.0.0.1
+  RPING=$(redis-cli -h 127.0.0.1 -p "${REDIS_PORT:-6379}" -a "${REDIS_PASSWORD:-}" --no-auth-warning ping 2>/dev/null || true)
+else
+  RPING=""
+fi
+if [[ "$RPING" == "PONG" ]]; then
+  check "redis" $OK "PONG"
+elif [[ "$RPING" == *WRONGPASS* || "$RPING" == *NOAUTH* ]]; then
+  check "redis" $FAIL "认证失败：REDIS_PASSWORD 与运行中的 redis 不一致"; overall=$FAIL
+else
+  check "redis" $FAIL "未运行/无响应（容器未起 且 本机无 redis）"; overall=$FAIL
 fi
 
 # ── 磁盘 ──────────────────────────────────────────────────────
