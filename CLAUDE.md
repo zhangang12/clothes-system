@@ -13,8 +13,8 @@
 任何新增/修改 **实体（entity）、列、表、枚举值** 的改动，除了同步 `init.sql`，**必须同时提供存量库升级**，否则发版后接口大面积 `Unknown column` / `Table doesn't exist`（合同/对账/结算/工厂等全线报错）。
 
 **怎么做**
-1. 把本次 schema delta 追加进幂等升级脚本 `infra/scripts/hotfix-schema.sql`（存储过程守卫：逐列/逐表判断 `information_schema`，已存在即跳过；`MODIFY` 用于扩枚举/放宽约束/加宽长度，可等价重放）。
-2. 生产执行 `bash infra/scripts/upgrade-db.sh`：**先整库备份 → 应用幂等 SQL → 校验关键表/列 → 重启 API → 健康检查 + 残留报错自检**。
+1. 把本次 schema delta 追加进幂等升级脚本 `infra/scripts/hotfix-schema.sql`（存储过程守卫：逐列/逐表判断 `information_schema`，已存在即跳过；`MODIFY` 用于扩枚举/放宽约束/加宽长度，可等价重放）。同步改 `init.sql`（供全新装机）。
+2. **发版就一条命令 `bash infra/scripts/deploy.sh`**：它已把"升级前备份 → 应用幂等 `hotfix-schema.sql` → 校验关键列 → 再重启 API"**内置**在 API 重启之前，无需再手动区分"有没有动 schema"。（`upgrade-db.sh` 保留作单独/应急的结构升级工具。）
 3. **本地必须用真 MySQL/MariaDB 实测**：加载"旧结构"→应用升级→与全新 `init.sql` 结构做**完整性 diff（应为空）**→**二次执行验证幂等**。（本仓库容器可 `apt-get install mariadb-server` 起一个隔离实例验证。）
 4. 待办（尚未做）：引入正式 migration 体系（全新装机走 init.sql，存量升级走 migration），并把 `deep-test.sh` 真机门禁接入部署——**连真库没跑通不许发版**。
 
