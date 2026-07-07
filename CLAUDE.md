@@ -31,12 +31,18 @@
 3. **若本次动了实体/`init.sql`**：把 delta 补进 `hotfix-schema.sql` 并**用真库验证**（见红线一）；`bash -n infra/scripts/deep-test.sh` 至少过语法，能连真机则实跑。
 4. 部署后 `bash infra/scripts/health.sh` 确认全绿；`journalctl -u i9-api --since "2 min ago" | grep -iE "Unknown column|doesn't exist"` 应为空。
 
+## 🚀 发版（登服务器后一条命令）
+- **发版**：`cd /opt/i9/clothes-system && bash infra/scripts/deploy.sh`。内部顺序：拉 `main` → 构建四包 → **升级前整库备份 + 幂等结构升级（`hotfix-schema.sql`）+ 校验关键列**（都在 API 重启【之前】）→ 保证 MySQL/Redis 就绪（停了自动 `docker start`）→ 重启 `i9-api` → 健康检查 + 残留报错自检 → reload nginx。**不再区分"有没有动 schema"**；任一步失败会打印 `rollback.sh <上一版commit>`。
+- 开关：`--skip-pull`（代码已就位）、`--skip-backup`（急，跳过备份）。
+- **首次装机**（仅一次）：`bash infra/scripts/setup.sh`；随后改 `.env.production` 域名、`certbot` 配 HTTPS、crontab 加每日 `backup.sh`。
+- **回滚**：`bash infra/scripts/rollback.sh <commit>`（只回代码；幂等结构升级只增不减，不回退列）。
+- **验收**：`bash infra/scripts/health.sh` 全绿 + 新建一张测试单据（能出单号=Redis 通）。
+
 ## 🛠 运维脚本的坑（已修，勿回退）
 - **探活别用 `curl -f`**：`/api/v1` 无根路由，正常返回 404；`-f` 会让 curl 非零退出触发 `|| echo 000` 拼出 `404000`。用 `curl -s`，接受 `2xx/3xx/4xx` 视为存活。
 - **Redis 探活**用 `redis-cli --no-auth-warning`，并区分「容器未运行 / 密码不一致（WRONGPASS/NOAUTH）/ 无响应」。
-  - 常见故障：`✗ redis (no PONG)` 多为 **`.env.production` 的 `REDIS_PASSWORD` 与运行中容器不一致**（容器起于旧密码）。排查：
-    `docker ps | grep i9_redis` 看是否在跑；`docker exec i9_redis redis-cli -a <env里的密码> --no-auth-warning ping`。
-    修复：使容器与 env 一致（`docker compose --env-file .env.production up -d redis` 重建），再 `health.sh` 复核。
+  - 故障①「密码不一致」：`✗ redis` 多为 **`.env.production` 的 `REDIS_PASSWORD` 与运行中容器不一致**。修复：`docker compose --env-file .env.production up -d redis` 重建后 `health.sh` 复核。
+  - 故障②「容器/镜像都没有 + Docker Hub 被墙」（国内 ECS 常见，`docker pull` 撞 `registry-1.docker.io` 超时）：**别跟 Docker Hub 死磕，改用原生 redis**——`dnf install -y redis` → 配 `requirepass`(与 env 一致)/`appendonly yes` → `systemctl enable --now redis`。App 连 `127.0.0.1:6379`，容器/原生皆可；`health.sh` 已兼容两种探测。（或用阿里云专属加速器 / `docker save|load` 离线搬运镜像。）
 - **systemd 单元判定用 `systemctl cat <unit>.service`**，别用 `grep list-unit-files`（名称格式/分页易误判）。结构升级**不依赖**重启 API。
 
 ## 🔎 真机深测发现的典型坑（mock 永远测不出）
@@ -57,3 +63,10 @@
 - 后端 NestJS + TypeORM + MySQL8 + Redis7；`api/v1` 前缀；JWT（`req.user.role` + `req.user.type` admin|supplier）；`@Roles`+`RolesGuard`。
 - 单机 All-in-One 部署（单台 ECS）：nginx 反代 `/api`→:3000；web/portal 静态；MySQL/Redis 走 docker-compose（仅绑 127.0.0.1）；API 走 systemd `i9-api`。
 - 运维脚本全在 `infra/scripts/`：`setup / deploy / rollback / backup / health / logs / upgrade-db / hotfix-schema / deep-test`。
+
+## 📋 待办（认领后从此清单勾掉）
+- **Redis 是硬单点**：单号生成（`NumberingService`）依赖 Redis 且**无兜底**，Redis 一挂 → 所有"新建单据"失败（读取不受影响）。计划加 DB 兜底（`sys_sequence` 行锁发号，Redis 恢复自动切回），使 Redis 挂了只降速、不阻断建单。
+- 引入正式 **migration 体系**（全新装机走 `init.sql`，存量升级走 migration），替掉临时的 `hotfix-schema.sql`。
+- 把 `deep-test.sh` **真机门禁接进部署/CI**——连真库没跑通不许发版。
+- **GitHub Actions merge→deploy**：合并 `main` 自动 SSH 上服务器跑 `deploy.sh`（需在 GitHub 存部署 SSH 密钥），实现"合并即发版"。
+- 运维 P0：**异地备份（含 `/data/uploads`）+ HTTPS + 恢复演练 + 告警**。当前 `backup.sh` 仅 `mysqldump`、**不含上传文件**，且备份只在本机（实例挂了陪葬）。
