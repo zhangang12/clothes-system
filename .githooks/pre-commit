@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# =============================================================================
+# pre-commit — 强制「每次变更同步更新交接文档 HANDOFF.md」
+# 启用：git config core.hooksPath .githooks   （每个 clone 各配一次）
+# 跳过：git commit --no-verify                （仅限确无需更新交接文档时）
+# =============================================================================
+set -euo pipefail
+
+HANDOFF="HANDOFF.md"
+
+# 合并提交不拦截
+[[ -f "$(git rev-parse --git-dir)/MERGE_HEAD" ]] && exit 0
+
+# 本次暂存的文件（新增/改/删/改名）
+staged="$(git diff --cached --name-only --diff-filter=ACMRD)"
+[[ -z "$staged" ]] && exit 0
+
+# 只改了交接文档本身 → 放行
+others="$(printf '%s\n' "$staged" | grep -vxF "$HANDOFF" || true)"
+[[ -z "$others" ]] && exit 0
+
+# 有其它变更 → 必须同时更新交接文档
+if ! printf '%s\n' "$staged" | grep -qxF "$HANDOFF"; then
+  echo "────────────────────────────────────────────────────────────"
+  echo "✗ 提交被拦截：本次变更未更新交接文档 $HANDOFF"
+  echo "  约定「每次变更都要更新交接文档」（现状 / 待办 / 最近变更）。"
+  echo "  处理：编辑 $HANDOFF → git add $HANDOFF → 重新提交。"
+  echo "  确无需更新时：git commit --no-verify"
+  echo "────────────────────────────────────────────────────────────"
+  exit 1
+fi
+exit 0
