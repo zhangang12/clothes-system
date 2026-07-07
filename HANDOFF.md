@@ -8,7 +8,7 @@
 
 ## 一句话现状（最后更新 2026-07）
 
-功能审计 14 项已交付上线；生产 **schema 漂移事故已止血**；发版已改为**一条命令 `deploy.sh`**；项目记忆/交接文档已落盘。**唯一卡点：目标 ECS 的 Redis 还没起来**（一次性前置，方案见下）。
+功能审计 14 项已交付上线；生产 **schema 漂移事故已止血**；发版已改为**一条命令 `deploy.sh`**；**Redis 已在目标 ECS 起来、建单链路恢复**。下一步建议：拔掉 Redis 硬单点（`NumberingService` DB 兜底）。
 
 ## 系统当前活动状态
 
@@ -17,15 +17,16 @@
 | 业务功能 | 8 单据 + 基础资料 + 审计补口 14 项，已上线 |
 | 数据库结构 | 生产已用 `upgrade-db.sh` 补齐；`deploy.sh` 已内置幂等升级 |
 | 发版 | ✅ 一键 `bash infra/scripts/deploy.sh`（备份+结构升级+就绪自愈+回滚提示）|
-| Redis | ⚠️ 目标 ECS 上**未运行**（无镜像/无容器，Docker Hub 被墙）→ 单号生成受阻，**不能新建单据** |
+| Redis | ✅ 目标 ECS 上**已运行**（`health.sh` 兼容 Docker/原生两种探测）|
 | 测试 | 真机 `deep-test.sh` 493/0；API 单测 183/183 |
 
 ## 立即待办（按优先级）
 
-1. **🔴 起 Redis（目标 ECS 一次性前置）**：Docker Hub 拉不动 → 用原生 `dnf install -y redis`，配 `requirepass`(与 `.env.production` 一致)/`appendonly yes` → `systemctl enable --now redis` → `health.sh` 复核 → 新建一张测试单验证出单号。
-2. **🟠 `NumberingService` 加 DB 兜底**：拔掉 Redis 硬单点（`sys_sequence` 行锁发号，Redis 恢复自动切回），使 Redis 挂了只降速不阻断建单。
-3. 🟡 正式 migration 体系替掉临时 `hotfix-schema.sql`；`deep-test.sh` 真机门禁接入部署/CI。
-4. 🟡 GitHub Actions **merge→deploy**（合并即发版）；运维 P0：异地备份（含 `/data/uploads`）+ HTTPS + 告警。
+1. **🟠 `NumberingService` 加 DB 兜底**：拔掉 Redis 硬单点（`sys_sequence` 行锁发号，Redis 恢复自动切回），使 Redis 挂了只降速不阻断建单。
+2. 🟡 正式 migration 体系替掉临时 `hotfix-schema.sql`；`deep-test.sh` 真机门禁接入部署/CI。
+3. 🟡 GitHub Actions **merge→deploy**（合并即发版）；运维 P0：异地备份（含 `/data/uploads`）+ HTTPS + 告警。
+
+**近期已完成**：起 Redis（目标 ECS）✅ ；schema 漂移止血 ✅ ；一键 `deploy.sh` ✅ 。
 
 ## 本次会话关键决策（用户已拍板）
 
@@ -43,6 +44,8 @@
 
 ## 最近变更（新→旧，保留最近若干条）
 
+- （本次）HANDOFF：Redis 已在目标 ECS 起来，更新现状/状态/待办
+- `30e70d1` docs：新增 HANDOFF.md + pre-commit 钩子（每次变更强制更新交接文档）
 - `860a0c3` docs：落盘全量项目记忆 `docs/项目记忆.md`
 - `009d4c8` docs：CLAUDE.md 落盘发版结论（一键发版/Redis 退路/待办）
 - `8ed94cb` feat(ops)：`deploy.sh` 改一键部署（备份+幂等结构升级+就绪自愈+回滚提示）
