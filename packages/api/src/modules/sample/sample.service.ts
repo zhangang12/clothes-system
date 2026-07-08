@@ -110,6 +110,20 @@ export class SampleService {
     if (![SampleStatus.PENDING, SampleStatus.SAMPLING].includes(entity.status)) {
       throw new BadRequestException('该状态样衣不允许修改基本信息');
     }
+    // 中间商/最终买家改动:回填名称/编号快照(编辑态联动,设计稿页面事件)
+    let mmName: string | undefined;
+    if (dto.middlemanId !== undefined) {
+      const mm = await this.customerRepo.findOne({ where: { id: dto.middlemanId, deleted: 0 } });
+      if (!mm) throw new BadRequestException(`中间商客户 #${dto.middlemanId} 不存在`);
+      mmName = mm.name;
+    }
+    let buyerName: string | null | undefined; let buyerNo: string | null | undefined;
+    if (dto.buyerId !== undefined) {
+      if (dto.buyerId) {
+        const b = await this.customerRepo.findOne({ where: { id: dto.buyerId, deleted: 0 } });
+        buyerName = b?.name ?? null; buyerNo = b?.customer_no ?? null;
+      } else { buyerName = null; buyerNo = null; }
+    }
     return this.dataSource.transaction(async (manager) => {
       if (dto.categories !== undefined) entity.categories = dto.categories;
       if (dto.styleNo !== undefined) entity.style_no = dto.styleNo;
@@ -120,6 +134,12 @@ export class SampleService {
       if (dto.image1 !== undefined) entity.image1 = dto.image1;
       if (dto.image2 !== undefined) entity.image2 = dto.image2;
       if (dto.image3 !== undefined) entity.image3 = dto.image3;
+      // 此前静默丢弃的字段(设计稿:业务可改中间商/买家/制版师/制单人员)
+      if (dto.middlemanId !== undefined) { entity.customer_id = dto.middlemanId; entity.middleman_name = mmName as string; }
+      if (dto.buyerId !== undefined) { entity.buyer_id = dto.buyerId || null; entity.buyer_name = buyerName ?? null; entity.buyer_no = buyerNo ?? null; }
+      if (dto.patternmakerId !== undefined) entity.patternmaker_id = dto.patternmakerId;
+      if (dto.patternmakerName !== undefined) entity.patternmaker_name = dto.patternmakerName;
+      if (dto.maker !== undefined) entity.maker = dto.maker;
       const saved = await manager.save(SampleGarment, entity);
       if (dto.materials !== undefined) {
         await manager.delete(SampleMaterial, { sample_id: id });
@@ -133,6 +153,9 @@ export class SampleService {
   async pushPatternmaker(id: number, dto: PushPatternmakerDto, operatorId: number): Promise<SampleGarment> {
     const entity = await this.repo.findOne({ where: { id, deleted: 0 } });
     if (!entity) throw new NotFoundException(`样衣 #${id} 不存在`);
+    if (![SampleStatus.PENDING, SampleStatus.SAMPLING].includes(entity.status)) {
+      throw new BadRequestException('当前状态不允许推送版师(仅待派单/打样中)');
+    }
     if (dto.patternmakerId !== undefined) entity.patternmaker_id = dto.patternmakerId;
     if (dto.patternmakerName !== undefined) entity.patternmaker_name = dto.patternmakerName;
     if (dto.materialShipNo) {
@@ -149,6 +172,9 @@ export class SampleService {
   async patternmakerSave(id: number, dto: PatternmakerSaveDto, operatorId: number): Promise<SampleGarment> {
     const entity = await this.repo.findOne({ where: { id, deleted: 0 } });
     if (!entity) throw new NotFoundException(`样衣 #${id} 不存在`);
+    if (![SampleStatus.SAMPLING, SampleStatus.SHIPPED, SampleStatus.RETURNED, SampleStatus.RECONCILED].includes(entity.status)) {
+      throw new BadRequestException('当前状态不允许版师保存(样衣未在打样/寄回/对账阶段,或已成单/完成)');
+    }
 
     if (dto.materials?.length) {
       for (const m of dto.materials) {
@@ -183,6 +209,9 @@ export class SampleService {
   async markShipped(id: number, dto: ShipSampleDto): Promise<SampleGarment> {
     const entity = await this.repo.findOne({ where: { id, deleted: 0 } });
     if (!entity) throw new NotFoundException(`样衣 #${id} 不存在`);
+    if (![SampleStatus.SAMPLING, SampleStatus.SHIPPED].includes(entity.status)) {
+      throw new BadRequestException('当前状态不允许标记寄出');
+    }
     entity.ship_sample_date = dto.shipSampleDate || today();
     entity.status = SampleStatus.SHIPPED;
     return this.repo.save(entity);
@@ -191,6 +220,9 @@ export class SampleService {
   async complete(id: number): Promise<SampleGarment> {
     const entity = await this.repo.findOne({ where: { id, deleted: 0 } });
     if (!entity) throw new NotFoundException(`样衣 #${id} 不存在`);
+    if (![SampleStatus.RECONCILED, SampleStatus.DONE].includes(entity.status)) {
+      throw new BadRequestException('当前状态不允许标记完成(需先对账)');
+    }
     entity.status = SampleStatus.DONE;
     return this.repo.save(entity);
   }

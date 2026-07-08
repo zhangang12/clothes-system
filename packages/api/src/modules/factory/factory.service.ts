@@ -193,9 +193,21 @@ export class FactoryService {
   async remove(id: number): Promise<void> {
     const entity = await this.repo.findOne({ where: { id, deleted: 0 } });
     if (!entity) throw new NotFoundException(`工厂 #${id} 不存在`);
-    const refs = await this.contractRepo.count({ where: { factory_id: id, deleted: 0 } });
+    // v1.3 C2/C3:被任何下游单据引用则阻止删除(合同/样衣材料/订单/对账/付款),不止合同一张表
+    const rows = await this.dataSource.query(
+      `SELECT
+         (SELECT COUNT(*) FROM contract WHERE factory_id=? AND deleted=0)
+       + (SELECT COUNT(*) FROM order_main WHERE factory_id=? AND deleted=0)
+       + (SELECT COUNT(*) FROM reconciliation WHERE factory_id=? AND deleted=0)
+       + (SELECT COUNT(*) FROM payment_request WHERE factory_id=? AND deleted=0)
+       + (SELECT COUNT(*) FROM prepayment WHERE factory_id=?)
+       + (SELECT COUNT(*) FROM sample_material sm JOIN sample_garment s ON sm.sample_id=s.id
+          WHERE sm.supplier_id=? AND s.deleted=0) AS cnt`,
+      [id, id, id, id, id, id],
+    );
+    const refs = Number(rows?.[0]?.cnt ?? 0);
     if (refs > 0) {
-      throw new BadRequestException(`已被 ${refs} 张单据引用，无法删除`);
+      throw new BadRequestException(`已被 ${refs} 张下游单据引用(合同/样衣材料/订单/对账/付款),无法删除`);
     }
     entity.deleted = 1;
     await this.repo.save(entity);

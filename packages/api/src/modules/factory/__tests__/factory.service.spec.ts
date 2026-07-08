@@ -35,7 +35,10 @@ const mockManager = {
   save: jest.fn().mockImplementation((_e: any, v: any) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: v.id ?? 1 })),
   delete: jest.fn().mockResolvedValue({}),
 };
-const mockDataSource = { transaction: jest.fn((cb: any) => cb(mockManager)) };
+const mockDataSource = {
+  transaction: jest.fn((cb: any) => cb(mockManager)),
+  query: jest.fn().mockResolvedValue([{ cnt: 0 }]), // 删除前下游引用计数
+};
 
 const CONTACTS = [{ name: '张建国', phone: '0512-6877', mobile: '13901588888' }];
 
@@ -48,6 +51,7 @@ describe('FactoryService', () => {
     mockRepo.count.mockResolvedValue(0);
     mockContactRepo.find.mockResolvedValue([]);
     mockDataSource.transaction.mockImplementation((cb: any) => cb(mockManager));
+    mockDataSource.query.mockResolvedValue([{ cnt: 0 }]);
     const module = await Test.createTestingModule({
       providers: [
         FactoryService,
@@ -170,9 +174,9 @@ describe('FactoryService', () => {
       expect(mockRepo.save).toHaveBeenCalledWith(expect.objectContaining({ deleted: 1 }));
     });
 
-    it('UT-FAC-16: blocks delete when referenced by downstream contracts (C2)', async () => {
+    it('UT-FAC-16: blocks delete when referenced by downstream docs (C2/C3:合同/样衣材料/订单/对账/付款)', async () => {
       mockRepo.findOne.mockResolvedValue({ id: 1, deleted: 0 });
-      mockContractRepo.count.mockResolvedValue(2);
+      mockDataSource.query.mockResolvedValue([{ cnt: 2 }]);
       await expect(service.remove(1)).rejects.toThrow('无法删除');
       expect(mockRepo.save).not.toHaveBeenCalled();
     });

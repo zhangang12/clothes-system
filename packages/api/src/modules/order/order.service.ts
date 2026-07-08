@@ -160,6 +160,10 @@ export class OrderService {
     if (order.status !== OrderStatus.DRAFT) throw new BadRequestException('只有草稿状态可从报价导入');
     const quote = await this.quoteRepo.findOne({ where: { id: quoteId, deleted: 0 } });
     if (!quote) throw new BadRequestException(`报价单 #${quoteId} 不存在`);
+    // A7:仅「已报价」及之后状态的报价可建单;草稿报价禁止
+    if (![QuoteStatus.QUOTED, QuoteStatus.ADJUSTING, QuoteStatus.ORDERED].includes(quote.status)) {
+      throw new BadRequestException('只能从「已报价」及之后状态的报价建单(草稿报价禁止)');
+    }
     const items = await this.quoteItemRepo.find({ where: { quote_id: quoteId }, order: { sort_order: 'ASC' } });
 
     return this.dataSource.transaction(async (manager) => {
@@ -188,8 +192,9 @@ export class OrderService {
   async advanceStatus(id: number): Promise<OrderMain> {
     const order = await this.orderRepo.findOne({ where: { id, deleted: 0 } });
     if (!order) throw new NotFoundException(`订单 #${id} 不存在`);
-    if (order.status === OrderStatus.DONE) {
-      throw new BadRequestException('订单已完成，无法继续推进');
+    // D1:仅「下单」(草稿→已下单)为手动动作;已生成合同/生产中/已完成均由下游事件自动回写,不可手改
+    if (order.status !== OrderStatus.DRAFT) {
+      throw new BadRequestException('订单下单后,状态由下游事件(生成合同/发货/对账)自动推进,不可手动推进');
     }
     const next = STATUS_TRANSITIONS[order.status];
     // 金额阈值审批：下单（草稿→已下单）时订单金额超阈值需主管审批（设计稿 审批矩阵，阈值可配）

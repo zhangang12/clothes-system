@@ -103,13 +103,12 @@ describe('OrderService', () => {
     expect(result.status).toBe(OrderStatus.CONFIRMED);
   });
 
-  // UT-ORD-03: advanceStatus CONFIRMED → CONTRACTED（已下单→已生成合同）
-  it('UT-ORD-03 advanceStatus transitions CONFIRMED→CONTRACTED', async () => {
+  // UT-ORD-03: D1——下单后手动推进被拒(已生成合同/生产中/已完成由下游事件自动回写)
+  it('UT-ORD-03 advanceStatus blocks manual advance after 下单 (D1)', async () => {
     const order = makeOrder({ status: OrderStatus.CONFIRMED });
     mockOrderRepo.findOne.mockResolvedValue(order);
-    mockOrderRepo.save.mockResolvedValue({ ...order, status: OrderStatus.CONTRACTED });
-    const result = await service.advanceStatus(1);
-    expect(result.status).toBe(OrderStatus.CONTRACTED);
+    await expect(service.advanceStatus(1)).rejects.toThrow('不可手动推进');
+    expect(mockOrderRepo.save).not.toHaveBeenCalled();
   });
 
   // UT-ORD-04: advanceStatus throws when DONE
