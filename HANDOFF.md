@@ -8,7 +8,7 @@
 
 ## 一句话现状（最后更新 2026-07-08）
 
-准出审查发现前端存在**系统性阻断项**（列表响应契约不一致→全站列表恒空、编辑页 size 上限→加载 400），**已修复并端到端验证**（新增 macOS 免 Docker 本地全栈 + Playwright 冒烟）；顺带修掉客户银行子表清空、首建工厂撞种子 S001（`NumberingService` 已加 DB 基线兜底）。分支 `claude/fix-stage0-p0`。下一步：阶段1 安全/数据项（上传端点鉴权、结算无合同费用双重扣减、审批后改金额绕过、超付加锁）。
+准出审查:**阶段0(前端系统性阻断)+ 阶段1(安全/数据)P0 已修复并端到端验证**,分支 `claude/fix-stage0-p0`(已推 origin)。阶段0:列表响应契约对齐(全站列表恒空)、编辑页 size 上限(加载 400)、客户银行子表清空、首建撞种子 S001;新增 macOS 免 Docker 本地全栈 + Playwright 冒烟。阶段1:上传端点安全(magic bytes + 安全响应头,阻断存储型 XSS)、审批后改金额绕过、超付并发加锁、分页钳制。下一步:**结算无合同费用双重扣减**(需费用类别字段区分货款/期间费用)+ **发票号唯一索引**(schema 变更,走红线一);再往后阶段2 设计符合大项(合同两类编辑页、门户对账步/开票链、订单分色分码)。
 
 ## 系统当前活动状态
 
@@ -44,7 +44,8 @@
 
 ## 最近变更（新→旧，保留最近若干条）
 
-- （本次）准出审查 + 阶段0 P0 修复：`fix(api)` 编号从库取基线消除撞 S001；`fix(web)` 列表响应契约对齐+编辑页 size+客户银行子表映射（全站列表恒空/编辑页 400 已解）；`chore(devtools)` macOS 免 Docker 本地全栈 + Playwright 冒烟。分支 `claude/fix-stage0-p0`
+- （本次·阶段1）安全/数据 P0:`fix(api)` 上传端点 magic-bytes 校验+安全响应头(阻断存储型 XSS)；审批后改金额清 approval_status 防绕过；超付拦截事务内 pessimistic_write；reconciliation/settlement/payment/portal 分页钳制。均真栈验证,单测 185/185
+- （本次·阶段0）准出审查 + P0 修复：`fix(api)` 编号从库取基线消除撞 S001；`fix(web)` 列表响应契约对齐+编辑页 size+客户银行子表映射（全站列表恒空/编辑页 400 已解）；`chore(devtools)` macOS 免 Docker 本地全栈 + Playwright 冒烟。分支 `claude/fix-stage0-p0`
 - `30e70d1` docs：新增 HANDOFF.md + pre-commit 钩子（每次变更强制更新交接文档）
 - `30e70d1` docs：新增 HANDOFF.md + pre-commit 钩子（每次变更强制更新交接文档）
 - `860a0c3` docs：落盘全量项目记忆 `docs/项目记忆.md`
