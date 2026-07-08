@@ -160,6 +160,8 @@ export class QuoteService {
       ['totalRemark', 'total_remark'],
     ];
     for (const [k, col] of map) if (dto[k] !== undefined) (quote as any)[col] = dto[k];
+    // 编辑会重算金额:清除已有审批状态,避免「审批通过后改高金额再提交」绕过阈值校验
+    quote.approval_status = ApprovalStatus.NONE;
     const rate = +quote.exchange_rate;
 
     return this.dataSource.transaction(async (manager) => {
@@ -197,6 +199,7 @@ export class QuoteService {
       quote.sample_id = sampleId;
       quote.sample_no = sample.sample_no;
       if (!quote.style_no) quote.style_no = sample.style_no;
+      quote.approval_status = ApprovalStatus.NONE; // 导入改金额:清审批,避免绕过阈值
       await manager.save(Quotation, quote);
       await manager.delete(QuotationItem, { quote_id: id });
       const items = this.buildItems(id, materials.map((m) => ({

@@ -140,6 +140,8 @@ export class OrderService {
     for (const [k, col] of map) if (dto[k] !== undefined) (order as any)[col] = dto[k];
     if (dto.delivery_date !== undefined) order.delivery_date = dto.delivery_date as any;
     if (order.unit_price && order.qty_total) order.total_amount = +(order.unit_price * order.qty_total).toFixed(4);
+    // 编辑会重算金额:清除已有审批状态,避免「审批通过后改高金额再下单」绕过阈值校验
+    order.approval_status = ApprovalStatus.NONE;
 
     return this.dataSource.transaction(async (manager) => {
       await manager.save(OrderMain, order);
@@ -170,6 +172,7 @@ export class OrderService {
       // 导入默认币种 RMB、报价人民币价→订单单品单价（设计稿 订单 A3/Q3，可改）
       order.currency = 'CNY';
       if (quote.rmb_total != null) order.unit_price = +(+quote.rmb_total).toFixed(4);
+      order.approval_status = ApprovalStatus.NONE; // 导入改金额:清审批,避免绕过阈值
       await manager.save(OrderMain, order);
       await manager.delete(OrderMaterial, { order_id: id });
       const materials = this.buildMaterials(id, order.qty_total, items.map((it) => ({
