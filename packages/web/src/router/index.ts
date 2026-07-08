@@ -42,6 +42,8 @@ const routes: RouteRecordRaw[] = [
       { path: 'settlements', name: 'Settlements', component: () => import('../views/settlement/SettlementListView.vue') },
       { path: 'reports', name: 'Reports', component: () => import('../views/report/ReportView.vue') },
       { path: 'company-profiles', name: 'CompanyProfiles', component: () => import('../views/company/CompanyProfileView.vue') },
+      { path: 'feedbacks', name: 'Feedbacks', component: () => import('../views/feedback/FeedbackListView.vue'), meta: { admin: true } },
+      { path: 'error-logs', name: 'ErrorLogs', component: () => import('../views/system/ErrorLogListView.vue'), meta: { admin: true } },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/' },

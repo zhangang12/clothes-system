@@ -21,6 +21,8 @@
         <el-menu-item index="/payments"><el-icon><CreditCard /></el-icon>付款管理</el-menu-item>
         <el-menu-item index="/settlements"><el-icon><TrendCharts /></el-icon>结算清单</el-menu-item>
         <el-menu-item index="/reports"><el-icon><PieChart /></el-icon>报表统计</el-menu-item>
+        <el-menu-item v-if="isAdmin" index="/feedbacks"><el-icon><ChatDotRound /></el-icon>反馈管理</el-menu-item>
+        <el-menu-item v-if="isAdmin" index="/error-logs"><el-icon><Warning /></el-icon>系统报错</el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>
@@ -42,16 +44,21 @@
       <el-main class="main"><router-view /></el-main>
     </el-container>
   </el-container>
+  <!-- 右下角问题反馈悬浮入口(所有登录用户可用) -->
+  <FeedbackWidget />
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
+import { UserRole } from '@i9/types';
 import { useAuthStore } from '../../stores/auth';
+import FeedbackWidget from '../../components/FeedbackWidget.vue';
 
 const auth = useAuthStore();
 const router = useRouter();
 const route = useRoute();
+const isAdmin = computed(() => auth.hasRole(UserRole.ADMIN));
 
 const titleMap: Record<string, string> = {
   '/dashboard': '工作台',
@@ -66,6 +73,8 @@ const titleMap: Record<string, string> = {
   '/settlements': '结算清单',
   '/reports': '报表统计',
   '/company-profiles': '本司主体',
+  '/feedbacks': '反馈管理',
+  '/error-logs': '系统报错记录',
 };
 const pageTitle = computed(() => titleMap[route.path] || '');
 
