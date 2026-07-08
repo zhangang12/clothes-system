@@ -193,6 +193,48 @@ INSERT IGNORE INTO `sys_config` (`cfg_key`,`cfg_value`,`remark`) VALUES
 INSERT IGNORE INTO `company_profile` (`id`,`name`,`short_name`,`is_default`) VALUES
 (1, 'I9 服装制造有限公司', 'I9', 1);
 
+-- ── 用户反馈 / 系统报错记录(CREATE TABLE IF NOT EXISTS 原生幂等)──
+CREATE TABLE IF NOT EXISTS `feedback` (
+  `id`         BIGINT       NOT NULL AUTO_INCREMENT,
+  `user_id`    BIGINT       NOT NULL COMMENT '提交用户',
+  `username`   VARCHAR(50)  DEFAULT NULL COMMENT '提交人(快照)',
+  `content`    TEXT         NOT NULL COMMENT '问题描述',
+  `images`     TEXT         DEFAULT NULL COMMENT '图片URL(JSON数组)',
+  `page_url`   VARCHAR(255) DEFAULT NULL COMMENT '提交页面',
+  `status`     ENUM('PENDING','HANDLED') NOT NULL DEFAULT 'PENDING',
+  `reply`      VARCHAR(500) DEFAULT NULL COMMENT '处理回复',
+  `deleted`    TINYINT      NOT NULL DEFAULT 0,
+  `created_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_status` (`status`,`deleted`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户反馈';
+
+CREATE TABLE IF NOT EXISTS `error_log` (
+  `id`          BIGINT        NOT NULL AUTO_INCREMENT,
+  `fingerprint` VARCHAR(40)   NOT NULL COMMENT '去重指纹',
+  `method`      VARCHAR(10)   NOT NULL,
+  `path`        VARCHAR(255)  NOT NULL,
+  `status_code` INT           NOT NULL DEFAULT 500,
+  `code`        INT           NOT NULL DEFAULT 5000 COMMENT '业务返回码',
+  `error_type`  VARCHAR(100)  DEFAULT NULL COMMENT '异常类型',
+  `message`     VARCHAR(1000) DEFAULT NULL,
+  `stack`       TEXT          DEFAULT NULL COMMENT '堆栈(仅未捕获/500)',
+  `req_input`   TEXT          DEFAULT NULL COMMENT '输入上下文(query/params/body脱敏)',
+  `resp_output` TEXT          DEFAULT NULL COMMENT '输出(code/msg)',
+  `user_id`     BIGINT        DEFAULT NULL,
+  `username`    VARCHAR(50)   DEFAULT NULL,
+  `ip`          VARCHAR(45)   DEFAULT NULL,
+  `count`       INT           NOT NULL DEFAULT 1 COMMENT '同类累计次数',
+  `status`      ENUM('OPEN','HANDLED') NOT NULL DEFAULT 'OPEN',
+  `first_seen`  DATETIME      NOT NULL,
+  `last_seen`   DATETIME      NOT NULL,
+  `created_at`  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_fingerprint` (`fingerprint`),
+  KEY `idx_status` (`status`,`last_seen`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统报错记录';
+
 -- ── 清理助手 ─────────────────────────────────────────────────────
 DROP PROCEDURE IF EXISTS _i9_add_col;
 DROP PROCEDURE IF EXISTS _i9_modify_col;

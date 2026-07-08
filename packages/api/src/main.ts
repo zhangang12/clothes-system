@@ -2,7 +2,6 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
-import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 
 async function bootstrap() {
@@ -21,8 +20,7 @@ async function bootstrap() {
     }),
   );
 
-  // 全局异常过滤器
-  app.useGlobalFilters(new HttpExceptionFilter());
+  // 全局异常过滤器改由 ErrorLogModule 以 APP_FILTER 注册(带 DI,自动归档服务器异常)
 
   // 全局响应拦截器
   app.useGlobalInterceptors(new ResponseInterceptor());

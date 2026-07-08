@@ -16,6 +16,8 @@ import { PaymentModule } from './modules/payment/payment.module';
 import { SettlementModule } from './modules/settlement/settlement.module';
 import { StatsModule } from './modules/stats/stats.module';
 import { CompanyModule } from './modules/company/company.module';
+import { FeedbackModule } from './modules/feedback/feedback.module';
+import { ErrorLogModule } from './modules/error-log/error-log.module';
 import { NumberingModule } from './common/services/numbering.module';
 import { SysConfigModule } from './common/config/sys-config.module';
 import { FileModule } from './common/services/file.module';
@@ -62,6 +64,8 @@ import { UploadModule } from './modules/upload/upload.module';
     StatsModule,
     CompanyModule,
     UploadModule,
+    FeedbackModule,
+    ErrorLogModule,
   ],
 })
 export class AppModule {}
