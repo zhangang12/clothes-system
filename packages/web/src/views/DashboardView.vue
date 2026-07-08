@@ -75,7 +75,7 @@ const todos = reactive([
   { label: '草稿报价待发出', route: '/quotes', count: null as number | null, api: () => quoteApi.list({ page: 1, size: 1, status: 'DRAFT' }) },
   { label: '待盖章合同', route: '/contracts', count: null, api: () => contractApi.list({ page: 1, size: 1, portal_status: 'PUSHED' }) },
   { label: '生产中订单', route: '/orders', count: null, api: () => orderApi.list({ page: 1, size: 1, status: 'PRODUCING' }) },
-  { label: '待审批付款', route: '/payments', count: null, api: () => paymentRequestApi.list({ page: 1, size: 1, status: 'PENDING' }) },
+  { label: '待审批付款', route: '/payments', count: null, api: () => paymentRequestApi.list({ page: 1, size: 1, approval_status: 'PENDING' }) },
 ]);
 
 function go(name: string) { router.push({ name }); }

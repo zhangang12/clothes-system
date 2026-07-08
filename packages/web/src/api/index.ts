@@ -21,11 +21,15 @@ http.interceptors.response.use(
     return res.data;
   },
   (err) => {
-    if (err.response?.status === 401) {
+    const status = err.response?.status;
+    const onLogin = window.location.pathname.endsWith('/login');
+    if (status === 401 && !onLogin) {
+      // 登录态失效:清理并跳登录
       localStorage.removeItem('token');
       window.location.href = '/login';
     } else {
-      ElMessage.error(err.response?.data?.msg ?? '网络错误');
+      // 登录页密码错(401)或其它错误:提示而非刷新丢失输入
+      ElMessage.error(err.response?.data?.msg ?? (status === 401 ? '用户名或密码错误' : '网络错误'));
     }
     return Promise.reject(err);
   },
