@@ -7,6 +7,7 @@ import { ContractMaterial } from '../../contract/contract-material.entity';
 import { ContractShipment } from '../../contract/contract-shipment.entity';
 import { ContractPortalLog } from '../../contract/contract-portal-log.entity';
 import { OrderMain } from '../../order/order-main.entity';
+import { Reconciliation } from '../../reconciliation/reconciliation.entity';
 import { OrderMaterial } from '../../order/order-material.entity';
 import { OrderSizeMatrix } from '../../order/order-size-matrix.entity';
 import { NumberingService } from '../../../common/services/numbering.service';
@@ -55,11 +56,13 @@ describe('PortalService', () => {
   let contractRepo: any;
   let materialRepo: any;
   let logRepo: any;
+  let reconcileRepo: any;
 
   beforeEach(async () => {
     contractRepo = makeRepo();
     materialRepo = makeRepo();
     logRepo = makeRepo();
+    reconcileRepo = makeRepo();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -71,6 +74,7 @@ describe('PortalService', () => {
         { provide: getRepositoryToken(OrderMain), useValue: makeRepo() },
         { provide: getRepositoryToken(OrderMaterial), useValue: makeRepo() },
         { provide: getRepositoryToken(OrderSizeMatrix), useValue: makeRepo() },
+        { provide: getRepositoryToken(Reconciliation), useValue: reconcileRepo },
         { provide: NumberingService, useValue: { nextWithSegment: jest.fn().mockResolvedValue('FH-K-001') } },
       ],
     }).compile();
@@ -178,13 +182,29 @@ describe('PortalService', () => {
     await expect(service.confirmShipping(1, 'supplier_A', 10)).rejects.toThrow(BadRequestException);
   });
 
-  // UT-PORTAL-11: uploadInvoice logs INVOICE action only after 对账（RECONCILED）
-  it('UT-PORTAL-11 uploadInvoice logs INVOICE action during RECONCILED', async () => {
-    const contract = makeContract({ portal_status: ContractPortalStatus.RECONCILED });
-    contractRepo.findOne.mockResolvedValue(contract);
-
+  // UT-PORTAL-11: uploadInvoice 校验发票金额=对账金额并把发票落到对账单（设计稿 门户开票 / 06 D2）
+  it('UT-PORTAL-11 uploadInvoice validates amount and persists invoice to reconciliation', async () => {
+    contractRepo.findOne.mockResolvedValue(makeContract({ portal_status: ContractPortalStatus.RECONCILED }));
+    reconcileRepo.find.mockResolvedValue([
+      { id: 7, reconcile_no: 'DZ-1', total_amount: 5000, status: 'CONFIRMED', invoice_no: null },
+    ]);
     await service.uploadInvoice(1, 'supplier_A', 10, { invoice_no: 'INV-001', invoice_amount: 5000 });
+    expect(reconcileRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ invoice_no: 'INV-001', invoice_amount: 5000, has_invoice: 1 }),
+    );
     expect(logRepo.create).toHaveBeenCalledWith(expect.objectContaining({ action: 'INVOICE' }));
+  });
+
+  // UT-PORTAL-11b: 发票金额与对账金额不一致 → 拒绝提交,不落库
+  it('UT-PORTAL-11b uploadInvoice rejects when invoice amount != reconciliation amount', async () => {
+    contractRepo.findOne.mockResolvedValue(makeContract({ portal_status: ContractPortalStatus.RECONCILED }));
+    reconcileRepo.find.mockResolvedValue([
+      { id: 7, reconcile_no: 'DZ-1', total_amount: 5000, status: 'CONFIRMED', invoice_no: null },
+    ]);
+    await expect(
+      service.uploadInvoice(1, 'supplier_A', 10, { invoice_no: 'INV-001', invoice_amount: 4000 }),
+    ).rejects.toThrow(BadRequestException);
+    expect(reconcileRepo.save).not.toHaveBeenCalled();
   });
 
   // UT-PORTAL-12: uploadInvoice throws before 对账（开票须对账后）—— SHIPPING 尚不可开票

@@ -7,13 +7,14 @@ import { Contract } from '../contract/contract.entity';
 import { ContractMaterial } from '../contract/contract-material.entity';
 import { ContractShipment } from '../contract/contract-shipment.entity';
 import { ContractPortalLog } from '../contract/contract-portal-log.entity';
+import { Reconciliation } from '../reconciliation/reconciliation.entity';
 import { OrderMain } from '../order/order-main.entity';
 import { OrderMaterial } from '../order/order-material.entity';
 import { OrderSizeMatrix } from '../order/order-size-matrix.entity';
 
 @Module({
   imports: [TypeOrmModule.forFeature([
-    SupplierAccount, Contract, ContractMaterial, ContractShipment, ContractPortalLog, OrderMain, OrderMaterial, OrderSizeMatrix,
+    SupplierAccount, Contract, ContractMaterial, ContractShipment, ContractPortalLog, OrderMain, OrderMaterial, OrderSizeMatrix, Reconciliation,
   ])],
   controllers: [PortalController],
   providers: [PortalService],

@@ -8,6 +8,7 @@ import { ContractPortalLog, PortalOperatorType } from '../contract/contract-port
 import { OrderMain } from '../order/order-main.entity';
 import { OrderMaterial } from '../order/order-material.entity';
 import { OrderSizeMatrix } from '../order/order-size-matrix.entity';
+import { Reconciliation, ReconciliationStatus } from '../reconciliation/reconciliation.entity';
 import { ContractPortalStatus, ContractType } from '@i9/types';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { UploadInvoiceDto } from './dto/upload-invoice.dto';
@@ -29,6 +30,7 @@ export class PortalService {
     @InjectRepository(OrderMain) private readonly orderRepo: Repository<OrderMain>,
     @InjectRepository(OrderMaterial) private readonly orderMaterialRepo: Repository<OrderMaterial>,
     @InjectRepository(OrderSizeMatrix) private readonly matrixRepo: Repository<OrderSizeMatrix>,
+    @InjectRepository(Reconciliation) private readonly reconcileRepo: Repository<Reconciliation>,
     private readonly numbering: NumberingService,
   ) {}
 
@@ -226,19 +228,50 @@ export class PortalService {
       throw new BadRequestException('开票须在对账通过后进行（当前合同尚未完成对账）');
     }
 
-    const parts: string[] = [];
-    if (dto.invoice_no) parts.push(`发票号:${dto.invoice_no}`);
-    if (dto.invoice_amount != null) parts.push(`金额:${dto.invoice_amount}`);
+    // 财务管控（设计稿 门户开票 / 06 D2）：发票号+金额必填,发票金额必须=对账金额(±¥0.01),发票号不可重复
+    if (!dto.invoice_no) throw new BadRequestException('请填写发票号');
+    if (dto.invoice_amount == null) throw new BadRequestException('请填写发票金额');
+
+    const recons = await this.reconcileRepo.find({ where: { contract_id: id, deleted: 0 } });
+    const confirmed = recons.filter(
+      (r) => r.status === ReconciliationStatus.CONFIRMED || r.status === ReconciliationStatus.PAID,
+    );
+    if (confirmed.length === 0) throw new BadRequestException('尚无已确认的对账单,无法开票');
+    const pending = confirmed.filter((r) => !r.invoice_no);
+    if (pending.length === 0) throw new BadRequestException('该合同对账单已开票,请勿重复提交');
+    if (pending.length > 1) throw new BadRequestException('该合同存在多张待开票对账单,请联系业务处理');
+    const rec = pending[0];
+
+    const diff = +(dto.invoice_amount - +rec.total_amount).toFixed(4);
+    if (Math.abs(diff) > 0.01) {
+      throw new BadRequestException(
+        `发票金额 ¥${dto.invoice_amount} 与对账金额 ¥${(+rec.total_amount).toFixed(2)} 不一致,无法提交`,
+      );
+    }
+    // 发票号全局查重（防重复报销;DB uk_invoice_no 兜底并发）
+    const dup = await this.reconcileRepo.findOne({ where: { invoice_no: dto.invoice_no, deleted: 0 } });
+    if (dup && dup.id !== rec.id) {
+      throw new BadRequestException(`发票号 ${dto.invoice_no} 已被对账单 ${dup.reconcile_no} 使用（防重复付）`);
+    }
+
+    // 发票落到对账单（不再只写日志）
+    rec.invoice_no = dto.invoice_no;
+    rec.invoice_amount = dto.invoice_amount;
+    rec.invoice_diff = diff;
+    rec.invoice_url = dto.invoice_url ?? null;
+    rec.has_invoice = 1;
+    await this.reconcileRepo.save(rec);
+
+    const parts: string[] = [`发票号:${dto.invoice_no}`, `金额:${dto.invoice_amount}`];
     if (dto.invoice_url) parts.push(`附件:${dto.invoice_url}`);
     if (dto.remark) parts.push(dto.remark);
-    const remark = parts.length ? parts.join(' · ') : undefined;
     await this.logRepo.save(
       this.logRepo.create({
         contract_id: id,
         action: 'INVOICE',
         operator: supplierAccount,
         operator_type: PortalOperatorType.SUPPLIER,
-        remark,
+        remark: parts.join(' · '),
       }),
     );
   }
