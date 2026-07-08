@@ -15,6 +15,7 @@
 DROP PROCEDURE IF EXISTS _i9_add_col;
 DROP PROCEDURE IF EXISTS _i9_modify_col;
 DROP PROCEDURE IF EXISTS _i9_add_index;
+DROP PROCEDURE IF EXISTS _i9_add_unique;
 DELIMITER $$
 
 -- 仅当列不存在时 ADD COLUMN
@@ -43,6 +44,19 @@ BEGIN
   IF (SELECT COUNT(*) FROM information_schema.STATISTICS
       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = p_tbl AND INDEX_NAME = p_idx) = 0 THEN
     SET @sql = CONCAT('ALTER TABLE `', p_tbl, '` ADD INDEX `', p_idx, '` (', p_cols, ')');
+    PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+  END IF;
+END $$
+
+CREATE PROCEDURE _i9_add_unique(IN p_tbl VARCHAR(64), IN p_idx VARCHAR(64), IN p_cols VARCHAR(200))
+BEGIN
+  -- 若存量数据已有重复值(旧 bug 允许过),ADD UNIQUE 会失败;用 CONTINUE HANDLER 兜住,
+  -- 仅告警不中断发版(应用层查重仍在;清理重复数据后可重跑本脚本补加索引)。
+  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION
+    SELECT CONCAT('WARN: 无法为 ', p_tbl, '.', p_idx, ' 加唯一索引,可能存在重复值,清理后重跑') AS _i9_warn;
+  IF (SELECT COUNT(*) FROM information_schema.STATISTICS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = p_tbl AND INDEX_NAME = p_idx) = 0 THEN
+    SET @sql = CONCAT('ALTER TABLE `', p_tbl, '` ADD UNIQUE INDEX `', p_idx, '` (', p_cols, ')');
     PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
   END IF;
 END $$
@@ -167,6 +181,9 @@ CALL _i9_modify_col('contract','contract_no',"VARCHAR(40) NOT NULL COMMENT 'HT-�
 -- ═══════════════ 索引 ═══════════════
 CALL _i9_add_index('reconciliation','idx_patternmaker','`patternmaker_id`');
 
+-- 发票号唯一(防重复报销/重复付款);无发票为 NULL,可多张并存
+CALL _i9_add_unique('reconciliation','uk_invoice_no','`invoice_no`');
+
 -- ═══════════════ 配置 / 种子（INSERT IGNORE 幂等）═══════════════
 INSERT IGNORE INTO `sys_config` (`cfg_key`,`cfg_value`,`remark`) VALUES
 ('approval.quote.threshold',    '0', '报价审批阈值(人民币合计,0=不启用)'),
@@ -180,5 +197,6 @@ INSERT IGNORE INTO `company_profile` (`id`,`name`,`short_name`,`is_default`) VAL
 DROP PROCEDURE IF EXISTS _i9_add_col;
 DROP PROCEDURE IF EXISTS _i9_modify_col;
 DROP PROCEDURE IF EXISTS _i9_add_index;
+DROP PROCEDURE IF EXISTS _i9_add_unique;
 
 SELECT '✓ hotfix-schema 应用完成' AS status;

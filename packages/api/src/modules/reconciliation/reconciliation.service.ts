@@ -96,7 +96,7 @@ export class ReconciliationService {
           total_amount: +totalAmount.toFixed(4),
           tax_rate: dto.tax_rate ?? null,
           tax_amount: taxAmount,
-          invoice_no: dto.invoice_no ?? null,
+          invoice_no: dto.invoice_no || null, // 空串归一为 NULL:唯一索引允许多张「无发票」对账单并存,仅拦真实重复发票号
           invoice_amount: dto.invoice_amount ?? null,
           invoice_diff: invoiceDiff,
           invoice_url: dto.invoice_url ?? null,

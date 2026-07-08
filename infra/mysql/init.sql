@@ -583,6 +583,7 @@ CREATE TABLE IF NOT EXISTS `reconciliation` (
   `deleted`          TINYINT        NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_reconcile_no` (`reconcile_no`),
+  UNIQUE KEY `uk_invoice_no` (`invoice_no`),
   KEY `idx_contract` (`contract_id`),
   KEY `idx_factory` (`factory_id`),
   KEY `idx_style_no` (`style_no`),
