@@ -1,20 +1,27 @@
 import { Test } from '@nestjs/testing';
+import { DataSource } from 'typeorm';
 import { NumberingService, REDIS_CLIENT } from '../numbering.service';
 
 const mockRedis = {
   eval: jest.fn(),
   incr: jest.fn(),
+  exists: jest.fn(),
+  set: jest.fn(),
 };
+const mockDataSource = { query: jest.fn() };
 
 describe('NumberingService', () => {
   let service: NumberingService;
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockRedis.exists.mockResolvedValue(0); // 默认:计数器不存在
+    mockDataSource.query.mockResolvedValue([{ m: 0 }]); // 默认:库中无同前缀数据
     const module = await Test.createTestingModule({
       providers: [
         NumberingService,
         { provide: REDIS_CLIENT, useValue: mockRedis },
+        { provide: DataSource, useValue: mockDataSource },
       ],
     }).compile();
     service = module.get(NumberingService);
@@ -75,6 +82,24 @@ describe('NumberingService', () => {
       mockRedis.incr.mockResolvedValue(5);
       await service.nextGlobal('S');
       expect(mockRedis.incr).toHaveBeenCalledWith('seq:global:S');
+    });
+
+    it('UT-NUM-08: seeds counter from DB max when key absent (avoids colliding with seed/existing rows)', async () => {
+      mockRedis.exists.mockResolvedValue(0); // 计数器不存在
+      mockDataSource.query.mockResolvedValue([{ m: 1 }]); // 库中已有 S001
+      mockRedis.incr.mockResolvedValue(2);
+      const result = await service.nextGlobal('S');
+      expect(mockRedis.set).toHaveBeenCalledWith('seq:global:S', 1, 'NX'); // 基线=已有最大号
+      expect(result).toBe('S002'); // 下一个不再撞 S001
+    });
+
+    it('UT-NUM-09: skips DB seed when counter already exists', async () => {
+      mockRedis.exists.mockResolvedValue(1); // 计数器已存在
+      mockRedis.incr.mockResolvedValue(7);
+      const result = await service.nextGlobal('S');
+      expect(mockDataSource.query).not.toHaveBeenCalled();
+      expect(mockRedis.set).not.toHaveBeenCalled();
+      expect(result).toBe('S007');
     });
   });
 });

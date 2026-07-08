@@ -1,4 +1,5 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, Optional } from '@nestjs/common';
+import { DataSource } from 'typeorm';
 import Redis from 'ioredis';
 
 export const REDIS_CLIENT = 'REDIS_CLIENT';
@@ -21,7 +22,19 @@ export const NUM_PREFIX = {
 
 @Injectable()
 export class NumberingService {
-  constructor(@Inject(REDIS_CLIENT) private readonly redis: Redis) {}
+  // 全局递增号(nextGlobal)的取数来源:计数器首次创建时用库中现有最大号做基线,
+  // 避免与 init.sql 种子/存量数据撞号(如种子工厂 S001),同时兜底 Redis 数据丢失后从 001 重发。
+  private static readonly GLOBAL_SOURCE: Record<string, { table: string; col: string }> = {
+    S: { table: 'factory', col: 'factory_no' },
+    CM: { table: 'customer', col: 'customer_no' },
+    FE: { table: 'customer', col: 'customer_no' },
+  };
+
+  constructor(
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    // Optional:生产/集成环境由 TypeOrm 注入;纯单测(mock 仓储)不提供时退化为原发号行为。
+    @Optional() private readonly dataSource?: DataSource,
+  ) {}
 
   /**
    * 生成带日期的流水号，格式：{prefix}-{YYYYMMDD}-{3位序号}
@@ -67,8 +80,31 @@ export class NumberingService {
    */
   async nextGlobal(prefix: string): Promise<string> {
     const key = `seq:global:${prefix}`;
+    // 计数器不存在时(全新装机 / Redis 数据丢失),用库中现有最大号做基线,避免撞号。
+    // 仅在有 DataSource(生产/集成)时播种;纯单测无 DataSource 时退化为原行为。
+    if (this.dataSource && !(await this.redis.exists(key))) {
+      const base = await this.currentMaxSeq(prefix);
+      if (base > 0) await this.redis.set(key, base, 'NX');
+    }
     const seq = await this.redis.incr(key);
     return `${prefix}${String(seq).padStart(3, '0')}`;
+  }
+
+  /** 查库中该前缀现有最大序号(仅用于全局号基线,前缀取自固定白名单,非用户输入) */
+  private async currentMaxSeq(prefix: string): Promise<number> {
+    const src = NumberingService.GLOBAL_SOURCE[prefix];
+    if (!src || !this.dataSource) return 0;
+    const start = prefix.length + 1;
+    try {
+      const rows = await this.dataSource.query(
+        `SELECT COALESCE(MAX(CAST(SUBSTRING(\`${src.col}\`, ${start}) AS UNSIGNED)), 0) AS m
+         FROM \`${src.table}\` WHERE \`${src.col}\` LIKE ?`,
+        [`${prefix}%`],
+      );
+      return Number(rows?.[0]?.m ?? 0);
+    } catch {
+      return 0; // 查询失败时退化为原行为,不阻断发号
+    }
   }
 
   private formatDate(d: Date): string {

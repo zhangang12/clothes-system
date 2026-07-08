@@ -29,7 +29,7 @@ const mockContactRepo = {
   find: jest.fn().mockResolvedValue([]),
 };
 const mockContractRepo = { count: jest.fn() };
-const mockRedis = { incr: jest.fn(), expire: jest.fn() };
+const mockRedis = { incr: jest.fn(), expire: jest.fn(), exists: jest.fn().mockResolvedValue(1), set: jest.fn() };
 const mockManager = {
   create: jest.fn().mockImplementation((_e: any, v: any) => v),
   save: jest.fn().mockImplementation((_e: any, v: any) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: v.id ?? 1 })),
