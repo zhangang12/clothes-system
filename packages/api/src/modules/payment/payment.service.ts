@@ -39,6 +39,7 @@ export class PaymentService {
   }
 
   async findPrepayments(factoryId?: number, page = 1, size = 20) {
+    size = Math.min(Math.max(Number(size) || 20, 1), 100); page = Math.max(Number(page) || 1, 1); // 分页钳制,防超大 LIMIT / 负 OFFSET
     const where: any = factoryId ? { factory_id: factoryId } : {};
     const [items, total] = await this.prepayRepo.findAndCount({
       where,
@@ -74,39 +75,47 @@ export class PaymentService {
       }
     }
 
-    // 分批付款·超付拦截（设计稿 G4）：同一对账单累计付款申请额不得超过对账应付
-    if (dto.reconcile_id) {
-      const rec = await this.reconcileRepo.findOne({ where: { id: dto.reconcile_id, deleted: 0 } });
-      if (!rec) throw new NotFoundException(`对账单 #${dto.reconcile_id} 不存在`);
-      const existing = await this.prRepo.find({ where: { reconcile_id: dto.reconcile_id, deleted: 0 } });
-      const requested = existing
-        .filter((p) => p.approval_status !== PaymentApprovalStatus.REJECTED)
-        .reduce((s, p) => s + +p.amount, 0);
-      if (requested + dto.amount > +rec.total_amount + 0.01) {
-        throw new BadRequestException(
-          `累计付款申请 ${(requested + dto.amount).toFixed(2)} 超过对账应付 ${(+rec.total_amount).toFixed(2)}（已申请 ${requested.toFixed(2)}，本次 ${dto.amount}）`,
-        );
-      }
-    }
-
     const prefix = dto.type === ReconcileType.NO_CONTRACT
       ? `${NUM_PREFIX.PAYMENT}-NC`
       : NUM_PREFIX.PAYMENT;
-    const pr_no = await this.numbering.next(prefix);
+    const pr_no = await this.numbering.next(prefix); // Redis 发号,置于事务外
 
-    const pr = this.prRepo.create({
-      pr_no,
-      type: dto.type,
-      reconcile_id: dto.reconcile_id ?? null,
-      factory_id: dto.factory_id,
-      amount: dto.amount,
-      prepay_offset: prepayOffset,
-      actual_pay: +(dto.amount - prepayOffset).toFixed(4),
-      approval_status: PaymentApprovalStatus.DRAFT,
-      description: dto.description ?? null,
-      created_by: createdBy,
+    return this.dataSource.transaction(async (manager) => {
+      // 分批付款·超付拦截（设计稿 G4）：锁定对账单行,串行化同一对账单的并发付款申请,
+      // 避免「先查后写」竞态下两笔并发申请双双通过导致累计超付。
+      if (dto.reconcile_id) {
+        const rec = await manager.findOne(Reconciliation, {
+          where: { id: dto.reconcile_id, deleted: 0 },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!rec) throw new NotFoundException(`对账单 #${dto.reconcile_id} 不存在`);
+        const existing = await manager.find(PaymentRequest, {
+          where: { reconcile_id: dto.reconcile_id, deleted: 0 },
+        });
+        const requested = existing
+          .filter((p) => p.approval_status !== PaymentApprovalStatus.REJECTED)
+          .reduce((s, p) => s + +p.amount, 0);
+        if (requested + dto.amount > +rec.total_amount + 0.01) {
+          throw new BadRequestException(
+            `累计付款申请 ${(requested + dto.amount).toFixed(2)} 超过对账应付 ${(+rec.total_amount).toFixed(2)}（已申请 ${requested.toFixed(2)}，本次 ${dto.amount}）`,
+          );
+        }
+      }
+
+      const pr = manager.create(PaymentRequest, {
+        pr_no,
+        type: dto.type,
+        reconcile_id: dto.reconcile_id ?? null,
+        factory_id: dto.factory_id,
+        amount: dto.amount,
+        prepay_offset: prepayOffset,
+        actual_pay: +(dto.amount - prepayOffset).toFixed(4),
+        approval_status: PaymentApprovalStatus.DRAFT,
+        description: dto.description ?? null,
+        created_by: createdBy,
+      });
+      return manager.save(pr);
     });
-    return this.prRepo.save(pr);
   }
 
   async findPaymentRequests(
@@ -129,6 +138,7 @@ export class PaymentService {
       where.created_at = LessThanOrEqual(`${endDate} 23:59:59`);
     }
 
+    size = Math.min(Math.max(Number(size) || 20, 1), 100); page = Math.max(Number(page) || 1, 1); // 分页钳制
     const [items, total] = await this.prRepo.findAndCount({
       where,
       skip: (page - 1) * size,

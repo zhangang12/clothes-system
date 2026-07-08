@@ -33,6 +33,7 @@ export class PortalService {
   ) {}
 
   async getContracts(factoryId: number, page = 1, size = 20, portalStatus?: string) {
+    size = Math.min(Math.max(Number(size) || 20, 1), 100); page = Math.max(Number(page) || 1, 1); // 分页钳制
     const base = { factory_id: factoryId, deleted: 0 };
     const where = portalStatus
       ? { ...base, portal_status: portalStatus as ContractPortalStatus }

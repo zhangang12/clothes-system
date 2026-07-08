@@ -47,12 +47,14 @@ const mockReconcileRepo = {
   update: jest.fn().mockResolvedValue({ affected: 1 }),
 };
 const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn().mockResolvedValue(1) };
+const mockManager = {
+  findOne: jest.fn().mockResolvedValue(null),
+  find: jest.fn().mockResolvedValue([]),
+  create: jest.fn().mockImplementation((_e, v) => v),
+  save: jest.fn().mockImplementation((v) => Promise.resolve(v)),
+};
 const mockDataSource = {
-  transaction: jest.fn().mockImplementation((cb) => cb({
-    findOne: jest.fn().mockResolvedValue(null),
-    find: jest.fn().mockResolvedValue([]),
-    save: jest.fn().mockImplementation((_, v) => Promise.resolve(v)),
-  })),
+  transaction: jest.fn().mockImplementation((cb) => cb(mockManager)),
 };
 
 describe('PaymentService', () => {
@@ -60,11 +62,11 @@ describe('PaymentService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    mockDataSource.transaction.mockImplementation((cb) => cb({
-      findOne: jest.fn().mockResolvedValue(null),
-      find: jest.fn().mockResolvedValue([]),
-      save: jest.fn().mockImplementation((_, v) => Promise.resolve(v)),
-    }));
+    mockManager.findOne.mockResolvedValue(null);
+    mockManager.find.mockResolvedValue([]);
+    mockManager.create.mockImplementation((_e, v) => v);
+    mockManager.save.mockImplementation((v) => Promise.resolve(v));
+    mockDataSource.transaction.mockImplementation((cb) => cb(mockManager));
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PaymentService,
@@ -104,7 +106,7 @@ describe('PaymentService', () => {
     const dto = { type: ReconcileType.CONTRACT, factory_id: 5, amount: 3000, prepay_offset: 500 };
     mockPrepayRepo.find.mockResolvedValue([makePrepayment({ balance: 1000 })]);
     await service.createPaymentRequest(dto as any, 1);
-    expect(mockPrRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockManager.create).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       amount: 3000,
       prepay_offset: 500,
       actual_pay: 2500,
