@@ -44,6 +44,7 @@
 
 ## 最近变更（新→旧，保留最近若干条）
 
+- （本次·阶段1续）数据/schema:`fix(api)` 结算总货款只计合同对账(消除无合同费用双重扣减致净利偏低,真栈验 goods=1000 非 1200);发票号唯一索引 uk_invoice_no(init.sql+hotfix `_i9_add_unique` 幂等迁移,真库验重复拒/多NULL放行/二次幂等)。单测 185/185
 - （本次·阶段1）安全/数据 P0:`fix(api)` 上传端点 magic-bytes 校验+安全响应头(阻断存储型 XSS)；审批后改金额清 approval_status 防绕过；超付拦截事务内 pessimistic_write；reconciliation/settlement/payment/portal 分页钳制。均真栈验证,单测 185/185
 - （本次·阶段0）准出审查 + P0 修复：`fix(api)` 编号从库取基线消除撞 S001；`fix(web)` 列表响应契约对齐+编辑页 size+客户银行子表映射（全站列表恒空/编辑页 400 已解）；`chore(devtools)` macOS 免 Docker 本地全栈 + Playwright 冒烟。分支 `claude/fix-stage0-p0`
 - `30e70d1` docs：新增 HANDOFF.md + pre-commit 钩子（每次变更强制更新交接文档）
