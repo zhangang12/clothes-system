@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like, In, FindOptionsWhere, DataSource } from 'typeorm';
+import { Repository, Like, FindOptionsWhere, DataSource } from 'typeorm';
 import { SettlementStatus, ReconcileType } from '@i9/types';
 import { Settlement } from './settlement.entity';
 import { SettlementCost } from './settlement-cost.entity';
@@ -104,12 +104,14 @@ export class SettlementService {
   // 按款号从已确认/已付对账付款汇总总货款(含税)——成本明细只读、源自对账付款（设计稿 D4/D6）
   private async aggregateGoodsTax(styleNo?: string): Promise<number> {
     if (!styleNo) return 0;
-    // 仅统计供应商货款对账（合同/无合同费用），排除样衣工时对账(LABOR)，避免单款工时污染货款汇总
-    const goodsTypes = In([ReconcileType.CONTRACT, ReconcileType.NO_CONTRACT]);
+    // 总货款仅统计【合同】对账(材料/加工/补料)。无合同费用(快邮/运杂/打样/货代等)计入【期间费用】
+    // (aggregatePeriodExpense),此处不再重复计入,避免同一笔被「货款+期间费用」双重扣减致净利系统性偏低;
+    // 样衣工时对账(LABOR)也排除。成本单价=总货款/件数 亦应只含料+工,不含期间费用。
+    const goodsType = ReconcileType.CONTRACT;
     const recons = await this.reconcileRepo.find({
       where: [
-        { style_no: styleNo, type: goodsTypes, status: ReconciliationStatus.CONFIRMED, deleted: 0 },
-        { style_no: styleNo, type: goodsTypes, status: ReconciliationStatus.PAID, deleted: 0 },
+        { style_no: styleNo, type: goodsType, status: ReconciliationStatus.CONFIRMED, deleted: 0 },
+        { style_no: styleNo, type: goodsType, status: ReconciliationStatus.PAID, deleted: 0 },
       ],
     });
     return r4(recons.reduce((s, r) => s + +r.total_amount, 0));
