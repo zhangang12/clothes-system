@@ -55,7 +55,7 @@ function mountView(role: UserRole) {
 
 describe('ReconciliationListView', () => {
   beforeEach(() => {
-    mockList.mockResolvedValue({ items: [], total: 0 });
+    mockList.mockResolvedValue({ data: [], total: 0 });
     mockGet.mockResolvedValue({});
     mockCreate.mockResolvedValue({});
     mockConfirm.mockResolvedValue({});
@@ -77,7 +77,7 @@ describe('ReconciliationListView', () => {
       makeItem({ id: 1, status: 'DRAFT' }),
       makeItem({ id: 2, status: 'CONFIRMED' }),
     ];
-    mockList.mockResolvedValue({ items, total: 2 });
+    mockList.mockResolvedValue({ data: items, total: 2 });
 
     const wrapper = mountView(UserRole.ADMIN);
     // Each row renders a "详情" button in its #default scoped slot
@@ -114,26 +114,26 @@ describe('ReconciliationListView', () => {
 
   // ──────────────────────────────────────────────── status tag labels
   it('shows "草稿" text for DRAFT status', async () => {
-    mockList.mockResolvedValue({ items: [makeItem({ status: 'DRAFT' })], total: 1 });
+    mockList.mockResolvedValue({ data: [makeItem({ status: 'DRAFT' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('草稿'));
   });
 
   it('shows "已确认" text for CONFIRMED status', async () => {
-    mockList.mockResolvedValue({ items: [makeItem({ status: 'CONFIRMED' })], total: 1 });
+    mockList.mockResolvedValue({ data: [makeItem({ status: 'CONFIRMED' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('已确认'));
   });
 
   it('shows "已付款" text for PAID status', async () => {
-    mockList.mockResolvedValue({ items: [makeItem({ status: 'PAID' })], total: 1 });
+    mockList.mockResolvedValue({ data: [makeItem({ status: 'PAID' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('已付款'));
   });
 
   // ─────────────────────────────────────── status tag Element Plus types
   it('DRAFT status tag has el-tag--info class', async () => {
-    mockList.mockResolvedValue({ items: [makeItem({ status: 'DRAFT' })], total: 1 });
+    mockList.mockResolvedValue({ data: [makeItem({ status: 'DRAFT' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     // Wait for table rows to render (not just option text which appears immediately)
     await vi.waitFor(() => expect(wrapper.findAll('button').some((b) => b.text() === '详情')).toBe(true));
@@ -146,7 +146,7 @@ describe('ReconciliationListView', () => {
   });
 
   it('CONFIRMED status tag does NOT have el-tag--info or el-tag--success', async () => {
-    mockList.mockResolvedValue({ items: [makeItem({ status: 'CONFIRMED' })], total: 1 });
+    mockList.mockResolvedValue({ data: [makeItem({ status: 'CONFIRMED' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.findAll('button').some((b) => b.text() === '详情')).toBe(true));
 
@@ -158,7 +158,7 @@ describe('ReconciliationListView', () => {
   });
 
   it('PAID status tag has el-tag--success class', async () => {
-    mockList.mockResolvedValue({ items: [makeItem({ status: 'PAID' })], total: 1 });
+    mockList.mockResolvedValue({ data: [makeItem({ status: 'PAID' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.findAll('button').some((b) => b.text() === '详情')).toBe(true));
 
@@ -171,7 +171,7 @@ describe('ReconciliationListView', () => {
   // ────────────────────────────── 确认 button only shown for DRAFT + canEdit
   it('shows "提交复核" on DRAFT and "复核确认" on PENDING (ADMIN, 二级审批)', async () => {
     mockList.mockResolvedValue({
-      items: [
+      data: [
         makeItem({ id: 1, status: 'DRAFT' }),
         makeItem({ id: 2, reconcile_no: 'RC-002', status: 'PENDING' }),
       ],
@@ -190,7 +190,7 @@ describe('ReconciliationListView', () => {
   });
 
   it('hides "复核确认" button for FINANCE user on PENDING row (仅主管/ADMIN)', async () => {
-    mockList.mockResolvedValue({ items: [makeItem({ status: 'PENDING' })], total: 1 });
+    mockList.mockResolvedValue({ data: [makeItem({ status: 'PENDING' })], total: 1 });
     const wrapper = mountView(UserRole.FINANCE);
     await vi.waitFor(() => expect(wrapper.text()).toContain('RC-2024-001'));
 
@@ -200,7 +200,7 @@ describe('ReconciliationListView', () => {
 
   // ──────────────────────────────────────────── 删除 button (ADMIN only)
   it('shows "删除" button for DRAFT + ADMIN', async () => {
-    mockList.mockResolvedValue({ items: [makeItem({ status: 'DRAFT' })], total: 1 });
+    mockList.mockResolvedValue({ data: [makeItem({ status: 'DRAFT' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('RC-2024-001'));
 
@@ -209,7 +209,7 @@ describe('ReconciliationListView', () => {
   });
 
   it('hides "删除" button for DRAFT + FINANCE (non-admin)', async () => {
-    mockList.mockResolvedValue({ items: [makeItem({ status: 'DRAFT' })], total: 1 });
+    mockList.mockResolvedValue({ data: [makeItem({ status: 'DRAFT' })], total: 1 });
     const wrapper = mountView(UserRole.FINANCE);
     await vi.waitFor(() => expect(wrapper.text()).toContain('RC-2024-001'));
 
@@ -218,7 +218,7 @@ describe('ReconciliationListView', () => {
   });
 
   it('hides "删除" button for CONFIRMED row even as ADMIN', async () => {
-    mockList.mockResolvedValue({ items: [makeItem({ status: 'CONFIRMED' })], total: 1 });
+    mockList.mockResolvedValue({ data: [makeItem({ status: 'CONFIRMED' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('RC-2024-001'));
 
@@ -229,7 +229,7 @@ describe('ReconciliationListView', () => {
   // ─────────────────────────────────────── 详情 → calls reconciliationApi.get
   it('clicking "详情" calls reconciliationApi.get with the row id', async () => {
     const item = makeItem({ id: 42 });
-    mockList.mockResolvedValue({ items: [item], total: 1 });
+    mockList.mockResolvedValue({ data: [item], total: 1 });
     mockGet.mockResolvedValue({ reconcile_no: 'RC-042', status: 'DRAFT', shipments: [] });
 
     const wrapper = mountView(UserRole.ADMIN);
@@ -263,7 +263,7 @@ describe('ReconciliationListView', () => {
 
   // ─────────────────────────────────────────────────────── pagination
   it('renders pagination total when data is loaded', async () => {
-    mockList.mockResolvedValue({ items: [makeItem()], total: 50 });
+    mockList.mockResolvedValue({ data: [makeItem()], total: 50 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('50'));
     expect(wrapper.find('.el-pagination-stub').exists()).toBe(true);

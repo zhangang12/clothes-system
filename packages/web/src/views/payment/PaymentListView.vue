@@ -313,7 +313,7 @@ async function loadPrepay() {
   prepayLoading.value = true;
   try {
     const res = await prepaymentApi.list(prepayQuery);
-    prepayList.value = res?.data?.items ?? res?.items ?? [];
+    prepayList.value = res?.data ?? [];
     prepayTotal.value = res?.data?.total ?? res?.total ?? 0;
   } finally { prepayLoading.value = false; }
 }
@@ -384,7 +384,7 @@ async function loadPR() {
       params.end_date = prDateRange.value[1];
     }
     const res = await paymentRequestApi.list(params);
-    prList.value = res?.data?.items ?? res?.items ?? [];
+    prList.value = res?.data ?? [];
     prTotal.value = res?.data?.total ?? res?.total ?? 0;
   } finally { prLoading.value = false; }
 }

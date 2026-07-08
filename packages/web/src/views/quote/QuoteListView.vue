@@ -103,7 +103,7 @@ async function load() {
   loading.value = true;
   try {
     const res: any = await quoteApi.list(query);
-    list.value = res.data?.items ?? res.items ?? [];
+    list.value = res.data ?? [];
     total.value = res.data?.total ?? res.total ?? 0;
   } finally {
     loading.value = false;

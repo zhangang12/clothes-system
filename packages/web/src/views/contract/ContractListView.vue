@@ -218,15 +218,15 @@ async function load() {
   loading.value = true;
   try {
     const res: any = await contractApi.list(query);
-    list.value = res.data?.items ?? res.items ?? [];
+    list.value = res.data ?? [];
     total.value = res.data?.total ?? res.total ?? 0;
   } finally { loading.value = false; }
 }
 function reset() { query.keyword = ''; query.type = undefined; query.portal_status = undefined; query.page = 1; load(); }
 async function loadRefs() {
-  const [fs, os] = await Promise.all([factoryApi.select(), orderApi.list({ page: 1, size: 200 })]);
+  const [fs, os] = await Promise.all([factoryApi.select(), orderApi.list({ page: 1, size: 100 })]);
   factories.value = (((fs as any).data ?? fs) as any[]) ?? [];
-  orders.value = (os as any).data?.items ?? (os as any).items ?? [];
+  orders.value = (os as any).data ?? [];
 }
 onMounted(() => {
   load();

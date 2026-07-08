@@ -57,7 +57,7 @@ function mountView(role: UserRole) {
 
 describe('SettlementListView', () => {
   beforeEach(() => {
-    mockList.mockResolvedValue({ items: [], total: 0 });
+    mockList.mockResolvedValue({ data: [], total: 0 });
     mockGet.mockResolvedValue({ costs: [], receipts: [] });
     mockCreate.mockResolvedValue({});
     mockConfirm.mockResolvedValue({});
@@ -75,14 +75,14 @@ describe('SettlementListView', () => {
   });
 
   it('renders settlement rows returned by the API', async () => {
-    mockList.mockResolvedValue({ items: [makeSettlement({ settlement_no: 'JS-001' })], total: 1 });
+    mockList.mockResolvedValue({ data: [makeSettlement({ settlement_no: 'JS-001' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('JS-001'));
   });
 
   // ─────────────────────────────────── net_profit colour classes
   it('applies text-success class to a positive net_profit', async () => {
-    mockList.mockResolvedValue({ items: [makeSettlement({ net_profit: '3000.00' })], total: 1 });
+    mockList.mockResolvedValue({ data: [makeSettlement({ net_profit: '3000.00' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('3000.00'));
 
@@ -93,7 +93,7 @@ describe('SettlementListView', () => {
   });
 
   it('applies text-danger class to a negative net_profit', async () => {
-    mockList.mockResolvedValue({ items: [makeSettlement({ net_profit: '-500.00' })], total: 1 });
+    mockList.mockResolvedValue({ data: [makeSettlement({ net_profit: '-500.00' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('-500.00'));
 
@@ -104,7 +104,7 @@ describe('SettlementListView', () => {
   });
 
   it('applies neither class when net_profit is zero', async () => {
-    mockList.mockResolvedValue({ items: [makeSettlement({ net_profit: '0.00' })], total: 1 });
+    mockList.mockResolvedValue({ data: [makeSettlement({ net_profit: '0.00' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('0.00'));
 
@@ -119,28 +119,28 @@ describe('SettlementListView', () => {
 
   // ─────────────────────────────────── 确认 button visibility
   it('shows "确认" button for DRAFT row as ADMIN', async () => {
-    mockList.mockResolvedValue({ items: [makeSettlement({ status: 'DRAFT' })], total: 1 });
+    mockList.mockResolvedValue({ data: [makeSettlement({ status: 'DRAFT' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('JS-2024-001'));
     expect(wrapper.findAll('button').find((b) => b.text() === '确认')).toBeTruthy();
   });
 
   it('shows "确认" button for DRAFT row as FINANCE', async () => {
-    mockList.mockResolvedValue({ items: [makeSettlement({ status: 'DRAFT' })], total: 1 });
+    mockList.mockResolvedValue({ data: [makeSettlement({ status: 'DRAFT' })], total: 1 });
     const wrapper = mountView(UserRole.FINANCE);
     await vi.waitFor(() => expect(wrapper.text()).toContain('JS-2024-001'));
     expect(wrapper.findAll('button').find((b) => b.text() === '确认')).toBeTruthy();
   });
 
   it('hides "确认" button for CONFIRMED row', async () => {
-    mockList.mockResolvedValue({ items: [makeSettlement({ status: 'CONFIRMED' })], total: 1 });
+    mockList.mockResolvedValue({ data: [makeSettlement({ status: 'CONFIRMED' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('JS-2024-001'));
     expect(wrapper.findAll('button').find((b) => b.text() === '确认')).toBeUndefined();
   });
 
   it('hides "确认" button for BUSINESS even on DRAFT', async () => {
-    mockList.mockResolvedValue({ items: [makeSettlement({ status: 'DRAFT' })], total: 1 });
+    mockList.mockResolvedValue({ data: [makeSettlement({ status: 'DRAFT' })], total: 1 });
     const wrapper = mountView(UserRole.BUSINESS);
     await vi.waitFor(() => expect(wrapper.text()).toContain('JS-2024-001'));
     expect(wrapper.findAll('button').find((b) => b.text() === '确认')).toBeUndefined();
@@ -148,21 +148,21 @@ describe('SettlementListView', () => {
 
   // ─────────────────────────────────── 删除 button (ADMIN only)
   it('shows "删除" button for DRAFT + ADMIN', async () => {
-    mockList.mockResolvedValue({ items: [makeSettlement({ status: 'DRAFT' })], total: 1 });
+    mockList.mockResolvedValue({ data: [makeSettlement({ status: 'DRAFT' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('JS-2024-001'));
     expect(wrapper.findAll('button').find((b) => b.text() === '删除')).toBeTruthy();
   });
 
   it('hides "删除" for DRAFT + FINANCE (non-admin)', async () => {
-    mockList.mockResolvedValue({ items: [makeSettlement({ status: 'DRAFT' })], total: 1 });
+    mockList.mockResolvedValue({ data: [makeSettlement({ status: 'DRAFT' })], total: 1 });
     const wrapper = mountView(UserRole.FINANCE);
     await vi.waitFor(() => expect(wrapper.text()).toContain('JS-2024-001'));
     expect(wrapper.findAll('button').find((b) => b.text() === '删除')).toBeUndefined();
   });
 
   it('hides "删除" for CONFIRMED row even as ADMIN', async () => {
-    mockList.mockResolvedValue({ items: [makeSettlement({ status: 'CONFIRMED' })], total: 1 });
+    mockList.mockResolvedValue({ data: [makeSettlement({ status: 'CONFIRMED' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('JS-2024-001'));
     expect(wrapper.findAll('button').find((b) => b.text() === '删除')).toBeUndefined();
@@ -228,7 +228,7 @@ describe('SettlementListView', () => {
 
   // ─────────────────────────────────────────────── pagination
   it('renders pagination when total > 0', async () => {
-    mockList.mockResolvedValue({ items: [makeSettlement()], total: 30 });
+    mockList.mockResolvedValue({ data: [makeSettlement()], total: 30 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('30'));
     expect(wrapper.find('.el-pagination-stub').exists()).toBe(true);

@@ -370,7 +370,7 @@ async function load() {
   loading.value = true;
   try {
     const res = await reconciliationApi.list(query);
-    list.value = res?.data?.items ?? res?.items ?? [];
+    list.value = res?.data ?? [];
     total.value = res?.data?.total ?? res?.total ?? 0;
   } finally { loading.value = false; }
 }
@@ -491,8 +491,8 @@ async function openLabor() {
   laborLoading.value = true;
   try {
     // 仅拉「已对账」样衣（版师已填件数+单价、工时金额生成）
-    const res = await sampleApi.list({ status: 'RECONCILED', page: 1, size: 200 });
-    const items = res?.data?.items ?? (res as any)?.items ?? [];
+    const res = await sampleApi.list({ status: 'RECONCILED', page: 1, size: 100 });
+    const items = res?.data ?? [];
     laborSamples.value = items.filter((s: any) => +s.labor_amount > 0);
   } finally { laborLoading.value = false; }
 }

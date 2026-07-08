@@ -65,10 +65,10 @@ async function loadMore() {
     const params: Record<string, unknown> = { page: page.value, size: PAGE_SIZE };
     if (activeTab.value) params.portal_status = activeTab.value;
     const res = await portalContractApi.list(params);
-    const data = (res as any).data ?? res;
-    const items: any[] = data.items ?? [];
+    const body = res as any;
+    const items: any[] = body.data ?? [];
     list.value.push(...items);
-    finished.value = list.value.length >= (data.total ?? 0);
+    finished.value = list.value.length >= (body.total ?? 0);
     page.value += 1;
   } finally {
     loading.value = false;

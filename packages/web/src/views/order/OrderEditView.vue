@@ -221,11 +221,11 @@ function delMats() { form.materials = form.materials.filter((r: any) => !selMats
 async function loadRefs() {
   // 生产工厂只选「委外加工商」(设计稿 订单 B3)；材料供应商从工厂库全量点选(设计稿 订单 B9)
   const [qs, fs, allF] = await Promise.all([
-    quoteApi.list({ page: 1, size: 200 }),
+    quoteApi.list({ page: 1, size: 100 }),
     factoryApi.select('OUTSOURCE'),
     factoryApi.select(),
   ]);
-  quotes.value = (qs as any).data?.items ?? (qs as any).items ?? [];
+  quotes.value = (qs as any).data ?? [];
   factories.value = (((fs as any).data ?? fs) as any[]) ?? [];
   supplierFactories.value = (((allF as any).data ?? allF) as any[]) ?? [];
 }

@@ -89,9 +89,9 @@ function mountView(role: UserRole) {
 
 describe('PaymentListView', () => {
   beforeEach(() => {
-    mockPrepayList.mockResolvedValue({ items: [], total: 0 });
+    mockPrepayList.mockResolvedValue({ data: [], total: 0 });
     mockPrepayGetBalance.mockResolvedValue(0);
-    mockPRList.mockResolvedValue({ items: [], total: 0 });
+    mockPRList.mockResolvedValue({ data: [], total: 0 });
     // Use mockClear (not mockReset) to preserve the spy implementation
     ElMessageMock.success.mockClear();
     ElMessageMock.warning.mockClear();
@@ -134,14 +134,14 @@ describe('PaymentListView', () => {
   });
 
   it('renders prepayment rows', async () => {
-    mockPrepayList.mockResolvedValue({ items: [makePrepay({ balance: '4000.00' })], total: 1 });
+    mockPrepayList.mockResolvedValue({ data: [makePrepay({ balance: '4000.00' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('4000.00'));
   });
 
   // ─────────────────── payment-request tab — action buttons per status
   it('shows "提交" button for DRAFT request (canEdit role)', async () => {
-    mockPRList.mockResolvedValue({ items: [makePR({ approval_status: 'DRAFT' })], total: 1 });
+    mockPRList.mockResolvedValue({ data: [makePR({ approval_status: 'DRAFT' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
 
@@ -149,7 +149,7 @@ describe('PaymentListView', () => {
   });
 
   it('hides "提交" button for BUSINESS user on DRAFT request', async () => {
-    mockPRList.mockResolvedValue({ items: [makePR({ approval_status: 'DRAFT' })], total: 1 });
+    mockPRList.mockResolvedValue({ data: [makePR({ approval_status: 'DRAFT' })], total: 1 });
     const wrapper = mountView(UserRole.BUSINESS);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
 
@@ -157,7 +157,7 @@ describe('PaymentListView', () => {
   });
 
   it('shows "批准" and "驳回" for PENDING request as ADMIN', async () => {
-    mockPRList.mockResolvedValue({ items: [makePR({ approval_status: 'PENDING' })], total: 1 });
+    mockPRList.mockResolvedValue({ data: [makePR({ approval_status: 'PENDING' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
 
@@ -167,7 +167,7 @@ describe('PaymentListView', () => {
 
   it('hides "批准" and "驳回" for PENDING request as FINANCE (not admin)', async () => {
     // In this component, approve/reject use `isAdmin` (not `canEdit`)
-    mockPRList.mockResolvedValue({ items: [makePR({ approval_status: 'PENDING' })], total: 1 });
+    mockPRList.mockResolvedValue({ data: [makePR({ approval_status: 'PENDING' })], total: 1 });
     const wrapper = mountView(UserRole.FINANCE);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
 
@@ -176,7 +176,7 @@ describe('PaymentListView', () => {
   });
 
   it('shows "标记付款" for APPROVED request as ADMIN', async () => {
-    mockPRList.mockResolvedValue({ items: [makePR({ approval_status: 'APPROVED' })], total: 1 });
+    mockPRList.mockResolvedValue({ data: [makePR({ approval_status: 'APPROVED' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
 
@@ -184,7 +184,7 @@ describe('PaymentListView', () => {
   });
 
   it('shows "标记付款" for APPROVED request as FINANCE', async () => {
-    mockPRList.mockResolvedValue({ items: [makePR({ approval_status: 'APPROVED' })], total: 1 });
+    mockPRList.mockResolvedValue({ data: [makePR({ approval_status: 'APPROVED' })], total: 1 });
     const wrapper = mountView(UserRole.FINANCE);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
 
@@ -192,7 +192,7 @@ describe('PaymentListView', () => {
   });
 
   it('hides "标记付款" for APPROVED request as BUSINESS', async () => {
-    mockPRList.mockResolvedValue({ items: [makePR({ approval_status: 'APPROVED' })], total: 1 });
+    mockPRList.mockResolvedValue({ data: [makePR({ approval_status: 'APPROVED' })], total: 1 });
     const wrapper = mountView(UserRole.BUSINESS);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
 
@@ -200,7 +200,7 @@ describe('PaymentListView', () => {
   });
 
   it('shows no transition-action buttons for PAID request', async () => {
-    mockPRList.mockResolvedValue({ items: [makePR({ approval_status: 'PAID' })], total: 1 });
+    mockPRList.mockResolvedValue({ data: [makePR({ approval_status: 'PAID' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
 
@@ -211,35 +211,35 @@ describe('PaymentListView', () => {
 
   // ─────────────────────── status labels
   it('shows "草稿" tag for DRAFT payment request', async () => {
-    mockPRList.mockResolvedValue({ items: [makePR({ approval_status: 'DRAFT' })], total: 1 });
+    mockPRList.mockResolvedValue({ data: [makePR({ approval_status: 'DRAFT' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
     expect(wrapper.text()).toContain('草稿');
   });
 
   it('shows "待审批" tag for PENDING payment request', async () => {
-    mockPRList.mockResolvedValue({ items: [makePR({ approval_status: 'PENDING' })], total: 1 });
+    mockPRList.mockResolvedValue({ data: [makePR({ approval_status: 'PENDING' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
     expect(wrapper.text()).toContain('待审批');
   });
 
   it('shows "已批准" tag for APPROVED payment request', async () => {
-    mockPRList.mockResolvedValue({ items: [makePR({ approval_status: 'APPROVED' })], total: 1 });
+    mockPRList.mockResolvedValue({ data: [makePR({ approval_status: 'APPROVED' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
     expect(wrapper.text()).toContain('已批准');
   });
 
   it('shows "已驳回" tag for REJECTED payment request', async () => {
-    mockPRList.mockResolvedValue({ items: [makePR({ approval_status: 'REJECTED' })], total: 1 });
+    mockPRList.mockResolvedValue({ data: [makePR({ approval_status: 'REJECTED' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
     expect(wrapper.text()).toContain('已驳回');
   });
 
   it('shows "已付款" tag for PAID payment request', async () => {
-    mockPRList.mockResolvedValue({ items: [makePR({ approval_status: 'PAID' })], total: 1 });
+    mockPRList.mockResolvedValue({ data: [makePR({ approval_status: 'PAID' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
     expect(wrapper.text()).toContain('已付款');
@@ -247,7 +247,7 @@ describe('PaymentListView', () => {
 
   // ─────────────────────── reject dialog
   it('opens reject dialog when "驳回" is clicked', async () => {
-    mockPRList.mockResolvedValue({ items: [makePR({ approval_status: 'PENDING' })], total: 1 });
+    mockPRList.mockResolvedValue({ data: [makePR({ approval_status: 'PENDING' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
 
@@ -259,7 +259,7 @@ describe('PaymentListView', () => {
   });
 
   it('warns when reject dialog submitted without a reason', async () => {
-    mockPRList.mockResolvedValue({ items: [makePR({ id: 5, approval_status: 'PENDING' })], total: 1 });
+    mockPRList.mockResolvedValue({ data: [makePR({ id: 5, approval_status: 'PENDING' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
 
@@ -278,7 +278,7 @@ describe('PaymentListView', () => {
   it('calls paymentRequestApi.reject with the reason text', async () => {
     mockPRReject.mockResolvedValue({});
     mockPRList.mockResolvedValue({
-      items: [makePR({ id: 5, approval_status: 'PENDING' })],
+      data: [makePR({ id: 5, approval_status: 'PENDING' })],
       total: 1,
     });
     const wrapper = mountView(UserRole.ADMIN);
@@ -297,7 +297,7 @@ describe('PaymentListView', () => {
 
   // ─────────────────────── mark-paid dialog
   it('opens mark-paid dialog when "标记付款" is clicked', async () => {
-    mockPRList.mockResolvedValue({ items: [makePR({ approval_status: 'APPROVED' })], total: 1 });
+    mockPRList.mockResolvedValue({ data: [makePR({ approval_status: 'APPROVED' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
 
@@ -309,7 +309,7 @@ describe('PaymentListView', () => {
   });
 
   it('warns when marking paid without a slip URL', async () => {
-    mockPRList.mockResolvedValue({ items: [makePR({ id: 7, approval_status: 'APPROVED' })], total: 1 });
+    mockPRList.mockResolvedValue({ data: [makePR({ id: 7, approval_status: 'APPROVED' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
 
@@ -325,7 +325,7 @@ describe('PaymentListView', () => {
 
   it('calls paymentRequestApi.markPaid with the slip URL', async () => {
     mockPRMarkPaid.mockResolvedValue({});
-    mockPRList.mockResolvedValue({ items: [makePR({ id: 7, approval_status: 'APPROVED' })], total: 1 });
+    mockPRList.mockResolvedValue({ data: [makePR({ id: 7, approval_status: 'APPROVED' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
 

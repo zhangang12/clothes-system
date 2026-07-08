@@ -229,13 +229,13 @@ function onMiddleman(id: number) {
 
 async function loadRefs() {
   const [ms, bs, ss] = await Promise.all([
-    customerApi.list({ page: 1, size: 200, type: 'MIDDLEMAN' }),
-    customerApi.list({ page: 1, size: 200, type: 'BUYER' }),
-    sampleApi.list({ page: 1, size: 200 }),
+    customerApi.list({ page: 1, size: 100, type: 'MIDDLEMAN' }),
+    customerApi.list({ page: 1, size: 100, type: 'BUYER' }),
+    sampleApi.list({ page: 1, size: 100 }),
   ]);
-  middlemen.value = (ms as any).data?.items ?? (ms as any).items ?? [];
-  buyers.value = (bs as any).data?.items ?? (bs as any).items ?? [];
-  samples.value = (ss as any).data?.items ?? (ss as any).items ?? [];
+  middlemen.value = (ms as any).data ?? [];
+  buyers.value = (bs as any).data ?? [];
+  samples.value = (ss as any).data ?? [];
 }
 
 async function load() {

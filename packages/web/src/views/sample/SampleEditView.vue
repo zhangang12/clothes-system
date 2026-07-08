@@ -201,12 +201,12 @@ const actionLabel = (a: string) => ({ PUSH: '推送版师', PATTERNMAKER_SAVE: '
 
 async function loadRefs() {
   const [ms, bs, fs] = await Promise.all([
-    customerApi.list({ page: 1, size: 200, type: 'MIDDLEMAN' }),
-    customerApi.list({ page: 1, size: 200, type: 'BUYER' }),
+    customerApi.list({ page: 1, size: 100, type: 'MIDDLEMAN' }),
+    customerApi.list({ page: 1, size: 100, type: 'BUYER' }),
     factoryApi.select(),
   ]);
-  middlemen.value = (ms as any).data?.items ?? (ms as any).items ?? [];
-  buyers.value = (bs as any).data?.items ?? (bs as any).items ?? [];
+  middlemen.value = (ms as any).data ?? [];
+  buyers.value = (bs as any).data ?? [];
   factories.value = (((fs as any).data ?? fs) as any[]) ?? [];
 }
 

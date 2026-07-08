@@ -207,10 +207,10 @@ function delRow(key: string, sel: any[]) {
 
 async function loadRefs() {
   const [ms, fs] = await Promise.all([
-    customerApi.list({ page: 1, size: 200, type: 'MIDDLEMAN' }),
+    customerApi.list({ page: 1, size: 100, type: 'MIDDLEMAN' }),
     factoryApi.select(),
   ]);
-  middlemen.value = (ms as any).data?.items ?? (ms as any).items ?? [];
+  middlemen.value = (ms as any).data ?? [];
   forwarders.value = (((fs as any).data ?? fs) as any[]).map((f) => f.name);
 }
 
@@ -229,8 +229,15 @@ async function load() {
     deliveryAddress: d.delivery_address ?? '', frontMark: d.front_mark ?? '', sideMark: d.side_mark ?? '',
     innerBoxText: d.inner_box_text ?? '', customerRemark: d.customer_remark ?? '',
     contacts: d.contacts?.length ? d.contacts : [emptyContact()],
-    banks: d.banks?.length ? d.banks : [emptyBank()],
-    expresses: d.expresses?.length ? d.expresses : [emptyExpress()],
+    // 子表回显:接口返回 snake_case(entity 列),表单/DTO 用 camelCase。
+    // 多词字段(account_name/bank_name/pay_method…)必须映射,否则回显为空且保存时被 clean() 过滤掉→清空子表。
+    banks: d.banks?.length ? d.banks.map((b: any) => ({
+      accountName: b.account_name ?? '', bankName: b.bank_name ?? '', bankAccount: b.bank_account ?? '',
+      bankAddress: b.bank_address ?? '', currency: b.currency ?? '', swiftCode: b.swift_code ?? '', remark: b.remark ?? '',
+    })) : [emptyBank()],
+    expresses: d.expresses?.length ? d.expresses.map((e: any) => ({
+      company: e.company ?? '', account: e.account ?? '', payMethod: e.pay_method ?? '', remark: e.remark ?? '',
+    })) : [emptyExpress()],
   });
 }
 
