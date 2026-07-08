@@ -6,9 +6,9 @@
 
 ---
 
-## 一句话现状（最后更新 2026-07）
+## 一句话现状（最后更新 2026-07-08）
 
-功能审计 14 项已交付上线；生产 **schema 漂移事故已止血**；发版已改为**一条命令 `deploy.sh`**；**Redis 已在目标 ECS 起来、建单链路恢复**。下一步建议：拔掉 Redis 硬单点（`NumberingService` DB 兜底）。
+准出审查发现前端存在**系统性阻断项**（列表响应契约不一致→全站列表恒空、编辑页 size 上限→加载 400），**已修复并端到端验证**（新增 macOS 免 Docker 本地全栈 + Playwright 冒烟）；顺带修掉客户银行子表清空、首建工厂撞种子 S001（`NumberingService` 已加 DB 基线兜底）。分支 `claude/fix-stage0-p0`。下一步：阶段1 安全/数据项（上传端点鉴权、结算无合同费用双重扣减、审批后改金额绕过、超付加锁）。
 
 ## 系统当前活动状态
 
@@ -44,7 +44,8 @@
 
 ## 最近变更（新→旧，保留最近若干条）
 
-- （本次）HANDOFF：Redis 已在目标 ECS 起来，更新现状/状态/待办
+- （本次）准出审查 + 阶段0 P0 修复：`fix(api)` 编号从库取基线消除撞 S001；`fix(web)` 列表响应契约对齐+编辑页 size+客户银行子表映射（全站列表恒空/编辑页 400 已解）；`chore(devtools)` macOS 免 Docker 本地全栈 + Playwright 冒烟。分支 `claude/fix-stage0-p0`
+- `30e70d1` docs：新增 HANDOFF.md + pre-commit 钩子（每次变更强制更新交接文档）
 - `30e70d1` docs：新增 HANDOFF.md + pre-commit 钩子（每次变更强制更新交接文档）
 - `860a0c3` docs：落盘全量项目记忆 `docs/项目记忆.md`
 - `009d4c8` docs：CLAUDE.md 落盘发版结论（一键发版/Redis 退路/待办）
