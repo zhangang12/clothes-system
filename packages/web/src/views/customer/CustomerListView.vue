@@ -5,7 +5,7 @@
         <div class="tools-left">
           <el-button v-if="canEdit" type="primary" :icon="Plus" @click="goCreate">新建</el-button>
           <el-button type="warning" plain :icon="Upload" @click="showImport = true">导入客户资料</el-button>
-          <el-button v-if="isAdmin" type="warning" plain :icon="Key" :disabled="!selected.length" @click="grantTip">批量授权机密权限</el-button>
+          <el-button v-if="isAdmin" type="warning" plain :icon="Key" :disabled="!selected.length" @click="openGrant">批量授权机密权限</el-button>
           <el-button plain :icon="Download" @click="exportCsv">导出</el-button>
           <el-button v-if="isAdmin" type="danger" plain :icon="Delete" :disabled="!selected.length" @click="batchRemove">
             删除{{ selected.length ? `(${selected.length})` : '' }}
@@ -69,10 +69,11 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column label="操作" width="190" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
             <el-button link size="small" @click="goView(row)">查看</el-button>
+            <el-button v-if="isAdmin" link type="warning" size="small" @click="openGrantList(row)">授权</el-button>
             <el-popconfirm v-if="isAdmin" title="确认删除？被引用将被拦截" @confirm="remove(row.id)">
               <template #reference><el-button link type="danger" size="small">删除</el-button></template>
             </el-popconfirm>
@@ -90,6 +91,47 @@
 
     <csv-import-dialog v-model="showImport" title="客户资料"
       :template-headers="importHeaders" :parse-row="parseCustomerRow" :submit="submitImport" @done="load" />
+
+    <!-- 批量授权机密权限（设计稿 01 §D.3，仅管理员） -->
+    <el-dialog v-model="grantVisible" title="🔑 批量授权机密权限" width="560px">
+      <div class="grant-hint">把选中的 <b>{{ selected.length }}</b> 个机密客户授权给以下用户（非授权用户在客户列表/下拉中均不可见这些客户）</div>
+      <el-form label-width="90px">
+        <el-form-item label="授权用户">
+          <el-checkbox-group v-model="grantForm.user_ids">
+            <el-checkbox v-for="u in grantUsers" :key="u.id" :value="u.id" :label="u.id" style="width:46%">
+              {{ u.real_name || u.username }}（{{ u.username }} · {{ u.role }}）
+            </el-checkbox>
+          </el-checkbox-group>
+        </el-form-item>
+        <el-form-item label="权限级别">
+          <el-radio-group v-model="grantForm.can_edit">
+            <el-radio :value="false">仅查看</el-radio>
+            <el-radio :value="true">查看 + 修改</el-radio>
+          </el-radio-group>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="grantVisible = false">取消</el-button>
+        <el-button type="primary" :loading="grantSaving" @click="doGrant">确认授权</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 单客户授权清单（查看 / 撤销） -->
+    <el-dialog v-model="grantListVisible" title="🔒 机密授权清单" width="520px">
+      <el-table :data="grantList" size="small" border>
+        <el-table-column label="用户" min-width="140"><template #default="{ row }">{{ row.real_name || row.username }}（{{ row.username }}）</template></el-table-column>
+        <el-table-column prop="role" label="角色" width="110" />
+        <el-table-column label="权限" width="100" align="center"><template #default="{ row }"><el-tag size="small" :type="row.can_edit ? 'warning' : 'info'">{{ row.can_edit ? '查看+修改' : '仅查看' }}</el-tag></template></el-table-column>
+        <el-table-column label="操作" width="80" align="center">
+          <template #default="{ row }">
+            <el-popconfirm title="撤销后该用户将不可见此客户，确认？" @confirm="doRevoke(row)">
+              <template #reference><el-button link type="danger" size="small">撤销</el-button></template>
+            </el-popconfirm>
+          </template>
+        </el-table-column>
+      </el-table>
+      <div v-if="!grantList.length" class="grant-hint">暂无授权记录（创建人与管理员天然可见）</div>
+    </el-dialog>
   </div>
 </template>
 
@@ -170,7 +212,43 @@ function parseCustomerRow(c: Record<string, string>) {
   };
 }
 const submitImport = (rows: any[]) => customerApi.importBatch(rows);
-function grantTip() { ElMessage.info(`批量授权机密权限：当前选中 ${selected.value.length} 个客户`); }
+// ===== 批量授权机密权限（设计稿 01 §D.3，仅管理员）=====
+const grantVisible = ref(false);
+const grantUsers = ref<any[]>([]);
+const grantForm = reactive<{ user_ids: number[]; can_edit: boolean }>({ user_ids: [], can_edit: false });
+const grantSaving = ref(false);
+async function openGrant() {
+  grantForm.user_ids = []; grantForm.can_edit = false;
+  try { grantUsers.value = ((await customerApi.listUsers()) as any).data ?? []; }
+  catch { ElMessage.error('加载用户清单失败'); return; }
+  grantVisible.value = true;
+}
+async function doGrant() {
+  if (!grantForm.user_ids.length) { ElMessage.warning('请至少勾选 1 个用户'); return; }
+  grantSaving.value = true;
+  try {
+    const res: any = await customerApi.grantBatch(selected.value.map((c: any) => c.id), grantForm.user_ids, grantForm.can_edit);
+    const d = res.data ?? res;
+    ElMessage.success(`已授权：${d.customers} 个客户 × ${d.users} 个用户（新增 ${d.created}，更新 ${d.updated}）`);
+    grantVisible.value = false;
+  } catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '授权失败'); }
+  finally { grantSaving.value = false; }
+}
+// 单客户授权清单（查看/撤销）
+const grantListVisible = ref(false);
+const grantList = ref<any[]>([]);
+let grantListTarget: any = null;
+async function openGrantList(row: any) {
+  grantListTarget = row;
+  try { grantList.value = ((await customerApi.getGrants(row.id)) as any).data ?? []; }
+  catch { grantList.value = []; }
+  grantListVisible.value = true;
+}
+async function doRevoke(g: any) {
+  await customerApi.revokeGrant(grantListTarget.id, g.user_id);
+  ElMessage.success('已撤销该用户的机密授权');
+  openGrantList(grantListTarget);
+}
 function exportCsv() {
   const cols = ['customer_no', 'name', 'type', 'trade_country', 'price_terms', 'grade', 'status'];
   const head = ['编号', '客户名称', '类型', '国别', '价格条款', '信用', '状态'];
@@ -192,4 +270,5 @@ onMounted(load);
 .footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
 .sel-info { font-size: 13px; color: var(--el-text-color-secondary); }
 .tip { margin-top: 8px; font-size: 12px; color: var(--el-text-color-secondary); }
+.grant-hint { font-size: 12px; color: var(--el-text-color-secondary); margin-bottom: 10px; }
 </style>

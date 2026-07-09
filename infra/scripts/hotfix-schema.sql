@@ -292,6 +292,18 @@ CREATE TABLE IF NOT EXISTS `customer_express` (
   KEY `idx_customer` (`customer_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='客户快件帐号明细';
 
+CREATE TABLE IF NOT EXISTS `customer_grant` (
+  `id`          BIGINT   NOT NULL AUTO_INCREMENT,
+  `customer_id` BIGINT   NOT NULL,
+  `user_id`     BIGINT   NOT NULL COMMENT '被授权用户',
+  `can_edit`    TINYINT  NOT NULL DEFAULT 0 COMMENT '0=仅查看 1=可修改',
+  `created_by`  BIGINT   DEFAULT NULL COMMENT '授权人(管理员)',
+  `created_at`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_cust_user` (`customer_id`,`user_id`),
+  KEY `idx_user` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='客户机密授权(行级可见:创建人/被授权人/管理员)';
+
 CREATE TABLE IF NOT EXISTS `sample_garment` (
   `id`               BIGINT        NOT NULL AUTO_INCREMENT,
   `sample_no`        VARCHAR(30)   NOT NULL COMMENT 'S-YYYYMMDD-001',
@@ -1179,6 +1191,18 @@ CALL _i9_add_col('customer_express','pay_method',"VARCHAR(10)  DEFAULT NULL COMM
 CALL _i9_sync_col('customer_express','pay_method',"VARCHAR(10)","VARCHAR(10)  DEFAULT NULL COMMENT '到付/预付'");
 CALL _i9_add_col('customer_express','remark',"VARCHAR(200) DEFAULT NULL");
 CALL _i9_sync_col('customer_express','remark',"VARCHAR(200)","VARCHAR(200) DEFAULT NULL");
+
+-- customer_grant
+CALL _i9_add_col('customer_grant','customer_id',"BIGINT   NOT NULL");
+CALL _i9_sync_col('customer_grant','customer_id',"BIGINT","BIGINT   NOT NULL");
+CALL _i9_add_col('customer_grant','user_id',"BIGINT   NOT NULL COMMENT '被授权用户'");
+CALL _i9_sync_col('customer_grant','user_id',"BIGINT","BIGINT   NOT NULL COMMENT '被授权用户'");
+CALL _i9_add_col('customer_grant','can_edit',"TINYINT  NOT NULL DEFAULT 0 COMMENT '0=仅查看 1=可修改'");
+CALL _i9_sync_col('customer_grant','can_edit',"TINYINT","TINYINT  NOT NULL DEFAULT 0 COMMENT '0=仅查看 1=可修改'");
+CALL _i9_add_col('customer_grant','created_by',"BIGINT   DEFAULT NULL COMMENT '授权人(管理员)'");
+CALL _i9_sync_col('customer_grant','created_by',"BIGINT","BIGINT   DEFAULT NULL COMMENT '授权人(管理员)'");
+CALL _i9_add_col('customer_grant','created_at',"DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP");
+CALL _i9_sync_col('customer_grant','created_at',"DATETIME","DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP");
 
 -- sample_garment
 CALL _i9_add_col('sample_garment','sample_no',"VARCHAR(30)   NOT NULL COMMENT 'S-YYYYMMDD-001'");

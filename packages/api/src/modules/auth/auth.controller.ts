@@ -1,8 +1,12 @@
-import { Controller, Post, Body, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { Controller, Post, Get, Body, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { LoginDto, PortalLoginDto } from './dto/login.dto';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { UserRole } from '@i9/types';
 
 @ApiTags('认证')
 @Controller('auth')
@@ -22,5 +26,14 @@ export class AuthController {
   @ApiOperation({ summary: '供应商门户登录' })
   portalLogin(@Body() dto: PortalLoginDto) {
     return this.authService.loginSupplier(dto.username, dto.password);
+  }
+
+  @Get('users')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '内部用户清单（客户机密批量授权选人用，仅管理员）' })
+  listUsers() {
+    return this.authService.listUsers();
   }
 }

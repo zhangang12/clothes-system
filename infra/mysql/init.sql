@@ -211,6 +211,18 @@ CREATE TABLE IF NOT EXISTS `customer_express` (
   KEY `idx_customer` (`customer_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='客户快件帐号明细';
 
+CREATE TABLE IF NOT EXISTS `customer_grant` (
+  `id`          BIGINT   NOT NULL AUTO_INCREMENT,
+  `customer_id` BIGINT   NOT NULL,
+  `user_id`     BIGINT   NOT NULL COMMENT '被授权用户',
+  `can_edit`    TINYINT  NOT NULL DEFAULT 0 COMMENT '0=仅查看 1=可修改',
+  `created_by`  BIGINT   DEFAULT NULL COMMENT '授权人(管理员)',
+  `created_at`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_cust_user` (`customer_id`,`user_id`),
+  KEY `idx_user` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='客户机密授权(行级可见:创建人/被授权人/管理员)';
+
 -- ============================================================
 -- 样衣管理
 -- ============================================================

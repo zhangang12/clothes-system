@@ -1,9 +1,10 @@
 import {
-  Injectable, NotFoundException, BadRequestException, ConflictException,
+  Injectable, NotFoundException, BadRequestException, ConflictException, ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, Like, Not, DataSource } from 'typeorm';
+import { Repository, FindOptionsWhere, Like, Not, In, DataSource } from 'typeorm';
 import { Customer } from './customer.entity';
+import { CustomerGrant } from './customer-grant.entity';
 import { CustomerContact } from './customer-contact.entity';
 import { CustomerBank } from './customer-bank.entity';
 import { CustomerExpress } from './customer-express.entity';
@@ -25,9 +26,79 @@ export class CustomerService {
     @InjectRepository(OrderMain) private readonly orderRepo: Repository<OrderMain>,
     @InjectRepository(Quotation) private readonly quoteRepo: Repository<Quotation>,
     @InjectRepository(SampleGarment) private readonly sampleRepo: Repository<SampleGarment>,
+    @InjectRepository(CustomerGrant) private readonly grantRepo: Repository<CustomerGrant>,
     private readonly numbering: NumberingService,
     private readonly dataSource: DataSource,
   ) {}
+
+  // ===== 客户机密授权（设计稿 01 v1.3：客户属机密单据，行级可见=创建人/被授权人/管理员）=====
+
+  // 该用户可见的客户 id 集合；ADMIN（或未传 user 的内部调用）返回 null=不限
+  async visibleCustomerIds(user?: { id: number; role?: string }): Promise<number[] | null> {
+    if (!user || user.role === 'ADMIN') return null;
+    const [grants, own] = await Promise.all([
+      this.grantRepo.find({ where: { user_id: user.id } }),
+      this.repo.find({ where: { created_by: user.id, deleted: 0 }, select: ['id'] }),
+    ]);
+    const ids = new Set<number>([...grants.map((g) => +g.customer_id), ...own.map((c) => +c.id)]);
+    return [...ids];
+  }
+
+  private async assertVisible(id: number, user?: { id: number; role?: string }): Promise<void> {
+    const ids = await this.visibleCustomerIds(user);
+    if (ids !== null && !ids.includes(+id)) {
+      // 与「不存在」同响应，防止未授权用户探测机密客户存在性
+      throw new NotFoundException(`客户 #${id} 不存在`);
+    }
+  }
+
+  private async assertEditable(entity: Customer, user?: { id: number; role?: string }): Promise<void> {
+    if (!user || user.role === 'ADMIN' || +entity.created_by === +user.id) return;
+    const grant = await this.grantRepo.findOne({ where: { customer_id: entity.id, user_id: user.id } });
+    if (!grant) throw new NotFoundException(`客户 #${entity.id} 不存在`); // 不可见
+    if (!grant.can_edit) throw new ForbiddenException('您对该机密客户仅有查看权限，无修改权限');
+  }
+
+  // 批量授权（仅管理员，controller 层 @Roles 把关；设计稿 §D.3：选多客户×多用户一次授权）
+  async grantBatch(customerIds: number[], userIds: number[], canEdit: boolean, byUserId: number) {
+    if (!customerIds?.length || !userIds?.length) {
+      throw new BadRequestException('请至少选择 1 个客户和 1 个用户');
+    }
+    let created = 0; let updated = 0;
+    for (const cid of customerIds) {
+      for (const uid of userIds) {
+        const existing = await this.grantRepo.findOne({ where: { customer_id: cid, user_id: uid } });
+        if (existing) {
+          if (existing.can_edit !== (canEdit ? 1 : 0)) {
+            existing.can_edit = canEdit ? 1 : 0;
+            await this.grantRepo.save(existing);
+            updated++;
+          }
+        } else {
+          await this.grantRepo.save(this.grantRepo.create({
+            customer_id: cid, user_id: uid, can_edit: canEdit ? 1 : 0, created_by: byUserId,
+          }));
+          created++;
+        }
+      }
+    }
+    return { created, updated, customers: customerIds.length, users: userIds.length };
+  }
+
+  // 某客户的授权清单（含用户姓名，供管理界面展示/撤销）
+  async getGrants(customerId: number) {
+    return this.dataSource.query(
+      `SELECT g.id, g.customer_id, g.user_id, g.can_edit, g.created_at,
+              u.username, u.real_name, u.role
+         FROM customer_grant g LEFT JOIN sys_user u ON u.id = g.user_id
+        WHERE g.customer_id = ? ORDER BY g.id`, [customerId],
+    );
+  }
+
+  async revokeGrant(customerId: number, userId: number) {
+    await this.grantRepo.delete({ customer_id: customerId, user_id: userId });
+    return { ok: true };
+  }
 
   private mapDto(dto: Partial<CreateCustomerDto>): Partial<Customer> {
     const e: Partial<Customer> = {};
@@ -111,6 +182,10 @@ export class CustomerService {
       if (contacts.length) await manager.save(CustomerContact, contacts);
       if (banks.length) await manager.save(CustomerBank, banks);
       if (expresses.length) await manager.save(CustomerExpress, expresses);
+      // 保存后自动登记机密权限：创建人可查看+修改（设计稿 01 §页面事件）
+      await manager.save(CustomerGrant, manager.create(CustomerGrant, {
+        customer_id: saved.id, user_id: createdBy, can_edit: 1, created_by: createdBy,
+      }));
       return saved;
     });
   }
@@ -130,10 +205,13 @@ export class CustomerService {
     return { total: rows.length, created, failedCount: failed.length, failed };
   }
 
-  async findAll(query: QueryCustomerDto) {
+  async findAll(query: QueryCustomerDto, user?: { id: number; role?: string }) {
     const { page = 1, size = 20, keyword, type, grade, status } = query;
+    // 机密行级过滤：非管理员只见 自建 + 被授权 客户（设计稿 01：客户属机密单据）
+    const visibleIds = await this.visibleCustomerIds(user);
     const base: FindOptionsWhere<Customer> = {
       deleted: 0,
+      ...(visibleIds !== null && { id: In(visibleIds.length ? visibleIds : [0]) }),
       ...(type !== undefined && { type }),
       ...(grade !== undefined && { grade }),
       ...(status !== undefined && { status }),
@@ -150,7 +228,8 @@ export class CustomerService {
     return { items, total, page, size };
   }
 
-  async findOne(id: number) {
+  async findOne(id: number, user?: { id: number; role?: string }) {
+    await this.assertVisible(id, user);
     const entity = await this.repo.findOne({ where: { id, deleted: 0 } });
     if (!entity) throw new NotFoundException(`客户 #${id} 不存在`);
     const [contacts, banks, expresses] = await Promise.all([
@@ -161,9 +240,10 @@ export class CustomerService {
     return { ...entity, contacts, banks, expresses };
   }
 
-  async update(id: number, dto: Partial<CreateCustomerDto>): Promise<Customer> {
+  async update(id: number, dto: Partial<CreateCustomerDto>, user?: { id: number; role?: string }): Promise<Customer> {
     const entity = await this.repo.findOne({ where: { id, deleted: 0 } });
     if (!entity) throw new NotFoundException(`客户 #${id} 不存在`);
+    await this.assertEditable(entity, user); // 机密：仅创建人/有修改授权者/管理员可改
     this.validateType(dto, entity);
     if (dto.name && dto.name !== entity.name) await this.assertNameUnique(dto.name, id);
     if (dto.contacts !== undefined) this.assertContacts(dto.contacts);
@@ -221,9 +301,12 @@ export class CustomerService {
     await this.repo.save(entity);
   }
 
-  async listForSelect(grade?: string) {
+  async listForSelect(grade?: string, user?: { id: number; role?: string }) {
     const where: FindOptionsWhere<Customer> = { status: 1, deleted: 0 };
     if (grade) Object.assign(where, { grade });
+    // 机密行级过滤：下游单据(报价/合同/订单)选客户的下拉同样不可见未授权客户
+    const visibleIds = await this.visibleCustomerIds(user);
+    if (visibleIds !== null) Object.assign(where, { id: In(visibleIds.length ? visibleIds : [0]) });
     return this.repo.find({
       where,
       select: ['id', 'customer_no', 'name', 'short_name', 'type', 'grade', 'currency'],

@@ -3,6 +3,7 @@ import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { Customer } from '../customer.entity';
+import { CustomerGrant } from '../customer-grant.entity';
 import { CustomerContact } from '../customer-contact.entity';
 import { CustomerBank } from '../customer-bank.entity';
 import { CustomerExpress } from '../customer-express.entity';
@@ -34,7 +35,14 @@ const mockManager = {
   save: jest.fn().mockImplementation((_e: any, v: any) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: v.id ?? 1 })),
   delete: jest.fn().mockResolvedValue({}),
 };
-const mockDataSource = { transaction: jest.fn((cb: any) => cb(mockManager)) };
+const mockDataSource = { transaction: jest.fn((cb: any) => cb(mockManager)), query: jest.fn().mockResolvedValue([]) };
+const mockGrantRepo = {
+  find: jest.fn().mockResolvedValue([]),
+  findOne: jest.fn().mockResolvedValue(null),
+  create: jest.fn().mockImplementation((v: any) => v),
+  save: jest.fn().mockImplementation((v: any) => Promise.resolve({ ...v, id: 1 })),
+  delete: jest.fn().mockResolvedValue({ affected: 1 }),
+};
 
 const CONTACTS = [{ name: '张建国', mobile: '13901588888' }];
 
@@ -49,11 +57,14 @@ describe('CustomerService', () => {
     mockRepo.count.mockResolvedValue(0);
     [mockContactRepo, mockBankRepo, mockExpressRepo].forEach((r) => r.find.mockResolvedValue([]));
     mockDataSource.transaction.mockImplementation((cb: any) => cb(mockManager));
+    mockGrantRepo.find.mockResolvedValue([]);
+    mockGrantRepo.findOne.mockResolvedValue(null);
     const module = await Test.createTestingModule({
       providers: [
         CustomerService,
         NumberingService,
         { provide: getRepositoryToken(Customer), useValue: mockRepo },
+        { provide: getRepositoryToken(CustomerGrant), useValue: mockGrantRepo },
         { provide: getRepositoryToken(CustomerContact), useValue: mockContactRepo },
         { provide: getRepositoryToken(CustomerBank), useValue: mockBankRepo },
         { provide: getRepositoryToken(CustomerExpress), useValue: mockExpressRepo },
@@ -201,6 +212,67 @@ describe('CustomerService', () => {
       expect(mockRepo.find).toHaveBeenCalledWith(expect.objectContaining({
         where: expect.objectContaining({ grade: CustomerGrade.A }),
       }));
+    });
+  });
+
+  // ===== 客户机密授权（设计稿 01 v1.3：行级可见 = 创建人/被授权人/管理员）=====
+  describe('机密授权', () => {
+    const biz = { id: 8, role: 'BUSINESS' };
+
+    it('UT-CUS-G1: 非管理员 findAll 仅见 自建+被授权 客户（其余行级隐藏）', async () => {
+      mockGrantRepo.find.mockResolvedValue([{ customer_id: 3 }]);
+      mockRepo.find.mockResolvedValue([{ id: 5 }]); // 自建
+      mockRepo.findAndCount.mockResolvedValue([[], 0]);
+      await service.findAll({ page: 1, size: 20 } as any, biz);
+      const where = mockRepo.findAndCount.mock.calls[0][0].where;
+      const cond = Array.isArray(where) ? where[0] : where;
+      expect(cond.id).toBeDefined(); // In([3,5])
+      expect(JSON.stringify(cond.id)).toContain('3');
+      expect(JSON.stringify(cond.id)).toContain('5');
+    });
+
+    it('UT-CUS-G1b: 无任何可见客户时 findAll 强制空集（In([0])），不放行全量', async () => {
+      mockGrantRepo.find.mockResolvedValue([]);
+      mockRepo.find.mockResolvedValue([]);
+      mockRepo.findAndCount.mockResolvedValue([[], 0]);
+      await service.findAll({ page: 1, size: 20 } as any, biz);
+      const where = mockRepo.findAndCount.mock.calls[0][0].where;
+      const cond = Array.isArray(where) ? where[0] : where;
+      expect(JSON.stringify(cond.id)).toContain('0');
+    });
+
+    it('UT-CUS-G2: 未授权 findOne → 404（与不存在同响应，防探测机密客户）', async () => {
+      mockGrantRepo.find.mockResolvedValue([]);
+      mockRepo.find.mockResolvedValue([]);
+      await expect(service.findOne(99, biz)).rejects.toThrow(NotFoundException);
+    });
+
+    it('UT-CUS-G2b: 管理员 findOne 不受行级限制', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 99, name: '机密客户', deleted: 0 });
+      const r: any = await service.findOne(99, { id: 1, role: 'ADMIN' });
+      expect(r.name).toBe('机密客户');
+    });
+
+    it('UT-CUS-G3: grantBatch 多客户×多用户批量授权', async () => {
+      mockGrantRepo.findOne.mockResolvedValue(null);
+      const r = await service.grantBatch([1, 2], [8, 9], false, 1);
+      expect(r.created).toBe(4);
+      expect(mockGrantRepo.save).toHaveBeenCalledTimes(4);
+    });
+
+    it('UT-CUS-G4: 仅查看授权的用户 update → Forbidden（无修改权限）', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 3, name: 'X', created_by: 1, deleted: 0, type: 'MIDDLEMAN' });
+      mockGrantRepo.findOne.mockResolvedValue({ customer_id: 3, user_id: 8, can_edit: 0 });
+      await expect(service.update(3, { name: '改名' } as any, biz)).rejects.toThrow('仅有查看权限');
+    });
+
+    it('UT-CUS-G5: create 保存后自动为创建人登记机密权限（can_edit=1）', async () => {
+      mockRedis.incr.mockResolvedValue(9);
+      await service.create({ name: '新客户', type: CustomerType.MIDDLEMAN, contacts: CONTACTS } as any, 42);
+      const grantSave = mockManager.save.mock.calls.find(
+        (c: any[]) => c[1] && !Array.isArray(c[1]) && c[1].user_id === 42 && c[1].can_edit === 1,
+      );
+      expect(grantSave).toBeTruthy();
     });
   });
 });

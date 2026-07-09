@@ -71,4 +71,13 @@ export class AuthService {
   async hashPassword(plain: string): Promise<string> {
     return bcrypt.hash(plain, 10);
   }
+
+  // 内部用户清单（客户机密授权选人；不含密码等敏感列）
+  async listUsers() {
+    return this.userRepo.find({
+      where: { status: 1 },
+      select: ['id', 'username', 'real_name', 'role'],
+      order: { id: 'ASC' },
+    });
+  }
 }
