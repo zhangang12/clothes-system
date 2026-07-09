@@ -27,6 +27,17 @@ export class PaymentRequest {
   @Column({ type: 'decimal', precision: 15, scale: 4, nullable: true })
   actual_pay: number;
 
+  // ===== 账期/到期日（设计稿 06 v1.4：账期取合同结算条款；到期日=出货日+账期，临近/逾期高亮）=====
+  @Column({ type: 'int', nullable: true })
+  account_period_days: number; // 结算账期（合同带入：材料90/加工45，可人工改）
+
+  @Column({ type: 'date', nullable: true })
+  due_date: Date; // 到期日 = 出货(最后发货)日 + 账期
+
+  // ===== 分批付款（设计稿 06 v1.1：多次付款自动累计已付/未付，余额=0 整单转已付清）=====
+  @Column({ type: 'decimal', precision: 15, scale: 4, default: 0 })
+  paid_total: number; // 已付总额（Σ payment_record.amount）
+
   @Column({ length: 500, nullable: true })
   slip_url: string;
 

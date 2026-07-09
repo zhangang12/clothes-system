@@ -20,6 +20,11 @@ export const paymentRequestApi = {
     http.patch<unknown, any>(`/payments/requests/${id}/approve`),
   reject: (id: number, reason: string) =>
     http.patch<unknown, any>(`/payments/requests/${id}/reject`, { reason }),
+  // 分批付款（设计稿 06 v1.1：多次付款累计已付/未付，余额=0 转已付清）
+  addRecord: (id: number, dto: Record<string, unknown>) =>
+    http.post<unknown, { data: any }>(`/payments/requests/${id}/records`, dto),
+  getRecords: (id: number) =>
+    http.get<unknown, { data: any[] }>(`/payments/requests/${id}/records`),
   markPaid: (id: number, slipUrl: string) =>
     http.patch<unknown, any>(`/payments/requests/${id}/paid`, { slip_url: slipUrl }),
   remove: (id: number) =>

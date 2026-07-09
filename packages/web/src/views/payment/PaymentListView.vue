@@ -113,9 +113,23 @@
           <el-table-column prop="prepay_offset" label="冲抵预付" width="100" align="right">
             <template #default="{ row }">{{ (+row.prepay_offset).toFixed(2) }}</template>
           </el-table-column>
-          <el-table-column prop="actual_pay" label="实付金额" width="110" align="right">
+          <el-table-column prop="actual_pay" label="应付总额" width="110" align="right">
             <template #default="{ row }">
               <strong>{{ row.actual_pay != null ? (+row.actual_pay).toFixed(2) : '--' }}</strong>
+            </template>
+          </el-table-column>
+          <el-table-column label="账期" width="76" align="center">
+            <template #default="{ row }">{{ row.account_period_days != null ? row.account_period_days + '天' : '—' }}</template>
+          </el-table-column>
+          <el-table-column label="到期日" width="112">
+            <template #default="{ row }">
+              <span :class="{ 'text-danger': isOverdue(row) }">{{ row.due_date ? String(row.due_date).slice(0, 10) : '—' }}</span>
+              <el-tag v-if="isOverdue(row)" type="danger" size="small" style="margin-left:2px">逾期</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="已付/余额" width="130" align="right">
+            <template #default="{ row }">
+              {{ (+(row.paid_total ?? 0)).toFixed(2) }} / <b :class="{ 'text-danger': prBalance(row) > 0 && row.approval_status === 'APPROVED' }">{{ prBalance(row).toFixed(2) }}</b>
             </template>
           </el-table-column>
           <el-table-column prop="approval_status" label="状态" width="90">
@@ -144,7 +158,12 @@
                 v-if="row.approval_status === 'APPROVED' && canEdit"
                 link type="primary" size="small"
                 @click="openMarkPaid(row)"
-              >标记付款</el-button>
+              >付款</el-button>
+              <el-button
+                v-if="row.approval_status === 'PAID' || +(row.paid_total ?? 0) > 0"
+                link size="small"
+                @click="openMarkPaid(row)"
+              >付款记录</el-button>
               <el-popconfirm v-if="row.approval_status === 'DRAFT' && isAdmin" title="确认删除？" @confirm="doPRRemove(row.id)">
                 <template #reference>
                   <el-button link type="danger" size="small">删除</el-button>
@@ -244,9 +263,40 @@
       </template>
     </el-dialog>
 
-    <!-- 标记付款弹窗（水单支持点击上传/拖拽/截图 Ctrl+V 粘贴） -->
-    <el-dialog v-model="markPaidVisible" title="上传付款水单" width="480px" @closed="resetSlip">
-      <el-form label-width="80px">
+    <!-- 财务付款（分批 v1.1：多次付款累计已付/未付，余额=0 整单转已付清；水单支持上传/拖拽/Ctrl+V 粘贴） -->
+    <el-dialog v-model="markPaidVisible" title="💰 财务付款（可分批）" width="560px" @closed="resetSlip">
+      <el-descriptions :column="3" border size="small" style="margin-bottom:12px">
+        <el-descriptions-item label="应付总额">{{ payTarget ? (+(payTarget.actual_pay ?? payTarget.amount)).toFixed(2) : '—' }}</el-descriptions-item>
+        <el-descriptions-item label="已付总额">{{ payTarget ? (+(payTarget.paid_total ?? 0)).toFixed(2) : '—' }}</el-descriptions-item>
+        <el-descriptions-item label="未付余额"><b class="text-danger">{{ payTarget ? prBalance(payTarget).toFixed(2) : '—' }}</b></el-descriptions-item>
+      </el-descriptions>
+      <template v-if="payRecords.length">
+        <el-table :data="payRecords" size="small" border style="margin-bottom:12px">
+          <el-table-column type="index" label="批次" width="56" align="center" />
+          <el-table-column label="方式" width="90"><template #default="{ row }">{{ payMethodLabel(row.pay_method) }}</template></el-table-column>
+          <el-table-column prop="pay_date" label="付款日期" width="104" />
+          <el-table-column prop="amount" label="金额" width="100" align="right"><template #default="{ row }">{{ (+row.amount).toFixed(2) }}</template></el-table-column>
+          <el-table-column label="水单" width="70" align="center"><template #default="{ row }"><el-link v-if="row.slip_url" type="primary" :href="row.slip_url" target="_blank">查看</el-link><span v-else>—</span></template></el-table-column>
+          <el-table-column prop="remark" label="备注" min-width="90" />
+        </el-table>
+      </template>
+      <el-form v-if="payTarget?.approval_status === 'APPROVED'" label-width="96px">
+        <el-form-item label="付款方式" required>
+          <el-radio-group v-model="payForm.pay_method">
+            <el-radio value="BANK">银行转账</el-radio>
+            <el-radio value="ACCEPTANCE">承兑汇票</el-radio>
+            <el-radio value="OTHER">其他</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="付款日期" required>
+          <el-date-picker v-model="payForm.pay_date" type="date" value-format="YYYY-MM-DD" style="width:100%" />
+        </el-form-item>
+        <el-form-item label="本次付款金额" required>
+          <el-input-number v-model="payForm.amount" :min="0.01" :precision="2" :controls="false" style="width:100%" placeholder="默认=未付余额，可改小分批付" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="payForm.remark" placeholder="选填" />
+        </el-form-item>
         <el-form-item label="付款水单">
           <div class="slip-uploader" @paste="onSlipPaste" tabindex="0">
             <el-upload
@@ -271,8 +321,8 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="markPaidVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" :disabled="slipUploading" @click="doMarkPaid">确认付款</el-button>
+        <el-button @click="markPaidVisible = false">关闭</el-button>
+        <el-button v-if="payTarget?.approval_status === 'APPROVED'" type="primary" :loading="saving" :disabled="slipUploading" @click="doAddRecord">💰 确认付款</el-button>
       </template>
     </el-dialog>
   </div>
@@ -425,8 +475,40 @@ async function doReject() {
 const markPaidVisible = ref(false);
 const slipUrl = ref('');
 const slipUploading = ref(false);
-let markPaidTarget: any = null;
-function openMarkPaid(row: any) { markPaidTarget = row; slipUrl.value = ''; markPaidVisible.value = true; }
+const payTarget = ref<any>(null);
+const payRecords = ref<any[]>([]);
+const payForm = reactive<any>({ pay_method: 'BANK', pay_date: new Date().toISOString().slice(0, 10), amount: undefined, remark: '' });
+const prBalance = (row: any) => +((+(row.actual_pay ?? row.amount ?? 0)) - (+(row.paid_total ?? 0))).toFixed(2);
+const isOverdue = (row: any) => {
+  if (!row?.due_date || row.approval_status === 'PAID') return false;
+  const d = new Date(String(row.due_date).slice(0, 10));
+  return !isNaN(d.getTime()) && d < new Date();
+};
+const payMethodLabel = (m: string) => ({ BANK: '银行转账', ACCEPTANCE: '承兑汇票', OTHER: '其他' } as any)[m] ?? m;
+async function openMarkPaid(row: any) {
+  payTarget.value = row;
+  slipUrl.value = '';
+  Object.assign(payForm, { pay_method: 'BANK', pay_date: new Date().toISOString().slice(0, 10), amount: prBalance(row) > 0 ? prBalance(row) : undefined, remark: '' });
+  try { payRecords.value = ((await paymentRequestApi.getRecords(row.id)) as any).data ?? []; } catch { payRecords.value = []; }
+  markPaidVisible.value = true;
+}
+// 分批付款登记（设计稿 06 v1.1）：余额=0 后端自动整单转已付清并联动对账单
+async function doAddRecord() {
+  if (!payForm.pay_date) { ElMessage.warning('请选择付款日期'); return; }
+  if (!(+payForm.amount > 0)) { ElMessage.warning('请填写本次付款金额'); return; }
+  saving.value = true;
+  try {
+    const res: any = await paymentRequestApi.addRecord(payTarget.value.id, {
+      pay_method: payForm.pay_method, pay_date: payForm.pay_date,
+      amount: +payForm.amount, slip_url: slipUrl.value || undefined, remark: payForm.remark || undefined,
+    });
+    const d = res.data ?? res;
+    ElMessage.success(d.balance <= 0.01 ? '已付清，整单转「已付款」' : `已登记本次付款，剩余未付 ${(+d.balance).toFixed(2)}`);
+    markPaidVisible.value = false;
+    loadPR();
+  } catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '付款登记失败'); }
+  finally { saving.value = false; }
+}
 function resetSlip() { slipUrl.value = ''; slipUploading.value = false; }
 
 // 上传水单文件（点击/拖拽/粘贴共用）：走后端 /uploads，成功后写入 slip_url
@@ -455,17 +537,6 @@ function onSlipPaste(e: ClipboardEvent) {
       if (f) { e.preventDefault(); uploadSlipFile(f); return; }
     }
   }
-}
-
-async function doMarkPaid() {
-  if (!slipUrl.value.trim()) { ElMessage.warning('请上传或填写水单地址'); return; }
-  saving.value = true;
-  try {
-    await paymentRequestApi.markPaid(markPaidTarget.id, slipUrl.value);
-    ElMessage.success('已标记付款');
-    markPaidVisible.value = false;
-    loadPR();
-  } finally { saving.value = false; }
 }
 
 async function doPRRemove(id: number) {

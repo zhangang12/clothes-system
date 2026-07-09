@@ -174,11 +174,14 @@
 
     <!-- 新建结算单弹窗 -->
     <el-dialog v-model="createVisible" title="新建结算单" width="700px" @closed="resetCreateForm">
+      <div class="agg-hint">🔎 搜款号带入：选择订单后，系统按该款号自动聚合「货款(含税·已确认合同对账)」与「期间费用(无合同对账)」作为成本，可在下方人工覆盖。</div>
       <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-width="90px">
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="订单ID" prop="order_id">
-              <el-input-number v-model="createForm.order_id" :min="1" style="width:100%" />
+            <el-form-item label="订单/款号" prop="order_id">
+              <el-select v-model="createForm.order_id" filterable placeholder="搜款号或订单号选择" style="width:100%">
+                <el-option v-for="o in orders" :key="o.id" :label="`${o.style_no || '无款号'} · ${o.order_no}`" :value="o.id" />
+              </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -294,6 +297,7 @@ import { ElMessage } from 'element-plus';
 import { Search, Refresh, Plus } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { settlementApi } from '@/api/settlement';
+import { orderApi } from '@/api/order';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole } from '@i9/types';
 
@@ -327,7 +331,11 @@ function reset() {
   load();
 }
 
-onMounted(load);
+const orders = ref<any[]>([]);
+async function loadOrders() {
+  try { orders.value = ((await orderApi.list({ page: 1, size: 100 })) as any).data ?? []; } catch { orders.value = []; }
+}
+onMounted(() => { load(); loadOrders(); });
 
 // Detail
 const detailVisible = ref(false);
@@ -454,4 +462,5 @@ async function doAddReceipt() {
 .detail-toolbar { margin-bottom: 8px; }
 .text-danger { color: #f56c6c; }
 .text-success { color: #67c23a; }
+.agg-hint { font-size: 12px; color: #3E8E7E; background: var(--el-fill-color-light); border-radius: 4px; padding: 8px 10px; margin-bottom: 12px; }
 </style>

@@ -5,6 +5,7 @@ import { DataSource } from 'typeorm';
 import { PaymentService } from '../payment.service';
 import { Prepayment } from '../prepayment.entity';
 import { PaymentRequest } from '../payment-request.entity';
+import { PaymentRecord } from '../payment-record.entity';
 import { Reconciliation } from '../../reconciliation/reconciliation.entity';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
 import { PaymentApprovalStatus, ReconcileType } from '@i9/types';
@@ -72,6 +73,7 @@ describe('PaymentService', () => {
         PaymentService,
         { provide: getRepositoryToken(Prepayment), useValue: mockPrepayRepo },
         { provide: getRepositoryToken(PaymentRequest), useValue: mockPrRepo },
+        { provide: getRepositoryToken(PaymentRecord), useValue: { find: jest.fn().mockResolvedValue([]), create: jest.fn().mockImplementation((v) => v), save: jest.fn().mockImplementation((v) => Promise.resolve({ ...v, id: 1 })) } },
         { provide: getRepositoryToken(Reconciliation), useValue: mockReconcileRepo },
         { provide: NumberingService, useValue: new NumberingService(mockRedis as any) },
         { provide: DataSource, useValue: mockDataSource },
@@ -269,5 +271,58 @@ describe('PaymentService', () => {
     const dto = { type: ReconcileType.CONTRACT, factory_id: 5, amount: 1000, prepay_offset: 1500 };
     await expect(service.createPaymentRequest(dto as any, 1)).rejects.toThrow(BadRequestException);
     expect(mockPrepayRepo.find).not.toHaveBeenCalled();
+  });
+
+  // ===== 分批付款（设计稿 06 v1.1）=====
+  const makeRecordManager = (pr: any) => ({
+    findOne: jest.fn().mockResolvedValue(pr),
+    find: jest.fn().mockResolvedValue([]),
+    create: jest.fn().mockImplementation((_e: any, v: any) => v),
+    save: jest.fn().mockImplementation((_e: any, v: any) => Promise.resolve({ ...v, id: v.id ?? 9 })),
+    update: jest.fn().mockResolvedValue({ affected: 1 }),
+    query: jest.fn().mockResolvedValue([]),
+  });
+
+  // UT-PAY-REC-01: 部分付款累计已付,余额>0 状态保持 APPROVED
+  it('UT-PAY-REC-01 partial payment accumulates paid_total, stays APPROVED', async () => {
+    const pr = makePR({ approval_status: PaymentApprovalStatus.APPROVED, actual_pay: 5000, paid_total: 0 });
+    const manager = makeRecordManager(pr);
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+    const res: any = await service.addPaymentRecord(1, { pay_date: '2026-07-09', amount: 2000, pay_method: 'BANK' }, 3);
+    expect(res.paid_total).toBe(2000);
+    expect(res.balance).toBe(3000);
+    expect(res.request.approval_status).toBe(PaymentApprovalStatus.APPROVED); // 未付清
+  });
+
+  // UT-PAY-REC-02: 付清(余额=0) → 整单转 PAID + 联动对账单已付款
+  it('UT-PAY-REC-02 final payment flips to PAID and marks reconciliation PAID', async () => {
+    const pr = makePR({ approval_status: PaymentApprovalStatus.APPROVED, actual_pay: 5000, paid_total: 3000, reconcile_id: 7 });
+    const manager = makeRecordManager(pr);
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+    const res: any = await service.addPaymentRecord(1, { pay_date: '2026-07-09', amount: 2000, slip_url: '/u/slip.png' }, 3);
+    expect(res.request.approval_status).toBe(PaymentApprovalStatus.PAID);
+    expect(res.balance).toBe(0);
+    expect(manager.update).toHaveBeenCalled(); // 对账单 CONFIRMED→PAID
+  });
+
+  // UT-PAY-REC-03: 累计超应付被拦截
+  it('UT-PAY-REC-03 over-payment across records is rejected', async () => {
+    const pr = makePR({ approval_status: PaymentApprovalStatus.APPROVED, actual_pay: 5000, paid_total: 4500 });
+    const manager = makeRecordManager(pr);
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+    await expect(service.addPaymentRecord(1, { pay_date: '2026-07-09', amount: 1000 }, 3))
+      .rejects.toThrow(/超过应付总额/);
+  });
+
+  // UT-PAY-REC-04: 未审批/已付清不可登记付款
+  it('UT-PAY-REC-04 rejects when not APPROVED or already PAID', async () => {
+    const manager1 = makeRecordManager(makePR({ approval_status: PaymentApprovalStatus.PENDING }));
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager1));
+    await expect(service.addPaymentRecord(1, { pay_date: '2026-07-09', amount: 100 }, 3))
+      .rejects.toThrow(/只有已审批/);
+    const manager2 = makeRecordManager(makePR({ approval_status: PaymentApprovalStatus.PAID }));
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager2));
+    await expect(service.addPaymentRecord(1, { pay_date: '2026-07-09', amount: 100 }, 3))
+      .rejects.toThrow(/已付清/);
   });
 });

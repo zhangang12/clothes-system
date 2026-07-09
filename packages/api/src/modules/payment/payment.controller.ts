@@ -92,6 +92,19 @@ export class PaymentController {
     return this.service.rejectPaymentRequest(id, req.user.id, reason);
   }
 
+  @Post('requests/:id/records')
+  @Roles(UserRole.ADMIN, UserRole.FINANCE)
+  @ApiOperation({ summary: '分批付款登记（多次付款自动累计已付/未付，余额=0 整单转已付清，设计稿 06 v1.1）' })
+  addRecord(@Param('id', ParseIntPipe) id: number, @Body() dto: any, @Request() req: any) {
+    return this.service.addPaymentRecord(id, dto, req.user.id);
+  }
+
+  @Get('requests/:id/records')
+  @ApiOperation({ summary: '付款申请的分批付款记录' })
+  getRecords(@Param('id', ParseIntPipe) id: number) {
+    return this.service.getPaymentRecords(id);
+  }
+
   @Patch('requests/:id/paid')
   @Roles(UserRole.ADMIN, UserRole.FINANCE)
   @ApiOperation({ summary: '标记已付款（APPROVED→PAID），上传水单' })

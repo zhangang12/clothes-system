@@ -5,6 +5,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import { Prepayment } from './prepayment.entity';
 import { PaymentRequest } from './payment-request.entity';
+import { PaymentRecord } from './payment-record.entity';
 import { Reconciliation, ReconciliationStatus } from '../reconciliation/reconciliation.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { PaymentApprovalStatus, ReconcileType } from '@i9/types';
@@ -16,6 +17,7 @@ export class PaymentService {
   constructor(
     @InjectRepository(Prepayment) private readonly prepayRepo: Repository<Prepayment>,
     @InjectRepository(PaymentRequest) private readonly prRepo: Repository<PaymentRequest>,
+    @InjectRepository(PaymentRecord) private readonly recordRepo: Repository<PaymentRecord>,
     @InjectRepository(Reconciliation) private readonly reconcileRepo: Repository<Reconciliation>,
     private readonly numbering: NumberingService,
     private readonly dataSource: DataSource,
@@ -83,6 +85,7 @@ export class PaymentService {
     return this.dataSource.transaction(async (manager) => {
       // 分批付款·超付拦截（设计稿 G4）：锁定对账单行,串行化同一对账单的并发付款申请,
       // 避免「先查后写」竞态下两笔并发申请双双通过导致累计超付。
+      let contractRow: { account_period_days: number | null; due_date: string | null } | null = null;
       if (dto.reconcile_id) {
         const rec = await manager.findOne(Reconciliation, {
           where: { id: dto.reconcile_id, deleted: 0 },
@@ -100,6 +103,13 @@ export class PaymentService {
             `累计付款申请 ${(requested + dto.amount).toFixed(2)} 超过对账应付 ${(+rec.total_amount).toFixed(2)}（已申请 ${requested.toFixed(2)}，本次 ${dto.amount}）`,
           );
         }
+        // 账期/到期日从合同带入（设计稿 06：账期取合同结算条款；到期日=出货日+账期，可人工改）
+        if (rec.contract_id) {
+          const rows = await manager.query(
+            'SELECT account_period_days, due_date FROM contract WHERE id = ? AND deleted = 0', [rec.contract_id],
+          );
+          contractRow = rows?.[0] ?? null;
+        }
       }
 
       const pr = manager.create(PaymentRequest, {
@@ -110,12 +120,74 @@ export class PaymentService {
         amount: dto.amount,
         prepay_offset: prepayOffset,
         actual_pay: +(dto.amount - prepayOffset).toFixed(4),
+        account_period_days: dto.account_period_days ?? contractRow?.account_period_days ?? null,
+        due_date: (dto.due_date ?? contractRow?.due_date ?? null) as any,
         approval_status: PaymentApprovalStatus.DRAFT,
         description: dto.description ?? null,
         created_by: createdBy,
       });
       return manager.save(pr);
     });
+  }
+
+  // ===== 分批付款（设计稿 06 v1.1）：多次付款自动累计已付/未付，余额=0 整单转已付清 =====
+  async addPaymentRecord(
+    id: number,
+    dto: { pay_method?: string; pay_date: string; amount: number; slip_url?: string; remark?: string },
+    userId: number,
+  ) {
+    if (!(dto.amount > 0)) throw new BadRequestException('本次付款金额须大于 0');
+    return this.dataSource.transaction(async (manager) => {
+      const pr = await manager.findOne(PaymentRequest, {
+        where: { id, deleted: 0 },
+        lock: { mode: 'pessimistic_write' }, // 串行化同一申请的并发付款，防累计超付
+      });
+      if (!pr) throw new NotFoundException(`付款申请 #${id} 不存在`);
+      if (pr.approval_status !== PaymentApprovalStatus.APPROVED) {
+        throw new BadRequestException(
+          pr.approval_status === PaymentApprovalStatus.PAID
+            ? '该付款申请已付清，不可再付款'
+            : '只有已审批状态才可登记付款',
+        );
+      }
+      const payable = +(pr.actual_pay ?? pr.amount); // 应付总额
+      const paidTotal = +(pr.paid_total ?? 0);
+      if (paidTotal + dto.amount > payable + 0.01) {
+        throw new BadRequestException(
+          `本次付款后累计 ${(paidTotal + dto.amount).toFixed(2)} 超过应付总额 ${payable.toFixed(2)}（已付 ${paidTotal.toFixed(2)}）`,
+        );
+      }
+
+      const record = await manager.save(PaymentRecord, manager.create(PaymentRecord, {
+        pr_id: id,
+        pay_method: dto.pay_method ?? 'BANK',
+        pay_date: dto.pay_date,
+        amount: +(+dto.amount).toFixed(4),
+        slip_url: dto.slip_url ?? null,
+        remark: dto.remark ?? null,
+        created_by: userId,
+      }));
+
+      pr.paid_total = +(paidTotal + dto.amount).toFixed(4);
+      // 余额=0（±0.01）→ 整单转已付清 + 联动对账单已付款
+      if (payable - pr.paid_total <= 0.01) {
+        pr.approval_status = PaymentApprovalStatus.PAID;
+        pr.paid_by = userId;
+        pr.slip_uploaded_at = new Date();
+        if (dto.slip_url) pr.slip_url = dto.slip_url;
+        if (pr.reconcile_id) {
+          await manager.update(Reconciliation,
+            { id: pr.reconcile_id, status: ReconciliationStatus.CONFIRMED },
+            { status: ReconciliationStatus.PAID });
+        }
+      }
+      const saved = await manager.save(PaymentRequest, pr);
+      return { record, request: saved, paid_total: +saved.paid_total, balance: +(payable - +saved.paid_total).toFixed(4) };
+    });
+  }
+
+  async getPaymentRecords(id: number) {
+    return this.recordRepo.find({ where: { pr_id: id }, order: { id: 'ASC' } });
   }
 
   async findPaymentRequests(
@@ -207,6 +279,7 @@ export class PaymentService {
     pr.slip_url = slipUrl;
     pr.paid_by = paidBy;
     pr.slip_uploaded_at = new Date();
+    pr.paid_total = +(pr.actual_pay ?? pr.amount); // 一次性付清兼容口径：已付=应付
     const saved = await this.prRepo.save(pr);
 
     // 付款完成后联动关联对账单进入已付款状态（系统开发手册·状态流转规则）

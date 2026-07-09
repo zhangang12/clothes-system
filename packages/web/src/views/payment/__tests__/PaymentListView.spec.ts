@@ -18,6 +18,8 @@ const mockPRSubmit = vi.fn();
 const mockPRApprove = vi.fn();
 const mockPRReject = vi.fn();
 const mockPRMarkPaid = vi.fn();
+const mockPRAddRecord = vi.fn();
+const mockPRGetRecords = vi.fn().mockResolvedValue({ data: [] });
 const mockPRRemove = vi.fn();
 
 vi.mock('@/api/payment', () => ({
@@ -33,6 +35,8 @@ vi.mock('@/api/payment', () => ({
     approve: (...a: any[]) => mockPRApprove(...a),
     reject: (...a: any[]) => mockPRReject(...a),
     markPaid: (...a: any[]) => mockPRMarkPaid(...a),
+    addRecord: (...a: any[]) => mockPRAddRecord(...a),
+    getRecords: (...a: any[]) => mockPRGetRecords(...a),
     remove: (...a: any[]) => mockPRRemove(...a),
   },
 }));
@@ -180,7 +184,7 @@ describe('PaymentListView', () => {
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
 
-    expect(wrapper.findAll('button').find((b) => b.text() === '标记付款')).toBeTruthy();
+    expect(wrapper.findAll('button').find((b) => b.text() === '付款')).toBeTruthy();
   });
 
   it('shows "标记付款" for APPROVED request as FINANCE', async () => {
@@ -188,7 +192,7 @@ describe('PaymentListView', () => {
     const wrapper = mountView(UserRole.FINANCE);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
 
-    expect(wrapper.findAll('button').find((b) => b.text() === '标记付款')).toBeTruthy();
+    expect(wrapper.findAll('button').find((b) => b.text() === '付款')).toBeTruthy();
   });
 
   it('hides "标记付款" for APPROVED request as BUSINESS', async () => {
@@ -295,54 +299,45 @@ describe('PaymentListView', () => {
     await vi.waitFor(() => expect(mockPRReject).toHaveBeenCalledWith(5, '质量不合格'));
   });
 
-  // ─────────────────────── mark-paid dialog
-  it('opens mark-paid dialog when "标记付款" is clicked', async () => {
-    mockPRList.mockResolvedValue({ data: [makePR({ approval_status: 'APPROVED' })], total: 1 });
+  // ─────────────────────── 财务付款（分批 v1.1）
+  it('opens installment-pay dialog with payable/paid/balance when 付款 clicked', async () => {
+    mockPRList.mockResolvedValue({ data: [makePR({ approval_status: 'APPROVED', actual_pay: 5000, paid_total: 2000 })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
 
-    await wrapper.findAll('button').find((b) => b.text() === '标记付款')!.trigger('click');
-    await wrapper.vm.$nextTick();
-
-    expect(wrapper.text()).toContain('上传付款水单');
-    expect(wrapper.text()).toContain('水单URL');
+    await wrapper.findAll('button').find((b) => b.text() === '付款')!.trigger('click');
+    await vi.waitFor(() => expect(wrapper.text()).toContain('财务付款'));
+    expect(wrapper.text()).toContain('应付总额');
+    expect(wrapper.text()).toContain('未付余额');
+    expect(mockPRGetRecords).toHaveBeenCalled(); // 打开即加载分批记录
   });
 
-  it('warns when marking paid without a slip URL', async () => {
-    mockPRList.mockResolvedValue({ data: [makePR({ id: 7, approval_status: 'APPROVED' })], total: 1 });
+  it('submits installment record with default amount = balance', async () => {
+    mockPRAddRecord.mockResolvedValue({ data: { balance: 0, paid_total: 5000, request: { approval_status: 'PAID' } } });
+    mockPRList.mockResolvedValue({ data: [makePR({ id: 7, approval_status: 'APPROVED', actual_pay: 5000, paid_total: 3000 })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
 
-    await wrapper.findAll('button').find((b) => b.text() === '标记付款')!.trigger('click');
-    await wrapper.vm.$nextTick();
+    await wrapper.findAll('button').find((b) => b.text() === '付款')!.trigger('click');
+    await vi.waitFor(() => expect(wrapper.text()).toContain('财务付款'));
 
-    await wrapper.findAll('button').find((b) => b.text() === '确认付款')!.trigger('click');
-    await wrapper.vm.$nextTick();
-
-    expect(ElMessageMock.warning).toHaveBeenCalledWith('请上传或填写水单地址');
-    expect(mockPRMarkPaid).not.toHaveBeenCalled();
+    await wrapper.findAll('button').find((b) => b.text().includes('确认付款'))!.trigger('click');
+    await vi.waitFor(() => expect(mockPRAddRecord).toHaveBeenCalledWith(7, expect.objectContaining({
+      amount: 2000, // 默认=未付余额 5000-3000
+      pay_method: 'BANK',
+    })));
   });
 
-  it('calls paymentRequestApi.markPaid with the slip URL', async () => {
-    mockPRMarkPaid.mockResolvedValue({});
-    mockPRList.mockResolvedValue({ data: [makePR({ id: 7, approval_status: 'APPROVED' })], total: 1 });
+  it('shows history records table inside pay dialog', async () => {
+    mockPRGetRecords.mockResolvedValueOnce({ data: [
+      { id: 1, pay_method: 'BANK', pay_date: '2026-07-01', amount: 1000, slip_url: '', remark: '首批' },
+    ] });
+    mockPRList.mockResolvedValue({ data: [makePR({ approval_status: 'APPROVED', actual_pay: 5000, paid_total: 1000 })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
 
-    await wrapper.findAll('button').find((b) => b.text() === '标记付款')!.trigger('click');
-    await wrapper.vm.$nextTick();
-
-    // The mark-paid dialog has an el-input (rendered as an input[type=text])
-    // Find the one inside the mark-paid dialog. It will be the last text input
-    // because the dialog is appended after other content.
-    const inputs = wrapper.findAll('input').filter((i) => i.element.type !== 'number');
-    // Find the slip URL input — should be the only text input visible in this dialog
-    const slipInput = inputs[inputs.length - 1];
-    await slipInput.setValue('https://cdn.example.com/slip.jpg');
-
-    await wrapper.findAll('button').find((b) => b.text() === '确认付款')!.trigger('click');
-    await vi.waitFor(() =>
-      expect(mockPRMarkPaid).toHaveBeenCalledWith(7, 'https://cdn.example.com/slip.jpg'),
-    );
+    await wrapper.findAll('button').find((b) => b.text() === '付款')!.trigger('click');
+    await vi.waitFor(() => expect(wrapper.text()).toContain('银行转账'));
+    expect(wrapper.text()).toContain('首批');
   });
 });

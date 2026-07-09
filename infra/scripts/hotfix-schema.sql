@@ -743,6 +743,9 @@ CREATE TABLE IF NOT EXISTS `payment_request` (
   `amount`            DECIMAL(15,4)  NOT NULL COMMENT '申请付款金额',
   `prepay_offset`     DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '预付款冲抵金额',
   `actual_pay`        DECIMAL(15,4)  DEFAULT NULL COMMENT '实付金额=amount-prepay_offset',
+  `account_period_days` INT          DEFAULT NULL COMMENT '结算账期(合同带入,可人工改)',
+  `due_date`           DATE           DEFAULT NULL COMMENT '到期日=出货日+账期(逾期高亮)',
+  `paid_total`         DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '已付总额(分批付款累计)',
   `slip_url`          VARCHAR(500)   DEFAULT NULL COMMENT '水单文件路径',
   `paid_by`           BIGINT         DEFAULT NULL COMMENT '标记付款操作人',
   `slip_uploaded_at`  DATETIME       DEFAULT NULL,
@@ -763,6 +766,20 @@ CREATE TABLE IF NOT EXISTS `payment_request` (
   KEY `idx_factory` (`factory_id`),
   KEY `idx_approval_status` (`approval_status`,`deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='付款申请';
+
+CREATE TABLE IF NOT EXISTS `payment_record` (
+  `id`         BIGINT        NOT NULL AUTO_INCREMENT,
+  `pr_id`      BIGINT        NOT NULL COMMENT '所属付款申请',
+  `pay_method` ENUM('BANK','ACCEPTANCE','OTHER') NOT NULL DEFAULT 'BANK' COMMENT '付款方式:银行转账/承兑汇票/其他',
+  `pay_date`   DATE          NOT NULL,
+  `amount`     DECIMAL(15,4) NOT NULL COMMENT '本次付款金额',
+  `slip_url`   VARCHAR(500)  DEFAULT NULL COMMENT '付款凭证(水单)',
+  `remark`     VARCHAR(200)  DEFAULT NULL,
+  `created_by` BIGINT        NOT NULL,
+  `created_at` DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_pr` (`pr_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='分批付款记录(v1.1:多次付款累计已付/未付,余额0转已付清)';
 
 CREATE TABLE IF NOT EXISTS `settlement` (
   `id`                   BIGINT         NOT NULL AUTO_INCREMENT,
@@ -1838,6 +1855,12 @@ CALL _i9_add_col('payment_request','prepay_offset',"DECIMAL(15,4)  NOT NULL DEFA
 CALL _i9_sync_col('payment_request','prepay_offset',"DECIMAL(15,4)","DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '预付款冲抵金额'");
 CALL _i9_add_col('payment_request','actual_pay',"DECIMAL(15,4)  DEFAULT NULL COMMENT '实付金额=amount-prepay_offset'");
 CALL _i9_sync_col('payment_request','actual_pay',"DECIMAL(15,4)","DECIMAL(15,4)  DEFAULT NULL COMMENT '实付金额=amount-prepay_offset'");
+CALL _i9_add_col('payment_request','account_period_days',"INT          DEFAULT NULL COMMENT '结算账期(合同带入,可人工改)'");
+CALL _i9_sync_col('payment_request','account_period_days',"INT","INT          DEFAULT NULL COMMENT '结算账期(合同带入,可人工改)'");
+CALL _i9_add_col('payment_request','due_date',"DATE           DEFAULT NULL COMMENT '到期日=出货日+账期(逾期高亮)'");
+CALL _i9_sync_col('payment_request','due_date',"DATE","DATE           DEFAULT NULL COMMENT '到期日=出货日+账期(逾期高亮)'");
+CALL _i9_add_col('payment_request','paid_total',"DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '已付总额(分批付款累计)'");
+CALL _i9_sync_col('payment_request','paid_total',"DECIMAL(15,4)","DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '已付总额(分批付款累计)'");
 CALL _i9_add_col('payment_request','slip_url',"VARCHAR(500)   DEFAULT NULL COMMENT '水单文件路径'");
 CALL _i9_sync_col('payment_request','slip_url',"VARCHAR(500)","VARCHAR(500)   DEFAULT NULL COMMENT '水单文件路径'");
 CALL _i9_add_col('payment_request','paid_by',"BIGINT         DEFAULT NULL COMMENT '标记付款操作人'");
@@ -1866,6 +1889,24 @@ CALL _i9_add_col('payment_request','updated_at',"DATETIME       NOT NULL DEFAULT
 CALL _i9_sync_col('payment_request','updated_at',"DATETIME","DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
 CALL _i9_add_col('payment_request','deleted',"TINYINT        NOT NULL DEFAULT 0");
 CALL _i9_sync_col('payment_request','deleted',"TINYINT","TINYINT        NOT NULL DEFAULT 0");
+
+-- payment_record
+CALL _i9_add_col('payment_record','pr_id',"BIGINT        NOT NULL COMMENT '所属付款申请'");
+CALL _i9_sync_col('payment_record','pr_id',"BIGINT","BIGINT        NOT NULL COMMENT '所属付款申请'");
+CALL _i9_add_col('payment_record','pay_method',"ENUM('BANK','ACCEPTANCE','OTHER') NOT NULL DEFAULT 'BANK' COMMENT '付款方式:银行转账/承兑汇票/其他'");
+CALL _i9_sync_col('payment_record','pay_method',"ENUM('BANK','ACCEPTANCE','OTHER')","ENUM('BANK','ACCEPTANCE','OTHER') NOT NULL DEFAULT 'BANK' COMMENT '付款方式:银行转账/承兑汇票/其他'");
+CALL _i9_add_col('payment_record','pay_date',"DATE          NOT NULL");
+CALL _i9_sync_col('payment_record','pay_date',"DATE","DATE          NOT NULL");
+CALL _i9_add_col('payment_record','amount',"DECIMAL(15,4) NOT NULL COMMENT '本次付款金额'");
+CALL _i9_sync_col('payment_record','amount',"DECIMAL(15,4)","DECIMAL(15,4) NOT NULL COMMENT '本次付款金额'");
+CALL _i9_add_col('payment_record','slip_url',"VARCHAR(500)  DEFAULT NULL COMMENT '付款凭证(水单)'");
+CALL _i9_sync_col('payment_record','slip_url',"VARCHAR(500)","VARCHAR(500)  DEFAULT NULL COMMENT '付款凭证(水单)'");
+CALL _i9_add_col('payment_record','remark',"VARCHAR(200)  DEFAULT NULL");
+CALL _i9_sync_col('payment_record','remark',"VARCHAR(200)","VARCHAR(200)  DEFAULT NULL");
+CALL _i9_add_col('payment_record','created_by',"BIGINT        NOT NULL");
+CALL _i9_sync_col('payment_record','created_by',"BIGINT","BIGINT        NOT NULL");
+CALL _i9_add_col('payment_record','created_at',"DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP");
+CALL _i9_sync_col('payment_record','created_at',"DATETIME","DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP");
 
 -- settlement
 CALL _i9_add_col('settlement','settlement_no',"VARCHAR(30)    NOT NULL COMMENT '结算单号 JS-YYYYMMDD-001'");

@@ -374,6 +374,8 @@ export class PortalService {
         amount: rec.total_amount,
         prepay_offset: 0,
         actual_pay: rec.total_amount,
+        account_period_days: contract.account_period_days ?? null,
+        due_date: contract.due_date ?? null, // 到期日=最后发货日+账期(发货时已算)
         approval_status: PaymentApprovalStatus.PENDING,
         description: `门户开票自动生成(发票 ${dto.invoice_no})`,
         created_by: rec.created_by ?? null,
