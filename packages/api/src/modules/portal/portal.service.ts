@@ -9,7 +9,8 @@ import { OrderMain } from '../order/order-main.entity';
 import { OrderMaterial } from '../order/order-material.entity';
 import { OrderSizeMatrix } from '../order/order-size-matrix.entity';
 import { Reconciliation, ReconciliationStatus } from '../reconciliation/reconciliation.entity';
-import { ContractPortalStatus, ContractType } from '@i9/types';
+import { PaymentRequest } from '../payment/payment-request.entity';
+import { ContractPortalStatus, ContractType, ReconcileType, PaymentApprovalStatus } from '@i9/types';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { UploadInvoiceDto } from './dto/upload-invoice.dto';
 
@@ -31,6 +32,7 @@ export class PortalService {
     @InjectRepository(OrderMaterial) private readonly orderMaterialRepo: Repository<OrderMaterial>,
     @InjectRepository(OrderSizeMatrix) private readonly matrixRepo: Repository<OrderSizeMatrix>,
     @InjectRepository(Reconciliation) private readonly reconcileRepo: Repository<Reconciliation>,
+    @InjectRepository(PaymentRequest) private readonly prRepo: Repository<PaymentRequest>,
     private readonly numbering: NumberingService,
   ) {}
 
@@ -261,6 +263,24 @@ export class PortalService {
     rec.invoice_url = dto.invoice_url ?? null;
     rec.has_invoice = 1;
     await this.reconcileRepo.save(rec);
+
+    // 开票→推财务:该对账单尚无有效付款申请时,自动生成一张(状态 PENDING,进财务审批台)
+    const existingPr = await this.prRepo.findOne({ where: { reconcile_id: rec.id, deleted: 0 } });
+    if (!existingPr || existingPr.approval_status === PaymentApprovalStatus.REJECTED) {
+      const pr_no = await this.numbering.next(NUM_PREFIX.PAYMENT);
+      await this.prRepo.save(this.prRepo.create({
+        pr_no,
+        type: ReconcileType.CONTRACT,
+        reconcile_id: rec.id,
+        factory_id: contract.factory_id,
+        amount: rec.total_amount,
+        prepay_offset: 0,
+        actual_pay: rec.total_amount,
+        approval_status: PaymentApprovalStatus.PENDING,
+        description: `门户开票自动生成(发票 ${dto.invoice_no})`,
+        created_by: rec.created_by ?? null,
+      }));
+    }
 
     const parts: string[] = [`发票号:${dto.invoice_no}`, `金额:${dto.invoice_amount}`];
     if (dto.invoice_url) parts.push(`附件:${dto.invoice_url}`);

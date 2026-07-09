@@ -8,6 +8,7 @@ import { ContractShipment } from '../../contract/contract-shipment.entity';
 import { ContractPortalLog } from '../../contract/contract-portal-log.entity';
 import { OrderMain } from '../../order/order-main.entity';
 import { Reconciliation } from '../../reconciliation/reconciliation.entity';
+import { PaymentRequest } from '../../payment/payment-request.entity';
 import { OrderMaterial } from '../../order/order-material.entity';
 import { OrderSizeMatrix } from '../../order/order-size-matrix.entity';
 import { NumberingService } from '../../../common/services/numbering.service';
@@ -75,7 +76,8 @@ describe('PortalService', () => {
         { provide: getRepositoryToken(OrderMaterial), useValue: makeRepo() },
         { provide: getRepositoryToken(OrderSizeMatrix), useValue: makeRepo() },
         { provide: getRepositoryToken(Reconciliation), useValue: reconcileRepo },
-        { provide: NumberingService, useValue: { nextWithSegment: jest.fn().mockResolvedValue('FH-K-001') } },
+        { provide: getRepositoryToken(PaymentRequest), useValue: makeRepo() },
+        { provide: NumberingService, useValue: { nextWithSegment: jest.fn().mockResolvedValue('FH-K-001'), next: jest.fn().mockResolvedValue('PR-20260709-001') } },
       ],
     }).compile();
 
