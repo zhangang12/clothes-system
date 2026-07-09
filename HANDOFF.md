@@ -29,11 +29,11 @@
 
 ## 立即待办（按优先级）
 
-1. **🟠 `NumberingService` 加 DB 兜底**：拔掉 Redis 硬单点（`sys_sequence` 行锁发号，Redis 恢复自动切回），使 Redis 挂了只降速不阻断建单。
-2. 🟡 正式 migration 体系替掉临时 `hotfix-schema.sql`；`deep-test.sh` 真机门禁接入部署/CI。
-3. 🟡 GitHub Actions **merge→deploy**（合并即发版）；运维 P0：异地备份（含 `/data/uploads`）+ HTTPS + 告警。
+1. **🟠 用户操作·上线验收**：服务器 `bash infra/scripts/deploy.sh`（会自动补齐生产缺列并上线全部新功能）→ `health.sh` 全绿 → 网站验收 → 系统报错页把 8 条历史报错标「已处理」。
+2. 🟡 用户操作·启用合并即发版：把 `infra/ci/deploy.yml` 复制为 `.github/workflows/deploy.yml`（网页端建，当前 PAT 无 workflow scope）+ 配 `DEPLOY_SSH_HOST/USER/KEY` secrets。
+3. 🟡 剩余基建：正式 migration 体系（`gen-column-sync.py` 已等效缓解）；`deep-test.sh` CI 门禁；异地备份推送（OSS/rclone）+ HTTPS + 告警（需服务器侧凭据）。
 
-**近期已完成**：起 Redis（目标 ECS）✅ ；schema 漂移止血 ✅ ；一键 `deploy.sh` ✅ 。
+**近期已完成**：审计清单全清 ✅；生产缺列事故根治（结构自动同步）✅；Redis 单点消除（DB 兜底发号）✅；backup.sh 含上传文件 ✅；一键 `deploy.sh` ✅。
 
 ## 本次会话关键决策（用户已拍板）
 
