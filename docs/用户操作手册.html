@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>I9 服装制造管理系统 · 用户操作手册 v1.0</title>
+<style>
+  :root {
+    --ink: #23282e; --ink-2: #5c6670; --ink-3: #8a939c;
+    --bg: #faf9f6; --card: #ffffff; --line: #e3e0d8; --line-soft: #eeebe3;
+    --navy: #1E3A5F; --navy-soft: #eaeff5;
+    --amber: #D17A40; --amber-soft: #faf0e6;
+    --green: #3E8E7E; --green-soft: #e9f3f0;
+    --red: #C04042; --red-soft: #faecec;
+    --gold: #C8901E; --gold-soft: #f8f1df;
+    --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #e4e2dc; --ink-2: #a8afb8; --ink-3: #767e88;
+      --bg: #17191d; --card: #1f2228; --line: #34383f; --line-soft: #2a2d33;
+      --navy: #7da4d4; --navy-soft: #232c38;
+      --amber: #e09a63; --amber-soft: #322a22;
+      --green: #6cb5a5; --green-soft: #20302c;
+      --red: #e08587; --red-soft: #362426;
+      --gold: #d9b05e; --gold-soft: #322c1e;
+    }
+  }
+  :root[data-theme="light"] {
+    --ink: #23282e; --ink-2: #5c6670; --ink-3: #8a939c;
+    --bg: #faf9f6; --card: #ffffff; --line: #e3e0d8; --line-soft: #eeebe3;
+    --navy: #1E3A5F; --navy-soft: #eaeff5; --amber: #D17A40; --amber-soft: #faf0e6;
+    --green: #3E8E7E; --green-soft: #e9f3f0; --red: #C04042; --red-soft: #faecec;
+    --gold: #C8901E; --gold-soft: #f8f1df;
+  }
+  :root[data-theme="dark"] {
+    --ink: #e4e2dc; --ink-2: #a8afb8; --ink-3: #767e88;
+    --bg: #17191d; --card: #1f2228; --line: #34383f; --line-soft: #2a2d33;
+    --navy: #7da4d4; --navy-soft: #232c38; --amber: #e09a63; --amber-soft: #322a22;
+    --green: #6cb5a5; --green-soft: #20302c; --red: #e08587; --red-soft: #362426;
+    --gold: #d9b05e; --gold-soft: #322c1e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.75 "PingFang SC", "Microsoft YaHei", -apple-system, sans-serif; }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 32px 24px 96px; }
+
+  header.hero { border-bottom: 3px solid var(--navy); padding-bottom: 20px; margin-bottom: 28px; }
+  .hero h1 { margin: 0 0 6px; font-size: 27px; letter-spacing: 1px; color: var(--navy); text-wrap: balance; }
+  .hero .sub { color: var(--ink-2); font-size: 14px; }
+  .hero .meta { margin-top: 10px; font-size: 12.5px; color: var(--ink-3); }
+  .hero .meta code { font-family: var(--mono); background: var(--line-soft); padding: 1px 6px; border-radius: 4px; }
+
+  nav.toc { background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+            padding: 14px 18px; margin-bottom: 30px; font-size: 13.5px;
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 3px 20px; }
+  nav.toc a { color: var(--navy); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+  nav.toc .toc-head { grid-column: 1 / -1; font-weight: 700; color: var(--ink-2);
+                      font-size: 12px; letter-spacing: 2px; text-transform: uppercase; }
+
+  section.mod { background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+                padding: 22px 26px; margin-bottom: 26px; }
+  section.mod > h2 { margin: 0 0 4px; font-size: 20px; color: var(--navy);
+                     display: flex; align-items: baseline; gap: 10px; }
+  section.mod > h2 .no { font-family: var(--mono); font-size: 13px; color: var(--amber); font-weight: 700; }
+  .mod-sub { color: var(--ink-2); font-size: 13px; margin-bottom: 14px; }
+  h3 { font-size: 15px; margin: 22px 0 8px; color: var(--ink);
+       border-left: 3px solid var(--amber); padding-left: 9px; }
+  h4 { font-size: 13.5px; margin: 14px 0 6px; color: var(--ink-2); }
+  p { margin: 6px 0; }
+  ul, ol { margin: 6px 0; padding-left: 22px; }
+  li { margin: 3px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--line-soft);
+         padding: 1px 5px; border-radius: 4px; }
+  b { color: var(--ink); }
+
+  .tablebox { overflow-x: auto; margin: 8px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--navy-soft); color: var(--navy); font-weight: 600; white-space: nowrap; }
+  td.c, th.c { text-align: center; }
+  tr.warn td { background: var(--red-soft); }
+
+  .flow { font-family: var(--mono); font-size: 12.5px; line-height: 1.9; background: var(--navy-soft);
+          border: 1px solid var(--line); border-radius: 6px; padding: 12px 16px;
+          overflow-x: auto; white-space: pre; color: var(--ink); }
+
+  .tag { display: inline-block; font-size: 11.5px; padding: 1px 8px; border-radius: 10px;
+         font-weight: 600; white-space: nowrap; line-height: 1.6; vertical-align: middle; }
+  .t-navy  { background: var(--navy-soft);  color: var(--navy); }
+  .t-amber { background: var(--amber-soft); color: var(--amber); }
+  .t-green { background: var(--green-soft); color: var(--green); }
+  .t-red   { background: var(--red-soft);   color: var(--red); }
+  .t-gold  { background: var(--gold-soft);  color: var(--gold); }
+
+  .callout { border-left: 4px solid var(--gold); background: var(--gold-soft);
+             padding: 8px 14px; border-radius: 0 6px 6px 0; margin: 10px 0; font-size: 13.5px; }
+  .callout.red { border-color: var(--red); background: var(--red-soft); }
+  .callout.green { border-color: var(--green); background: var(--green-soft); }
+
+  .steps { counter-reset: st; padding-left: 0; list-style: none; }
+  .steps > li { counter-increment: st; position: relative; padding-left: 34px; margin: 7px 0; }
+  .steps > li::before { content: counter(st); position: absolute; left: 0; top: 2px;
+                        width: 22px; height: 22px; border-radius: 50%; background: var(--navy);
+                        color: #fff; font-size: 12px; font-weight: 700;
+                        display: flex; align-items: center; justify-content: center; }
+  footer { color: var(--ink-3); font-size: 12.5px; text-align: center; margin-top: 40px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>🪡 I9 服装制造管理系统 · 用户操作手册</h1>
+  <div class="sub">UI 操作指引 + 业务规则详设 + 数据流转 三合一 · 覆盖管理端 9 大模块 + 供应商门户 H5</div>
+  <div class="meta">v1.0 · 2026-07-10 · 内容逐条对照当前 <code>main</code> 分支代码与后端接口生成（非照抄设计稿）；与 UI 设计稿的已知差异如实列于 <a href="#gap" style="color:var(--red)">附录 D</a></div>
+</header>
+
+<nav class="toc">
+  <span class="toc-head">目录</span>
+  <a href="#overview">0 · 系统全景与数据流</a>
+  <a href="#login">1 · 登录 · 角色 · 权限</a>
+  <a href="#basic">2 · 基础资料（工厂/客户/本司主体）</a>
+  <a href="#sample">3 · 样衣管理</a>
+  <a href="#quote">4 · 客户报价</a>
+  <a href="#order">5 · 订单管理</a>
+  <a href="#contract">6 · 合同管理</a>
+  <a href="#portal">7 · 供应商门户（H5）</a>
+  <a href="#reconcile">8 · 对账管理</a>
+  <a href="#payment">9 · 付款管理</a>
+  <a href="#settle">10 · 结算清单</a>
+  <a href="#stats">11 · 报表统计</a>
+  <a href="#sys">12 · 反馈 · 系统报错</a>
+  <a href="#apxA">附录 A · 状态机总表</a>
+  <a href="#apxB">附录 B · 编号规则</a>
+  <a href="#apxC">附录 C · 角色权限矩阵</a>
+  <a href="#gap">附录 D · 与设计稿的已知差异 ⚠️</a>
+</nav>
+
+<!-- ===================== 0 全景 ===================== -->
+<section class="mod" id="overview">
+  <h2><span class="no">00</span>系统全景与数据流</h2>
+  <div class="mod-sub">一条端到端业务流：样衣 → 报价 → 订单 → 合同 → 供应商门户四步 → 对账 → 付款 → 结算 → 报表</div>
+<div class="flow">③样衣 S-  ──导入材料──▶ ④客户报价 Q-  ──一键导入──▶ ⑤订单 O-（尺码PO矩阵→大货总数→用料核算）
+                                                        │
+                              ┌─ 生成材料合同（按供应商拆多张，分色/分码按矩阵出行）
+                              └─ 生成加工合同（数量=大货数）        ⑤′合同 HT-
+                                                        │ 推送（超阈值先主管审批）
+                                                        ▼
+⑥供应商门户 H5：🔖盖章 → 📦发货(FH-·多批·业务逐批审批) → 🧾我要对账(勾已审批批次→DZ-) → 💵开票(发票=对账金额)
+                                                        │                    │
+                        业务复核确认(二级审批) ◀─────────┘        自动生成付款申请 PR-（PENDING）
+                                                        ▼                    ▼
+⑦对账 DZ-（合同/无合同/工时三类） ──▶ ⑧付款 PR-（预付冲抵·分批付款·账期到期日） ──▶ ⑨结算 JS-（按款号聚合成本·退税·净利）
+                                                                                        │
+                                                                            ⑩报表：漏斗 / 成单率 / 利润(亏损预警)</div>
+  <h3>关键联动（系统自动，无需人工）</h3>
+  <ul>
+    <li>报价「转销售合同」→ 关联样衣自动置 <span class="tag t-green">已成单</span>；订单从报价导入自动带客户/明细快照。</li>
+    <li>生成合同后订单自动 <span class="tag t-navy">已下单→已生成合同</span>；对账确认后合同→<span class="tag t-green">已对账</span>、订单（生产中时）→<span class="tag t-green">已完成</span>。</li>
+    <li>门户开票成功 → 自动生成付款申请（PENDING 直进财务审批台，带账期/到期日）。</li>
+    <li>付款申请付清 → 关联对账单自动转 <span class="tag t-green">已付款</span>。</li>
+    <li>所有服务器 5xx 异常 → 自动进「系统报错」归档（去重+操作上下文），无需人工上报。</li>
+  </ul>
+</section>
+
+<!-- ===================== 1 登录角色 ===================== -->
+<section class="mod" id="login">
+  <h2><span class="no">01</span>登录 · 角色 · 权限</h2>
+  <div class="mod-sub">管理端（Web）与供应商门户（H5）双入口、双账号体系</div>
+  <h3>操作指引</h3>
+  <ol class="steps">
+    <li><b>内部员工</b>：浏览器打开管理端地址 → 输入用户名/密码登录。密码错误会在登录页直接提示（不跳转）。登录接口有频控（每分钟 10 次）。</li>
+    <li><b>供应商</b>：手机打开门户 H5 地址 → 用工厂档案里开通的门户账号登录，只能看到<b>推送给本厂</b>的合同。</li>
+  </ol>
+  <h3>六个内部角色 + 权限要点</h3>
+  <div class="tablebox"><table>
+    <tr><th>角色</th><th>定位</th><th>关键限制</th></tr>
+    <tr><td><span class="tag t-red">ADMIN 管理员</span></td><td>全权限</td><td>独有：删除类操作、客户机密批量授权、反馈管理、系统报错、本司主体维护、用户清单</td></tr>
+    <tr><td><span class="tag t-navy">BUSINESS 业务</span></td><td>建单主力</td><td>可建/编辑 客户·样衣·报价·订单·合同·对账；受客户机密行级限制</td></tr>
+    <tr><td><span class="tag t-gold">FINANCE 财务</span></td><td>钱的动作</td><td>付款审批/分批付款登记/结算；报价可见</td></tr>
+    <tr><td><span class="tag t-green">SUPERVISOR 主管</span></td><td>审批节点</td><td>超阈值报价/订单/合同审批、对账复核确认/退回、发货批次审批</td></tr>
+    <tr><td><span class="tag t-amber">PATTERNMAKER 版师</span></td><td>打样执行</td><td><b>不可见</b>：客户报价、报表统计、本司主体菜单；合同/订单中<b>供应商成本、对客单价被脱敏</b>（显示「—」）</td></tr>
+    <tr><td><span class="tag t-amber">SAMPLE_MAKER 打样</span></td><td>同版师</td><td>同上脱敏与菜单限制</td></tr>
+  </table></div>
+  <div class="callout">🔒 <b>客户机密</b>是独立于角色的<b>行级</b>控制：即使是业务/财务，看不到未授权的客户及其报价（详见 <a href="#basic">§2 客户资料</a>）。管理员不受限。</div>
+</section>
+
+<!-- ===================== 2 基础资料 ===================== -->
+<section class="mod" id="basic">
+  <h2><span class="no">02</span>基础资料：工厂 / 客户 / 本司主体</h2>
+  <div class="mod-sub">全系统取数源头——报价选客户、合同选工厂、PDF 抬头取本司主体，都从这里来</div>
+
+  <h3>2.1 工厂资料（供应商/加工厂档案）</h3>
+  <ol class="steps">
+    <li>基础资料 → 工厂资料 → <b>新建</b>：填名称、主身份（面料/辅料供应商、委外加工商、货代、测试、出口、其他 7 类）、可开票、联系人/电话、地址、银行、税号等。编号自动 <code>S001</code> 递增。</li>
+    <li>双身份工厂（既供料又加工）：主身份选一类，<b>附加身份</b>补另一类——合同选甲方时按身份过滤，双身份两边都能被选到。</li>
+    <li>CSV 批量导入：下载模板 → 填好上传 → 逐行校验入库，错误行单独提示。</li>
+    <li>要走门户协同的工厂：在工厂档案<b>开通门户账号</b>（推送合同前必须开通，否则推送被拦截并提示）。</li>
+  </ol>
+  <h4>业务分支与规则</h4>
+  <div class="tablebox"><table>
+    <tr><th>分支</th><th>系统行为</th></tr>
+    <tr><td>删除被引用的工厂</td><td><b>拦截</b>——被 合同/订单/对账/付款申请/预付款/样衣材料 任一引用即不可删，提示引用来源</td></tr>
+    <tr><td>停用工厂</td><td>所有单据下拉不再出现；存量单据不受影响</td></tr>
+    <tr><td>合同选甲方过滤</td><td>材料合同只列 面料/辅料/其他；加工合同只列 委外加工商/其他（含附加身份）</td></tr>
+  </table></div>
+
+  <h3>2.2 客户资料（机密单据 🔒）</h3>
+  <ol class="steps">
+    <li>新建：选类型——<b>中间商</b>（编号 <code>CM001</code>）或<b>最终买家</b>（编号 <code>FE001</code>，<b>必须关联中间商</b>，下拉只列中间商）。</li>
+    <li><b>联系人子表不能为空</b>（保存时校验）；客户名称全局唯一；银行子表开户名自动=客户名称；另有快递账号子表。</li>
+    <li>保存成功 → 系统<b>自动为创建人登记机密权限</b>（查看+修改）。</li>
+  </ol>
+  <h4>🔒 机密授权（谁能看到这个客户）</h4>
+  <div class="tablebox"><table>
+    <tr><th>场景</th><th>操作 / 系统行为</th></tr>
+    <tr><td>默认可见范围</td><td>创建人 + 被授权人 + 管理员。其他人：客户列表<b>看不到这行</b>、详情返回「不存在」（防探测）、所有单据的客户下拉里也没有、<b>该客户名下的报价单同样整单隐藏</b></td></tr>
+    <tr><td>批量授权（仅管理员）</td><td>客户列表勾选多条 → 工具栏「批量授权机密权限」→ 勾选用户（多选）→ 选权限级别 <b>仅查看 / 查看+修改</b> → 确认。重复授权自动幂等升降级</td></tr>
+    <tr><td>查看/撤销单客户授权</td><td>行操作「授权」→ 弹出该客户的授权清单（用户/角色/级别）→ 可逐条撤销</td></tr>
+    <tr><td>仅查看者试图修改</td><td>被拒并提示「仅有查看权限，无修改权限」</td></tr>
+    <tr><td>非管理员调授权</td><td>接口层直接 403</td></tr>
+  </table></div>
+
+  <h3>2.3 本司主体（多抬头）</h3>
+  <p>管理员维护本司公司主体（全称/地址/税号/开户行/法人/Logo），可设<b>默认主体</b>。取数方：合同乙方/委托方下拉、合同与报价 PDF 抬头、（未来）开票抬头。</p>
+</section>
+
+<!-- ===================== 3 样衣 ===================== -->
+<section class="mod" id="sample">
+  <h2><span class="no">03</span>样衣管理</h2>
+  <div class="mod-sub">业务建档 → 推版师打样 → 寄出/寄回 → 工时对账 → 完成/成单 · 编号 <code>S-YYYYMMDD-序号</code></div>
+  <h3>标准流程</h3>
+  <ol class="steps">
+    <li><b>业务</b>新建样衣：款号、品类、中间商、材料明细等 → 状态 <span class="tag t-navy">待派单</span>。</li>
+    <li>点<b>推送版师</b>（可同时填材料寄出单号）→ <span class="tag t-amber">打样中</span>。</li>
+    <li><b>版师视图</b>保存：实际耗用、拉链长度、寄回单号、件数、工时单价（此步允许在 打样中/已寄出/已寄回/已对账 状态下补录）。</li>
+    <li>标记<b>已寄出</b> → <span class="tag t-amber">已寄出</span>；版师填寄回单号后 → 已寄回。</li>
+    <li>件数+工时单价齐了 → 走<b>工时对账</b>（见分支）→ <span class="tag t-green">已对账</span>。</li>
+    <li>标记<b>完成</b>（仅 已对账/已完成 状态可点）；若后续被报价转成销售合同 → 自动 <span class="tag t-green">已成单</span>（列表绿色加粗）。</li>
+  </ol>
+  <h4>业务分支</h4>
+  <div class="tablebox"><table>
+    <tr><th>分支</th><th>规则</th></tr>
+    <tr><td>状态机守卫</td><td>推送版师仅限 待派单/打样中；标记完成仅限 已对账/已完成——乱序操作被拦截并提示</td></tr>
+    <tr><td>工时对账（多款合并）</td><td>对账管理 →「工时对账」：自由勾选<b>多款样衣</b>（须同一版师、每款件数×工时单价&gt;0）合并生成一张工时对账单（类型 LABOR、币种 CNY、按月归账期），样衣转已对账</td></tr>
+    <tr><td>复制样衣</td><td>行操作「复制」→ 基本信息+材料明细复制为新单（待派单）</td></tr>
+    <tr><td>删除</td><td>仅「待派单」可删；被报价等引用时拦截</td></tr>
+    <tr><td>变更记录</td><td>详情内可查看历次变更版本</td></tr>
+  </table></div>
+  <p><b>数据流转</b>：材料明细 → 报价「从样衣导入」；件数/工时单价 → 工时对账单；被成单状态 ← 报价回写。</p>
+</section>
+
+<!-- ===================== 4 报价 ===================== -->
+<section class="mod" id="quote">
+  <h2><span class="no">04</span>客户报价</h2>
+  <div class="mod-sub">对客报价核价 · 编号 <code>Q-</code> · <b>版师/打样整个模块不可见</b>（F1）</div>
+  <h3>标准流程</h3>
+  <ol class="steps">
+    <li>新建：选<b>中间商</b>（必填，受客户机密过滤）、可选最终买家、款号、币种/汇率/利润率。费用明细自动带 6 行常用费用。</li>
+    <li>「<b>从样衣导入</b>」把样衣材料明细带入报价明细行（部位/品名/门幅/颜色/供应商/耗用/损耗%/RMB单价）。</li>
+    <li>核对 RMB 合计 / USD 报价（汇率、利润率换算）→ <b>发出报价</b> → <span class="tag t-amber">已报价</span>。</li>
+    <li>客户砍价 → 「客户调整」→ <span class="tag t-amber">客户调整</span> → 改完再次发出。</li>
+    <li>谈成 → 「<b>转销售合同</b>」→ <span class="tag t-green">已成单</span>，关联样衣同步已成单。之后去订单模块「从报价一键导入」。</li>
+  </ol>
+  <h4>业务分支</h4>
+  <div class="tablebox"><table>
+    <tr><th>分支</th><th>规则</th></tr>
+    <tr><td>超阈值审批</td><td>发出报价时金额超系统阈值 → 转 <span class="tag t-gold">待审批</span>，主管「审批」通过后方可发出</td></tr>
+    <tr><td>编辑窗口</td><td>仅 草稿/客户调整 状态可编辑（覆盖式保存）</td></tr>
+    <tr><td>订单导入门槛（A7）</td><td>只有 已报价/客户调整/已成单 的报价才能被订单导入——草稿不可</td></tr>
+    <tr><td>对客打印</td><td>打印报价单自动<b>隐藏供应商名</b>（对客脱敏）；抬头取默认本司主体</td></tr>
+    <tr><td>客户机密联动</td><td>非授权用户在报价列表/详情中<b>看不到机密客户的报价单</b>（整单隐藏、详情404）</td></tr>
+    <tr><td>复制 / 删除</td><td>复制→新草稿；仅草稿可删</td></tr>
+  </table></div>
+</section>
+
+<!-- ===================== 5 订单 ===================== -->
+<section class="mod" id="order">
+  <h2><span class="no">05</span>订单管理</h2>
+  <div class="mod-sub">采购与生产的共同源头 · 编号 <code>O-YYYYMMDD-序号</code> · 大货总数=尺码矩阵所有格子之和</div>
+  <h3>标准流程</h3>
+  <ol class="steps">
+    <li>新建订单 → 「<b>从报价一键导入</b>」：带出款号/客户/中间商/买家 + 报价明细复制为材料明细（单件耗用=报价耗用，快照）。业务只补：客户 PO 号、约定交期、生产工厂（下拉=委外加工商）。</li>
+    <li>填<b>尺码数量搭配矩阵</b>：行=款号·颜色·尺码；列=各 PO（列头三行：PO号/目的地/收货人，可「＋加 PO 列」）；格填数量。行 TOTAL、各 PO 合计、<b>总计自动回填「大货总数量」</b>；下方自动出「总数量搭配（不分PO）」汇总。</li>
+    <li>或用「📋 Excel 导入」四步：下载模板（CSV，Excel 直接打开填写）→ 上传 → 系统校验（款号/尺码/非负整数/PO 表头，异常行逐条提示）→ 确认入库生成矩阵。</li>
+    <li>核对<b>材料明细/用料核算</b>：系统采购量 = 大货总数 × 单件耗用 × (1+损耗%)；整数类单位（个/条/只…）自动向上取整（可逐行强制/关闭）；<b>最终采购量偏离系统值超 ±10% 弹二次确认</b>。</li>
+    <li>每行可设<b>拆分</b>：不拆 / 按尺码 / 按颜色——展开行实时预览分色分码出量（某色该料量=该色件数×耗用×(1+损耗)），生成材料合同时按此拆行。</li>
+    <li>保存 → 「推进状态」下单（超阈值需主管审批）→ 去合同模块生成材料/加工合同。</li>
+  </ol>
+  <h4>状态机</h4>
+  <p><span class="tag t-navy">草稿</span> → 推进 → <span class="tag t-navy">已下单</span> → 生成合同自动 → <span class="tag t-amber">已生成合同</span> → <span class="tag t-amber">生产中</span> → 对账确认自动 → <span class="tag t-green">已完成</span>。<b>仅草稿可编辑/删除</b>。</p>
+  <h4>其他分支</h4>
+  <div class="tablebox"><table>
+    <tr><th>分支</th><th>规则</th></tr>
+    <tr><td>附件档案 5 类</td><td>彩稿/大货尺寸表/大货纸板/包装资料/填充量，多文件上传；加工合同推送后同步给加工厂门户</td></tr>
+    <tr><td>出货记录</td><td>详情内添加出货记录（船务口径，供结算出货件数汇总）</td></tr>
+    <tr><td>脱敏</td><td>版师/打样查看订单时对客单价隐藏</td></tr>
+  </table></div>
+</section>
+
+<!-- ===================== 6 合同 ===================== -->
+<section class="mod" id="contract">
+  <h2><span class="no">06</span>合同管理（材料 / 加工两类编辑页）</h2>
+  <div class="mod-sub">编号 <code>HT-YYYYMMDD-序号</code>，补料合同 <code>补料-原合同号-序号</code> · 列表页两个新建按钮分别进两类编辑页</div>
+  <h3>建材料合同（原料/辅料购销协议：甲方=供应商，乙方=本司）</h3>
+  <ol class="steps">
+    <li>合同列表 → <b>新建材料合同</b> → 编辑页。选<b>关联订单</b>（关联款号自动带出，可多选补充）、选<b>甲方(供方)</b>（自动带出住所/代表/电话）。乙方=本司主体（默认抬头）、乙方代表默认登录人可改。</li>
+    <li>「🔵 <b>选订单款号带入</b>」→ 货物明细自动生成：品名/规格/颜色/尺码/单位/<b>数量=采购量(含损耗)</b>/单价（带参考价可改）/小计/款号/交货期限（默认=订单交期−45天）/照片（可传材料图）。分色/分码材料自动按矩阵拆多行。可加行/删行/微调（<b>不回写订单</b>）。</li>
+    <li>选填：签约地点/日期（默认今天）、<b>发货地址</b>（材料发往加工厂，供门户发货带入）、担保人(丙方)+身份证照片、定金/中期/尾款比例（<b>三者之和必须=100%</b>）、账期（材料默认 90 天）。</li>
+    <li><b>合同条款</b>分区：质量标准/交货方式/验收/货款结算/违约/争议 六条模板填空可改，随合同归档；填了担保人 → PDF 自动插入丙方连带担保条款。</li>
+    <li>保存 → 生成合同号；「📄 生成 PDF」出正式合同文本（可打印/另存 PDF）；「📤 <b>推送供应商</b>」进门户。</li>
+  </ol>
+  <h3>建加工合同（委托加工合同：受托方=加工厂，委托方=本司）</h3>
+  <p>流程同上，差异点：甲方过滤=委外加工商；货物明细列为 货号/品名及规格/数量（<b>带订单大货数</b>）/加工单价（业务现填）/总价/交期（默认=订单交期−10天）；多一个「<b>价格包含项</b>」分区——工缴/裁剪/线/后道/运费/纸箱/拷贝纸/干燥剂/运杂费/进仓费 勾选（默认全含、胶袋不含）+ 增值税%（默认13，含税不另计）+ 其他手填，勾选汇入 PDF「以上价格包含…」段落，<b>不改合同金额</b>；账期默认 45 天。</p>
+  <h4>业务分支</h4>
+  <div class="tablebox"><table>
+    <tr><th>分支</th><th>规则</th></tr>
+    <tr><td>超阈值审批</td><td>推送时金额超阈值 → 转「待审批」，主管审批通过后才可推送</td></tr>
+    <tr><td>推送前置校验</td><td>该工厂必须已开通门户账号，否则拦截提示</td></tr>
+    <tr><td>撤销推送</td><td>供应商<b>未盖章前</b>可「撤销推送」回草稿修改；重推后门户红条提示「合同已更新，请重新核对」，供应商重新盖章后标记清除</td></tr>
+    <tr><td>编辑锁定（E5）</td><td>草稿全字段可改（改明细自动重算总额；<b>金额变化会重置已通过的审批</b>）；已推送/盖章后仅「备注」可改——要改先撤销推送</td></tr>
+    <tr><td>盖章快照</td><td>供应商盖章瞬间锁定金额/明细快照，此后对账按快照单价</td></tr>
+    <tr><td>补料（仅材料合同）</td><td>「🧩 补料」= 复制原合同全部信息与材料清单，<b>各行数量清零</b>由业务填实际补料量；编号「补料-原合同号-NN」不占主序号，独立走门户</td></tr>
+    <tr><td>复制 / 删除</td><td>复制→新草稿（签约日期重置为今天）；仅草稿可删；被发货/对账引用禁止删</td></tr>
+    <tr><td>发货批次审批（B2）</td><td>合同详情「发货批次」表：业务/主管对每批发货「通过/驳回」——<b>通过后供应商门户才能勾选该批次对账</b>；已被对账引用的批次不可改审批</td></tr>
+    <tr><td>供应商拆单</td><td>订单侧「生成材料合同」按材料供应商自动拆成多张合同；供应商没建工厂档案的归入「未匹配」提示补档</td></tr>
+    <tr><td>到期日</td><td>= 最后发货日 + 账期天数；详情与应付列表逾期红标</td></tr>
+  </table></div>
+</section>
+
+<!-- ===================== 7 门户 ===================== -->
+<section class="mod" id="portal">
+  <h2><span class="no">07</span>供应商门户（手机 H5）· 四步顺序锁定</h2>
+  <div class="mod-sub">🔖盖章 → 📦发货 → 🧾对账 → 💵开票，前一步未完成后面按钮不可点</div>
+  <h3>四步操作</h3>
+  <ol class="steps">
+    <li><b>🔖 我要盖章</b>：打开合同详情核对材料/金额 → 勾选「我已阅读并同意合同条款」（不勾不能提交）→ 确认盖章。盖章后明细锁定快照，进入发货。</li>
+    <li><b>📦 我要发货</b>：填本次实发数量 + 快递公司/单号 + 附件（装箱单/货物照片）+ 备注 → 提交。<b>可多次发货</b>，页面显示累计已发；每批发货单号 <code>FH-款号-序号</code>，逐批锁定当时合同单价。<b>每批提交后等达泰业务审批</b>（批次卡显示 待审批/已审批/已驳回/已对账 标签）。</li>
+    <li><b>🧾 我要对账</b>：至少一批发货被审批通过后按钮解锁 → 弹窗勾选批次（未审批/已对账的置灰不可选，默认全选可对账批次）→ 系统按 <b>合同单价×发货数量</b> 自动算对账金额 → 「确认对账·推业务审批」生成对账单 <code>DZ-款号-序号</code>（直接进业务复核）。业务确认后合同转「已对账」解锁开票。</li>
+    <li><b>💵 我要开票</b>：填发票号 + 发票金额 + 上传发票（照片/PDF）→ 提交。<b>发票金额必须=对账金额（±0.01）</b>否则拦截；发票号全局查重防重复报销。提交成功后系统<b>自动生成付款申请推给达泰财务</b>。</li>
+  </ol>
+  <h4>拦截与分支</h4>
+  <div class="tablebox"><table>
+    <tr><th>场景</th><th>系统行为</th></tr>
+    <tr><td>超发</td><td>本次发货后累计超合同量 → 拦截提示，弹「超发确认」二次确认后才放行</td></tr>
+    <tr><td>勾未审批批次对账</td><td>拒绝并列出未通过审批的批次号</td></tr>
+    <tr><td>同批次重复对账</td><td>拒绝（批次被对账单占用；内部删除该对账单后自动释放可重选）</td></tr>
+    <tr><td>对账前开票</td><td>拒绝：「开票须在对账通过后进行」</td></tr>
+    <tr><td>合同被撤回重推</td><td>门户红条「合同已更新，请重新核对」，需重新盖章</td></tr>
+    <tr><td>加工合同专属</td><td>详情多一块「订单明细（加工同步）」：订单号/款号/大货数/纸板/尺寸表/填充量附件/订量明细</td></tr>
+  </table></div>
+</section>
+
+<!-- ===================== 8 对账 ===================== -->
+<section class="mod" id="reconcile">
+  <h2><span class="no">08</span>对账管理</h2>
+  <div class="mod-sub">编号 <code>DZ-款号-序号</code>（无合同 <code>DZ-费用-序号</code>）· 三种类型 · 业务提交 + 主管复核二级审批</div>
+  <h3>三种对账单</h3>
+  <div class="tablebox"><table>
+    <tr><th>类型</th><th>怎么来</th><th>金额口径</th></tr>
+    <tr><td><b>合同对账</b>（CONTRACT）</td><td>供应商门户「我要对账」勾批次自动生成（直接进待复核）；或业务在对账管理手工新建挑出货批次</td><td>Σ 批次快照单价×数量；一张单只能同一类型合同（材料或加工），不可混</td></tr>
+    <tr><td><b>无合同空白对账单</b>（NO_CONTRACT）</td><td>业务手工新建，子类型三选一：<b>费用 / 现金无票 / 预付款</b></td><td>Σ 费用明细行（费用名/金额/款号/附件）</td></tr>
+    <tr><td><b>工时对账</b>（LABOR）</td><td>勾选多款样衣（同一版师）合并生成</td><td>Σ 各款件数×工时单价，CNY，按月归账期</td></tr>
+  </table></div>
+  <h3>审批流（二级）</h3>
+  <p><span class="tag t-navy">草稿</span> →业务「提交复核」→ <span class="tag t-gold">待复核</span> →主管「复核确认」→ <span class="tag t-green">已确认</span> →付款付清自动→ <span class="tag t-green">已付款</span>。主管也可「<b>整单退回</b>」（回草稿并记退回批注）。</p>
+  <h4>关键规则</h4>
+  <ul>
+    <li><b>发票校验</b>：含票对账单复核确认时校验发票金额=对账金额（±0.01），不一致拦截、不进付款。</li>
+    <li><b>发票号全局唯一</b>：录重复发票号直接拒绝（应用层+数据库唯一索引双保险）。</li>
+    <li>合同对账确认 → 联动合同门户状态「已对账」+ 订单「已完成」。</li>
+    <li>删除仅限草稿；删除后释放被占用的发货批次（供应商可重新勾选对账）。</li>
+  </ul>
+</section>
+
+<!-- ===================== 9 付款 ===================== -->
+<section class="mod" id="payment">
+  <h2><span class="no">09</span>付款管理</h2>
+  <div class="mod-sub">编号 <code>PR-</code>（无合同 <code>PR-NC-</code>）· 预付款冲抵 · 审批后分批付款 · 账期到期日逾期高亮</div>
+  <h3>预付款 Tab</h3>
+  <p>财务/管理员创建预付款（工厂/金额/付款日期）；页面实时显示所选工厂<b>可用预付余额</b>。新建付款申请时可「冲抵预付款」——冲抵额不得超申请金额、不得超可用余额（均拦截）。</p>
+  <h3>付款申请 Tab · 标准流程</h3>
+  <ol class="steps">
+    <li>来源两种：<b>门户开票自动生成</b>（PENDING，带账期/到期日，描述注明发票号）；或手工新建（类型 合同付款/非合同付款，可冲抵预付）→ 草稿 → 「提交」。</li>
+    <li>管理员「批准」（同时扣减预付余额）或「驳回」（填原因）。</li>
+    <li>已审批后点「<b>付款</b>」→ 财务付款弹窗（可分批）：显示 <b>应付总额 / 已付总额 / 未付余额</b> 三栏 + 历史分批记录表 → 填 付款方式（银行转账/承兑汇票/其他）、付款日期、<b>本次付款金额（默认=余额，可改小分批付）</b>、水单（点击/拖拽/Ctrl+V 粘贴截图上传）、备注 → 确认付款。</li>
+    <li>系统自动累计已付/未付；<b>余额=0 整单转「已付款」</b>并联动对账单已付款。已付清后「付款记录」可随时查历史批次。</li>
+  </ol>
+  <h4>拦截与规则</h4>
+  <div class="tablebox"><table>
+    <tr><th>场景</th><th>系统行为</th></tr>
+    <tr><td>同一对账单累计申请超应付</td><td>拦截（含并发场景，数据库行锁串行化）</td></tr>
+    <tr><td>分批累计超应付</td><td>拦截并显示已付/应付数字</td></tr>
+    <tr><td>已付清再付 / 未审批就付</td><td>均拒绝</td></tr>
+    <tr><td>账期 / 到期日</td><td>创建时自动从合同带入（到期日=最后发货日+账期）；列表到期日<b>逾期红标</b></td></tr>
+    <tr><td>删除</td><td>仅草稿</td></tr>
+  </table></div>
+</section>
+
+<!-- ===================== 10 结算 ===================== -->
+<section class="mod" id="settle">
+  <h2><span class="no">10</span>结算清单（成本利润核算）</h2>
+  <div class="mod-sub">编号 <code>JS-款号-序号</code> · 成本/毛利<b>仅财务与管理可见</b> · 按款号自动聚合</div>
+  <h3>标准流程</h3>
+  <ol class="steps">
+    <li>新建 → <b>搜款号选订单</b>（下拉「款号·订单号」可搜索）→ 系统按该款号自动聚合：<b>总货款(含税)</b>=已确认合同对账合计、<b>期间费用</b>=无合同对账合计；出货件数汇总自订单出货记录。可人工覆盖。</li>
+    <li>补录收汇口径：发票金额(USD)、实际收汇(USD)、结算汇率 → 系统算 结算金额(RMB)=收汇×汇率、美金单价、保本汇率。</li>
+    <li>费用与税：运杂费/快邮费/打样费/其它费用（可加费用明细行，各行可设税率——有票按税率换不含税，无票按含税全额）；<b>财务及管理费=结算金额×7%</b>；<b>出口退税自动测算</b>（可退税不含税采购额×退税率，回款到账后置「已到账」）。</li>
+    <li>登记<b>回款</b>；对账付款侧有新付款后点「刷新付款汇总」重算总货款。</li>
+    <li>核对 含退税净利（列表红/绿标注亏盈）→ 「确认」定稿 <span class="tag t-green">已确认</span>。</li>
+  </ol>
+  <p><b>规则</b>：总货款只计<b>合同对账</b>（无合同费用单独进期间费用，不重复扣减）；仅草稿可删；版师/打样看列表时净利显示「—」。</p>
+</section>
+
+<!-- ===================== 11 报表 ===================== -->
+<section class="mod" id="stats">
+  <h2><span class="no">11</span>报表统计</h2>
+  <div class="mod-sub">需求出处：《全流程问题确认清单 v1.0》I 段业务确认——「本期出：转化漏斗 + 成单率 + 利润汇总（亏损预警）」（8 份 UI 稿之外的业务确认项，2026-07-05 实现）</div>
+  <div class="tablebox"><table>
+    <tr><th>报表</th><th>内容</th><th>可见角色</th></tr>
+    <tr><td>转化漏斗</td><td>样衣建档 → 客户报价 → 订单成单 三级数量与转化率（条形图）</td><td>管理/业务/财务/主管</td></tr>
+    <tr><td>成单率</td><td>按<b>业务员/客户</b>两维切换，报价→成单比例进度条</td><td>同上</td></tr>
+    <tr><td>利润汇总</td><td>按 款号/月份/客户 汇总结算净利与毛利率，<b>净利&lt;0 亏损预警置顶红标</b>；支持导出 CSV</td><td>仅 管理/财务/主管</td></tr>
+  </table></div>
+  <p>版师/打样整个菜单不可见；版师调利润接口直接 403。</p>
+</section>
+
+<!-- ===================== 12 系统 ===================== -->
+<section class="mod" id="sys">
+  <h2><span class="no">12</span>用户反馈 · 系统报错（运维支撑）</h2>
+  <h3>用户反馈（全员可用）</h3>
+  <p>任何页面右下角<b>悬浮反馈按钮</b> → 弹窗填问题描述 + 截图（可多图）→ 提交（自动带当前页面地址）。管理员在「反馈管理」查看、标记已处理（可附回复）、<b>导出 HTML</b>（已处理的不导出）。</p>
+  <h3>系统报错（仅管理员）</h3>
+  <p><b>全自动</b>：服务器任何 5xx 异常自动归档——同类报错按「接口+异常类型+消息」指纹<b>去重累计次数</b>，记录首末时间、<b>请求输入（query/params/body）、响应输出、堆栈、操作人/IP</b>。管理员在「系统报错」排查 → 修复后标记「已处理」→ 导出 HTML 只含未处理项，可直接发给技术。</p>
+</section>
+
+<!-- ===================== 附录 ===================== -->
+<section class="mod" id="apxA">
+  <h2><span class="no">A</span>附录 A · 状态机总表</h2>
+  <div class="tablebox"><table>
+    <tr><th>单据</th><th>状态流</th><th>自动流转点</th></tr>
+    <tr><td>样衣</td><td>待派单→打样中→已寄出→已寄回→已对账→已完成 / 已成单</td><td>已成单←报价转合同回写</td></tr>
+    <tr><td>报价</td><td>草稿→已报价⇄客户调整→已成单</td><td>—（超阈值插入 待审批）</td></tr>
+    <tr><td>订单</td><td>草稿→已下单→已生成合同→生产中→已完成</td><td>已生成合同←建合同；已完成←对账确认</td></tr>
+    <tr><td>合同(门户)</td><td>草稿→已推送→已盖章→出货中→已对账</td><td>已对账←对账复核确认；撤销推送回草稿</td></tr>
+    <tr><td>发货批次</td><td>待审批→已审批/已驳回 →(被对账占用)</td><td>对账单删除自动释放</td></tr>
+    <tr><td>对账</td><td>草稿→待复核→已确认→已付款（退回→草稿）</td><td>已付款←付款申请付清</td></tr>
+    <tr><td>付款申请</td><td>草稿→待审批→已审批→已付款（驳回→已驳回）</td><td>已付款←分批余额=0</td></tr>
+    <tr><td>结算</td><td>草稿→已确认</td><td>—</td></tr>
+  </table></div>
+</section>
+
+<section class="mod" id="apxB">
+  <h2><span class="no">B</span>附录 B · 编号规则</h2>
+  <div class="tablebox"><table>
+    <tr><th>单据</th><th>格式</th><th>示例</th></tr>
+    <tr><td>工厂 / 中间商 / 买家</td><td>全局递增</td><td><code>S001</code> / <code>CM001</code> / <code>FE001</code></td></tr>
+    <tr><td>样衣 / 报价 / 订单 / 合同 / 付款</td><td>前缀-日期-序号</td><td><code>S-20260710-001</code> <code>Q-…</code> <code>O-…</code> <code>HT-…</code> <code>PR-…</code>（无合同 <code>PR-NC-…</code>）</td></tr>
+    <tr><td>对账 / 发货 / 结算</td><td>前缀-款号-序号</td><td><code>DZ-M525-001</code> <code>FH-M525-001</code> <code>JS-M525-001</code>（无合同对账 <code>DZ-费用-…</code>）</td></tr>
+    <tr><td>补料合同</td><td>补料-原合同号-NN</td><td><code>补料-HT-20260710-001-01</code></td></tr>
+  </table></div>
+  <p>发号高可用：Redis 快速发号 + 数据库影子兜底——<b>Redis 故障时建单不中断</b>，恢复后自动接续不重号。</p>
+</section>
+
+<section class="mod" id="apxC">
+  <h2><span class="no">C</span>附录 C · 角色权限矩阵（关键动作）</h2>
+  <div class="tablebox"><table>
+    <tr><th>动作</th><th class="c">管理</th><th class="c">业务</th><th class="c">财务</th><th class="c">主管</th><th class="c">版师/打样</th></tr>
+    <tr><td>建/编辑 客户·样衣·报价·订单·合同·对账</td><td class="c">✓</td><td class="c">✓</td><td class="c">部分</td><td class="c">查看</td><td class="c">样衣版师视图</td></tr>
+    <tr><td>查看报价模块</td><td class="c">✓</td><td class="c">✓</td><td class="c">✓</td><td class="c">✓</td><td class="c">✗ (F1)</td></tr>
+    <tr><td>超阈值审批（报价/订单/合同）</td><td class="c">✓</td><td class="c">✗</td><td class="c">✗</td><td class="c">✓</td><td class="c">✗</td></tr>
+    <tr><td>发货批次审批</td><td class="c">✓</td><td class="c">✓</td><td class="c">✗</td><td class="c">✓</td><td class="c">✗</td></tr>
+    <tr><td>对账复核确认/退回</td><td class="c">✓</td><td class="c">✗</td><td class="c">✓</td><td class="c">✓</td><td class="c">✗</td></tr>
+    <tr><td>付款审批 / 分批付款登记</td><td class="c">✓</td><td class="c">✗</td><td class="c">✓(付款)</td><td class="c">✗</td><td class="c">✗</td></tr>
+    <tr><td>结算成本/毛利可见</td><td class="c">✓</td><td class="c">✗</td><td class="c">✓</td><td class="c">✓</td><td class="c">✗</td></tr>
+    <tr><td>客户机密批量授权 / 删除类 / 反馈管理 / 系统报错</td><td class="c">✓</td><td class="c">✗</td><td class="c">✗</td><td class="c">✗</td><td class="c">✗</td></tr>
+  </table></div>
+  <p style="font-size:12.5px;color:var(--ink-3)">注：以上为概览，细粒度以各接口实际角色注解为准（如工时对账、利润报表见各模块章节）。</p>
+</section>
+
+<section class="mod" id="gap">
+  <h2><span class="no">D</span>附录 D · 与 UI 设计稿的已知差异（如实声明）⚠️</h2>
+  <div class="mod-sub">核心业务流程与五大项均已实现并经真实环境端到端验证，但以下条目未做或做了简化——验收时请知悉</div>
+  <div class="tablebox"><table>
+    <tr><th>#</th><th>设计稿条目</th><th>实际状态</th></tr>
+    <tr class="warn"><td>1</td><td>电子章图片自动贴 PDF 落款（合同 D5）</td><td><b>未做</b>电子章图片管理；PDF 落款为文字占位</td></tr>
+    <tr><td>2</td><td>服务端 PDF 套模板/多行分页/对供应商脱敏（D6）</td><td>简化为浏览器打印视图（合同文本/条款/担保条款齐全，可另存 PDF）</td></tr>
+    <tr class="warn"><td>3</td><td>可信时间戳/电子签章存证（合同 E6）</td><td><b>未做</b>（需第三方存证服务）</td></tr>
+    <tr><td>4</td><td>交期偏移（−10/−45天）系统参数可配置（A7）</td><td>默认值固定；逐单可改 ✓，参数化 ✗</td></tr>
+    <tr><td>5</td><td>门户推送生成专属链接/小程序通知（B3）</td><td>无推送通知；供应商登录门户账号后可见</td></tr>
+    <tr><td>6</td><td>尺码搭配 Excel(.xlsx) 导入</td><td>CSV 模板（Excel 直接打开编辑另存），避免引入有安全通告的 xlsx 依赖</td></tr>
+    <tr><td>7</td><td>机密授权粒度：查看/修改/附件/提醒 多档（D.3）</td><td>实现 查看/修改 两级；附件/提醒子功能系统本身不存在</td></tr>
+    <tr><td>8</td><td>机密客户「在合同/订单中不可见」</td><td>客户/报价已行级过滤；合同列表本无客户列；<b>订单/样衣列表的中间商名称快照未遮蔽</b></td></tr>
+    <tr><td>9</td><td>应付汇总「到期日范围」筛选器</td><td>到期日列+逾期红标 ✓；范围筛选器未加</td></tr>
+    <tr><td>10</td><td>合同独立「提交审批」按钮</td><td>合并进推送动作（超阈值自动转待审批）</td></tr>
+    <tr><td>11</td><td>⑧大货生产 / ⑨船务、币种汇率字典、出口发票子模块</td><td>业务方已拍板<b>暂缓/不做</b></td></tr>
+  </table></div>
+  <p>另注：01 基础资料 / 02 报价 / 02 样衣 三份稿按早期审计清单逐项修复覆盖，未做本轮逐字段重比对；如需 100% 字段级比对可另行安排专项核对。</p>
+</section>
+
+<footer>I9 服装制造管理系统 · 用户操作手册 v1.0 · 2026-07-10 · 依据 main 分支实际代码与接口编写</footer>
+</div>
+</body>
+</html>
