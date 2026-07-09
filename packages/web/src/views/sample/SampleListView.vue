@@ -78,7 +78,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search, Plus, Download, Delete, CopyDocument, ArrowDown } from '@element-plus/icons-vue';
 import { sampleApi } from '@/api/sample';
 import { useAuthStore } from '@/stores/auth';
@@ -121,6 +121,7 @@ async function copyOne() {
   catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '复制失败'); }
 }
 async function batchRemove() {
+  try { await ElMessageBox.confirm(`确认删除选中的 ${selected.value.length} 条记录?此操作不可恢复。`, "批量删除", { type: "warning" }); } catch { return; }
   let ok = 0, fail = 0;
   for (const row of selected.value) { try { await sampleApi.remove(row.id); ok++; } catch { fail++; } }
   ElMessage[fail ? 'warning' : 'success'](`删除完成：成功 ${ok} 条${fail ? `，拦截 ${fail} 条(仅待派单/未被引用可删)` : ''}`);

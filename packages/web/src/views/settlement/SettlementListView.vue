@@ -46,7 +46,8 @@
         </el-table-column>
         <el-table-column prop="net_profit" label="含退税净利" width="120" align="right">
           <template #default="{ row }">
-            <span :class="{ 'text-danger': +row.net_profit < 0, 'text-success': +row.net_profit > 0 }">
+            <span v-if="row.net_profit == null" class="muted">—</span>
+            <span v-else :class="{ 'text-danger': +row.net_profit < 0, 'text-success': +row.net_profit > 0 }">
               {{ (+row.net_profit).toFixed(2) }}
             </span>
           </template>

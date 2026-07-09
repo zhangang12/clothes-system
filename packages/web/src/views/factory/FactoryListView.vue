@@ -100,7 +100,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search, Plus, Upload, Download, Delete, ArrowDown } from '@element-plus/icons-vue';
 import { factoryApi } from '@/api/factory';
 import { useAuthStore } from '@/stores/auth';
@@ -166,6 +166,7 @@ async function remove(id: number) {
   }
 }
 async function batchRemove() {
+  try { await ElMessageBox.confirm(`确认删除选中的 ${selected.value.length} 条记录?此操作不可恢复。`, "批量删除", { type: "warning" }); } catch { return; }
   let ok = 0, fail = 0;
   for (const row of selected.value) {
     try { await factoryApi.remove(row.id); ok++; } catch { fail++; }

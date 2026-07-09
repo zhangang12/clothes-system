@@ -26,7 +26,7 @@
       <el-table :data="list" v-loading="loading" border stripe @row-dblclick="viewDetail">
         <el-table-column prop="contract_no" label="合同编号" width="160" sortable />
         <el-table-column label="类型" width="100"><template #default="{ row }"><el-tag size="small" effect="light">{{ typeLabel(row.type) }}</el-tag></template></el-table-column>
-        <el-table-column label="合同金额" width="130" align="right"><template #default="{ row }">{{ row.currency }} {{ (+row.total_amount).toFixed(2) }}</template></el-table-column>
+        <el-table-column label="合同金额" width="130" align="right"><template #default="{ row }"><span v-if="row.total_amount == null">—</span><span v-else>{{ row.currency }} {{ (+row.total_amount).toFixed(2) }}</span></template></el-table-column>
         <el-table-column label="定金/中期/尾款" width="150" align="center"><template #default="{ row }">{{ row.deposit_ratio }}/{{ row.mid_ratio }}/{{ row.final_ratio }}%</template></el-table-column>
         <el-table-column prop="account_period_days" label="账期(天)" width="90" align="right" />
         <el-table-column label="门户状态" width="150"><template #default="{ row }"><el-tag :type="portalTagType(row.portal_status)" size="small">{{ portalLabel(row.portal_status) }}</el-tag><el-tag v-if="row.approval_status === 'PENDING'" type="warning" size="small" style="margin-left:4px">待审批</el-tag><el-tag v-if="Number(row.revised) === 1 && row.portal_status === 'PUSHED'" type="danger" size="small" style="margin-left:4px">已更新</el-tag></template></el-table-column>
