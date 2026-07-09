@@ -2,7 +2,7 @@ import {
   Injectable, NotFoundException, BadRequestException, ConflictException, ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, Like, Not, In, DataSource } from 'typeorm';
+import { Repository, FindOptionsWhere, Like, Not, In, Between, MoreThanOrEqual, LessThanOrEqual, DataSource } from 'typeorm';
 import { Customer } from './customer.entity';
 import { CustomerGrant } from './customer-grant.entity';
 import { CustomerContact } from './customer-contact.entity';
@@ -36,10 +36,13 @@ export class CustomerService {
   // 该用户可见的客户 id 集合；ADMIN（或未传 user 的内部调用）返回 null=不限
   async visibleCustomerIds(user?: { id: number; role?: string }): Promise<number[] | null> {
     if (!user || user.role === 'ADMIN') return null;
-    const [grants, own] = await Promise.all([
+    const today = new Date().toISOString().slice(0, 10);
+    const [allGrants, own] = await Promise.all([
       this.grantRepo.find({ where: { user_id: user.id } }),
       this.repo.find({ where: { created_by: user.id, deleted: 0 }, select: ['id'] }),
     ]);
+    // 有效期过滤(设计 D.3:过期授权自动失效)
+    const grants = allGrants.filter((g) => !g.expire_at || String(g.expire_at).slice(0, 10) >= today);
     const ids = new Set<number>([...grants.map((g) => +g.customer_id), ...own.map((c) => +c.id)]);
     return [...ids];
   }
@@ -55,12 +58,13 @@ export class CustomerService {
   private async assertEditable(entity: Customer, user?: { id: number; role?: string }): Promise<void> {
     if (!user || user.role === 'ADMIN' || +entity.created_by === +user.id) return;
     const grant = await this.grantRepo.findOne({ where: { customer_id: entity.id, user_id: user.id } });
-    if (!grant) throw new NotFoundException(`客户 #${entity.id} 不存在`); // 不可见
+    const expired = grant?.expire_at && String(grant.expire_at).slice(0, 10) < new Date().toISOString().slice(0, 10);
+    if (!grant || expired) throw new NotFoundException(`客户 #${entity.id} 不存在`); // 不可见/授权已过期
     if (!grant.can_edit) throw new ForbiddenException('您对该机密客户仅有查看权限，无修改权限');
   }
 
   // 批量授权（仅管理员，controller 层 @Roles 把关；设计稿 §D.3：选多客户×多用户一次授权）
-  async grantBatch(customerIds: number[], userIds: number[], canEdit: boolean, byUserId: number) {
+  async grantBatch(customerIds: number[], userIds: number[], canEdit: boolean, byUserId: number, expireAt?: string, remark?: string) {
     if (!customerIds?.length || !userIds?.length) {
       throw new BadRequestException('请至少选择 1 个客户和 1 个用户');
     }
@@ -69,14 +73,15 @@ export class CustomerService {
       for (const uid of userIds) {
         const existing = await this.grantRepo.findOne({ where: { customer_id: cid, user_id: uid } });
         if (existing) {
-          if (existing.can_edit !== (canEdit ? 1 : 0)) {
-            existing.can_edit = canEdit ? 1 : 0;
-            await this.grantRepo.save(existing);
-            updated++;
-          }
+          existing.can_edit = canEdit ? 1 : 0;
+          existing.expire_at = (expireAt ?? null) as any;
+          if (remark !== undefined) existing.remark = remark as any;
+          await this.grantRepo.save(existing);
+          updated++;
         } else {
           await this.grantRepo.save(this.grantRepo.create({
-            customer_id: cid, user_id: uid, can_edit: canEdit ? 1 : 0, created_by: byUserId,
+            customer_id: cid, user_id: uid, can_edit: canEdit ? 1 : 0,
+            expire_at: (expireAt ?? null) as any, remark: (remark ?? null) as any, created_by: byUserId,
           }));
           created++;
         }
@@ -88,7 +93,7 @@ export class CustomerService {
   // 某客户的授权清单（含用户姓名，供管理界面展示/撤销）
   async getGrants(customerId: number) {
     return this.dataSource.query(
-      `SELECT g.id, g.customer_id, g.user_id, g.can_edit, g.created_at,
+      `SELECT g.id, g.customer_id, g.user_id, g.can_edit, g.expire_at, g.remark, g.created_at,
               u.username, u.real_name, u.role
          FROM customer_grant g LEFT JOIN sys_user u ON u.id = g.user_id
         WHERE g.customer_id = ? ORDER BY g.id`, [customerId],
@@ -196,7 +201,15 @@ export class CustomerService {
     let created = 0;
     for (let i = 0; i < rows.length; i++) {
       try {
-        await this.create(rows[i], createdBy);
+        // 已存在(同名)记录 → 覆盖更新(设计稿 D.2:导入重复默认更新,不再报错跳过)
+        const existing = rows[i]?.name
+          ? await this.repo.findOne({ where: { name: rows[i].name, deleted: 0 } })
+          : null;
+        if (existing) {
+          await this.update(existing.id, rows[i], { id: createdBy, role: 'ADMIN' });
+        } else {
+          await this.create(rows[i], createdBy);
+        }
         created += 1;
       } catch (e: any) {
         failed.push({ index: i + 1, name: rows[i]?.name, error: e?.message ?? '未知错误' });
@@ -206,7 +219,9 @@ export class CustomerService {
   }
 
   async findAll(query: QueryCustomerDto, user?: { id: number; role?: string }) {
-    const { page = 1, size = 20, keyword, type, grade, status } = query;
+    const { page = 1, size = 20, keyword, type, grade, status,
+      trade_country, cooperation_level, customer_source, salesperson, contact,
+      develop_start, develop_end } = query as any;
     // 机密行级过滤：非管理员只见 自建 + 被授权 客户（设计稿 01：客户属机密单据）
     const visibleIds = await this.visibleCustomerIds(user);
     const base: FindOptionsWhere<Customer> = {
@@ -215,7 +230,28 @@ export class CustomerService {
       ...(type !== undefined && { type }),
       ...(grade !== undefined && { grade }),
       ...(status !== undefined && { status }),
+      // 高级筛选(设计稿 §2.2):国别/合作等级/来源/外销员/开发时间范围
+      ...(trade_country && { trade_country: Like(`%${trade_country}%`) }),
+      ...(cooperation_level && { cooperation_level: Like(`%${cooperation_level}%`) }),
+      ...(customer_source && { customer_source: Like(`%${customer_source}%`) }),
+      ...(salesperson && { salesperson: Like(`%${salesperson}%`) }),
+      ...(develop_start && develop_end
+        ? { develop_date: Between(develop_start, develop_end) }
+        : develop_start ? { develop_date: MoreThanOrEqual(develop_start) }
+        : develop_end ? { develop_date: LessThanOrEqual(develop_end) } : {}),
     };
+    // 联系人检索(姓名/手机,设计稿 §2.2):命中联系人的客户 id 并入过滤
+    if (contact) {
+      const hits = await this.contactRepo
+        .createQueryBuilder('c')
+        .select('DISTINCT c.customer_id', 'cid')
+        .where('c.name LIKE :k OR c.mobile LIKE :k OR c.phone LIKE :k', { k: `%${contact}%` })
+        .getRawMany();
+      const ids = hits.map((h) => +h.cid);
+      const cur = (base as any).id;
+      const merged = cur ? ids.filter((x) => JSON.stringify(cur).includes(String(x))) : ids;
+      Object.assign(base, { id: In(merged.length ? merged : [0]) });
+    }
     // 智能搜索：客户编号/贸易国别/国家区域/所在城市/公司主页/详细地址 + 客户名称（设计稿 §2.2）
     const searchable = ['customer_no', 'name', 'trade_country', 'country_region', 'city', 'homepage', 'address'];
     const where: FindOptionsWhere<Customer> | FindOptionsWhere<Customer>[] = keyword
@@ -249,9 +285,22 @@ export class CustomerService {
     if (dto.contacts !== undefined) this.assertContacts(dto.contacts);
 
     const base = this.mapDto(dto);
+    const nameChanged = dto.name && dto.name !== entity.name ? { from: entity.name, to: dto.name } : null;
     return this.dataSource.transaction(async (manager) => {
       Object.assign(entity, base);
       const saved = await manager.save(Customer, entity);
+      // C1 实时同步(基础资料稿):客户改名 → 同步 草稿/已报价 单据的名称快照;已成单(ORDERED)不动
+      if (nameChanged) {
+        await manager.query(
+          "UPDATE quotation SET middleman_name = ? WHERE customer_id = ? AND status <> 'ORDERED' AND deleted = 0",
+          [nameChanged.to, id]);
+        await manager.query(
+          "UPDATE quotation SET buyer_name = ? WHERE buyer_id = ? AND status <> 'ORDERED' AND deleted = 0",
+          [nameChanged.to, id]);
+        await manager.query(
+          "UPDATE sample_garment SET middleman_name = ? WHERE customer_id = ? AND status <> 'ORDERED' AND deleted = 0",
+          [nameChanged.to, id]);
+      }
       const { contacts, banks, expresses } = this.buildSubtables(id, dto, saved.name);
       if (dto.contacts !== undefined) {
         await manager.delete(CustomerContact, { customer_id: id });

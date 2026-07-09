@@ -64,7 +64,7 @@ describe('SampleService', () => {
     it('UT-SAM-01: creates sample S-date no, PENDING, auto middleman name', async () => {
       mockRedis.eval.mockResolvedValue(1);
       const result = await service.create(
-        { middlemanId: 1, styleNo: 'H-2026-S001', materials: MATERIALS } as any, 99,
+        { middlemanId: 1, styleNo: 'H-2026-S001', categories: '外套', materials: MATERIALS } as any, 99,
       );
       const savedArg = mockManager.save.mock.calls[0][1];
       expect(savedArg).toMatchObject({ style_no: 'H-2026-S001', middleman_name: '中间商A', status: SampleStatus.PENDING });

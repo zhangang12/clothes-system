@@ -1,5 +1,5 @@
 import {
-  IsString, IsOptional, IsInt, IsNumber, IsArray, MaxLength, ValidateNested,
+  IsString, IsNotEmpty, IsOptional, IsInt, IsNumber, IsArray, MaxLength, ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -27,8 +27,8 @@ export class SampleMaterialDto {
 }
 
 export class CreateSampleDto {
-  @ApiPropertyOptional({ description: '样衣类别（7 类多选，逗号分隔）' })
-  @IsOptional() @IsString() @MaxLength(100) categories?: string;
+  @ApiProperty({ description: '样衣类别（7 类多选，逗号分隔，必填）' })
+  @IsString() @IsNotEmpty() @MaxLength(100) categories: string;
 
   @ApiProperty({ description: '中间商客户ID' })
   @Type(() => Number) @IsInt() middlemanId: number;
@@ -49,6 +49,9 @@ export class CreateSampleDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(255) image1?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(255) image2?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(255) image3?: string;
+
+  @ApiPropertyOptional({ description: '样衣意见附件（客户反馈图/PDF，多文件逗号分隔）' })
+  @IsOptional() @IsString() @MaxLength(500) feedbackAttachments?: string;
 
   @ApiPropertyOptional({ type: [SampleMaterialDto] })
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => SampleMaterialDto)
@@ -71,6 +74,33 @@ export class PatternmakerSaveDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) returnNo?: string;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() pieceCount?: number;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() laborUnitPrice?: number;
+
+  @ApiPropertyOptional({ description: '样衣意见附件（客户反馈图/PDF，多文件逗号分隔）' })
+  @IsOptional() @IsString() @MaxLength(500) feedbackAttachments?: string;
+}
+
+// 历史样衣批量导入（CSV：客户款号,样衣类别,中间商名称,制版师,制单人,材料品名(分号分隔)）
+export class ImportSampleRowDto {
+  @ApiProperty({ description: '客户款号' })
+  @IsString() @IsNotEmpty() @MaxLength(100) styleNo: string;
+
+  @ApiProperty({ description: '样衣类别（逗号分隔）' })
+  @IsString() @IsNotEmpty() @MaxLength(100) categories: string;
+
+  @ApiProperty({ description: '中间商名称（精确匹配客户资料）' })
+  @IsString() @IsNotEmpty() @MaxLength(100) middlemanName: string;
+
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) patternmakerName?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) maker?: string;
+
+  @ApiProperty({ description: '材料品名（分号分隔，至少 1 个）' })
+  @IsString() @IsNotEmpty() materials: string;
+}
+
+export class ImportSampleDto {
+  @ApiProperty({ type: [ImportSampleRowDto] })
+  @IsArray() @ValidateNested({ each: true }) @Type(() => ImportSampleRowDto)
+  rows: ImportSampleRowDto[];
 }
 
 export class ShipSampleDto {

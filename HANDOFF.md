@@ -51,6 +51,7 @@
 
 ## 最近变更（新→旧，保留最近若干条）
 
+- （本次·样衣模块对齐设计稿 13 项）`feat(sample)` ①保存时填材料寄出单号自动推送版师(待派单→打样中);②制版师文本框改用户下拉(GET /auth/users?role= 扩 BUSINESS 可调,失败降级文本);③新增列 `sample_garment.feedback_attachments` VARCHAR(500) 样衣意见附件(init.sql+gen-column-sync 已重跑,业务/版师视图均可传);④版师视图隐藏材料「参考价格」+实际耗用全空保存软确认;⑤categories 后端必填;⑥版师列表默认只看自己名下+未指派;⑦列表加制单人列;⑧编辑页管理员删除按钮;⑨样衣制作单 A4 打印(`utils/samplePrint.ts`,脱敏不含参考价格,编辑页+列表入口);⑩变更记录全覆盖 CREATE/UPDATE/SHIP/COMPLETE/COPY;⑪高级筛选(款号/中间商/类别/制版师/制单人/制单·寄出日期范围);⑫历史样衣 CSV 导入(POST /samples/import,中间商按名精确匹配+材料分号拆行);⑬列表全列排序。web typecheck✓ vitest 85/85✓ api build✓ jest 213/213✓(**真库端到端未跑**,发版走 deploy.sh 幂等升级即补列)
 - （本次·生产缺列事故根治）线上 8 张表大面积 `Unknown column` 500(报错记录功能抓到,`Customer.type`/`OrderMain.style_no`/`Factory.can_invoice` 等)——根因:`hotfix-schema.sql` 手工 delta 清单覆盖不全,生产库基线比清单更老。根治:新增 `infra/scripts/gen-column-sync.py` 从 HEAD init.sql 自动生成「全表补表+541列补齐+类型同步」AUTO 段 + 手工「枚举语义迁移」块(旧值→新值映射,BOTH 双身份回填 extra_types)。真库验证:**最老基线(8c46b21,23表)→hotfix→与 HEAD 全新库 diff(表/列/类型)为空 + 旧枚举数据迁移正确 + 二次幂等 + 对已是 HEAD 的库无害**;8 个生产报错请求本地全部 200。**服务器执行 `bash infra/scripts/deploy.sh` 即修复**。
 
 - （本次·闭环+润色)`feat(portal)` 开票→自动生成付款申请(PENDING,幂等),打通 对账→开票→付款;`fix(web)` 脱敏字段显示「—」非0.00、5列表批量删二次确认。真栈验证,均已进 main(0abee64)

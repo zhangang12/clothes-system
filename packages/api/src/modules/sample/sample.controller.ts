@@ -9,7 +9,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@i9/types';
 import { SampleService } from './sample.service';
 import {
-  CreateSampleDto, PushPatternmakerDto, PatternmakerSaveDto, ShipSampleDto,
+  CreateSampleDto, PushPatternmakerDto, PatternmakerSaveDto, ShipSampleDto, ImportSampleDto,
 } from './dto/create-sample.dto';
 import { QuerySampleDto } from './dto/query-sample.dto';
 
@@ -27,10 +27,17 @@ export class SampleController {
     return this.service.create(dto, req.user.id);
   }
 
+  @Post('import')
+  @Roles(UserRole.ADMIN, UserRole.BUSINESS)
+  @ApiOperation({ summary: '历史样衣批量导入（CSV 行）' })
+  importBatch(@Body() dto: ImportSampleDto, @Request() req: any) {
+    return this.service.importBatch(dto.rows, req.user.id);
+  }
+
   @Get()
-  @ApiOperation({ summary: '样衣列表（分页）' })
-  findAll(@Query() query: QuerySampleDto) {
-    return this.service.findAll(query);
+  @ApiOperation({ summary: '样衣列表（分页；版师默认仅自己名下+未指派）' })
+  findAll(@Query() query: QuerySampleDto, @Request() req: any) {
+    return this.service.findAll(query, req.user);
   }
 
   @Get(':id')
@@ -48,8 +55,8 @@ export class SampleController {
   @Put(':id')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
   @ApiOperation({ summary: '更新样衣基本信息（业务视图）' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: Partial<CreateSampleDto>) {
-    return this.service.update(id, dto);
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: Partial<CreateSampleDto>, @Request() req: any) {
+    return this.service.update(id, dto, req.user.id);
   }
 
   @Patch(':id/push')
@@ -69,15 +76,15 @@ export class SampleController {
   @Patch(':id/ship')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
   @ApiOperation({ summary: '标记已寄出' })
-  ship(@Param('id', ParseIntPipe) id: number, @Body() dto: ShipSampleDto) {
-    return this.service.markShipped(id, dto);
+  ship(@Param('id', ParseIntPipe) id: number, @Body() dto: ShipSampleDto, @Request() req: any) {
+    return this.service.markShipped(id, dto, req.user.id);
   }
 
   @Patch(':id/complete')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
   @ApiOperation({ summary: '标记已完成' })
-  complete(@Param('id', ParseIntPipe) id: number) {
-    return this.service.complete(id);
+  complete(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.service.complete(id, req.user.id);
   }
 
   @Post(':id/copy')

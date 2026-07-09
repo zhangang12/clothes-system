@@ -20,8 +20,8 @@ export const customerApi = {
   remove: (id: number) =>
     http.delete(`/customers/${id}`),
   // 机密授权（设计稿 01 §D.3：批量授权仅管理员）
-  grantBatch: (customer_ids: number[], user_ids: number[], can_edit: boolean) =>
-    http.post<unknown, { data: any }>('/customers/grants', { customer_ids, user_ids, can_edit }),
+  grantBatch: (customer_ids: number[], user_ids: number[], can_edit: boolean, expire_at?: string, remark?: string) =>
+    http.post<unknown, { data: any }>('/customers/grants', { customer_ids, user_ids, can_edit, expire_at, remark }),
   getGrants: (id: number) =>
     http.get<unknown, { data: any[] }>(`/customers/${id}/grants`),
   revokeGrant: (id: number, userId: number) =>

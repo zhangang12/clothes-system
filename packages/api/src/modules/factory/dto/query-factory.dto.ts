@@ -32,4 +32,11 @@ export class QueryFactoryDto {
   @IsOptional()
   @Type(() => Number)
   status?: number;
+
+  @IsOptional() factory_no?: string;
+  @IsOptional() name?: string;
+  @IsOptional() bank_name?: string;
+  @IsOptional() contact?: string;
+  @IsOptional() develop_start?: string;
+  @IsOptional() develop_end?: string;
 }

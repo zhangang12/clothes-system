@@ -2,7 +2,9 @@ import {
   Injectable, NotFoundException, BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, Like, DataSource } from 'typeorm';
+import {
+  Repository, FindOptionsWhere, Like, IsNull, Between, MoreThanOrEqual, LessThanOrEqual, DataSource,
+} from 'typeorm';
 import { SampleGarment } from './sample-garment.entity';
 import { SampleMaterial } from './sample-material.entity';
 import { SampleVersion } from './sample-version.entity';
@@ -11,7 +13,7 @@ import { Quotation } from '../quote/quotation.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { SampleStatus } from '@i9/types';
 import {
-  CreateSampleDto, PushPatternmakerDto, PatternmakerSaveDto, ShipSampleDto,
+  CreateSampleDto, PushPatternmakerDto, PatternmakerSaveDto, ShipSampleDto, ImportSampleRowDto,
 } from './dto/create-sample.dto';
 import { QuerySampleDto } from './dto/query-sample.dto';
 
@@ -62,34 +64,60 @@ export class SampleService {
     }
     const sample_no = await this.numbering.next(NUM_PREFIX.SAMPLE);
 
-    return this.dataSource.transaction(async (manager) => {
-      const saved = await manager.save(SampleGarment, manager.create(SampleGarment, {
+    const saved = await this.dataSource.transaction(async (manager) => {
+      const created = await manager.save(SampleGarment, manager.create(SampleGarment, {
         sample_no, categories: dto.categories, customer_id: middlemanId, middleman_name: middleman.name,
         style_no: dto.styleNo, buyer_id: dto.buyerId, buyer_name: buyerName, buyer_no: buyerNo,
         patternmaker_id: dto.patternmakerId, patternmaker_name: dto.patternmakerName,
         maker: dto.maker, make_date: today(),
         ship_sample_date: dto.shipSampleDate, recipient: dto.recipient, file_location: dto.fileLocation,
         garment_remark: dto.garmentRemark, image1: dto.image1, image2: dto.image2, image3: dto.image3,
+        feedback_attachments: dto.feedbackAttachments,
         status: SampleStatus.PENDING, version: 1, created_by: createdBy, deleted: 0,
       }));
-      await manager.save(SampleMaterial, this.buildMaterials(saved.id, materials));
-      return saved;
+      await manager.save(SampleMaterial, this.buildMaterials(created.id, materials));
+      return created;
     });
+    await this.log(saved.id, saved.version ?? 1, 'CREATE', createdBy, saved.sample_no);
+    return saved;
   }
 
-  async findAll(query: QuerySampleDto) {
-    const { page = 1, size = 20, keyword, status, customer_id, patternmaker_id } = query;
+  async findAll(query: QuerySampleDto, user?: { id: number; role?: string }) {
+    const {
+      page = 1, size = 20, keyword, status, customer_id, patternmaker_id,
+      style_no, middleman_name, patternmaker_name, maker, categories,
+      make_start, make_end, ship_start, ship_end,
+    } = query;
+    const dateRange = (start?: string, end?: string) =>
+      start && end ? Between(start, end) : start ? MoreThanOrEqual(start) : end ? LessThanOrEqual(end) : undefined;
+    const makeDateCond = dateRange(make_start, make_end);
+    const shipDateCond = dateRange(ship_start, ship_end);
     const base: FindOptionsWhere<SampleGarment> = {
       deleted: 0,
       ...(status !== undefined && { status }),
       ...(customer_id !== undefined && { customer_id }),
       ...(patternmaker_id !== undefined && { patternmaker_id }),
+      // 高级筛选（设计稿 §C：款号/中间商/制版师/制单人/类别/日期范围）
+      ...(style_no && { style_no: Like(`%${style_no}%`) }),
+      ...(middleman_name && { middleman_name: Like(`%${middleman_name}%`) }),
+      ...(patternmaker_name && { patternmaker_name: Like(`%${patternmaker_name}%`) }),
+      ...(maker && { maker: Like(`%${maker}%`) }),
+      ...(categories && { categories: Like(`%${categories}%`) }),
+      ...(makeDateCond && { make_date: makeDateCond }),
+      ...(shipDateCond && { ship_sample_date: shipDateCond }),
     };
+    // 版师默认范围：只看自己名下 + 未指派（设计稿 §C）
+    const bases: FindOptionsWhere<SampleGarment>[] =
+      user?.role === 'PATTERNMAKER' && patternmaker_id === undefined
+        ? [{ ...base, patternmaker_id: user.id }, { ...base, patternmaker_id: IsNull() }]
+        : [base];
     // 智能搜索：样衣编号/客户款号/中间商名称/最终买家/制版师/制单人员（设计稿 §C）
     const searchable = ['sample_no', 'style_no', 'middleman_name', 'buyer_name', 'patternmaker_name', 'maker'];
-    const where: FindOptionsWhere<SampleGarment> | FindOptionsWhere<SampleGarment>[] = keyword
-      ? searchable.map((f) => ({ ...base, [f]: Like(`%${keyword}%`) }))
-      : base;
+    const conds: FindOptionsWhere<SampleGarment>[] = keyword
+      ? bases.flatMap((b) => searchable.map((f) => ({ ...b, [f]: Like(`%${keyword}%`) })))
+      : bases;
+    const where: FindOptionsWhere<SampleGarment> | FindOptionsWhere<SampleGarment>[] =
+      conds.length === 1 ? conds[0] : conds;
 
     const [items, total] = await this.repo.findAndCount({
       where, skip: (page - 1) * size, take: size, order: { id: 'DESC' },
@@ -104,7 +132,7 @@ export class SampleService {
     return { ...entity, materials };
   }
 
-  async update(id: number, dto: Partial<CreateSampleDto>): Promise<SampleGarment> {
+  async update(id: number, dto: Partial<CreateSampleDto>, operatorId?: number): Promise<SampleGarment> {
     const entity = await this.repo.findOne({ where: { id, deleted: 0 } });
     if (!entity) throw new NotFoundException(`样衣 #${id} 不存在`);
     if (![SampleStatus.PENDING, SampleStatus.SAMPLING].includes(entity.status)) {
@@ -124,7 +152,7 @@ export class SampleService {
         buyerName = b?.name ?? null; buyerNo = b?.customer_no ?? null;
       } else { buyerName = null; buyerNo = null; }
     }
-    return this.dataSource.transaction(async (manager) => {
+    const saved = await this.dataSource.transaction(async (manager) => {
       if (dto.categories !== undefined) entity.categories = dto.categories;
       if (dto.styleNo !== undefined) entity.style_no = dto.styleNo;
       if (dto.recipient !== undefined) entity.recipient = dto.recipient;
@@ -134,19 +162,22 @@ export class SampleService {
       if (dto.image1 !== undefined) entity.image1 = dto.image1;
       if (dto.image2 !== undefined) entity.image2 = dto.image2;
       if (dto.image3 !== undefined) entity.image3 = dto.image3;
+      if (dto.feedbackAttachments !== undefined) entity.feedback_attachments = dto.feedbackAttachments;
       // 此前静默丢弃的字段(设计稿:业务可改中间商/买家/制版师/制单人员)
       if (dto.middlemanId !== undefined) { entity.customer_id = dto.middlemanId; entity.middleman_name = mmName as string; }
       if (dto.buyerId !== undefined) { entity.buyer_id = dto.buyerId || null; entity.buyer_name = buyerName ?? null; entity.buyer_no = buyerNo ?? null; }
       if (dto.patternmakerId !== undefined) entity.patternmaker_id = dto.patternmakerId;
       if (dto.patternmakerName !== undefined) entity.patternmaker_name = dto.patternmakerName;
       if (dto.maker !== undefined) entity.maker = dto.maker;
-      const saved = await manager.save(SampleGarment, entity);
+      const updated = await manager.save(SampleGarment, entity);
       if (dto.materials !== undefined) {
         await manager.delete(SampleMaterial, { sample_id: id });
         await manager.save(SampleMaterial, this.buildMaterials(id, dto.materials));
       }
-      return saved;
+      return updated;
     });
+    await this.log(id, entity.version, 'UPDATE', operatorId ?? entity.created_by);
+    return saved;
   }
 
   // 推送版师：填材料寄出单号 / 指派制版师 → 打样中（设计稿页面事件）
@@ -191,6 +222,7 @@ export class SampleService {
       entity.return_date = today();
       entity.status = SampleStatus.RETURNED;
     }
+    if (dto.feedbackAttachments !== undefined) entity.feedback_attachments = dto.feedbackAttachments;
     // 版师填件数+单价 → 工时金额公式生效 + 状态已对账（自动生成对账单的触发点）
     if (dto.pieceCount !== undefined || dto.laborUnitPrice !== undefined) {
       if (dto.pieceCount === undefined || dto.laborUnitPrice === undefined) {
@@ -206,7 +238,7 @@ export class SampleService {
     return saved;
   }
 
-  async markShipped(id: number, dto: ShipSampleDto): Promise<SampleGarment> {
+  async markShipped(id: number, dto: ShipSampleDto, operatorId?: number): Promise<SampleGarment> {
     const entity = await this.repo.findOne({ where: { id, deleted: 0 } });
     if (!entity) throw new NotFoundException(`样衣 #${id} 不存在`);
     if (![SampleStatus.SAMPLING, SampleStatus.SHIPPED].includes(entity.status)) {
@@ -214,17 +246,21 @@ export class SampleService {
     }
     entity.ship_sample_date = dto.shipSampleDate || today();
     entity.status = SampleStatus.SHIPPED;
-    return this.repo.save(entity);
+    const saved = await this.repo.save(entity);
+    await this.log(id, entity.version, 'SHIP', operatorId ?? entity.created_by, entity.ship_sample_date);
+    return saved;
   }
 
-  async complete(id: number): Promise<SampleGarment> {
+  async complete(id: number, operatorId?: number): Promise<SampleGarment> {
     const entity = await this.repo.findOne({ where: { id, deleted: 0 } });
     if (!entity) throw new NotFoundException(`样衣 #${id} 不存在`);
     if (![SampleStatus.RECONCILED, SampleStatus.DONE].includes(entity.status)) {
       throw new BadRequestException('当前状态不允许标记完成(需先对账)');
     }
     entity.status = SampleStatus.DONE;
-    return this.repo.save(entity);
+    const saved = await this.repo.save(entity);
+    await this.log(id, entity.version, 'COMPLETE', operatorId ?? entity.created_by);
+    return saved;
   }
 
   // 被客户报价转销售合同后自动置已成单（B1，供报价/合同模块调用）
@@ -238,7 +274,7 @@ export class SampleService {
     if (!src) throw new NotFoundException(`样衣 #${id} 不存在`);
     const srcMaterials = await this.materialRepo.find({ where: { sample_id: id }, order: { sort_order: 'ASC' } });
     const sample_no = await this.numbering.next(NUM_PREFIX.SAMPLE);
-    return this.dataSource.transaction(async (manager) => {
+    const newSample = await this.dataSource.transaction(async (manager) => {
       const saved = await manager.save(SampleGarment, manager.create(SampleGarment, {
         sample_no, categories: src.categories, customer_id: src.customer_id, middleman_name: src.middleman_name,
         style_no: src.style_no, buyer_id: src.buyer_id, buyer_name: src.buyer_name, buyer_no: src.buyer_no,
@@ -255,6 +291,34 @@ export class SampleService {
       if (copied.length) await manager.save(SampleMaterial, copied);
       return saved;
     });
+    await this.log(newSample.id, newSample.version ?? 1, 'COPY', createdBy, `复制自 ${src.sample_no ?? `#${id}`}`);
+    return newSample;
+  }
+
+  // 历史样衣批量导入：中间商按名称精确匹配；材料串按分号拆为品名行；复用 create（含类别/材料校验）
+  async importBatch(rows: ImportSampleRowDto[], createdBy: number) {
+    let ok = 0;
+    const failures: Array<{ row: number; reason: string }> = [];
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      try {
+        const middleman = await this.customerRepo.findOne({ where: { name: r.middlemanName, deleted: 0 } });
+        if (!middleman) throw new BadRequestException(`中间商「${r.middlemanName}」不存在（需与客户资料名称完全一致）`);
+        const materials = String(r.materials ?? '')
+          .split(/[;；]/).map((s) => s.trim()).filter(Boolean)
+          .map((itemName) => ({ itemName }));
+        if (!materials.length) throw new BadRequestException('材料品名为空（分号分隔，至少 1 个）');
+        await this.create({
+          categories: r.categories, middlemanId: middleman.id, styleNo: r.styleNo,
+          patternmakerName: r.patternmakerName || undefined, maker: r.maker || undefined,
+          materials,
+        } as CreateSampleDto, createdBy);
+        ok += 1;
+      } catch (e: any) {
+        failures.push({ row: i + 1, reason: e?.message ?? '未知错误' });
+      }
+    }
+    return { ok, fail: failures.length, failures };
   }
 
   async getVersionHistory(id: number): Promise<SampleVersion[]> {

@@ -139,6 +139,18 @@ CREATE TABLE IF NOT EXISTS `sys_sequence` (
   PRIMARY KEY (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='单号发号 DB 兜底(Redis 单点消除:挂了降速不阻断,恢复自动切回)';
 
+CREATE TABLE IF NOT EXISTS `sys_dict` (
+  `id`         BIGINT       NOT NULL AUTO_INCREMENT,
+  `type`       VARCHAR(40)  NOT NULL COMMENT '字典类别',
+  `label`      VARCHAR(100) NOT NULL COMMENT '显示值',
+  `value`      VARCHAR(100) DEFAULT NULL COMMENT '附加值(币种字典存默认汇率)',
+  `sort`       INT          NOT NULL DEFAULT 0,
+  `status`     TINYINT      NOT NULL DEFAULT 1,
+  `created_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_type` (`type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='通用字典(下拉自填自动累积)';
+
 CREATE TABLE IF NOT EXISTS `supplier_account` (
   `id`            BIGINT       NOT NULL AUTO_INCREMENT,
   `account`       VARCHAR(50)  NOT NULL COMMENT '登录账号',
@@ -166,6 +178,7 @@ CREATE TABLE IF NOT EXISTS `factory` (
   `city`           VARCHAR(30)   DEFAULT NULL COMMENT '所在城市',
   `address`        VARCHAR(200)  DEFAULT NULL COMMENT '详细地址',
   `business_scope` VARCHAR(200)  DEFAULT NULL COMMENT '业务范围',
+  `grade`               VARCHAR(10)    DEFAULT NULL COMMENT '信用等级A/B/C',
   `develop_date`   DATE          DEFAULT NULL COMMENT '开发时间',
   `bank_name`      VARCHAR(100)  DEFAULT NULL COMMENT '开户银行',
   `bank_account`   VARCHAR(40)   DEFAULT NULL COMMENT '银行帐号',
@@ -304,6 +317,8 @@ CREATE TABLE IF NOT EXISTS `customer_grant` (
   `customer_id` BIGINT   NOT NULL,
   `user_id`     BIGINT   NOT NULL COMMENT '被授权用户',
   `can_edit`    TINYINT  NOT NULL DEFAULT 0 COMMENT '0=仅查看 1=可修改',
+  `expire_at`   DATE     DEFAULT NULL COMMENT '有效期至(过期授权自动失效,空=永久)',
+  `remark`      VARCHAR(200) DEFAULT NULL COMMENT '授权备注',
   `created_by`  BIGINT   DEFAULT NULL COMMENT '授权人(管理员)',
   `created_at`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -336,6 +351,7 @@ CREATE TABLE IF NOT EXISTS `sample_garment` (
   `material_ship_date` DATE         DEFAULT NULL COMMENT '材料寄出日期(自动)',
   `return_no`        VARCHAR(50)   DEFAULT NULL COMMENT '寄回快递单号(版师)',
   `return_date`      DATE          DEFAULT NULL COMMENT '寄回日期(自动)',
+  `feedback_attachments` VARCHAR(500) DEFAULT NULL COMMENT '样衣意见附件(客户反馈图/PDF,多文件逗号分隔)',
   `piece_count`      INT           DEFAULT NULL COMMENT '件数(版师)',
   `labor_unit_price` DECIMAL(12,2) DEFAULT NULL COMMENT '版师工时单价CNY',
   `labor_amount`     DECIMAL(14,2) DEFAULT NULL COMMENT '工时金额CNY=件数×单价',
@@ -967,6 +983,20 @@ CALL _i9_sync_col('sys_sequence','value',"BIGINT","BIGINT      NOT NULL DEFAULT 
 CALL _i9_add_col('sys_sequence','updated_at',"DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
 CALL _i9_sync_col('sys_sequence','updated_at',"DATETIME","DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
 
+-- sys_dict
+CALL _i9_add_col('sys_dict','type',"VARCHAR(40)  NOT NULL COMMENT '字典类别'");
+CALL _i9_sync_col('sys_dict','type',"VARCHAR(40)","VARCHAR(40)  NOT NULL COMMENT '字典类别'");
+CALL _i9_add_col('sys_dict','label',"VARCHAR(100) NOT NULL COMMENT '显示值'");
+CALL _i9_sync_col('sys_dict','label',"VARCHAR(100)","VARCHAR(100) NOT NULL COMMENT '显示值'");
+CALL _i9_add_col('sys_dict','value',"VARCHAR(100) DEFAULT NULL COMMENT '附加值(币种字典存默认汇率)'");
+CALL _i9_sync_col('sys_dict','value',"VARCHAR(100)","VARCHAR(100) DEFAULT NULL COMMENT '附加值(币种字典存默认汇率)'");
+CALL _i9_add_col('sys_dict','sort',"INT          NOT NULL DEFAULT 0");
+CALL _i9_sync_col('sys_dict','sort',"INT","INT          NOT NULL DEFAULT 0");
+CALL _i9_add_col('sys_dict','status',"TINYINT      NOT NULL DEFAULT 1");
+CALL _i9_sync_col('sys_dict','status',"TINYINT","TINYINT      NOT NULL DEFAULT 1");
+CALL _i9_add_col('sys_dict','created_at',"DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP");
+CALL _i9_sync_col('sys_dict','created_at',"DATETIME","DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP");
+
 -- supplier_account
 CALL _i9_add_col('supplier_account','account',"VARCHAR(50)  NOT NULL COMMENT '登录账号'");
 CALL _i9_sync_col('supplier_account','account',"VARCHAR(50)","VARCHAR(50)  NOT NULL COMMENT '登录账号'");
@@ -1008,6 +1038,8 @@ CALL _i9_add_col('factory','address',"VARCHAR(200)  DEFAULT NULL COMMENT '详细
 CALL _i9_sync_col('factory','address',"VARCHAR(200)","VARCHAR(200)  DEFAULT NULL COMMENT '详细地址'");
 CALL _i9_add_col('factory','business_scope',"VARCHAR(200)  DEFAULT NULL COMMENT '业务范围'");
 CALL _i9_sync_col('factory','business_scope',"VARCHAR(200)","VARCHAR(200)  DEFAULT NULL COMMENT '业务范围'");
+CALL _i9_add_col('factory','grade',"VARCHAR(10)    DEFAULT NULL COMMENT '信用等级A/B/C'");
+CALL _i9_sync_col('factory','grade',"VARCHAR(10)","VARCHAR(10)    DEFAULT NULL COMMENT '信用等级A/B/C'");
 CALL _i9_add_col('factory','develop_date',"DATE          DEFAULT NULL COMMENT '开发时间'");
 CALL _i9_sync_col('factory','develop_date',"DATE","DATE          DEFAULT NULL COMMENT '开发时间'");
 CALL _i9_add_col('factory','bank_name',"VARCHAR(100)  DEFAULT NULL COMMENT '开户银行'");
@@ -1214,6 +1246,10 @@ CALL _i9_add_col('customer_grant','user_id',"BIGINT   NOT NULL COMMENT '被授�
 CALL _i9_sync_col('customer_grant','user_id',"BIGINT","BIGINT   NOT NULL COMMENT '被授权用户'");
 CALL _i9_add_col('customer_grant','can_edit',"TINYINT  NOT NULL DEFAULT 0 COMMENT '0=仅查看 1=可修改'");
 CALL _i9_sync_col('customer_grant','can_edit',"TINYINT","TINYINT  NOT NULL DEFAULT 0 COMMENT '0=仅查看 1=可修改'");
+CALL _i9_add_col('customer_grant','expire_at',"DATE     DEFAULT NULL COMMENT '有效期至(过期授权自动失效,空=永久)'");
+CALL _i9_sync_col('customer_grant','expire_at',"DATE","DATE     DEFAULT NULL COMMENT '有效期至(过期授权自动失效,空=永久)'");
+CALL _i9_add_col('customer_grant','remark',"VARCHAR(200) DEFAULT NULL COMMENT '授权备注'");
+CALL _i9_sync_col('customer_grant','remark',"VARCHAR(200)","VARCHAR(200) DEFAULT NULL COMMENT '授权备注'");
 CALL _i9_add_col('customer_grant','created_by',"BIGINT   DEFAULT NULL COMMENT '授权人(管理员)'");
 CALL _i9_sync_col('customer_grant','created_by',"BIGINT","BIGINT   DEFAULT NULL COMMENT '授权人(管理员)'");
 CALL _i9_add_col('customer_grant','created_at',"DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP");
@@ -1266,6 +1302,8 @@ CALL _i9_add_col('sample_garment','return_no',"VARCHAR(50)   DEFAULT NULL COMMEN
 CALL _i9_sync_col('sample_garment','return_no',"VARCHAR(50)","VARCHAR(50)   DEFAULT NULL COMMENT '寄回快递单号(版师)'");
 CALL _i9_add_col('sample_garment','return_date',"DATE          DEFAULT NULL COMMENT '寄回日期(自动)'");
 CALL _i9_sync_col('sample_garment','return_date',"DATE","DATE          DEFAULT NULL COMMENT '寄回日期(自动)'");
+CALL _i9_add_col('sample_garment','feedback_attachments',"VARCHAR(500) DEFAULT NULL COMMENT '样衣意见附件(客户反馈图/PDF,多文件逗号分隔)'");
+CALL _i9_sync_col('sample_garment','feedback_attachments',"VARCHAR(500)","VARCHAR(500) DEFAULT NULL COMMENT '样衣意见附件(客户反馈图/PDF,多文件逗号分隔)'");
 CALL _i9_add_col('sample_garment','piece_count',"INT           DEFAULT NULL COMMENT '件数(版师)'");
 CALL _i9_sync_col('sample_garment','piece_count',"INT","INT           DEFAULT NULL COMMENT '件数(版师)'");
 CALL _i9_add_col('sample_garment','labor_unit_price',"DECIMAL(12,2) DEFAULT NULL COMMENT '版师工时单价CNY'");
@@ -2347,6 +2385,32 @@ CREATE TABLE IF NOT EXISTS `error_log` (
   UNIQUE KEY `uk_fingerprint` (`fingerprint`),
   KEY `idx_status` (`status`,`last_seen`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统报错记录';
+
+-- ── 字典种子(存量库幂等:仅当该类别为空时插入,避免覆盖用户自建) ──
+INSERT INTO sys_dict (type,label,value,sort)
+SELECT * FROM (SELECT 'currency' t,'USD' l,'7.10' v,1 s UNION SELECT 'currency','EUR','7.80',2 UNION SELECT 'currency','GBP','9.00',3 UNION SELECT 'currency','JPY','0.048',4 UNION SELECT 'currency','CNY','1',5) x
+WHERE NOT EXISTS (SELECT 1 FROM sys_dict WHERE type='currency');
+INSERT INTO sys_dict (type,label,sort)
+SELECT * FROM (SELECT 'trade_country' t,'美国' l,1 s UNION SELECT 'trade_country','英国',2 UNION SELECT 'trade_country','德国',3 UNION SELECT 'trade_country','日本',4 UNION SELECT 'trade_country','法国',5) x
+WHERE NOT EXISTS (SELECT 1 FROM sys_dict WHERE type='trade_country');
+INSERT INTO sys_dict (type,label,sort)
+SELECT * FROM (SELECT 'price_terms' t,'FOB 上海' l,1 s UNION SELECT 'price_terms','FOB 宁波',2 UNION SELECT 'price_terms','CIF',3 UNION SELECT 'price_terms','CFR',4) x
+WHERE NOT EXISTS (SELECT 1 FROM sys_dict WHERE type='price_terms');
+INSERT INTO sys_dict (type,label,sort)
+SELECT * FROM (SELECT 'settlement_method' t,'T/T 30天' l,1 s UNION SELECT 'settlement_method','T/T 45天',2 UNION SELECT 'settlement_method','T/T 60天',3 UNION SELECT 'settlement_method','L/C at sight',4) x
+WHERE NOT EXISTS (SELECT 1 FROM sys_dict WHERE type='settlement_method');
+INSERT INTO sys_dict (type,label,sort)
+SELECT * FROM (SELECT 'customer_source' t,'展会' l,1 s UNION SELECT 'customer_source','老客户介绍',2 UNION SELECT 'customer_source','网络开发',3 UNION SELECT 'customer_source','主动来询',4) x
+WHERE NOT EXISTS (SELECT 1 FROM sys_dict WHERE type='customer_source');
+INSERT INTO sys_dict (type,label,sort)
+SELECT * FROM (SELECT 'cooperation_level' t,'战略客户' l,1 s UNION SELECT 'cooperation_level','重点客户',2 UNION SELECT 'cooperation_level','普通客户',3 UNION SELECT 'cooperation_level','新客户',4) x
+WHERE NOT EXISTS (SELECT 1 FROM sys_dict WHERE type='cooperation_level');
+INSERT INTO sys_dict (type,label,sort)
+SELECT * FROM (SELECT 'department' t,'外贸部' l,1 s UNION SELECT 'department','采购部',2 UNION SELECT 'department','财务部',3 UNION SELECT 'department','生产部',4) x
+WHERE NOT EXISTS (SELECT 1 FROM sys_dict WHERE type='department');
+INSERT INTO sys_dict (type,label,sort)
+SELECT * FROM (SELECT 'title' t,'经理' l,1 s UNION SELECT 'title','主管',2 UNION SELECT 'title','跟单员',3 UNION SELECT 'title','业务员',4) x
+WHERE NOT EXISTS (SELECT 1 FROM sys_dict WHERE type='title');
 
 -- ── 清理助手 ─────────────────────────────────────────────────────
 DROP PROCEDURE IF EXISTS _i9_add_col;

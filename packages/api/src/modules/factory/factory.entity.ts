@@ -43,6 +43,9 @@ export class Factory {
   @Column({ length: 200, nullable: true })
   business_scope: string;
 
+  @Column({ length: 10, nullable: true })
+  grade: string; // 信用等级 A/B/C(设计稿 §1.2 列表信用列)
+
   @Column({ type: 'date', nullable: true })
   develop_date: string;
 

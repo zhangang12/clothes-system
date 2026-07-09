@@ -49,10 +49,10 @@ export class CustomerController {
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: '批量授权机密权限（多客户×多用户，仅管理员）' })
   grantBatch(
-    @Body() dto: { customer_ids: number[]; user_ids: number[]; can_edit?: boolean },
+    @Body() dto: { customer_ids: number[]; user_ids: number[]; can_edit?: boolean; expire_at?: string; remark?: string },
     @Request() req: any,
   ) {
-    return this.service.grantBatch(dto.customer_ids, dto.user_ids, !!dto.can_edit, req.user.id);
+    return this.service.grantBatch(dto.customer_ids, dto.user_ids, !!dto.can_edit, req.user.id, dto.expire_at, dto.remark);
   }
 
   @Get(':id/grants')

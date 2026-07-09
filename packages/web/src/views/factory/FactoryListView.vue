@@ -5,8 +5,17 @@
       <div class="toolbar">
         <div class="tools-left">
           <el-button v-if="canEdit" type="primary" :icon="Plus" @click="goCreate">新建</el-button>
-          <el-button type="warning" plain :icon="Upload" @click="showImport = true">导入工厂资料</el-button>
-          <el-button plain :icon="Download" @click="exportCsv">导出</el-button>
+          <el-button v-if="canImport" type="warning" plain :icon="Upload" @click="showImport = true">导入工厂资料</el-button>
+          <el-button plain :icon="Download" :loading="exporting" @click="exportAllRows">导出</el-button>
+          <el-dropdown trigger="click" @command="onMore">
+            <el-button plain>···</el-button>
+            <template #dropdown><el-dropdown-menu>
+              <el-dropdown-item command="print">🖨 打印当前列表</el-dropdown-item>
+              <el-dropdown-item command="copy">📋 复制到剪贴板</el-dropdown-item>
+              <el-dropdown-item command="cols">👁 自定义显示列</el-dropdown-item>
+              <el-dropdown-item command="reset">↺ 重置筛选</el-dropdown-item>
+            </el-dropdown-menu></template>
+          </el-dropdown>
           <el-button v-if="isAdmin" type="danger" plain :icon="Delete" :disabled="!selected.length" @click="batchRemove">
             删除{{ selected.length ? `(${selected.length})` : '' }}
           </el-button>
@@ -30,6 +39,15 @@
                 <el-option label="启用" :value="1" /><el-option label="停用" :value="0" />
               </el-select>
             </el-form-item>
+            <el-form-item label="编号"><el-input v-model="query.factory_no" clearable style="width:120px" @keyup.enter="load" @clear="load" /></el-form-item>
+            <el-form-item label="名称"><el-input v-model="query.name" clearable style="width:150px" @keyup.enter="load" @clear="load" /></el-form-item>
+            <el-form-item label="开户银行"><el-input v-model="query.bank_name" clearable style="width:140px" @keyup.enter="load" @clear="load" /></el-form-item>
+            <el-form-item label="联系人/手机"><el-input v-model="query.contact" clearable style="width:140px" @keyup.enter="load" @clear="load" /></el-form-item>
+            <el-form-item label="开发日期">
+              <el-date-picker v-model="query.develop_start" type="date" value-format="YYYY-MM-DD" placeholder="起" style="width:130px" @change="load" />
+              <span style="margin:0 4px">—</span>
+              <el-date-picker v-model="query.develop_end" type="date" value-format="YYYY-MM-DD" placeholder="止" style="width:130px" @change="load" />
+            </el-form-item>
             <el-form-item label="工厂类型">
               <el-select v-model="query.type" clearable placeholder="全部" style="width:150px" @change="load">
                 <el-option v-for="t in factoryTypes" :key="t.value" :label="t.label" :value="t.value" />
@@ -43,7 +61,7 @@
     <!-- 列表 -->
     <div class="table-card">
       <el-table :data="list" v-loading="loading" border stripe :row-class-name="rowClass"
-        @selection-change="(v: any[]) => selected = v" @row-dblclick="goEdit">
+        @selection-change="(v: any[]) => selected = v" @row-dblclick="goEdit" @row-click="onRowClick" ref="tableRef">
         <el-table-column type="selection" width="42" />
         <el-table-column prop="factory_no" label="编号" width="100" sortable />
         <el-table-column prop="name" label="厂商名称" min-width="180" show-overflow-tooltip />
@@ -52,12 +70,13 @@
             <el-tag size="small" effect="light" :type="typeTag(row.type)">{{ typeLabel(row.type) }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column v-if="showCol('grade')" label="信用" width="70" align="center"><template #default="{ row }">{{ row.grade ? row.grade + '级' : '—' }}</template></el-table-column>
         <el-table-column label="省/市" width="130">
           <template #default="{ row }">{{ [row.province, row.city].filter(Boolean).join(' ') || '-' }}</template>
         </el-table-column>
         <el-table-column label="最后交易日期" width="130">
           <template #default="{ row }">
-            <span :class="{ overdue: isOverdue(row.last_trade_date) }">{{ row.last_trade_date || '-' }}</span>
+            <span :class="{ overdue: isOverdue(row.last_trade_date) }"><template v-if="isOverdue(row.last_trade_date)">⚠ </template>{{ row.last_trade_date || '-' }}</span>
           </template>
         </el-table-column>
         <el-table-column label="开票" width="70" align="center">
@@ -94,6 +113,12 @@
 
     <csv-import-dialog v-model="showImport" title="工厂资料"
       :template-headers="importHeaders" :parse-row="parseFactoryRow" :submit="submitImport" @done="load" />
+
+    <el-dialog v-model="colsVisible" title="自定义显示列" width="420px">
+      <el-checkbox-group v-model="visibleCols">
+        <el-checkbox v-for="c in ALL_COLS" :key="c.key" :value="c.key" style="width:46%">{{ c.title }}</el-checkbox>
+      </el-checkbox-group>
+    </el-dialog>
   </div>
 </template>
 
@@ -122,7 +147,7 @@ const list = ref<any[]>([]);
 const total = ref(0);
 const selected = ref<any[]>([]);
 const showAdvanced = ref(false);
-const query = reactive({ page: 1, size: 20, keyword: '', type: undefined as string | undefined, status: undefined as number | undefined });
+const query = reactive({ page: 1, size: 20, keyword: '', type: undefined as string | undefined, status: undefined as number | undefined, factory_no: '', name: '', bank_name: '', contact: '', develop_start: '', develop_end: '' });
 
 function isOverdue(d?: string) {
   if (!d) return false;
@@ -141,7 +166,7 @@ async function load() {
   }
 }
 function reset() {
-  query.keyword = ''; query.type = undefined; query.status = undefined; query.page = 1; load();
+  query.keyword = ''; query.type = undefined; query.status = undefined; query.page = 1; Object.assign(query, { factory_no: '', name: '', bank_name: '', contact: '', develop_start: '', develop_end: '' }); load();
 }
 function goCreate() { router.push({ name: 'FactoryCreate' }); }
 function goEdit(row: Factory) { router.push({ name: 'FactoryEdit', params: { id: row.id } }); }
@@ -206,6 +231,55 @@ function exportCsv() {
   URL.revokeObjectURL(url);
 }
 onMounted(load);
+
+// ===== 列表增强(基础资料稿 §列表页) =====
+import { exportAll } from '@/utils/exportAll';
+const canImport = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.BUSINESS));
+const exporting = ref(false);
+const tableRef = ref();
+const ALL_COLS = [
+  { key: 'factory_no', title: '编号' }, { key: 'name', title: '名称' }, { key: 'type', title: '类型' },
+  { key: 'contact_name', title: '联系人' }, { key: 'contact_phone', title: '电话' },
+  { key: 'province', title: '省份' }, { key: 'city', title: '城市' }, { key: 'address', title: '地址' },
+  { key: 'bank_name', title: '开户银行' }, { key: 'bank_account', title: '银行账号' }, { key: 'tax_no', title: '税号' },
+  { key: 'develop_date', title: '开发时间' }, { key: 'last_trade_date', title: '最后交易日期' },
+  { key: 'grade', title: '信用' }, { key: 'status', title: '状态' },
+];
+const colsVisible = ref(false);
+const visibleCols = ref<string[]>(ALL_COLS.map((c) => c.key));
+const showCol = (k: string) => visibleCols.value.includes(k);
+// 单击行=切换选中;按住 Shift=连选(设计稿 §行交互)
+let lastClickIndex = -1;
+function onRowClick(row: any, _col: any, event: MouseEvent) {
+  const idx = list.value.indexOf(row);
+  const table = tableRef.value;
+  if (!table) return;
+  if (event.shiftKey && lastClickIndex >= 0) {
+    const [a, b] = [Math.min(lastClickIndex, idx), Math.max(lastClickIndex, idx)];
+    for (let i = a; i <= b; i++) table.toggleRowSelection(list.value[i], true);
+  } else {
+    table.toggleRowSelection(row);
+  }
+  lastClickIndex = idx;
+}
+async function exportAllRows() {
+  exporting.value = true;
+  try {
+    const n = await exportAll((p, sz) => factoryApi.list({ ...query, page: p, size: sz }) as any, ALL_COLS, '工厂资料');
+    ElMessage.success(`已导出全部 ${n} 条(全列)`);
+  } catch (e: any) { ElMessage.error(e?.message ?? '导出失败'); }
+  finally { exporting.value = false; }
+}
+function onMore(cmd: string) {
+  if (cmd === 'print') window.print();
+  else if (cmd === 'copy') {
+    const tsv = [ALL_COLS.map((c) => c.title).join('\t'),
+      ...list.value.map((r: any) => ALL_COLS.map((c) => r[c.key] ?? '').join('\t'))].join('\n');
+    navigator.clipboard.writeText(tsv).then(() => ElMessage.success('已复制当前页到剪贴板(可直接粘进 Excel)'));
+  }
+  else if (cmd === 'cols') colsVisible.value = true;
+  else if (cmd === 'reset') reset();
+}
 </script>
 
 <style scoped>

@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Body, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
@@ -30,10 +30,10 @@ export class AuthController {
 
   @Get('users')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.BUSINESS)
   @ApiBearerAuth()
-  @ApiOperation({ summary: '内部用户清单（客户机密批量授权选人用，仅管理员）' })
-  listUsers() {
-    return this.authService.listUsers();
+  @ApiOperation({ summary: '内部用户清单（机密授权选人 / 制版师下拉，可按角色过滤）' })
+  listUsers(@Query('role') role?: string) {
+    return this.authService.listUsers(role);
   }
 }

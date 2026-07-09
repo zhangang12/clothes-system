@@ -27,8 +27,31 @@ function validUntil(inquiry?: string): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} 前有效`;
 }
 
-export function printQuote(detail: any, company?: { name?: string }): void {
-  const companyName = company?.name || DEFAULT_COMPANY;
+const PRINT_STYLE = `
+  @page { size: A4; margin: 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Microsoft YaHei","PingFang SC","Songti SC",sans-serif; color:#1a1a1a; font-size:12px; }
+  .head { display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2px solid #1E3A5F; padding-bottom:8px; }
+  .company { font-size:18px; font-weight:700; color:#1E3A5F; }
+  .title { font-size:22px; font-weight:700; letter-spacing:4px; }
+  .title small { display:block; font-size:11px; letter-spacing:2px; color:#888; text-align:right; }
+  .meta { display:grid; grid-template-columns:1fr 1fr 1fr; gap:2px 16px; margin:12px 0; }
+  .meta div { padding:2px 0; }
+  .meta b { color:#555; font-weight:600; }
+  h3 { font-size:13px; color:#1E3A5F; margin:14px 0 4px; border-left:3px solid #D17A40; padding-left:6px; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { border:1px solid #ccc; padding:4px 6px; }
+  th { background:#f2f5f8; color:#1E3A5F; font-weight:600; }
+  td.c { text-align:center; } td.r { text-align:right; }
+  .totals { margin-top:10px; display:flex; justify-content:flex-end; gap:24px; font-size:13px; }
+  .totals b { color:#C04042; font-size:15px; }
+  .foot { margin-top:20px; display:flex; justify-content:space-between; color:#555; }
+  .tip { margin-top:6px; font-size:10px; color:#999; }
+  @media screen { body { max-width:820px; margin:20px auto; } }
+`;
+
+// 单张报价单正文（printQuote / printQuoteBatch 复用；批量时多张之间以分页符分隔）
+function buildQuoteBody(detail: any, companyName: string): string {
   const items: any[] = detail.items ?? [];
   const fees: any[] = detail.fees ?? [];
 
@@ -54,30 +77,7 @@ export function printQuote(detail: any, company?: { name?: string }): void {
       <td class="r">${n2((+f.rmb_price || 0) * (+f.quote_usage || 0))}</td>
     </tr>`).join('') || `<tr><td class="c" colspan="5">（无费用明细）</td></tr>`;
 
-  const html = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
-<title>报价单-${esc(detail.quote_no)}</title>
-<style>
-  @page { size: A4; margin: 14mm; }
-  * { box-sizing: border-box; }
-  body { font-family: "Microsoft YaHei","PingFang SC","Songti SC",sans-serif; color:#1a1a1a; font-size:12px; }
-  .head { display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2px solid #1E3A5F; padding-bottom:8px; }
-  .company { font-size:18px; font-weight:700; color:#1E3A5F; }
-  .title { font-size:22px; font-weight:700; letter-spacing:4px; }
-  .title small { display:block; font-size:11px; letter-spacing:2px; color:#888; text-align:right; }
-  .meta { display:grid; grid-template-columns:1fr 1fr 1fr; gap:2px 16px; margin:12px 0; }
-  .meta div { padding:2px 0; }
-  .meta b { color:#555; font-weight:600; }
-  h3 { font-size:13px; color:#1E3A5F; margin:14px 0 4px; border-left:3px solid #D17A40; padding-left:6px; }
-  table { width:100%; border-collapse:collapse; }
-  th, td { border:1px solid #ccc; padding:4px 6px; }
-  th { background:#f2f5f8; color:#1E3A5F; font-weight:600; }
-  td.c { text-align:center; } td.r { text-align:right; }
-  .totals { margin-top:10px; display:flex; justify-content:flex-end; gap:24px; font-size:13px; }
-  .totals b { color:#C04042; font-size:15px; }
-  .foot { margin-top:20px; display:flex; justify-content:space-between; color:#555; }
-  .tip { margin-top:6px; font-size:10px; color:#999; }
-  @media screen { body { max-width:820px; margin:20px auto; } }
-</style></head><body onload="window.print()">
+  return `
   <div class="head">
     <div class="company">${esc(companyName)}</div>
     <div class="title">报价单<small>QUOTATION</small></div>
@@ -122,9 +122,13 @@ export function printQuote(detail: any, company?: { name?: string }): void {
     <div>业务员：${esc(detail.salesperson) || '＿＿＿＿'}</div>
     <div>报价有效期：${esc(validUntil(detail.inquiry_date))}</div>
   </div>
-  <div class="tip">＊ 本报价单对客不含供应商及成本信息；最终以双方确认的销售合同为准。</div>
-</body></html>`;
+  <div class="tip">＊ 本报价单对客不含供应商及成本信息；最终以双方确认的销售合同为准。</div>`;
+}
 
+function openPrintWindow(title: string, body: string): void {
+  const html = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
+<title>${esc(title)}</title>
+<style>${PRINT_STYLE}</style></head><body onload="window.print()">${body}</body></html>`;
   const win = window.open('', '_blank', 'width=900,height=1000');
   if (!win) {
     throw new Error('无法打开打印窗口，请允许弹出窗口后重试');
@@ -132,4 +136,19 @@ export function printQuote(detail: any, company?: { name?: string }): void {
   win.document.open();
   win.document.write(html);
   win.document.close();
+}
+
+export function printQuote(detail: any, company?: { name?: string }): void {
+  const companyName = company?.name || DEFAULT_COMPANY;
+  openPrintWindow(`报价单-${detail.quote_no ?? ''}`, buildQuoteBody(detail, companyName));
+}
+
+// 批量打印：多张报价单一个窗口，页间分页符（page-break-after），一次打印/导出 PDF
+export function printQuoteBatch(details: any[], company?: { name?: string }): void {
+  if (!details.length) return;
+  const companyName = company?.name || DEFAULT_COMPANY;
+  const body = details
+    .map((d) => buildQuoteBody(d, companyName))
+    .join('<div style="page-break-after:always"></div>');
+  openPrintWindow(`报价单批量打印(${details.length}张)`, body);
 }

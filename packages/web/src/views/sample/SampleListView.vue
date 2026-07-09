@@ -4,6 +4,7 @@
       <div class="toolbar">
         <div class="tools-left">
           <el-button v-if="canEdit" type="primary" :icon="Plus" @click="goCreate">新建</el-button>
+          <el-button v-if="canEdit" plain :icon="Upload" @click="showImport = true">导入</el-button>
           <el-button plain :icon="Download" @click="exportCsv">导出</el-button>
           <el-button v-if="canEdit" plain :icon="CopyDocument" :disabled="selected.length !== 1" @click="copyOne">复制</el-button>
           <el-button v-if="isAdmin" type="danger" plain :icon="Delete" :disabled="!selected.length" @click="batchRemove">
@@ -28,6 +29,34 @@
                 <el-option v-for="s in statuses" :key="s.value" :label="s.label" :value="s.value" />
               </el-select>
             </el-form-item>
+            <el-form-item label="客户款号">
+              <el-input v-model="query.style_no" clearable style="width:140px" @keyup.enter="load" @clear="load" />
+            </el-form-item>
+            <el-form-item label="中间商">
+              <el-input v-model="query.middleman_name" clearable style="width:140px" @keyup.enter="load" @clear="load" />
+            </el-form-item>
+            <el-form-item label="类别">
+              <el-select v-model="query.categories" clearable placeholder="全部" style="width:120px" @change="load">
+                <el-option v-for="c in sampleCategories" :key="c" :label="c" :value="c" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="制版师">
+              <el-input v-model="query.patternmaker_name" clearable style="width:120px" @keyup.enter="load" @clear="load" />
+            </el-form-item>
+            <el-form-item label="制单人">
+              <el-input v-model="query.maker" clearable style="width:120px" @keyup.enter="load" @clear="load" />
+            </el-form-item>
+            <el-form-item label="制单日期">
+              <el-date-picker v-model="makeRange" type="daterange" value-format="YYYY-MM-DD"
+                range-separator="~" start-placeholder="起" end-placeholder="止" style="width:240px" @change="load" />
+            </el-form-item>
+            <el-form-item label="寄出日期">
+              <el-date-picker v-model="shipRange" type="daterange" value-format="YYYY-MM-DD"
+                range-separator="~" start-placeholder="起" end-placeholder="止" style="width:240px" @change="load" />
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" @click="load">筛选</el-button>
+            </el-form-item>
           </el-form>
         </div>
       </el-collapse-transition>
@@ -37,29 +66,33 @@
       <el-table :data="list" v-loading="loading" border stripe @selection-change="(v: any[]) => selected = v" @row-dblclick="goEdit">
         <el-table-column type="selection" width="42" />
         <el-table-column prop="sample_no" label="样衣编号" width="150" sortable />
-        <el-table-column prop="style_no" label="客户款号" min-width="130" show-overflow-tooltip />
-        <el-table-column label="样衣类别" width="120">
+        <el-table-column prop="style_no" label="客户款号" min-width="130" show-overflow-tooltip sortable />
+        <el-table-column prop="categories" label="样衣类别" width="120" sortable>
           <template #default="{ row }">{{ (row.categories || '').split(',').filter(Boolean).join('·') || '-' }}</template>
         </el-table-column>
-        <el-table-column label="中间商" min-width="120" show-overflow-tooltip>
+        <el-table-column prop="middleman_name" label="中间商" min-width="120" show-overflow-tooltip sortable>
           <template #default="{ row }">{{ row.middleman_name || '-' }}</template>
         </el-table-column>
-        <el-table-column label="制版师" width="100">
+        <el-table-column prop="patternmaker_name" label="制版师" width="100" sortable>
           <template #default="{ row }">{{ row.patternmaker_name || '—' }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="100">
+        <el-table-column prop="maker" label="制单人" width="100" sortable>
+          <template #default="{ row }">{{ row.maker || '—' }}</template>
+        </el-table-column>
+        <el-table-column prop="status" label="状态" width="100" sortable>
           <template #default="{ row }">
             <span v-if="row.status === 'ORDERED'" class="ordered">{{ statusLabel(row.status) }}</span>
             <el-tag v-else :type="statusTag(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="制单日期" width="110"><template #default="{ row }">{{ row.make_date || '-' }}</template></el-table-column>
-        <el-table-column label="寄出日期" width="110"><template #default="{ row }">{{ row.ship_sample_date || '—' }}</template></el-table-column>
-        <el-table-column label="寄回日期" width="110"><template #default="{ row }">{{ row.return_date || '—' }}</template></el-table-column>
-        <el-table-column label="操作" width="170" fixed="right">
+        <el-table-column prop="make_date" label="制单日期" width="110" sortable><template #default="{ row }">{{ row.make_date || '-' }}</template></el-table-column>
+        <el-table-column prop="ship_sample_date" label="寄出日期" width="110" sortable><template #default="{ row }">{{ row.ship_sample_date || '—' }}</template></el-table-column>
+        <el-table-column prop="return_date" label="寄回日期" width="110" sortable><template #default="{ row }">{{ row.return_date || '—' }}</template></el-table-column>
+        <el-table-column label="操作" width="210" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
             <el-button link size="small" @click="goView(row)">查看</el-button>
+            <el-button link size="small" @click="printRow(row)">打印</el-button>
             <el-button v-if="isPatternmaker" link type="warning" size="small" @click="goPatternmaker(row)">版师</el-button>
           </template>
         </el-table-column>
@@ -72,6 +105,9 @@
       </div>
       <div class="tip">🟢「已成单」= 被客户报价转销售合同后自动置，绿色加粗显示（B1）。</div>
     </div>
+
+    <csv-import-dialog v-model="showImport" title="历史样衣"
+      :template-headers="importHeaders" :parse-row="parseSampleRow" :submit="submitImport" @done="load" />
   </div>
 </template>
 
@@ -79,10 +115,12 @@
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Search, Plus, Download, Delete, CopyDocument, ArrowDown } from '@element-plus/icons-vue';
+import { Search, Plus, Upload, Download, Delete, CopyDocument, ArrowDown } from '@element-plus/icons-vue';
 import { sampleApi } from '@/api/sample';
 import { useAuthStore } from '@/stores/auth';
-import { UserRole, SAMPLE_STATUS_LABEL } from '@i9/types';
+import { printSample } from '@/utils/samplePrint';
+import CsvImportDialog from '@/components/CsvImportDialog.vue';
+import { UserRole, SAMPLE_STATUS_LABEL, SAMPLE_CATEGORIES } from '@i9/types';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -90,6 +128,7 @@ const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
 const canEdit = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.BUSINESS));
 const isPatternmaker = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.PATTERNMAKER));
 const statuses = Object.entries(SAMPLE_STATUS_LABEL).map(([value, label]) => ({ value, label }));
+const sampleCategories = SAMPLE_CATEGORIES;
 const statusLabel = (s: string) => (SAMPLE_STATUS_LABEL as any)[s] ?? s;
 const statusTag = (s: string) => ({ PENDING: 'info', SAMPLING: 'warning', SHIPPED: 'primary', RETURNED: 'primary', RECONCILED: 'success', DONE: 'success' } as any)[s] ?? 'info';
 
@@ -98,19 +137,40 @@ const list = ref<any[]>([]);
 const total = ref(0);
 const selected = ref<any[]>([]);
 const showAdvanced = ref(false);
-const query = reactive({ page: 1, size: 20, keyword: '', status: undefined as string | undefined });
+const query = reactive({
+  page: 1, size: 20, keyword: '', status: undefined as string | undefined,
+  style_no: '', middleman_name: '', categories: undefined as string | undefined,
+  patternmaker_name: '', maker: '',
+});
+const makeRange = ref<[string, string] | null>(null); // 制单日期范围
+const shipRange = ref<[string, string] | null>(null); // 寄出日期范围
+
+function buildParams() {
+  const params: Record<string, unknown> = { page: query.page, size: query.size };
+  (['keyword', 'status', 'style_no', 'middleman_name', 'categories', 'patternmaker_name', 'maker'] as const)
+    .forEach((k) => { if (query[k]) params[k] = query[k]; });
+  if (makeRange.value?.[0]) { params.make_start = makeRange.value[0]; params.make_end = makeRange.value[1]; }
+  if (shipRange.value?.[0]) { params.ship_start = shipRange.value[0]; params.ship_end = shipRange.value[1]; }
+  return params;
+}
 
 async function load() {
   loading.value = true;
   try {
-    const res: any = await sampleApi.list(query);
+    const res: any = await sampleApi.list(buildParams());
     list.value = res.data ?? [];
     total.value = res.data?.total ?? res.total ?? 0;
   } finally {
     loading.value = false;
   }
 }
-function reset() { query.keyword = ''; query.status = undefined; query.page = 1; load(); }
+function reset() {
+  query.keyword = ''; query.status = undefined; query.page = 1;
+  query.style_no = ''; query.middleman_name = ''; query.categories = undefined;
+  query.patternmaker_name = ''; query.maker = '';
+  makeRange.value = null; shipRange.value = null;
+  load();
+}
 function goCreate() { router.push({ name: 'SampleCreate' }); }
 function goEdit(row: any) { router.push({ name: 'SampleEdit', params: { id: row.id } }); }
 function goView(row: any) { router.push({ name: 'SampleView', params: { id: row.id } }); }
@@ -127,6 +187,39 @@ async function batchRemove() {
   ElMessage[fail ? 'warning' : 'success'](`删除完成：成功 ${ok} 条${fail ? `，拦截 ${fail} 条(仅待派单/未被引用可删)` : ''}`);
   load();
 }
+// 打印/PDF(取详情含材料明细;对外脱敏,不含参考价格)
+async function printRow(row: any) {
+  try { const res: any = await sampleApi.get(row.id); printSample(res.data ?? res); }
+  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? e?.message ?? '打印失败'); }
+}
+
+// ── 历史样衣 CSV 批量导入 ──
+const showImport = ref(false);
+const importHeaders = ['客户款号', '样衣类别', '中间商名称', '制版师', '制单人', '材料品名(分号分隔)'];
+function parseSampleRow(c: Record<string, string>) {
+  if (!c['客户款号']) return { row: null, error: '客户款号必填' };
+  if (!c['样衣类别']) return { row: null, error: '样衣类别必填' };
+  if (!c['中间商名称']) return { row: null, error: '中间商名称必填' };
+  if (!c['材料品名(分号分隔)']) return { row: null, error: '材料品名必填' };
+  return {
+    row: {
+      styleNo: c['客户款号'], categories: c['样衣类别'], middlemanName: c['中间商名称'],
+      patternmakerName: c['制版师'] || undefined, maker: c['制单人'] || undefined,
+      materials: c['材料品名(分号分隔)'],
+    },
+  };
+}
+async function submitImport(rows: any[]) {
+  const res: any = await sampleApi.importBatch(rows);
+  const d = res.data ?? res;
+  // 适配 CsvImportDialog 结果面板 {created, failedCount, failed:[{index,name,error}]}
+  return {
+    created: d.ok ?? 0,
+    failedCount: d.fail ?? 0,
+    failed: (d.failures ?? []).map((f: any) => ({ index: f.row, name: rows[f.row - 1]?.styleNo ?? '', error: f.reason })),
+  };
+}
+
 function exportCsv() {
   const cols = ['sample_no', 'style_no', 'categories', 'middleman_name', 'patternmaker_name', 'status', 'make_date'];
   const head = ['样衣编号', '客户款号', '样衣类别', '中间商', '制版师', '状态', '制单日期'];

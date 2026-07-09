@@ -37,4 +37,12 @@ export class QueryCustomerDto {
   @IsOptional()
   @Type(() => Number)
   status?: number;
+
+  @IsOptional() trade_country?: string;
+  @IsOptional() cooperation_level?: string;
+  @IsOptional() customer_source?: string;
+  @IsOptional() salesperson?: string;
+  @IsOptional() contact?: string;
+  @IsOptional() develop_start?: string;
+  @IsOptional() develop_end?: string;
 }

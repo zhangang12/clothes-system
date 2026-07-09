@@ -56,6 +56,7 @@
             <el-table-column prop="name" label="名称" width="160" />
             <el-table-column prop="error" label="失败原因" show-overflow-tooltip />
           </el-table>
+          <el-button v-if="result.failed?.length" style="margin-top:12px" type="danger" plain @click="downloadFailures">↓ 下载错误报告</el-button>
           <el-button style="margin-top:12px" type="primary" @click="done">完成</el-button>
         </template>
       </el-result>
@@ -137,6 +138,16 @@ async function commit() {
 }
 function done() { emit('done'); emit('update:modelValue', false); }
 function reset() { step.value = 0; rawText.value = ''; parsed.value = []; result.value = { created: 0, failedCount: 0, failed: [] }; }
+
+// 错误报告下载(设计稿 D.2:下载错误报告)
+function downloadFailures() {
+  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = (result.value.failed ?? []) as any[];
+  const csv = '\ufeff' + ['行号,名称,失败原因', ...rows.map((r) => [r.index, r.name, r.error].map(esc).join(','))].join('\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a'); a.href = url; a.download = '导入错误报告.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
 </script>
 
 <style scoped>

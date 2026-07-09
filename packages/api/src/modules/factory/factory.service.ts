@@ -2,7 +2,7 @@ import {
   Injectable, NotFoundException, ConflictException, BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, Like, Not, In, DataSource } from 'typeorm';
+import { Repository, FindOptionsWhere, Like, Not, In, DataSource, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { Factory } from './factory.entity';
 import { FactoryContact } from './factory-contact.entity';
@@ -118,7 +118,14 @@ export class FactoryService {
     let created = 0;
     for (let i = 0; i < rows.length; i++) {
       try {
-        await this.create(rows[i], createdBy);
+        const existing = rows[i]?.name
+          ? await this.repo.findOne({ where: { name: rows[i].name, deleted: 0 } })
+          : null;
+        if (existing) {
+          await this.update(existing.id, rows[i]); // 覆盖更新(设计稿 D.2)
+        } else {
+          await this.create(rows[i], createdBy);
+        }
         created += 1;
       } catch (e: any) {
         failed.push({ index: i + 1, name: rows[i]?.name, error: e?.message ?? '未知错误' });
@@ -129,10 +136,18 @@ export class FactoryService {
 
   async findAll(query: QueryFactoryDto) {
     const { page = 1, size = 20, keyword, type, status } = query;
+    const { factory_no, name: fname, bank_name, contact, develop_start, develop_end } = query as any;
     const base: FindOptionsWhere<Factory> = {
       deleted: 0,
       ...(type !== undefined && { type }),
       ...(status !== undefined && { status }),
+      ...(factory_no && { factory_no: Like(`%${factory_no}%`) }),
+      ...(fname && { name: Like(`%${fname}%`) }),
+      ...(bank_name && { bank_name: Like(`%${bank_name}%`) }),
+      ...(develop_start && develop_end
+        ? { develop_date: Between(develop_start, develop_end) }
+        : develop_start ? { develop_date: MoreThanOrEqual(develop_start) }
+        : develop_end ? { develop_date: LessThanOrEqual(develop_end) } : {}),
     };
     // 智能搜索：厂商编号/名称/省份/城市/地址/业务范围/法人代表（设计稿 §1.2）
     const searchable = ['factory_no', 'name', 'province', 'city', 'address', 'business_scope', 'legal_rep'];
@@ -140,6 +155,16 @@ export class FactoryService {
       ? searchable.map((f) => ({ ...base, [f]: Like(`%${keyword}%`) }))
       : base;
 
+    // 联系人检索(设计稿 §1.2)
+    if (contact) {
+      const hits = await this.contactRepo
+        .createQueryBuilder('c')
+        .select('DISTINCT c.factory_id', 'fid')
+        .where('c.name LIKE :k OR c.mobile LIKE :k OR c.phone LIKE :k', { k: `%${contact}%` })
+        .getRawMany();
+      const ids = hits.map((h) => +h.fid);
+      Object.assign(base, { id: In(ids.length ? ids : [0]) });
+    }
     const [items, total] = await this.repo.findAndCount({
       where, skip: (page - 1) * size, take: size, order: { id: 'DESC' },
     });

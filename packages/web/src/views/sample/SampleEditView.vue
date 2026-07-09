@@ -19,6 +19,8 @@
           <el-button v-if="!readonly && editId && ['RECONCILED', 'DONE'].includes(form.status)" type="success" plain @click="markComplete">标记完成</el-button>
           <el-button v-if="editId" :icon="CopyDocument" @click="copy">复制</el-button>
         </template>
+        <el-button v-if="editId" :icon="Printer" @click="print">打印/PDF</el-button>
+        <el-button v-if="editId && isAdmin" type="danger" plain :icon="Delete" @click="removeSample">删除</el-button>
       </div>
     </div>
 
@@ -49,7 +51,14 @@
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :span="8"><el-form-item label="制版师"><el-input v-model="form.patternmakerName" :disabled="bizDisabled" placeholder="从制版师字典选择" /></el-form-item></el-col>
+          <el-col :span="8">
+            <el-form-item label="制版师">
+              <el-select v-if="!pmLoadFailed" v-model="form.patternmakerId" filterable clearable placeholder="选择制版师" style="width:100%" :disabled="bizDisabled" @change="onPatternmaker">
+                <el-option v-for="u in pmUsers" :key="u.id" :label="u.real_name || u.username" :value="u.id" />
+              </el-select>
+              <el-input v-else v-model="form.patternmakerName" :disabled="bizDisabled" placeholder="制版师姓名" />
+            </el-form-item>
+          </el-col>
           <el-col :span="8"><el-form-item label="制单人员"><el-input v-model="form.maker" :disabled="bizDisabled" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="制单日期"><el-input v-model="form.makeDate" readonly /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="寄样日期"><el-date-picker v-model="form.shipSampleDate" type="date" value-format="YYYY-MM-DD" style="width:100%" :disabled="bizDisabled" /></el-form-item></el-col>
@@ -89,7 +98,8 @@
             <el-table-column label="拉头" width="80"><template #default="{ row }"><el-input v-model="row.puller" size="small" :disabled="bizDisabled" /></template></el-table-column>
             <el-table-column label="数量" width="90"><template #default="{ row }"><el-input v-model="row.qty" size="small" :disabled="bizDisabled" /></template></el-table-column>
             <el-table-column label="尺寸" width="110"><template #default="{ row }"><el-input v-model="row.size" size="small" :disabled="bizDisabled" /></template></el-table-column>
-            <el-table-column label="参考价格" width="100"><template #default="{ row }"><el-input v-model="row.refPrice" size="small" :disabled="bizDisabled" /></template></el-table-column>
+            <!-- 参考价格属敏感字段:版师视图隐藏(对外/版师脱敏) -->
+            <el-table-column v-if="!patternmaker" label="参考价格" width="100"><template #default="{ row }"><el-input v-model="row.refPrice" size="small" :disabled="bizDisabled" /></template></el-table-column>
             <el-table-column label="实际耗用" width="100"><template #default="{ row }"><el-input v-model="row.actualUsage" size="small" :disabled="!pmEnabled && bizDisabled" /></template></el-table-column>
             <el-table-column label="供应商" min-width="140">
               <template #default="{ row }">
@@ -123,6 +133,11 @@
           <el-col :span="8"><el-form-item label="件数"><el-input v-model="form.pieceCount" type="number" :disabled="!pmEnabled" placeholder="版师填" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="工时单价(CNY)"><el-input v-model="form.laborUnitPrice" type="number" :disabled="!pmEnabled" placeholder="版师填" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="工时金额(CNY)"><el-input :model-value="laborAmount" readonly placeholder="= 件数 × 单价" /></el-form-item></el-col>
+          <el-col :span="24">
+            <el-form-item label="样衣意见附件">
+              <file-upload v-model="form.feedbackAttachments" multiple accept="image/*,.pdf" :disabled="readonly" tip="客户反馈图/PDF,可多文件(业务/版师均可上传)" />
+            </el-form-item>
+          </el-col>
         </el-row>
         <div class="hint">💡 版师填「件数 + 工时单价」保存后自动生成对账单 → 联动付款申请。</div>
       </section-block>
@@ -143,16 +158,17 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, h } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
-import { Back, Check, Plus, Minus, Promotion, CopyDocument } from '@element-plus/icons-vue';
+import { Back, Check, Plus, Minus, Promotion, CopyDocument, Printer, Delete } from '@element-plus/icons-vue';
 import { sampleApi } from '@/api/sample';
 import { uploadApi } from '@/api/upload';
 import { useAuthStore } from '@/stores/auth';
 import { customerApi } from '@/api/customer';
 import { factoryApi } from '@/api/factory';
 import FileUpload from '@/components/FileUpload.vue';
-import { SAMPLE_CATEGORIES, SAMPLE_STATUS_LABEL } from '@i9/types';
+import { printSample } from '@/utils/samplePrint';
+import { SAMPLE_CATEGORIES, SAMPLE_STATUS_LABEL, UserRole } from '@i9/types';
 
 const SectionBlock = (props: { title: string; badge?: string }, { slots }: any) =>
   h('div', { class: 'section-block' }, [
@@ -172,18 +188,21 @@ const editId = computed(() => (route.params.id ? Number(route.params.id) : null)
 const modeLabel = computed(() => (readonly.value ? '查看' : patternmaker.value ? '版师编辑' : editId.value ? '编辑' : '新建'));
 const bizDisabled = computed(() => readonly.value || patternmaker.value); // 业务字段：查看/版师视图只读
 const pmEnabled = computed(() => patternmaker.value && !readonly.value);  // 版师字段：仅版师视图可编辑
+const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
 
 const sampleCategories = SAMPLE_CATEGORIES;
 const middlemen = ref<any[]>([]);
 const buyers = ref<any[]>([]);
 const factories = ref<any[]>([]);
 const versions = ref<any[]>([]);
+const pmUsers = ref<any[]>([]);       // 制版师用户(role=PATTERNMAKER)
+const pmLoadFailed = ref(false);      // 加载失败降级为文本输入
 
 const emptyMaterial = () => ({ itemName: '', arrangeDate: '', width: '', colors: '', part: '', composition: '', codeBand: '', zipperLength: '', puller: '', qty: '', size: '', refPrice: '', actualUsage: '', supplierId: undefined, supplierName: '', image: '', remark: '' });
 const form = reactive<any>({
   sampleNo: '', categories: '', middlemanId: undefined, styleNo: '', buyerId: undefined,
-  patternmakerName: '', maker: authStore.realName || '', makeDate: new Date().toISOString().slice(0, 10),
-  shipSampleDate: '', recipient: '', fileLocation: '', garmentRemark: '',
+  patternmakerId: undefined, patternmakerName: '', maker: authStore.realName || '', makeDate: new Date().toISOString().slice(0, 10),
+  shipSampleDate: '', recipient: '', fileLocation: '', garmentRemark: '', feedbackAttachments: '',
   image1: '', image2: '', image3: '', materialShipNo: '', materialShipDate: '',
   returnNo: '', returnDate: '', pieceCount: '', laborUnitPrice: '', status: '',
   materials: [emptyMaterial()],
@@ -214,7 +233,11 @@ function removeMaterials() {
   if (!form.materials.length) form.materials.push(emptyMaterial());
 }
 function onSupplier(row: any, id: number) { row.supplierName = factories.value.find((f) => f.id === id)?.name ?? ''; }
-const actionLabel = (a: string) => ({ PUSH: '推送版师', PATTERNMAKER_SAVE: '版师保存', SHIP: '已寄出', COMPLETE: '已完成', COPY: '复制' } as any)[a] ?? a;
+function onPatternmaker(id?: number) {
+  const u = pmUsers.value.find((x) => x.id === id);
+  form.patternmakerName = u ? (u.real_name || u.username) : '';
+}
+const actionLabel = (a: string) => ({ CREATE: '创建', UPDATE: '修改', PUSH: '推送版师', PATTERNMAKER_SAVE: '版师保存', SHIP: '已寄出', COMPLETE: '已完成', COPY: '复制' } as any)[a] ?? a;
 
 async function loadRefs() {
   const [ms, bs, fs] = await Promise.all([
@@ -225,6 +248,12 @@ async function loadRefs() {
   middlemen.value = (ms as any).data ?? [];
   buyers.value = (bs as any).data ?? [];
   factories.value = (((fs as any).data ?? fs) as any[]) ?? [];
+  // 制版师下拉(role=PATTERNMAKER);加载失败/无数据 → 降级为文本输入
+  try {
+    const us: any = await sampleApi.listPatternmakers();
+    pmUsers.value = (us.data ?? us) ?? [];
+    if (!pmUsers.value.length) pmLoadFailed.value = true;
+  } catch { pmLoadFailed.value = true; }
 }
 
 async function load() {
@@ -233,9 +262,10 @@ async function load() {
   const d = res.data ?? res;
   Object.assign(form, {
     sampleNo: d.sample_no, categories: d.categories ?? '', middlemanId: d.customer_id, styleNo: d.style_no,
-    buyerId: d.buyer_id ?? undefined, patternmakerName: d.patternmaker_name ?? '', maker: d.maker ?? '',
+    buyerId: d.buyer_id ?? undefined, patternmakerId: d.patternmaker_id != null ? Number(d.patternmaker_id) : undefined,
+    patternmakerName: d.patternmaker_name ?? '', maker: d.maker ?? '',
     makeDate: d.make_date ?? '', shipSampleDate: d.ship_sample_date ?? '', recipient: d.recipient ?? '',
-    fileLocation: d.file_location ?? '', garmentRemark: d.garment_remark ?? '',
+    fileLocation: d.file_location ?? '', garmentRemark: d.garment_remark ?? '', feedbackAttachments: d.feedback_attachments ?? '',
     image1: d.image1 ?? '', image2: d.image2 ?? '', image3: d.image3 ?? '',
     materialShipNo: d.material_ship_no ?? '', materialShipDate: d.material_ship_date ?? '',
     returnNo: d.return_no ?? '', returnDate: d.return_date ?? '', pieceCount: d.piece_count ?? '',
@@ -254,9 +284,11 @@ async function load() {
 function buildDto() {
   return {
     categories: form.categories, middlemanId: form.middlemanId, styleNo: form.styleNo,
-    buyerId: form.buyerId, patternmakerName: form.patternmakerName || undefined, maker: form.maker || undefined,
+    buyerId: form.buyerId, patternmakerId: form.patternmakerId || undefined,
+    patternmakerName: form.patternmakerName || undefined, maker: form.maker || undefined,
     shipSampleDate: form.shipSampleDate || undefined, recipient: form.recipient || undefined,
     fileLocation: form.fileLocation || undefined, garmentRemark: form.garmentRemark || undefined,
+    feedbackAttachments: form.feedbackAttachments ?? '',
     image1: form.image1 || undefined, image2: form.image2 || undefined, image3: form.image3 || undefined,
     materials: form.materials.filter((m: any) => m.itemName).map((m: any, i: number) => ({ ...m, sortOrder: i })),
   };
@@ -268,8 +300,20 @@ async function save() {
   if (!dto.materials.length) { ElMessage.error('材料明细至少 1 行且品名必填'); return; }
   saving.value = true;
   try {
-    if (editId.value) { await sampleApi.update(editId.value, dto); ElMessage.success('更新成功'); }
-    else { await sampleApi.create(dto); ElMessage.success('创建成功'); }
+    let id = editId.value;
+    if (id) { await sampleApi.update(id, dto); ElMessage.success('更新成功'); }
+    else { const r: any = await sampleApi.create(dto); id = Number((r.data ?? r)?.id); ElMessage.success('创建成功'); }
+    // 设计稿页面事件:填「材料寄出单号」保存即自动推送版师(待派单 → 打样中)
+    const wasPending = editId.value ? form.status === 'PENDING' : true; // 新建后必为待派单
+    if (id && form.materialShipNo && wasPending) {
+      try {
+        await sampleApi.push(id, { materialShipNo: form.materialShipNo });
+        ElMessage.success('已自动推送版师(打样中)');
+        if (editId.value) { await load(); return; } // 停留当前页并刷新
+      } catch (e: any) {
+        ElMessage.error(e?.response?.data?.message ?? '自动推送版师失败');
+      }
+    }
     router.push({ name: 'Samples' });
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.message ?? '保存失败');
@@ -306,6 +350,11 @@ async function pushPatternmaker() {
 
 async function savePatternmaker() {
   if (!editId.value) return;
+  // 软校验:实际耗用全空时提醒确认(可继续保存)
+  const noUsage = form.materials.every((m: any) => m.actualUsage === '' || m.actualUsage === null || m.actualUsage === undefined);
+  if (noUsage) {
+    try { await ElMessageBox.confirm('实际耗用尚未填写,确认保存?', '提示', { type: 'warning' }); } catch { return; }
+  }
   saving.value = true;
   try {
     await sampleApi.patternmakerSave(editId.value, {
@@ -313,6 +362,7 @@ async function savePatternmaker() {
       returnNo: form.returnNo || undefined,
       pieceCount: form.pieceCount === '' ? undefined : Number(form.pieceCount),
       laborUnitPrice: form.laborUnitPrice === '' ? undefined : Number(form.laborUnitPrice),
+      feedbackAttachments: form.feedbackAttachments ?? '',
     });
     ElMessage.success('版师保存成功');
     router.push({ name: 'Samples' });
@@ -325,6 +375,19 @@ async function copy() {
   if (!editId.value) return;
   try { const r: any = await sampleApi.copy(editId.value); ElMessage.success('已复制'); router.push({ name: 'SampleEdit', params: { id: (r.data ?? r).id } }); }
   catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '复制失败'); }
+}
+// 删除(仅管理员;仅待派单可删,被报价引用后端拦截)
+async function removeSample() {
+  if (!editId.value) return;
+  try { await ElMessageBox.confirm('确认删除该样衣?仅「待派单」状态可删,此操作不可恢复。', '删除样衣', { type: 'warning' }); } catch { return; }
+  try { await sampleApi.remove(editId.value); ElMessage.success('已删除'); router.push({ name: 'Samples' }); }
+  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '删除失败'); }
+}
+// 打印/PDF(A4;材料明细脱敏,不含参考价格)
+async function print() {
+  if (!editId.value) return;
+  try { const res: any = await sampleApi.get(editId.value); printSample(res.data ?? res); }
+  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? e?.message ?? '打印失败'); }
 }
 function goBack() { router.push({ name: 'Samples' }); }
 

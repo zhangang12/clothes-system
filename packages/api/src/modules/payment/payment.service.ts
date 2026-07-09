@@ -197,6 +197,8 @@ export class PaymentService {
     size = 20,
     startDate?: string,
     endDate?: string,
+    dueStart?: string,
+    dueEnd?: string,
   ) {
     const where: any = { deleted: 0 };
     if (factoryId) where.factory_id = factoryId;
@@ -209,6 +211,10 @@ export class PaymentService {
     } else if (endDate) {
       where.created_at = LessThanOrEqual(`${endDate} 23:59:59`);
     }
+    // 到期日范围（设计稿 06 应付汇总筛选）
+    if (dueStart && dueEnd) where.due_date = Between(dueStart, dueEnd);
+    else if (dueStart) where.due_date = MoreThanOrEqual(dueStart);
+    else if (dueEnd) where.due_date = LessThanOrEqual(dueEnd);
 
     size = Math.min(Math.max(Number(size) || 20, 1), 100); page = Math.max(Number(page) || 1, 1); // 分页钳制
     const [items, total] = await this.prRepo.findAndCount({

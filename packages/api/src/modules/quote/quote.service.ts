@@ -2,7 +2,7 @@ import {
   Injectable, NotFoundException, BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, Like, In, Raw, DataSource, EntityManager } from 'typeorm';
+import { Repository, FindOptionsWhere, Like, In, Raw, Between, MoreThanOrEqual, LessThanOrEqual, DataSource, EntityManager } from 'typeorm';
 import { Quotation } from './quotation.entity';
 import { QuotationItem } from './quotation-item.entity';
 import { QuotationFee } from './quotation-fee.entity';
@@ -11,6 +11,8 @@ import { SampleGarment } from '../sample/sample-garment.entity';
 import { SampleMaterial } from '../sample/sample-material.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { CustomerService } from '../customer/customer.service';
+import { OrderService } from '../order/order.service';
+import { CreateOrderDto } from '../order/dto/create-order.dto';
 import { SysConfigService } from '../../common/config/sys-config.service';
 import { QuoteStatus, SampleStatus, DEFAULT_QUOTE_FEES, ApprovalStatus, APPROVAL_THRESHOLD_KEYS } from '@i9/types';
 import { CreateQuoteDto, CreateQuoteItemDto, CreateQuoteFeeDto } from './dto/create-quote.dto';
@@ -35,6 +37,7 @@ export class QuoteService {
     @InjectRepository(SampleGarment) private readonly sampleRepo: Repository<SampleGarment>,
     @InjectRepository(SampleMaterial) private readonly sampleMaterialRepo: Repository<SampleMaterial>,
     private readonly customerService: CustomerService,
+    private readonly orderService: OrderService,
     private readonly numbering: NumberingService,
     private readonly config: SysConfigService,
     private readonly dataSource: DataSource,
@@ -119,7 +122,10 @@ export class QuoteService {
   }
 
   async findAll(query: QueryQuoteDto, user?: { id: number; role?: string }) {
-    const { page = 1, size = 20, keyword, status, customer_id } = query;
+    const {
+      page = 1, size = 20, keyword, status, customer_id,
+      quote_no, style_no, middleman_name, buyer_name, salesperson, inquiry_start, inquiry_end,
+    } = query;
     // 客户机密行级过滤（设计稿 01：非授权用户在报价中不可见该客户）：
     // 中间商(customer_id)或最终买家(buyer_id)任一指向不可见客户 → 整单隐藏
     const visibleIds = await this.customerService.visibleCustomerIds(user);
@@ -131,11 +137,24 @@ export class QuoteService {
         buyer_id: Raw((a) => `(${a} IS NULL OR ${a} IN (${set.join(',')}))`),
       });
     }
+    // 询价日期范围（起/止均含）
+    const inquiryCond = inquiry_start && inquiry_end
+      ? Between(inquiry_start, inquiry_end)
+      : inquiry_start ? MoreThanOrEqual(inquiry_start)
+      : inquiry_end ? LessThanOrEqual(inquiry_end)
+      : undefined;
+    // 高级筛选条件必须进 base：keyword 时 where 是 OR 数组，每个分支都要 AND 上这些条件
     const base: FindOptionsWhere<Quotation> = {
       deleted: 0,
       ...secretCond,
       ...(status !== undefined && { status }),
       ...(customer_id !== undefined && { customer_id }),
+      ...(quote_no && { quote_no: Like(`%${quote_no}%`) }),
+      ...(style_no && { style_no: Like(`%${style_no}%`) }),
+      ...(middleman_name && { middleman_name: Like(`%${middleman_name}%`) }),
+      ...(buyer_name && { buyer_name: Like(`%${buyer_name}%`) }),
+      ...(salesperson && { salesperson: Like(`%${salesperson}%`) }),
+      ...(inquiryCond && { inquiry_date: inquiryCond }),
     };
     // 智能搜索：报价单号/中间商/最终买家/客户款号/业务员（设计稿 §B）
     const searchable = ['quote_no', 'middleman_name', 'buyer_name', 'style_no', 'salesperson'];
@@ -283,8 +302,8 @@ export class QuoteService {
     return this.quoteRepo.save(quote);
   }
 
-  // 转销售合同：已报价/客户调整 → 已成单；关联样衣自动置已成单（B1）
-  async toContract(id: number): Promise<Quotation> {
+  // 转销售合同：已报价/客户调整 → 已成单；关联样衣自动置已成单（B1）；并自动生成订单草稿（含报价明细导入）
+  async toContract(id: number, userId: number) {
     const quote = await this.quoteRepo.findOne({ where: { id, deleted: 0 } });
     if (!quote) throw new NotFoundException(`报价单 #${id} 不存在`);
     if (![QuoteStatus.QUOTED, QuoteStatus.ADJUSTING].includes(quote.status)) {
@@ -295,10 +314,24 @@ export class QuoteService {
     if (quote.sample_id) {
       await this.sampleRepo.update({ id: quote.sample_id, deleted: 0 }, { status: SampleStatus.ORDERED });
     }
-    return saved;
+    // 自动建订单：create 必填仅 customer_id/qty_total；customer_po 暂无客户 PO，用报价单号占位（订单草稿可改）
+    const order = await this.orderService.create({
+      quote_id: id,
+      customer_id: quote.customer_id,
+      customer_po: quote.quote_no,
+      style_no: quote.style_no ?? undefined,
+      buyer_id: quote.buyer_id ?? undefined,
+      salesperson: quote.salesperson ?? undefined,
+      currency: quote.currency ?? undefined,
+      qty_total: +quote.quote_qty || 0,
+    } as CreateOrderDto, userId);
+    // 报价明细 → 订单材料明细（快照；importFromQuote 会带出中间商/买家等基础字段）
+    await this.orderService.importFromQuote(order.id, id);
+    return { ...saved, order_id: order.id, order_no: order.order_no };
   }
 
-  async copy(id: number, createdBy: number): Promise<Quotation> {
+  // 复制：withItems=true 含明细/费用；false 仅复制基本信息（设计稿：复制可选是否带明细）
+  async copy(id: number, createdBy: number, withItems = true): Promise<Quotation> {
     const src = await this.findOne(id);
     const quote_no = await this.numbering.next(NUM_PREFIX.QUOTATION);
     const rate = +src.exchange_rate;
@@ -307,17 +340,20 @@ export class QuoteService {
         quote_no, inquiry_date: today(), sample_id: src.sample_id, sample_no: src.sample_no,
         customer_id: src.customer_id, middleman_name: src.middleman_name, buyer_id: src.buyer_id,
         buyer_name: src.buyer_name, buyer_no: src.buyer_no, style_no: src.style_no,
+        middleman_contact: src.middleman_contact,
         currency: src.currency, exchange_rate: src.exchange_rate, trade_country: src.trade_country,
         settlement_method: src.settlement_method, price_terms: src.price_terms, salesperson: src.salesperson,
-        profit_rate: src.profit_rate, quote_qty: src.quote_qty, status: QuoteStatus.DRAFT,
+        profit_rate: src.profit_rate, quote_qty: src.quote_qty,
+        image1: src.image1, image2: src.image2, total_remark: src.total_remark,
+        status: QuoteStatus.DRAFT,
         created_by: createdBy, deleted: 0,
       }));
-      const items = (src.items ?? []).map((it: any, idx: number) => manager.create(QuotationItem, {
+      const items = (withItems ? src.items ?? [] : []).map((it: any, idx: number) => manager.create(QuotationItem, {
         quote_id: quote.id, sort_order: idx, part: it.part, item_name: it.item_name, width: it.width,
         color: it.color, supplier: it.supplier, unit: it.unit, quote_usage: it.quote_usage,
         rmb_price: it.rmb_price, usd_price: it.usd_price, loss_rate: it.loss_rate, loss_amount: it.loss_amount, remark: it.remark,
       }));
-      const fees = (src.fees ?? []).map((f: any, idx: number) => manager.create(QuotationFee, {
+      const fees = (withItems ? src.fees ?? [] : []).map((f: any, idx: number) => manager.create(QuotationFee, {
         quote_id: quote.id, sort_order: idx, fee_name: f.fee_name, rmb_price: f.rmb_price, usd_price: f.usd_price, quote_usage: f.quote_usage,
       }));
       if (items.length) await manager.save(QuotationItem, items);

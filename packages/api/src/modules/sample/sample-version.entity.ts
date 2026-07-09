@@ -2,6 +2,8 @@ import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeor
 
 // 变更记录动作（样衣设计稿 §A 变更记录分组）
 export enum SampleAction {
+  CREATE = 'CREATE',                       // 创建
+  UPDATE = 'UPDATE',                       // 修改
   PUSH = 'PUSH',                           // 推送版师
   PATTERNMAKER_SAVE = 'PATTERNMAKER_SAVE', // 版师保存
   SHIP = 'SHIP',                           // 已寄出

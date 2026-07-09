@@ -10,6 +10,7 @@
       </div>
       <div class="ops">
         <el-button v-if="!readonly" type="primary" :icon="Check" :loading="saving" @click="save">保存</el-button>
+        <el-button v-if="editId" :icon="CopyDocument" @click="copyAsNew">复制为新建</el-button>
       </div>
     </div>
 
@@ -85,6 +86,7 @@
               <el-input v-model="form.businessScope" />
             </el-form-item>
           </el-col>
+          <el-col :span="8"><el-form-item label="信用等级"><el-select v-model="form.grade" clearable placeholder="A/B/C" style="width:100%"><el-option label="A级" value="A" /><el-option label="B级" value="B" /><el-option label="C级" value="C" /></el-select></el-form-item></el-col>
         </el-row>
       </section-block>
 
@@ -103,16 +105,12 @@
           </el-table-column>
           <el-table-column label="部门" width="120">
             <template #default="{ row }">
-              <el-select v-model="row.department" size="small" allow-create filterable clearable style="width:100%">
-                <el-option v-for="d in departments" :key="d" :label="d" :value="d" />
-              </el-select>
+              <DictField v-model="row.department" type="department" size="small" />
             </template>
           </el-table-column>
           <el-table-column label="职务" width="120">
             <template #default="{ row }">
-              <el-select v-model="row.title" size="small" allow-create filterable clearable style="width:100%">
-                <el-option v-for="t in titles" :key="t" :label="t" :value="t" />
-              </el-select>
+              <DictField v-model="row.title" type="title" size="small" />
             </template>
           </el-table-column>
           <el-table-column label="电话号码" width="140">
@@ -180,8 +178,9 @@ import { ref, reactive, computed, onMounted, h } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
-import { Back, Check, Plus, Minus } from '@element-plus/icons-vue';
+import { Back, Check, Plus, Minus, CopyDocument } from '@element-plus/icons-vue';
 import { factoryApi } from '@/api/factory';
+import DictField from '@/components/DictSelect.vue';
 import { FACTORY_TYPE_LABEL } from '@i9/types';
 import { PROVINCES, PROVINCE_CITIES, DICT_DEPARTMENT, DICT_TITLE } from '@/constants/regions';
 
@@ -209,7 +208,7 @@ const factoryTypes = Object.entries(FACTORY_TYPE_LABEL).map(([value, label]) => 
 const emptyContact = () => ({ name: '', department: '', title: '', phone: '', mobile: '', email: '', remark: '' });
 const form = reactive<any>({
   factoryNo: '', type: '', extraTypes: [], canInvoice: true, name: '', province: '', city: '',
-  address: '', businessScope: '', developDate: new Date().toISOString().slice(0, 10),
+  address: '', businessScope: '', grade: '', developDate: new Date().toISOString().slice(0, 10),
   bankName: '', bankAccount: '', taxNo: '', invoicePhone: '', invoiceAddress: '',
   bankName2: '', bankAccount2: '', taxNo2: '', invoicePhone2: '', invoiceAddress2: '',
   legalRep: '', registeredCapital: '', establishedDate: '', annualSales: '',
@@ -246,7 +245,7 @@ async function load() {
   Object.assign(form, {
     factoryNo: d.factory_no, type: d.type, extraTypes: d.extra_types ? String(d.extra_types).split(',').filter(Boolean) : [], canInvoice: d.can_invoice !== 0, name: d.name,
     province: d.province ?? '', city: d.city ?? '', address: d.address ?? '',
-    businessScope: d.business_scope ?? '', developDate: d.develop_date ?? '',
+    businessScope: d.business_scope ?? '', grade: d.grade ?? '', developDate: d.develop_date ?? '',
     bankName: d.bank_name ?? '', bankAccount: d.bank_account ?? '', taxNo: d.tax_no ?? '',
     invoicePhone: d.invoice_phone ?? '', invoiceAddress: d.invoice_address ?? '',
     bankName2: d.bank_name2 ?? '', bankAccount2: d.bank_account2 ?? '', taxNo2: d.tax_no2 ?? '',
@@ -307,6 +306,13 @@ async function save() {
 
 function goBack() { router.push({ name: 'Factories' }); }
 onMounted(load);
+
+// 编辑页复制(设计稿 §编辑页工具栏):当前数据载为新建(编号留空由系统生成)
+function copyAsNew() {
+  form.factoryNo = '';
+  ElMessage.info('已复制当前数据为新建,保存后生成新编号');
+  router.replace({ path: router.currentRoute.value.path.replace(/\/\d+\/edit$/, '/new') });
+}
 </script>
 
 <style scoped>

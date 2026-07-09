@@ -1,4 +1,5 @@
 <template>
+  <div class="fu-wrap" tabindex="0" @paste="onPaste" @dragover.prevent @drop.prevent="onDrop">
   <el-upload
     action="#"
     :file-list="fileList"
@@ -19,6 +20,9 @@
     <el-button v-else-if="!disabled" size="small" :icon="Upload">上传</el-button>
     <template v-if="tip" #tip><div class="up-tip">{{ tip }}</div></template>
   </el-upload>
+
+  <div v-if="!disabled" class="fu-hint">支持拖入文件 / 聚焦后 Ctrl+V 粘贴截图</div>
+  </div>
 
   <el-dialog v-model="previewVisible" width="640px" append-to-body>
     <img :src="previewUrl" style="width:100%" alt="预览" />
@@ -53,6 +57,26 @@ watch(() => props.modelValue, () => { fileList.value = toList(); });
 const previewVisible = ref(false);
 const previewUrl = ref('');
 
+// 粘贴截图 / 拖拽文件 → 复用同一上传通道(设计稿:①点选 ②Ctrl+V 粘贴 ③拖文件)
+function onPaste(e: ClipboardEvent) {
+  if (props.disabled) return;
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const it of items) {
+    if (it.kind === 'file') {
+      const f = it.getAsFile();
+      if (f) { e.preventDefault(); doUpload({ file: f }); }
+    }
+  }
+}
+function onDrop(e: DragEvent) {
+  if (props.disabled) return;
+  const files = e.dataTransfer?.files;
+  if (!files?.length) return;
+  const max = effectiveLimit.value - urls().length;
+  Array.from(files).slice(0, Math.max(max, 0)).forEach((f) => doUpload({ file: f }));
+}
+
 async function doUpload(opt: any) {
   const fd = new FormData();
   fd.append('file', opt.file);
@@ -83,4 +107,6 @@ function onExceed() { ElMessage.warning(`最多上传 ${effectiveLimit.value} �
 .file-upload :deep(.el-upload--picture-card),
 .file-upload :deep(.el-upload-list--picture-card .el-upload-list__item) { width: 88px; height: 88px; }
 .up-tip { font-size: 12px; color: var(--el-text-color-secondary); }
+.fu-wrap { outline: none; }
+.fu-hint { font-size: 11px; color: var(--el-text-color-placeholder); margin-top: 2px; }
 </style>

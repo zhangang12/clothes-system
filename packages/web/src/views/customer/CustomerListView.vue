@@ -4,9 +4,18 @@
       <div class="toolbar">
         <div class="tools-left">
           <el-button v-if="canEdit" type="primary" :icon="Plus" @click="goCreate">新建</el-button>
-          <el-button type="warning" plain :icon="Upload" @click="showImport = true">导入客户资料</el-button>
+          <el-button v-if="canImport" type="warning" plain :icon="Upload" @click="showImport = true">导入客户资料</el-button>
           <el-button v-if="isAdmin" type="warning" plain :icon="Key" :disabled="!selected.length" @click="openGrant">批量授权机密权限</el-button>
-          <el-button plain :icon="Download" @click="exportCsv">导出</el-button>
+          <el-button plain :icon="Download" :loading="exporting" @click="exportAllRows">导出</el-button>
+          <el-dropdown trigger="click" @command="onMore">
+            <el-button plain>···</el-button>
+            <template #dropdown><el-dropdown-menu>
+              <el-dropdown-item command="print">🖨 打印当前列表</el-dropdown-item>
+              <el-dropdown-item command="copy">📋 复制到剪贴板</el-dropdown-item>
+              <el-dropdown-item command="cols">👁 自定义显示列</el-dropdown-item>
+              <el-dropdown-item command="reset">↺ 重置筛选</el-dropdown-item>
+            </el-dropdown-menu></template>
+          </el-dropdown>
           <el-button v-if="isAdmin" type="danger" plain :icon="Delete" :disabled="!selected.length" @click="batchRemove">
             删除{{ selected.length ? `(${selected.length})` : '' }}
           </el-button>
@@ -29,6 +38,16 @@
                 <el-option label="启用" :value="1" /><el-option label="停用" :value="0" />
               </el-select>
             </el-form-item>
+            <el-form-item label="贸易国别"><el-input v-model="query.trade_country" clearable style="width:110px" @keyup.enter="load" @clear="load" /></el-form-item>
+            <el-form-item label="合作等级"><el-input v-model="query.cooperation_level" clearable style="width:110px" @keyup.enter="load" @clear="load" /></el-form-item>
+            <el-form-item label="客户来源"><el-input v-model="query.customer_source" clearable style="width:110px" @keyup.enter="load" @clear="load" /></el-form-item>
+            <el-form-item label="外销员"><el-input v-model="query.salesperson" clearable style="width:100px" @keyup.enter="load" @clear="load" /></el-form-item>
+            <el-form-item label="联系人/手机"><el-input v-model="query.contact" clearable style="width:130px" @keyup.enter="load" @clear="load" /></el-form-item>
+            <el-form-item label="开发时间">
+              <el-date-picker v-model="query.develop_start" type="date" value-format="YYYY-MM-DD" placeholder="起" style="width:130px" @change="load" />
+              <span style="margin:0 4px">—</span>
+              <el-date-picker v-model="query.develop_end" type="date" value-format="YYYY-MM-DD" placeholder="止" style="width:130px" @change="load" />
+            </el-form-item>
             <el-form-item label="客户类型">
               <el-select v-model="query.type" clearable placeholder="全部" style="width:130px" @change="load">
                 <el-option label="中间商" value="MIDDLEMAN" /><el-option label="最终买家" value="BUYER" />
@@ -45,7 +64,7 @@
     </div>
 
     <div class="table-card">
-      <el-table :data="list" v-loading="loading" border stripe @selection-change="(v: any[]) => selected = v" @row-dblclick="goEdit">
+      <el-table :data="list" v-loading="loading" border stripe @selection-change="(v: any[]) => selected = v" @row-dblclick="goEdit" @row-click="onRowClick" ref="tableRef">
         <el-table-column type="selection" width="42" />
         <el-table-column prop="customer_no" label="编号" width="100" sortable />
         <el-table-column prop="name" label="客户名称" min-width="180" show-overflow-tooltip />
@@ -54,9 +73,9 @@
             <el-tag size="small" :type="row.type === 'BUYER' ? 'warning' : 'primary'" effect="light">{{ typeLabel(row.type) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="trade_country" label="国别" width="90"><template #default="{ row }">{{ row.trade_country || '-' }}</template></el-table-column>
-        <el-table-column prop="price_terms" label="价格条款" width="120"><template #default="{ row }">{{ row.price_terms || '-' }}</template></el-table-column>
-        <el-table-column prop="settlement_method" label="结汇方式" width="120"><template #default="{ row }">{{ row.settlement_method || '-' }}</template></el-table-column>
+        <el-table-column v-if="showCol('trade_country')" prop="trade_country" label="国别" width="90"><template #default="{ row }">{{ row.trade_country || '-' }}</template></el-table-column>
+        <el-table-column v-if="showCol('price_terms')" prop="price_terms" label="价格条款" width="120"><template #default="{ row }">{{ row.price_terms || '-' }}</template></el-table-column>
+        <el-table-column v-if="showCol('settlement_method')" prop="settlement_method" label="结汇方式" width="120"><template #default="{ row }">{{ row.settlement_method || '-' }}</template></el-table-column>
         <el-table-column label="信用" width="80" align="center">
           <template #default="{ row }"><span v-if="row.grade">信用 {{ row.grade }}</span><span v-else>-</span></template>
         </el-table-column>
@@ -109,6 +128,12 @@
             <el-radio :value="true">查看 + 修改</el-radio>
           </el-radio-group>
         </el-form-item>
+        <el-form-item label="有效期至">
+          <el-date-picker v-model="grantForm.expire_at" type="date" value-format="YYYY-MM-DD" placeholder="留空=永久有效(过期自动失效)" style="width:100%" />
+        </el-form-item>
+        <el-form-item label="授权备注">
+          <el-input v-model="grantForm.remark" placeholder="选填" />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="grantVisible = false">取消</el-button>
@@ -122,6 +147,8 @@
         <el-table-column label="用户" min-width="140"><template #default="{ row }">{{ row.real_name || row.username }}（{{ row.username }}）</template></el-table-column>
         <el-table-column prop="role" label="角色" width="110" />
         <el-table-column label="权限" width="100" align="center"><template #default="{ row }"><el-tag size="small" :type="row.can_edit ? 'warning' : 'info'">{{ row.can_edit ? '查看+修改' : '仅查看' }}</el-tag></template></el-table-column>
+        <el-table-column label="有效期至" width="104"><template #default="{ row }">{{ row.expire_at ? String(row.expire_at).slice(0, 10) : '永久' }}</template></el-table-column>
+        <el-table-column label="备注" min-width="90"><template #default="{ row }">{{ row.remark || '—' }}</template></el-table-column>
         <el-table-column label="操作" width="80" align="center">
           <template #default="{ row }">
             <el-popconfirm title="撤销后该用户将不可见此客户，确认？" @confirm="doRevoke(row)">
@@ -131,6 +158,12 @@
         </el-table-column>
       </el-table>
       <div v-if="!grantList.length" class="grant-hint">暂无授权记录（创建人与管理员天然可见）</div>
+    </el-dialog>
+
+    <el-dialog v-model="colsVisible" title="自定义显示列" width="420px">
+      <el-checkbox-group v-model="visibleCols">
+        <el-checkbox v-for="c in ALL_COLS" :key="c.key" :value="c.key" style="width:46%">{{ c.title }}</el-checkbox>
+      </el-checkbox-group>
     </el-dialog>
   </div>
 </template>
@@ -157,7 +190,7 @@ const list = ref<any[]>([]);
 const total = ref(0);
 const selected = ref<any[]>([]);
 const showAdvanced = ref(false);
-const query = reactive({ page: 1, size: 20, keyword: '', type: undefined as string | undefined, grade: undefined as string | undefined, status: undefined as number | undefined });
+const query = reactive({ page: 1, size: 20, keyword: '', type: undefined as string | undefined, grade: undefined as string | undefined, status: undefined as number | undefined, trade_country: '', cooperation_level: '', customer_source: '', salesperson: '', contact: '', develop_start: '', develop_end: '' });
 
 async function load() {
   loading.value = true;
@@ -169,7 +202,7 @@ async function load() {
     loading.value = false;
   }
 }
-function reset() { query.keyword = ''; query.type = undefined; query.grade = undefined; query.status = undefined; query.page = 1; load(); }
+function reset() { query.keyword = ''; query.type = undefined; query.grade = undefined; query.status = undefined; query.page = 1; Object.assign(query, { trade_country: '', cooperation_level: '', customer_source: '', salesperson: '', contact: '', develop_start: '', develop_end: '' }); load(); }
 function goCreate() { router.push({ name: 'CustomerCreate' }); }
 function goEdit(row: Customer) { router.push({ name: 'CustomerEdit', params: { id: row.id } }); }
 function goView(row: Customer) { router.push({ name: 'CustomerView', params: { id: row.id } }); }
@@ -215,10 +248,10 @@ const submitImport = (rows: any[]) => customerApi.importBatch(rows);
 // ===== 批量授权机密权限（设计稿 01 §D.3，仅管理员）=====
 const grantVisible = ref(false);
 const grantUsers = ref<any[]>([]);
-const grantForm = reactive<{ user_ids: number[]; can_edit: boolean }>({ user_ids: [], can_edit: false });
+const grantForm = reactive<{ user_ids: number[]; can_edit: boolean; expire_at: string; remark: string }>({ user_ids: [], can_edit: false, expire_at: '', remark: '' });
 const grantSaving = ref(false);
 async function openGrant() {
-  grantForm.user_ids = []; grantForm.can_edit = false;
+  grantForm.user_ids = []; grantForm.can_edit = false; grantForm.expire_at = ''; grantForm.remark = '';
   try { grantUsers.value = ((await customerApi.listUsers()) as any).data ?? []; }
   catch { ElMessage.error('加载用户清单失败'); return; }
   grantVisible.value = true;
@@ -227,11 +260,11 @@ async function doGrant() {
   if (!grantForm.user_ids.length) { ElMessage.warning('请至少勾选 1 个用户'); return; }
   grantSaving.value = true;
   try {
-    const res: any = await customerApi.grantBatch(selected.value.map((c: any) => c.id), grantForm.user_ids, grantForm.can_edit);
+    const res: any = await customerApi.grantBatch(selected.value.map((c: any) => c.id), grantForm.user_ids, grantForm.can_edit, grantForm.expire_at || undefined, grantForm.remark || undefined);
     const d = res.data ?? res;
     ElMessage.success(`已授权：${d.customers} 个客户 × ${d.users} 个用户（新增 ${d.created}，更新 ${d.updated}）`);
     grantVisible.value = false;
-  } catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '授权失败'); }
+  } catch (e: any) { ElMessage.error(e?.response?.status === 403 ? '您没有权限执行此操作！' : (e?.response?.data?.message ?? '授权失败')); }
   finally { grantSaving.value = false; }
 }
 // 单客户授权清单（查看/撤销）
@@ -259,6 +292,54 @@ function exportCsv() {
   URL.revokeObjectURL(url);
 }
 onMounted(load);
+
+// ===== 列表增强(基础资料稿 §列表页) =====
+import { exportAll } from '@/utils/exportAll';
+const canImport = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.BUSINESS));
+const exporting = ref(false);
+const tableRef = ref();
+const ALL_COLS = [
+  { key: 'customer_no', title: '编号' }, { key: 'name', title: '客户名称' }, { key: 'type', title: '类型' },
+  { key: 'trade_country', title: '贸易国别' }, { key: 'country_region', title: '国家区域' }, { key: 'city', title: '城市' },
+  { key: 'price_terms', title: '价格条款' }, { key: 'settlement_method', title: '结汇方式' },
+  { key: 'grade', title: '信用等级' }, { key: 'cooperation_level', title: '合作等级' }, { key: 'customer_source', title: '客户来源' },
+  { key: 'salesperson', title: '外销员' }, { key: 'develop_date', title: '开发时间' }, { key: 'status', title: '状态' },
+];
+const colsVisible = ref(false);
+const visibleCols = ref<string[]>(ALL_COLS.map((c) => c.key));
+const showCol = (k: string) => visibleCols.value.includes(k);
+// 单击行=切换选中;按住 Shift=连选(设计稿 §行交互)
+let lastClickIndex = -1;
+function onRowClick(row: any, _col: any, event: MouseEvent) {
+  const idx = list.value.indexOf(row);
+  const table = tableRef.value;
+  if (!table) return;
+  if (event.shiftKey && lastClickIndex >= 0) {
+    const [a, b] = [Math.min(lastClickIndex, idx), Math.max(lastClickIndex, idx)];
+    for (let i = a; i <= b; i++) table.toggleRowSelection(list.value[i], true);
+  } else {
+    table.toggleRowSelection(row);
+  }
+  lastClickIndex = idx;
+}
+async function exportAllRows() {
+  exporting.value = true;
+  try {
+    const n = await exportAll((p, sz) => customerApi.list({ ...query, page: p, size: sz }) as any, ALL_COLS, '客户资料');
+    ElMessage.success(`已导出全部 ${n} 条(全列)`);
+  } catch (e: any) { ElMessage.error(e?.message ?? '导出失败'); }
+  finally { exporting.value = false; }
+}
+function onMore(cmd: string) {
+  if (cmd === 'print') window.print();
+  else if (cmd === 'copy') {
+    const tsv = [ALL_COLS.map((c) => c.title).join('\t'),
+      ...list.value.map((r: any) => ALL_COLS.map((c) => r[c.key] ?? '').join('\t'))].join('\n');
+    navigator.clipboard.writeText(tsv).then(() => ElMessage.success('已复制当前页到剪贴板(可直接粘进 Excel)'));
+  }
+  else if (cmd === 'cols') colsVisible.value = true;
+  else if (cmd === 'reset') reset();
+}
 </script>
 
 <style scoped>

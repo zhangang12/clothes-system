@@ -200,9 +200,13 @@ export class ContractService {
     const order = dto.order_id
       ? await this.orderRepo.findOne({ where: { id: dto.order_id, deleted: 0 } })
       : null;
-    // 交货期限默认（设计稿 合同 A7）：加工=订单交期−10天 / 材料·补料=−45天，可改
+    // 交货期限默认（设计稿 合同 A7）：加工=订单交期−10天 / 材料·补料=−45天。
+    // 偏移天数可在系统参数配置（sys_config: contract.delivery_offset_material / _process），逐单仍可改
+    const offsetKey = dto.type === ContractType.PROCESS
+      ? 'contract.delivery_offset_process' : 'contract.delivery_offset_material';
+    const offsetDays = await this.config.getNumber(offsetKey, DELIVERY_OFFSET_DAYS[dto.type]);
     const deliveryDeadline = dto.delivery_deadline
-      ?? minusDays(order?.delivery_date as any, DELIVERY_OFFSET_DAYS[dto.type]);
+      ?? minusDays(order?.delivery_date as any, offsetDays);
 
     // 快照机制（系统开发手册）：报价→合同时锁定费用明细/单价。材料合同若未手工提供
     // materials，自动从该订单已核算的用料清单（quote_item→order_material 链路，

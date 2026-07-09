@@ -91,7 +91,7 @@ describe('ContractService', () => {
         { provide: getRepositoryToken(Factory), useValue: mockFactoryRepo },
         { provide: getRepositoryToken(SupplierAccount), useValue: mockSupplierRepo },
         { provide: NumberingService, useValue: new NumberingService(mockRedis as any) },
-        { provide: SysConfigService, useValue: { getNumber: jest.fn().mockResolvedValue(0) } },
+        { provide: SysConfigService, useValue: { getNumber: jest.fn().mockImplementation((_k: string, fb = 0) => Promise.resolve(fb)) } },
         { provide: DataSource, useValue: mockDataSource },
         { provide: REDIS_CLIENT, useValue: mockRedis },
       ],

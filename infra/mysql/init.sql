@@ -28,6 +28,29 @@ CREATE TABLE IF NOT EXISTS `sys_sequence` (
   PRIMARY KEY (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='单号发号 DB 兜底(Redis 单点消除:挂了降速不阻断,恢复自动切回)';
 
+CREATE TABLE IF NOT EXISTS `sys_dict` (
+  `id`         BIGINT       NOT NULL AUTO_INCREMENT,
+  `type`       VARCHAR(40)  NOT NULL COMMENT '字典类别',
+  `label`      VARCHAR(100) NOT NULL COMMENT '显示值',
+  `value`      VARCHAR(100) DEFAULT NULL COMMENT '附加值(币种字典存默认汇率)',
+  `sort`       INT          NOT NULL DEFAULT 0,
+  `status`     TINYINT      NOT NULL DEFAULT 1,
+  `created_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_type` (`type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='通用字典(下拉自填自动累积)';
+
+INSERT INTO `sys_dict` (`type`,`label`,`value`,`sort`) VALUES
+('trade_country','美国',NULL,1),('trade_country','英国',NULL,2),('trade_country','德国',NULL,3),('trade_country','日本',NULL,4),('trade_country','法国',NULL,5),('trade_country','澳大利亚',NULL,6),('trade_country','加拿大',NULL,7),('trade_country','韩国',NULL,8),
+('price_terms','FOB 上海',NULL,1),('price_terms','FOB 宁波',NULL,2),('price_terms','CIF',NULL,3),('price_terms','CFR',NULL,4),('price_terms','EXW',NULL,5),
+('settlement_method','T/T 30天',NULL,1),('settlement_method','T/T 45天',NULL,2),('settlement_method','T/T 60天',NULL,3),('settlement_method','L/C at sight',NULL,4),('settlement_method','D/P',NULL,5),
+('customer_source','展会',NULL,1),('customer_source','老客户介绍',NULL,2),('customer_source','网络开发',NULL,3),('customer_source','主动来询',NULL,4),
+('cooperation_level','战略客户',NULL,1),('cooperation_level','重点客户',NULL,2),('cooperation_level','普通客户',NULL,3),('cooperation_level','新客户',NULL,4),
+('department','外贸部',NULL,1),('department','采购部',NULL,2),('department','财务部',NULL,3),('department','生产部',NULL,4),
+('title','经理',NULL,1),('title','主管',NULL,2),('title','跟单员',NULL,3),('title','业务员',NULL,4),
+('currency','USD','7.10',1),('currency','EUR','7.80',2),('currency','GBP','9.00',3),('currency','JPY','0.048',4),('currency','CNY','1',5)
+ON DUPLICATE KEY UPDATE `label`=`label`;
+
 -- 默认账号（密码均为 Admin@123，bcrypt）— admin 及各角色测试账号
 INSERT IGNORE INTO `sys_user` (`id`,`username`,`password`,`real_name`,`role`) VALUES
 (1,'admin','$2a$10$Y.NI2Bzr5gof2tpDSJsJ8exF2z2wuzkoqShu822RgpuJlrNC/GW5i','系统管理员','ADMIN'),
@@ -70,6 +93,7 @@ CREATE TABLE IF NOT EXISTS `factory` (
   `city`           VARCHAR(30)   DEFAULT NULL COMMENT '所在城市',
   `address`        VARCHAR(200)  DEFAULT NULL COMMENT '详细地址',
   `business_scope` VARCHAR(200)  DEFAULT NULL COMMENT '业务范围',
+  `grade`               VARCHAR(10)    DEFAULT NULL COMMENT '信用等级A/B/C',
   `develop_date`   DATE          DEFAULT NULL COMMENT '开发时间',
   `bank_name`      VARCHAR(100)  DEFAULT NULL COMMENT '开户银行',
   `bank_account`   VARCHAR(40)   DEFAULT NULL COMMENT '银行帐号',
@@ -223,6 +247,8 @@ CREATE TABLE IF NOT EXISTS `customer_grant` (
   `customer_id` BIGINT   NOT NULL,
   `user_id`     BIGINT   NOT NULL COMMENT '被授权用户',
   `can_edit`    TINYINT  NOT NULL DEFAULT 0 COMMENT '0=仅查看 1=可修改',
+  `expire_at`   DATE     DEFAULT NULL COMMENT '有效期至(过期授权自动失效,空=永久)',
+  `remark`      VARCHAR(200) DEFAULT NULL COMMENT '授权备注',
   `created_by`  BIGINT   DEFAULT NULL COMMENT '授权人(管理员)',
   `created_at`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -258,6 +284,7 @@ CREATE TABLE IF NOT EXISTS `sample_garment` (
   `material_ship_date` DATE         DEFAULT NULL COMMENT '材料寄出日期(自动)',
   `return_no`        VARCHAR(50)   DEFAULT NULL COMMENT '寄回快递单号(版师)',
   `return_date`      DATE          DEFAULT NULL COMMENT '寄回日期(自动)',
+  `feedback_attachments` VARCHAR(500) DEFAULT NULL COMMENT '样衣意见附件(客户反馈图/PDF,多文件逗号分隔)',
   `piece_count`      INT           DEFAULT NULL COMMENT '件数(版师)',
   `labor_unit_price` DECIMAL(12,2) DEFAULT NULL COMMENT '版师工时单价CNY',
   `labor_amount`     DECIMAL(14,2) DEFAULT NULL COMMENT '工时金额CNY=件数×单价',

@@ -72,10 +72,10 @@ export class AuthService {
     return bcrypt.hash(plain, 10);
   }
 
-  // 内部用户清单（客户机密授权选人；不含密码等敏感列）
-  async listUsers() {
+  // 内部用户清单（客户机密授权选人 / 制版师下拉；不含密码等敏感列；可按角色过滤）
+  async listUsers(role?: string) {
     return this.userRepo.find({
-      where: { status: 1 },
+      where: { status: 1, ...(role && { role: role as any }) },
       select: ['id', 'username', 'real_name', 'role'],
       order: { id: 'ASC' },
     });

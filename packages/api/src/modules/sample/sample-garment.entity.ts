@@ -77,6 +77,9 @@ export class SampleGarment {
   @Column({ type: 'date', nullable: true })
   return_date: string;
 
+  @Column({ length: 500, nullable: true })
+  feedback_attachments: string; // 样衣意见附件（客户反馈图/PDF，多文件逗号分隔）
+
   @Column({ type: 'int', nullable: true })
   piece_count: number;
 

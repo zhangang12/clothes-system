@@ -85,6 +85,11 @@
                 @change="loadPR"
               />
             </el-form-item>
+          <el-form-item label="到期日">
+            <el-date-picker v-model="prQuery.due_start" type="date" value-format="YYYY-MM-DD" placeholder="起" style="width:130px" @change="loadPR" />
+            <span style="margin:0 4px">—</span>
+            <el-date-picker v-model="prQuery.due_end" type="date" value-format="YYYY-MM-DD" placeholder="止" style="width:130px" @change="loadPR" />
+          </el-form-item>
             <el-form-item>
               <el-button type="primary" :icon="Search" @click="loadPR">搜索</el-button>
               <el-button :icon="Refresh" @click="resetPR">重置</el-button>
@@ -420,8 +425,7 @@ const prTotal = ref(0);
 const prQuery = reactive({
   page: 1, size: 20,
   factory_id: undefined as number | undefined,
-  approval_status: undefined as string | undefined,
-});
+  approval_status: undefined as string | undefined, due_start: '', due_end: '' });
 // 申请日期范围（工厂+日期组合检索，付款申请设计稿 检索区）
 const prDateRange = ref<[string, string] | null>(null);
 

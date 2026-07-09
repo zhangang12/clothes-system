@@ -61,10 +61,11 @@ export class PaymentController {
     @Query('size', new DefaultValuePipe(20), ParseIntPipe) size: number = 20,
     @Query('start_date') startDate?: string,
     @Query('end_date') endDate?: string,
+    @Query('due_start') dueStart?: string,
+    @Query('due_end') dueEnd?: string,
   ) {
     return this.service.findPaymentRequests(
-      factoryId ? Number(factoryId) : undefined, approvalStatus, page, size, startDate, endDate,
-    );
+      factoryId ? Number(factoryId) : undefined, approvalStatus, page, size, startDate, endDate,, dueStart, dueEnd);
   }
 
   @Patch('requests/:id/submit')

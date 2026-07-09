@@ -17,6 +17,12 @@ export class CustomerGrant {
   @Column({ type: 'tinyint', default: 0 })
   can_edit: number; // 0=仅查看 1=可修改
 
+  @Column({ type: 'date', nullable: true })
+  expire_at: string; // 有效期至(设计 D.3;过期授权自动失效,空=永久)
+
+  @Column({ length: 200, nullable: true })
+  remark: string; // 授权备注
+
   @Column({ type: 'bigint', nullable: true })
   created_by: number; // 授权人（管理员）
 

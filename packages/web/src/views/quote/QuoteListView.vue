@@ -4,7 +4,11 @@
       <div class="toolbar">
         <div class="tools-left">
           <el-button v-if="canEdit" type="primary" :icon="Plus" @click="goCreate">新建</el-button>
+          <el-button v-if="canEdit" plain :icon="DocumentAdd" @click="openFromSample">从样衣建报价</el-button>
           <el-button plain :icon="Download" @click="exportCsv">导出</el-button>
+          <el-button plain :icon="Printer" :disabled="!selected.length" @click="batchPrint">
+            批量打印{{ selected.length ? `(${selected.length})` : '' }}
+          </el-button>
           <el-button v-if="canEdit" plain :icon="CopyDocument" :disabled="selected.length !== 1" @click="copyOne">复制</el-button>
           <el-button v-if="canEdit" type="danger" plain :icon="Delete" :disabled="!selected.length" @click="batchRemove">
             删除{{ selected.length ? `(${selected.length})` : '' }}
@@ -27,6 +31,28 @@
               <el-select v-model="query.status" clearable placeholder="全部" style="width:130px" @change="load">
                 <el-option v-for="s in statuses" :key="s.value" :label="s.label" :value="s.value" />
               </el-select>
+            </el-form-item>
+            <el-form-item label="报价单号">
+              <el-input v-model="query.quote_no" clearable placeholder="模糊匹配" style="width:150px" @keyup.enter="load" @clear="load" />
+            </el-form-item>
+            <el-form-item label="客户款号">
+              <el-input v-model="query.style_no" clearable placeholder="模糊匹配" style="width:140px" @keyup.enter="load" @clear="load" />
+            </el-form-item>
+            <el-form-item label="中间商">
+              <el-input v-model="query.middleman_name" clearable placeholder="名称" style="width:140px" @keyup.enter="load" @clear="load" />
+            </el-form-item>
+            <el-form-item label="最终买家">
+              <el-input v-model="query.buyer_name" clearable placeholder="名称" style="width:140px" @keyup.enter="load" @clear="load" />
+            </el-form-item>
+            <el-form-item label="业务员">
+              <el-input v-model="query.salesperson" clearable placeholder="姓名" style="width:110px" @keyup.enter="load" @clear="load" />
+            </el-form-item>
+            <el-form-item label="询价日期">
+              <el-date-picker v-model="inquiryRange" type="daterange" value-format="YYYY-MM-DD"
+                start-placeholder="起" end-placeholder="止" style="width:240px" @change="load" />
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" @click="load">筛选</el-button>
             </el-form-item>
           </el-form>
         </div>
@@ -72,6 +98,18 @@
       </div>
       <div class="tip">🟢「已成单」= 已转销售合同（绿色加粗）；美金总计含利润率并按汇率换算。</div>
     </div>
+
+    <!-- 从样衣建报价：选样衣 → 新建报价并导入样衣材料 → 跳编辑页 -->
+    <el-dialog v-model="fromSampleDialog" title="从样衣建报价" width="480px">
+      <el-select v-model="fromSampleId" filterable placeholder="选择样衣单" style="width:100%">
+        <el-option v-for="s in sampleOptions" :key="s.id" :label="`${s.sample_no} · ${s.style_no}`" :value="s.id" />
+      </el-select>
+      <p class="tip" style="margin-top:8px">将以该样衣的中间商/买家/款号新建报价（草稿），并自动导入样衣材料明细。</p>
+      <template #footer>
+        <el-button @click="fromSampleDialog = false">取消</el-button>
+        <el-button type="primary" :disabled="!fromSampleId" :loading="fromSampleLoading" @click="createFromSample">创建</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -79,10 +117,11 @@
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Search, Plus, Download, Delete, CopyDocument, ArrowDown, Printer } from '@element-plus/icons-vue';
-import { printQuote } from '@/utils/quotePrint';
+import { Search, Plus, Download, Delete, CopyDocument, ArrowDown, Printer, DocumentAdd } from '@element-plus/icons-vue';
+import { printQuote, printQuoteBatch } from '@/utils/quotePrint';
 import { companyApi } from '@/api/company';
 import { quoteApi } from '@/api/quote';
+import { sampleApi } from '@/api/sample';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole, QUOTE_STATUS_LABEL } from '@i9/types';
 
@@ -99,23 +138,50 @@ const list = ref<any[]>([]);
 const total = ref(0);
 const selected = ref<any[]>([]);
 const showAdvanced = ref(false);
-const query = reactive({ page: 1, size: 20, keyword: '', status: undefined as string | undefined });
+const query = reactive({
+  page: 1, size: 20, keyword: '', status: undefined as string | undefined,
+  quote_no: '', style_no: '', middleman_name: '', buyer_name: '', salesperson: '',
+});
+const inquiryRange = ref<[string, string] | null>(null);
 
 async function load() {
   loading.value = true;
   try {
-    const res: any = await quoteApi.list(query);
+    // 空串不传（后端 IsDateString/精确筛不吃空值）
+    const params: Record<string, unknown> = { page: query.page, size: query.size };
+    for (const k of ['keyword', 'status', 'quote_no', 'style_no', 'middleman_name', 'buyer_name', 'salesperson'] as const) {
+      if (query[k]) params[k] = query[k];
+    }
+    if (inquiryRange.value?.[0]) params.inquiry_start = inquiryRange.value[0];
+    if (inquiryRange.value?.[1]) params.inquiry_end = inquiryRange.value[1];
+    const res: any = await quoteApi.list(params);
     list.value = res.data ?? [];
     total.value = res.data?.total ?? res.total ?? 0;
   } finally {
     loading.value = false;
   }
 }
-function reset() { query.keyword = ''; query.status = undefined; query.page = 1; load(); }
+function reset() {
+  query.keyword = ''; query.status = undefined; query.page = 1;
+  query.quote_no = ''; query.style_no = ''; query.middleman_name = ''; query.buyer_name = ''; query.salesperson = '';
+  inquiryRange.value = null;
+  load();
+}
 function goCreate() { router.push({ name: 'QuoteCreate' }); }
 function goEdit(row: any) { router.push({ name: 'QuoteEdit', params: { id: row.id } }); }
 async function copyRow(row: any) {
-  try { await quoteApi.copy(row.id); ElMessage.success('已复制为新报价（草稿）'); load(); }
+  // 复制方式三选：确认=含明细/取消按钮=仅基本信息/右上关闭=不复制
+  let withItems: boolean;
+  try {
+    await ElMessageBox.confirm('复制为新报价（草稿）：是否同时复制报价明细与费用明细?', '复制报价单', {
+      distinguishCancelAndClose: true, confirmButtonText: '含明细复制', cancelButtonText: '仅基本信息', type: 'info',
+    });
+    withItems = true;
+  } catch (action) {
+    if (action !== 'cancel') return;
+    withItems = false;
+  }
+  try { await quoteApi.copy(row.id, withItems); ElMessage.success('已复制为新报价（草稿）'); load(); }
   catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '复制失败'); }
 }
 // 发出报价 / 客户调整（此前 UI 缺状态流转入口，草稿无法走到已报价）
@@ -145,6 +211,56 @@ async function printRow(row: any) {
   } catch (e: any) { ElMessage.error(e?.message ?? e?.response?.data?.message ?? '打印失败'); }
 }
 function copyOne() { copyRow(selected.value[0]); }
+// 批量打印：逐个取详情，一个窗口多页（页间分页符），一次打印/导出 PDF
+async function batchPrint() {
+  if (!selected.value.length) return;
+  try {
+    if (cachedCompany === null) {
+      try { cachedCompany = (await companyApi.getDefault() as any)?.data ?? null; } catch { cachedCompany = undefined; }
+    }
+    const details: any[] = [];
+    for (const row of selected.value) {
+      const res: any = await quoteApi.get(row.id);
+      details.push(res.data ?? res);
+    }
+    printQuoteBatch(details, cachedCompany || undefined);
+  } catch (e: any) { ElMessage.error(e?.message ?? e?.response?.data?.message ?? '批量打印失败'); }
+}
+
+// ── 从样衣建报价 ──
+const fromSampleDialog = ref(false);
+const fromSampleId = ref<number>();
+const fromSampleLoading = ref(false);
+const sampleOptions = ref<any[]>([]);
+async function openFromSample() {
+  fromSampleId.value = undefined;
+  fromSampleDialog.value = true;
+  try {
+    const res: any = await sampleApi.list({ page: 1, size: 100 });
+    sampleOptions.value = res.data ?? [];
+  } catch { sampleOptions.value = []; }
+}
+async function createFromSample() {
+  const sample = sampleOptions.value.find((s) => s.id === fromSampleId.value);
+  if (!sample) return;
+  fromSampleLoading.value = true;
+  try {
+    // create DTO 是 camelCase；middlemanId 必填（= 样衣的 customer_id）
+    const r: any = await quoteApi.create({
+      middlemanId: sample.customer_id,
+      buyerId: sample.buyer_id || undefined,
+      styleNo: sample.style_no,
+      sampleId: sample.id,
+    });
+    const newId = (r.data ?? r).id;
+    await quoteApi.importFromSample(newId, sample.id);
+    ElMessage.success('已从样衣创建报价并导入材料明细');
+    fromSampleDialog.value = false;
+    router.push(`/quotes/${newId}/edit`);
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message ?? '创建失败');
+  } finally { fromSampleLoading.value = false; }
+}
 async function batchRemove() {
   try { await ElMessageBox.confirm(`确认删除选中的 ${selected.value.length} 条记录?此操作不可恢复。`, "批量删除", { type: "warning" }); } catch { return; }
   let ok = 0, fail = 0;

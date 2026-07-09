@@ -8,6 +8,7 @@
         <el-tag v-if="form.customerNo" size="small" type="primary">{{ form.customerNo }}</el-tag>
       </div>
       <el-button v-if="!readonly" type="primary" :icon="Check" :loading="saving" @click="save">保存</el-button>
+        <el-button v-if="editId" :icon="CopyDocument" @click="copyAsNew">复制为新建</el-button>
     </div>
 
     <el-form ref="formRef" :model="form" :rules="rules" label-width="104px" :disabled="readonly" class="form-body">
@@ -32,20 +33,18 @@
           </el-col>
           <el-col :span="8">
             <el-form-item label="贸易国别">
-              <el-select v-model="form.tradeCountry" clearable filterable allow-create placeholder="请选择" style="width:100%" @change="onCountryChange">
-                <el-option v-for="c in tradeCountries" :key="c" :label="c" :value="c" />
-              </el-select>
+              <DictField v-model="form.tradeCountry" type="trade_country" placeholder="请选择(可自填累积)" />
             </el-form-item>
           </el-col>
           <el-col :span="8"><el-form-item label="国家区域"><el-input v-model="form.countryRegion" readonly placeholder="随贸易国别自动带出" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="所在城市"><el-input v-model="form.city" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="公司主页"><el-input v-model="form.homepage" placeholder="https://" /></el-form-item></el-col>
           <el-col :span="16"><el-form-item label="详细地址"><el-input v-model="form.address" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="价格条款"><dict-select v-model="form.priceTerms" :options="dictPriceTerms" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="结汇方式"><dict-select v-model="form.settlementMethod" :options="dictSettlement" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="价格条款"><DictField v-model="form.priceTerms" type="price_terms" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="结汇方式"><DictField v-model="form.settlementMethod" type="settlement_method" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="信用等级"><el-select v-model="form.grade" clearable placeholder="请选择" style="width:100%"><el-option label="A级" value="A" /><el-option label="B级" value="B" /><el-option label="C级" value="C" /></el-select></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="合作等级"><dict-select v-model="form.cooperationLevel" :options="dictCooperation" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="客户来源"><dict-select v-model="form.customerSource" :options="dictSource" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="合作等级"><DictField v-model="form.cooperationLevel" type="cooperation_level" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="客户来源"><DictField v-model="form.customerSource" type="customer_source" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="付款期限"><el-input v-model="form.paymentDays" type="number"><template #append>天</template></el-input></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="外销员"><el-input v-model="form.salesperson" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="开发时间"><el-date-picker v-model="form.developDate" type="date" value-format="YYYY-MM-DD" style="width:100%" /></el-form-item></el-col>
@@ -63,14 +62,14 @@
         <el-table :data="form.contacts" size="small" border @selection-change="(v: any[]) => selContacts = v">
           <el-table-column type="selection" width="40" />
           <el-table-column label="姓名" min-width="100"><template #default="{ row }"><el-input v-model="row.name" size="small" /></template></el-table-column>
-          <el-table-column label="部门" width="110"><template #default="{ row }"><el-select v-model="row.department" size="small" allow-create filterable clearable style="width:100%"><el-option v-for="d in dictDept" :key="d" :label="d" :value="d" /></el-select></template></el-table-column>
+          <el-table-column label="部门" width="110"><template #default="{ row }"><DictField v-model="row.department" type="department" size="small" /></template></el-table-column>
           <el-table-column label="性别" width="80"><template #default="{ row }"><el-select v-model="row.gender" size="small" clearable style="width:100%"><el-option label="男" value="M" /><el-option label="女" value="F" /></el-select></template></el-table-column>
-          <el-table-column label="职务" width="110"><template #default="{ row }"><el-select v-model="row.title" size="small" allow-create filterable clearable style="width:100%"><el-option v-for="t in dictTitle" :key="t" :label="t" :value="t" /></el-select></template></el-table-column>
+          <el-table-column label="职务" width="110"><template #default="{ row }"><DictField v-model="row.title" type="title" size="small" /></template></el-table-column>
           <el-table-column label="电话号码" width="130"><template #default="{ row }"><el-input v-model="row.phone" size="small" /></template></el-table-column>
           <el-table-column label="手机号码" width="120"><template #default="{ row }"><el-input v-model="row.mobile" size="small" /></template></el-table-column>
           <el-table-column label="手机(1)" width="120"><template #default="{ row }"><el-input v-model="row.mobile1" size="small" /></template></el-table-column>
           <el-table-column label="手机(2)" width="120"><template #default="{ row }"><el-input v-model="row.mobile2" size="small" /></template></el-table-column>
-          <el-table-column label="电子邮件" min-width="150"><template #default="{ row }"><el-input v-model="row.email" size="small" /></template></el-table-column>
+          <el-table-column label="电子邮件" min-width="150"><template #default="{ row }"><el-input v-model="row.email" size="small"><template #append><el-button :disabled="!row.email" size="small" @click="mailTo(row.email)">✉</el-button></template></el-input></template></el-table-column>
           <el-table-column label="备注" min-width="110"><template #default="{ row }"><el-input v-model="row.remark" size="small" /></template></el-table-column>
         </el-table>
       </section-block>
@@ -121,9 +120,10 @@ import { ref, reactive, computed, onMounted, watch, h } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
-import { Back, Check, Plus, Minus } from '@element-plus/icons-vue';
+import { Back, Check, Plus, Minus, CopyDocument } from '@element-plus/icons-vue';
 import { ElButton, ElSelect, ElOption } from 'element-plus';
 import { customerApi } from '@/api/customer';
+import DictField from '@/components/DictSelect.vue';
 import { useAuthStore } from '@/stores/auth';
 import { factoryApi } from '@/api/factory';
 import { CUSTOMER_TYPE_LABEL } from '@i9/types';
@@ -198,7 +198,9 @@ const rules: FormRules = {
 };
 
 function onTypeChange() { if (form.type !== 'BUYER') form.relatedMiddleman = ''; }
-function onCountryChange() { form.countryRegion = COUNTRY_REGION[form.tradeCountry] ?? form.countryRegion; }
+function openUrl(u: string) { if (u) window.open(/^https?:/.test(u) ? u : 'https://' + u, '_blank'); }
+function mailTo(m: string) { if (m) window.location.href = 'mailto:' + m; }
+watch(() => form.tradeCountry, () => { form.countryRegion = COUNTRY_REGION[form.tradeCountry] ?? form.countryRegion; });
 
 const factories: Record<string, () => any> = { contacts: emptyContact, banks: emptyBank, expresses: emptyExpress };
 function addRow(key: string) { form[key].push(factories[key]()); }
@@ -286,6 +288,13 @@ function goBack() { router.push({ name: 'Customers' }); }
 watch(() => form.name, (n) => { form.banks.forEach((b: any) => { if (!b.accountName) b.accountName = ''; }); void n; });
 
 onMounted(async () => { await loadRefs(); await load(); });
+
+// 编辑页复制(设计稿 §编辑页工具栏):当前数据载为新建(编号留空由系统生成)
+function copyAsNew() {
+  form.customerNo = '';
+  ElMessage.info('已复制当前数据为新建,保存后生成新编号');
+  router.replace({ path: router.currentRoute.value.path.replace(/\/\d+\/edit$/, '/new') });
+}
 </script>
 
 <style scoped>

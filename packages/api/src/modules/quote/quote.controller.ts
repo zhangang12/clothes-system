@@ -77,16 +77,16 @@ export class QuoteController {
 
   @Patch(':id/to-contract')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
-  @ApiOperation({ summary: '转销售合同（已报价/客户调整→已成单，关联样衣置已成单）' })
-  toContract(@Param('id', ParseIntPipe) id: number) {
-    return this.service.toContract(id);
+  @ApiOperation({ summary: '转销售合同（已报价/客户调整→已成单，关联样衣置已成单，自动生成订单草稿）' })
+  toContract(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.service.toContract(id, req.user.id);
   }
 
   @Post(':id/copy')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
-  @ApiOperation({ summary: '复制报价单（新单草稿）' })
-  copy(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
-    return this.service.copy(id, req.user.id);
+  @ApiOperation({ summary: '复制报价单（新单草稿；with_items=false 仅复制基本信息）' })
+  copy(@Param('id', ParseIntPipe) id: number, @Request() req: any, @Body('with_items') withItems?: boolean) {
+    return this.service.copy(id, req.user.id, withItems !== false);
   }
 
   @Delete(':id')

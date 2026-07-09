@@ -20,8 +20,8 @@ export const quoteApi = {
     http.patch<unknown, { data: Quotation }>(`/quotes/${id}/adjust`),
   toContract: (id: number) =>
     http.patch<unknown, { data: Quotation }>(`/quotes/${id}/to-contract`),
-  copy: (id: number) =>
-    http.post<unknown, { data: Quotation }>(`/quotes/${id}/copy`),
+  copy: (id: number, withItems = true) =>
+    http.post<unknown, { data: Quotation }>(`/quotes/${id}/copy`, { with_items: withItems }),
   remove: (id: number) =>
     http.delete(`/quotes/${id}`),
 };
