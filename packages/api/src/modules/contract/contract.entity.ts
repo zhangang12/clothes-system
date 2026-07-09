@@ -57,6 +57,43 @@ export class Contract {
   @Column({ type: 'date', nullable: true })
   due_date: Date;
 
+  // ===== 编辑页扩展字段（设计稿 04-合同 v1.3 两类编辑页）=====
+  @Column({ length: 100, nullable: true })
+  sign_place: string; // 签约地点（默认本司地址，可改）
+
+  @Column({ type: 'date', nullable: true })
+  sign_date: Date; // 签约日期（默认今天，可改）
+
+  @Column({ type: 'bigint', nullable: true })
+  company_id: number; // 乙方/委托方=本司主体（company_profile 字典，多抬头 B4）
+
+  @Column({ length: 50, nullable: true })
+  company_rep: string; // 乙方/委托方代表（默认登录业务员，可改 B5）
+
+  @Column({ length: 50, nullable: true })
+  guarantor: string; // 担保人（丙方，选填；填了 PDF 自动插担保条款 D7）
+
+  @Column({ length: 500, nullable: true })
+  guarantor_id_photo: string; // 担保人身份证照片 URL（选填 B6）
+
+  @Column({ type: 'date', nullable: true })
+  delivery_deadline: Date; // 交货期限（默认 加工=订单交期−10天 / 材料=−45天，可改 A7）
+
+  @Column({ length: 500, nullable: true })
+  style_nos: string; // 关联款号（多选逗号分隔 D2；默认订单款号）
+
+  @Column({ type: 'json', nullable: true })
+  price_includes: string[] | null; // 价格包含项勾选（加工合同；仅汇入 PDF 文字不改金额 D4）
+
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
+  vat_rate: number; // 增值税%（加工合同默认13，含税不另计 D4）
+
+  @Column({ length: 200, nullable: true })
+  price_other: string; // 价格包含项·其他说明（手填）
+
+  @Column({ type: 'json', nullable: true })
+  terms_json: Record<string, string> | null; // 合同条款模板填空（质量/交货/验收/结算/违约/争议 D3）
+
   @Column({ type: 'enum', enum: ContractPortalStatus, default: ContractPortalStatus.DRAFT })
   portal_status: ContractPortalStatus;
 

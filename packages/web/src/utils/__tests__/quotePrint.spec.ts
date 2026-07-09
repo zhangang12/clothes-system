@@ -35,17 +35,37 @@ describe('printQuote', () => {
 });
 
 describe('printContract', () => {
-  it('renders contract with materials, payment terms and resolved 乙方 name', () => {
+  it('材料合同：甲方=供方(工厂)/乙方=本司，含明细/条款/付款条件（设计稿 04 v1.3）', () => {
     const detail = {
       contract_no: 'HT-2026-01', type: 'MATERIAL', currency: 'CNY', total_amount: 12000,
       deposit_ratio: 30, mid_ratio: 40, final_ratio: 30, account_period_days: 90, factory_id: 5,
-      materials: [{ item_name: '面料', spec: '斜纹', unit: '米', qty: 1500, unit_price: 8, amount: 12000, qty_source: '采购量含损耗' }],
+      style_nos: 'MNA263M525', guarantor: '担保人丙',
+      materials: [{ item_name: '面料', spec: '斜纹', color: '藏青', size: 'M 码', style_no: 'MNA263M525', unit: '米', qty: 1500, unit_price: 8, amount: 12000 }],
     };
-    const html = captureHtml(() => printContract(detail, '苏州福利纺织'));
+    const html = captureHtml(() => printContract(detail, { name: '苏州福利纺织', address: '苏州市' }, { name: '南京达泰服装' }));
     expect(html).toContain('HT-2026-01');
-    expect(html).toContain('材料采购合同');
-    expect(html).toContain('苏州福利纺织'); // 乙方名已解析
-    expect(html).toContain('采购量含损耗');
+    expect(html).toContain('原料/辅料购销协议'); // 类型标题（真实合同名）
+    expect(html).toContain('甲方（供方）：</b>苏州福利纺织'); // 材料合同角色：甲方=供应商
+    expect(html).toContain('乙方（需方）：</b>南京达泰服装'); // 乙方=本司
+    expect(html).toContain('藏青'); // 分色列
+    expect(html).toContain('MNA263M525'); // 款号随行
+    expect(html).toContain('丙方担保条款'); // 填担保人自动插入（D7）
     expect(html).toContain('30%'); // 定金比例
+  });
+
+  it('加工合同：受托方=加工厂/委托方=本司，含价格包含项与增值税（D4）', () => {
+    const detail = {
+      contract_no: 'HT-2026-02', type: 'PROCESS', currency: 'CNY', total_amount: 271730,
+      deposit_ratio: 30, mid_ratio: 40, final_ratio: 30, account_period_days: 45, factory_id: 7,
+      vat_rate: 13, price_includes: ['工缴', '裁剪', '线'], price_other: '',
+      materials: [{ item_name: '三合一外壳', style_no: 'MNA263M525', unit: '件', qty: 1430, unit_price: 145, amount: 207350, delivery_date: '2026-07-20' }],
+    };
+    const html = captureHtml(() => printContract(detail, { name: '昆山览月制衣' }, { name: '南京达泰服装' }));
+    expect(html).toContain('委托加工合同');
+    expect(html).toContain('受托方（加工厂）：</b>昆山览月制衣');
+    expect(html).toContain('委托方（本司）：</b>南京达泰服装');
+    expect(html).toContain('以上价格包含：工缴、裁剪、线');
+    expect(html).toContain('增值税 13%（含税不另计）');
+    expect(html).not.toContain('丙方担保条款'); // 未填担保人不插担保条款
   });
 });

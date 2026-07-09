@@ -147,6 +147,27 @@ CALL _i9_add_col('contract','approved_at',"DATETIME DEFAULT NULL");
 -- 合同：撤销推送后修改重推标记
 CALL _i9_add_col('contract','revised',"TINYINT NOT NULL DEFAULT 0 COMMENT '撤销推送后修改重推标记(盖章后清零)'");
 
+-- 合同：两类编辑页扩展字段（设计稿 04-合同 v1.3）
+CALL _i9_add_col('contract','sign_place',"VARCHAR(100) DEFAULT NULL COMMENT '签约地点(默认本司地址)'");
+CALL _i9_add_col('contract','sign_date',"DATE DEFAULT NULL COMMENT '签约日期(默认今天)'");
+CALL _i9_add_col('contract','company_id',"BIGINT DEFAULT NULL COMMENT '乙方/委托方=本司主体(company_profile)'");
+CALL _i9_add_col('contract','company_rep',"VARCHAR(50) DEFAULT NULL COMMENT '乙方/委托方代表(默认登录业务员)'");
+CALL _i9_add_col('contract','guarantor',"VARCHAR(50) DEFAULT NULL COMMENT '担保人(丙方,选填)'");
+CALL _i9_add_col('contract','guarantor_id_photo',"VARCHAR(500) DEFAULT NULL COMMENT '担保人身份证照片URL(选填)'");
+CALL _i9_add_col('contract','delivery_deadline',"DATE DEFAULT NULL COMMENT '交货期限(加工=订单交期-10天/材料=-45天)'");
+CALL _i9_add_col('contract','style_nos',"VARCHAR(500) DEFAULT NULL COMMENT '关联款号(多选逗号分隔)'");
+CALL _i9_add_col('contract','price_includes',"JSON DEFAULT NULL COMMENT '价格包含项勾选(加工合同,汇入PDF)'");
+CALL _i9_add_col('contract','vat_rate',"DECIMAL(5,2) DEFAULT NULL COMMENT '增值税%(加工默认13,含税不另计)'");
+CALL _i9_add_col('contract','price_other',"VARCHAR(200) DEFAULT NULL COMMENT '价格包含项·其他说明'");
+CALL _i9_add_col('contract','terms_json',"JSON DEFAULT NULL COMMENT '合同条款模板填空(key→条款文本)'");
+
+-- 合同材料明细：编辑页扩展列（分色/分码/款号/行交期/照片）
+CALL _i9_add_col('contract_material','color',"VARCHAR(50) DEFAULT NULL COMMENT '颜色(分色行)'");
+CALL _i9_add_col('contract_material','size',"VARCHAR(30) DEFAULT NULL COMMENT '尺码/码(分码行)'");
+CALL _i9_add_col('contract_material','style_no',"VARCHAR(50) DEFAULT NULL COMMENT '款号(多款号同表随行标注)'");
+CALL _i9_add_col('contract_material','delivery_date',"DATE DEFAULT NULL COMMENT '行交货期限(材料默认=款交期-45天)'");
+CALL _i9_add_col('contract_material','photo_url',"VARCHAR(500) DEFAULT NULL COMMENT '材料照片URL'");
+
 -- 对账单：工时对账 / 整单退回相关
 CALL _i9_add_col('reconciliation','sub_type',"VARCHAR(20) DEFAULT NULL COMMENT '无合同子类型:EXPENSE/CASH_NO_INVOICE/PREPAY'");
 CALL _i9_add_col('reconciliation','patternmaker_id',"BIGINT DEFAULT NULL COMMENT '工时对账受款方版师'");

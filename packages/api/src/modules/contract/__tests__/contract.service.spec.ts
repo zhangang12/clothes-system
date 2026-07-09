@@ -63,6 +63,7 @@ const mockDataSource = {
     create: jest.fn().mockImplementation((_, v) => v),
     save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
     findOne: jest.fn().mockResolvedValue(null),
+    delete: jest.fn().mockResolvedValue({ affected: 1 }),
   })),
 };
 
@@ -296,5 +297,88 @@ describe('ContractService', () => {
     mockRepo.findOne.mockResolvedValue(contract);
     const price = await service.getSnapshotUnitPrice(1, '面料X');
     expect(price).toBeNull();
+  });
+
+  // ===== 编辑页 update（设计稿 04 v1.3 + E5 锁定规则）=====
+
+  // UT-CON-16: 草稿全字段可改，明细替换后重算总额
+  it('UT-CON-16 update on DRAFT replaces materials and recalculates total_amount', async () => {
+    const contract = makeContract({
+      portal_status: ContractPortalStatus.DRAFT,
+      deposit_ratio: 30, mid_ratio: 40, final_ratio: 30, approval_status: 'NONE',
+    });
+    mockRepo.findOne.mockResolvedValue(contract);
+    const result: any = await service.update(1, {
+      sign_place: '南京', guarantor: '担保人丙', style_nos: 'M525,F525',
+      materials: [
+        { item_name: '5#尼龙开口', color: '黑色', style_no: 'M525', unit: '条', qty: 1520, unit_price: 1 },
+        { item_name: '螺纹', size: 'S 码', unit: '米', qty: 180, unit_price: 12 },
+      ],
+    } as any);
+    expect(result.total_amount).toBe(1520 + 2160);
+    expect(result.sign_place).toBe('南京');
+    expect(result.guarantor).toBe('担保人丙');
+    expect(result.style_nos).toBe('M525,F525');
+  });
+
+  // UT-CON-17: 推送后仅备注可改，改关键字段被拒（E5 锁定）
+  it('UT-CON-17 update after PUSHED rejects non-remark fields (E5 lock)', async () => {
+    // 前序用例可能用 mockResolvedValue 固定过 save 返回值，这里恢复透传实现
+    mockRepo.save.mockImplementation((v: any) => Promise.resolve({ ...v, id: v.id ?? 1 }));
+    mockRepo.findOne.mockResolvedValue(makeContract({ portal_status: ContractPortalStatus.PUSHED }));
+    await expect(service.update(1, { factory_id: 9 } as any)).rejects.toThrow(BadRequestException);
+    // 仅备注可改
+    const result: any = await service.update(1, { remark: '推送后补充备注' } as any);
+    expect(result.remark).toBe('推送后补充备注');
+  });
+
+  // UT-CON-18: 草稿改明细致金额变化 → 已通过的审批被重置（防审批后改金额绕过）
+  it('UT-CON-18 update resets APPROVED approval when total changes', async () => {
+    const contract = makeContract({
+      portal_status: ContractPortalStatus.DRAFT, total_amount: 10000,
+      deposit_ratio: 30, mid_ratio: 40, final_ratio: 30,
+      approval_status: 'APPROVED', approved_by: 2, approved_at: new Date(),
+    });
+    mockRepo.findOne.mockResolvedValue(contract);
+    const result: any = await service.update(1, {
+      materials: [{ item_name: '面料', unit: '米', qty: 100, unit_price: 999 }],
+    } as any);
+    expect(result.total_amount).toBe(99900);
+    expect(result.approval_status).toBe('NONE');
+  });
+
+  // UT-CON-19: 付款比例合并校验（改后 ≠100% 拒绝）
+  it('UT-CON-19 update rejects when merged ratios do not sum to 100%', async () => {
+    mockRepo.findOne.mockResolvedValue(makeContract({
+      portal_status: ContractPortalStatus.DRAFT, deposit_ratio: 30, mid_ratio: 40, final_ratio: 30,
+    }));
+    await expect(service.update(1, { deposit_ratio: 50 } as any)).rejects.toThrow(BadRequestException);
+  });
+
+  // UT-CON-20: create 持久化编辑页扩展字段 + 加工合同价格包含项/税率默认
+  it('UT-CON-20 create persists edit-page fields with PROCESS defaults', async () => {
+    mockRedis.eval.mockResolvedValue('HT-20260709-001');
+    mockOrderRepo.findOne.mockResolvedValue({
+      id: 10, qty_total: 1874, style_no: 'MNA263M525', style_name: '三合一外壳',
+      delivery_date: '2026-07-30', deleted: 0,
+    });
+    let savedContract: any = null;
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb({
+      create: jest.fn().mockImplementation((_: any, v: any) => v),
+      save: jest.fn().mockImplementation((_: any, v: any) => {
+        if (!Array.isArray(v) && v.contract_no) savedContract = v;
+        return Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 });
+      }),
+      findOne: jest.fn().mockResolvedValue(null),
+      delete: jest.fn(),
+    }));
+    await service.create({
+      type: ContractType.PROCESS, factory_id: 5, order_id: 10, guarantor: '丙方某',
+    } as any, 1);
+    expect(savedContract.vat_rate).toBe(13); // 加工默认增值税13%
+    expect(savedContract.price_includes).toContain('工缴'); // 默认包含项
+    expect(savedContract.style_nos).toBe('MNA263M525'); // 默认=订单款号
+    expect(savedContract.guarantor).toBe('丙方某');
+    expect(savedContract.delivery_deadline).toBe('2026-07-20'); // 订单交期−10天（A7）
   });
 });

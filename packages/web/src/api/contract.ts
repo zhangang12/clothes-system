@@ -10,6 +10,8 @@ export const contractApi = {
     http.get<unknown, { data: any[] }>(`/contracts/${id}/logs`),
   create: (dto: Record<string, unknown>) =>
     http.post<unknown, { data: Contract }>('/contracts', dto),
+  update: (id: number, dto: Record<string, unknown>) =>
+    http.patch<unknown, { data: Contract }>(`/contracts/${id}`, dto),
   push: (id: number) =>
     http.patch<unknown, { data: Contract }>(`/contracts/${id}/push`),
   recall: (id: number) =>

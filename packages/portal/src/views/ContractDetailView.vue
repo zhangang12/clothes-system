@@ -44,7 +44,8 @@
         :title="m.item_name"
       >
         <template #label>
-          <span v-if="m.spec || m.unit">{{ m.spec }} {{ m.unit }}</span>
+          <span>{{ [m.spec, m.color, m.size, m.style_no, m.unit].filter(Boolean).join(' · ') }}</span>
+          <span v-if="m.delivery_date" style="margin-left:6px">交期 {{ String(m.delivery_date).slice(0, 10) }}</span>
         </template>
         <template #value>
           <div class="material-value">

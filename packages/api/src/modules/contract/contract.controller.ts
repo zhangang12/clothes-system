@@ -11,6 +11,7 @@ import { ContractService } from './contract.service';
 import { maskContract } from '../../common/masking/field-mask';
 import { ContractStatus } from './contract.entity';
 import { CreateContractDto } from './dto/create-contract.dto';
+import { UpdateContractDto } from './dto/update-contract.dto';
 import { QueryContractDto } from './dto/query-contract.dto';
 
 @ApiTags('合同管理')
@@ -50,6 +51,13 @@ export class ContractController {
   @ApiOperation({ summary: '合同门户操作日志' })
   getLogs(@Param('id', ParseIntPipe) id: number) {
     return this.service.getLogs(id);
+  }
+
+  @Patch(':id')
+  @Roles(UserRole.ADMIN, UserRole.BUSINESS)
+  @ApiOperation({ summary: '编辑合同（草稿全字段可改；推送后仅备注可改，E5 锁定）' })
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateContractDto) {
+    return this.service.update(id, dto);
   }
 
   @Patch(':id/push')

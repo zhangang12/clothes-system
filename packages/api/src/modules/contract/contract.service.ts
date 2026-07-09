@@ -22,7 +22,26 @@ const DEFAULT_ACCOUNT_PERIOD_DAYS: Record<ContractType, number> = {
   [ContractType.SUPPLEMENT]: 90,
 };
 import { CreateContractDto } from './dto/create-contract.dto';
+import { UpdateContractDto } from './dto/update-contract.dto';
 import { QueryContractDto } from './dto/query-contract.dto';
+
+// 加工合同价格包含项默认勾选（设计稿 04 v1.3：取自真实加工合同「以上价格包含…」写法；胶袋默认不含）
+const DEFAULT_PRICE_INCLUDES = ['工缴', '裁剪', '线', '后道', '运费', '纸箱', '拷贝纸', '干燥剂', '运杂费', '进仓费'];
+
+// 交货期限默认偏移（设计稿 合同 A7：加工=订单交期−10天 / 材料=−45天，可改）
+const DELIVERY_OFFSET_DAYS: Record<ContractType, number> = {
+  [ContractType.MATERIAL]: 45,
+  [ContractType.PROCESS]: 10,
+  [ContractType.SUPPLEMENT]: 45,
+};
+
+function minusDays(date: Date | string | null | undefined, days: number): string | null {
+  if (!date) return null;
+  const d = new Date(typeof date === 'string' ? date : date.toISOString());
+  if (isNaN(d.getTime())) return null;
+  d.setDate(d.getDate() - days);
+  return d.toISOString().slice(0, 10);
+}
 
 @Injectable()
 export class ContractService {
@@ -106,6 +125,14 @@ export class ContractService {
       );
     }
 
+    // 关联订单（编辑页默认值来源：款号/交期偏移；订单不存在不阻断——历史数据兼容）
+    const order = dto.order_id
+      ? await this.orderRepo.findOne({ where: { id: dto.order_id, deleted: 0 } })
+      : null;
+    // 交货期限默认（设计稿 合同 A7）：加工=订单交期−10天 / 材料·补料=−45天，可改
+    const deliveryDeadline = dto.delivery_deadline
+      ?? minusDays(order?.delivery_date as any, DELIVERY_OFFSET_DAYS[dto.type]);
+
     // 快照机制（系统开发手册）：报价→合同时锁定费用明细/单价。材料合同若未手工提供
     // materials，自动从该订单已核算的用料清单（quote_item→order_material 链路，
     // total_purchase/unit_price 已按报价损耗率算好）带出，避免业务员凭空重新誊抄。
@@ -118,6 +145,10 @@ export class ContractService {
       });
       materialInputs = orderMaterials.map((om) => ({
         item_name: om.item_name,
+        spec: [om.width, om.composition].filter(Boolean).join(' / ') || undefined,
+        color: om.color || undefined,
+        style_no: order?.style_no || undefined,
+        delivery_date: deliveryDeadline || undefined,
         unit: om.unit,
         unit_price: +om.unit_price || 0,
         qty: +(om.final_purchase ?? om.total_purchase) || 0,
@@ -126,11 +157,12 @@ export class ContractService {
       }));
     }
     // 加工合同：数量取订单大货数（设计稿 合同 A4）；单价由业务填写
-    if (materialInputs.length === 0 && dto.type === ContractType.PROCESS && dto.order_id) {
-      const order = await this.orderRepo.findOne({ where: { id: dto.order_id, deleted: 0 } });
+    if (materialInputs.length === 0 && dto.type === ContractType.PROCESS) {
       if (order && +order.qty_total) {
         materialInputs = [{
-          item_name: '加工费',
+          item_name: order.style_name || '加工费',
+          style_no: order.style_no || undefined,
+          delivery_date: deliveryDeadline || undefined,
           unit: '件',
           unit_price: 0,
           qty: +order.qty_total,
@@ -161,6 +193,20 @@ export class ContractService {
         ship_to_address: dto.ship_to_address,
         account_period_days: dto.account_period_days ?? DEFAULT_ACCOUNT_PERIOD_DAYS[dto.type],
         remark: dto.remark,
+        // 编辑页扩展字段（设计稿 04 v1.3）
+        sign_place: dto.sign_place,
+        sign_date: (dto.sign_date ?? new Date().toISOString().slice(0, 10)) as any,
+        company_id: dto.company_id,
+        company_rep: dto.company_rep,
+        guarantor: dto.guarantor,
+        guarantor_id_photo: dto.guarantor_id_photo,
+        delivery_deadline: deliveryDeadline as any,
+        style_nos: dto.style_nos ?? order?.style_no ?? null,
+        price_includes: dto.price_includes
+          ?? (dto.type === ContractType.PROCESS ? DEFAULT_PRICE_INCLUDES : null),
+        vat_rate: dto.vat_rate ?? (dto.type === ContractType.PROCESS ? 13 : null),
+        price_other: dto.price_other,
+        terms_json: dto.terms_json ?? null,
         created_by: createdBy,
         portal_status: ContractPortalStatus.DRAFT,
         status: ContractStatus.ACTIVE,
@@ -171,6 +217,11 @@ export class ContractService {
         sort_order: m.sort_order ?? idx,
         item_name: m.item_name,
         spec: m.spec,
+        color: m.color ?? null,
+        size: m.size ?? null,
+        style_no: m.style_no ?? null,
+        delivery_date: (m.delivery_date ?? null) as any,
+        photo_url: m.photo_url ?? null,
         unit: m.unit,
         unit_price: m.unit_price,
         qty: m.qty,
@@ -228,6 +279,83 @@ export class ContractService {
     const shippedQty = +(+(contract.shipped_qty ?? 0)).toFixed(4);
     const qtyStats = { contractQty, shippedQty, diffQty: +(contractQty - shippedQty).toFixed(4) };
     return { ...contract, materials, shipments, qtyStats };
+  }
+
+  // 合同编辑（设计稿 04 v1.3 编辑页 + E5 锁定规则）：
+  // 草稿可全改；推送/盖章后锁定关键字段，仅备注可改（要改需先撤销推送回草稿）
+  async update(id: number, dto: UpdateContractDto): Promise<Contract> {
+    const contract = await this.repo.findOne({ where: { id, deleted: 0 } });
+    if (!contract) throw new NotFoundException(`合同 #${id} 不存在`);
+
+    if (contract.portal_status !== ContractPortalStatus.DRAFT) {
+      const locked = Object.keys(dto).filter(
+        (k) => (dto as any)[k] !== undefined && k !== 'remark',
+      );
+      if (locked.length) {
+        throw new BadRequestException(
+          `合同已推送/盖章，仅可修改备注（修改其他字段请先撤销推送回草稿）；被锁定字段：${locked.join('、')}`,
+        );
+      }
+      if (dto.remark !== undefined) contract.remark = dto.remark;
+      return this.repo.save(contract);
+    }
+
+    // 付款比例校验（与 create 同规则）：合并后 定金+中期+尾款 = 100%
+    const deposit = dto.deposit_ratio ?? +contract.deposit_ratio;
+    const mid = dto.mid_ratio ?? +contract.mid_ratio;
+    const fin = dto.final_ratio ?? +contract.final_ratio;
+    if (Math.abs(deposit + mid + fin - 100) > 0.01) {
+      throw new BadRequestException(
+        `定金比例 + 中期比例 + 尾款比例必须等于 100%（当前为 ${deposit + mid + fin}%）`,
+      );
+    }
+
+    return this.dataSource.transaction(async (manager) => {
+      const assignable: Array<keyof UpdateContractDto> = [
+        'factory_id', 'currency', 'deposit_ratio', 'mid_ratio', 'final_ratio',
+        'last_ship_date', 'ship_to_address', 'account_period_days', 'remark',
+        'sign_place', 'sign_date', 'company_id', 'company_rep',
+        'guarantor', 'guarantor_id_photo', 'delivery_deadline', 'style_nos',
+        'price_includes', 'vat_rate', 'price_other', 'terms_json',
+      ];
+      for (const k of assignable) {
+        if ((dto as any)[k] !== undefined) (contract as any)[k] = (dto as any)[k];
+      }
+
+      if (dto.materials) {
+        if (!dto.materials.length) throw new BadRequestException('货物明细不能为空');
+        await manager.delete(ContractMaterial, { contract_id: id });
+        const rows = dto.materials.map((m, idx) => manager.create(ContractMaterial, {
+          contract_id: id,
+          sort_order: m.sort_order ?? idx,
+          item_name: m.item_name,
+          spec: m.spec,
+          color: m.color ?? null,
+          size: m.size ?? null,
+          style_no: m.style_no ?? null,
+          delivery_date: (m.delivery_date ?? null) as any,
+          photo_url: m.photo_url ?? null,
+          unit: m.unit,
+          unit_price: m.unit_price,
+          qty: m.qty,
+          amount: +(m.unit_price * m.qty).toFixed(4),
+          qty_source: m.qty_source ?? null,
+          remark: m.remark,
+        }));
+        await manager.save(ContractMaterial, rows);
+        const newTotal = +rows.reduce((s, r) => s + +r.amount, 0).toFixed(4);
+        // 金额变化则重置已通过的审批（防"审批后改金额"绕过阈值管控，同付款申请口径）
+        if (Math.abs(newTotal - +contract.total_amount) > 0.0001
+            && contract.approval_status === ApprovalStatus.APPROVED) {
+          contract.approval_status = ApprovalStatus.NONE;
+          contract.approved_by = null as any;
+          contract.approved_at = null as any;
+        }
+        contract.total_amount = newTotal;
+      }
+
+      return manager.save(Contract, contract);
+    });
   }
 
   // 推送给供应商门户 (DRAFT → PUSHED)

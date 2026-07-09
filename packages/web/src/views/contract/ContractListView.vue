@@ -3,7 +3,8 @@
     <div class="toolbar-card">
       <div class="toolbar">
         <div class="tools-left">
-          <el-button v-if="canEdit" type="primary" :icon="Plus" @click="openCreate">新建合同</el-button>
+          <el-button v-if="canEdit" type="primary" :icon="Plus" @click="$router.push('/contracts/new?type=MATERIAL')">新建材料合同</el-button>
+          <el-button v-if="canEdit" type="primary" plain :icon="Plus" @click="$router.push('/contracts/new?type=PROCESS')">新建加工合同</el-button>
           <el-button plain :icon="Download" @click="exportCsv">导出</el-button>
         </div>
         <div class="tools-right">
@@ -26,15 +27,20 @@
       <el-table :data="list" v-loading="loading" border stripe @row-dblclick="viewDetail">
         <el-table-column prop="contract_no" label="合同编号" width="160" sortable />
         <el-table-column label="类型" width="100"><template #default="{ row }"><el-tag size="small" effect="light">{{ typeLabel(row.type) }}</el-tag></template></el-table-column>
+        <el-table-column label="供应商/加工厂" min-width="140"><template #default="{ row }">{{ factoryName(row.factory_id) }}</template></el-table-column>
+        <el-table-column label="关联款号" min-width="120"><template #default="{ row }">{{ row.style_nos || '—' }}</template></el-table-column>
         <el-table-column label="合同金额" width="130" align="right"><template #default="{ row }"><span v-if="row.total_amount == null">—</span><span v-else>{{ row.currency }} {{ (+row.total_amount).toFixed(2) }}</span></template></el-table-column>
         <el-table-column label="定金/中期/尾款" width="150" align="center"><template #default="{ row }">{{ row.deposit_ratio }}/{{ row.mid_ratio }}/{{ row.final_ratio }}%</template></el-table-column>
         <el-table-column prop="account_period_days" label="账期(天)" width="90" align="right" />
         <el-table-column label="门户状态" width="150"><template #default="{ row }"><el-tag :type="portalTagType(row.portal_status)" size="small">{{ portalLabel(row.portal_status) }}</el-tag><el-tag v-if="row.approval_status === 'PENDING'" type="warning" size="small" style="margin-left:4px">待审批</el-tag><el-tag v-if="Number(row.revised) === 1 && row.portal_status === 'PUSHED'" type="danger" size="small" style="margin-left:4px">已更新</el-tag></template></el-table-column>
         <el-table-column prop="stamped_at" label="盖章时间" width="160"><template #default="{ row }">{{ row.stamped_at || '—' }}</template></el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="$router.push(`/contracts/${row.id}/edit`)">{{ row.portal_status === 'DRAFT' && canEdit ? '编辑' : '查看' }}</el-button>
             <el-button link type="primary" size="small" @click="viewDetail(row)">详情</el-button>
-            <el-button link size="small" @click="printRow(row)">打印/PDF</el-button>
+            <el-button v-if="canEdit" link size="small" @click="$router.push(`/contracts/new?type=${row.type}&copy_from=${row.id}`)">复制</el-button>
+            <el-button v-if="canEdit && row.type === 'MATERIAL'" link size="small" @click="$router.push(`/contracts/new?type=SUPPLEMENT&parent_id=${row.id}&copy_from=${row.id}`)">补料</el-button>
+            <el-button link size="small" @click="printRow(row)">PDF</el-button>
             <el-button v-if="row.approval_status === 'PENDING' && canReview" link type="success" size="small" @click="doApprove(row)">审批</el-button>
             <el-button v-if="row.portal_status === 'DRAFT' && canEdit" link type="warning" size="small" @click="doPush(row)">推送门户</el-button>
             <el-popconfirm v-if="row.portal_status === 'PUSHED' && canEdit" title="撤销后合同回到草稿，可修改后重新推送。确认撤销？" @confirm="doRecall(row)">
@@ -52,42 +58,6 @@
       </div>
       <div class="tip">材料合同不填材料明细时，自动从关联订单的用料核算带出（快照）；供应商盖章后单价锁定。</div>
     </div>
-
-    <!-- 新建合同 -->
-    <el-dialog v-model="createVisible" title="新建合同" width="760px" @closed="resetCreateForm">
-      <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-width="96px">
-        <el-row :gutter="16">
-          <el-col :span="8"><el-form-item label="合同类型" prop="type"><el-select v-model="createForm.type" style="width:100%"><el-option label="面料合同" value="MATERIAL" /><el-option label="加工合同" value="PROCESS" /><el-option label="补料合同" value="SUPPLEMENT" /></el-select></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="供应商工厂" prop="factory_id"><el-select v-model="createForm.factory_id" filterable placeholder="选择工厂" style="width:100%"><el-option v-for="f in factories" :key="f.id" :label="`${f.factory_no} · ${f.name}`" :value="f.id" /></el-select></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="关联订单" prop="order_id"><el-select v-model="createForm.order_id" filterable placeholder="选择订单" style="width:100%"><el-option v-for="o in orders" :key="o.id" :label="`${o.order_no} · ${o.style_no || ''}`" :value="o.id" /></el-select></el-form-item></el-col>
-          <el-col :span="6"><el-form-item label="币种"><el-select v-model="createForm.currency" style="width:100%"><el-option label="CNY" value="CNY" /><el-option label="USD" value="USD" /></el-select></el-form-item></el-col>
-          <el-col :span="6"><el-form-item label="定金%"><el-input-number v-model="createForm.deposit_ratio" :min="0" :max="100" :precision="2" style="width:100%" /></el-form-item></el-col>
-          <el-col :span="6"><el-form-item label="中期%"><el-input-number v-model="createForm.mid_ratio" :min="0" :max="100" :precision="2" style="width:100%" /></el-form-item></el-col>
-          <el-col :span="6"><el-form-item label="尾款%"><el-input-number v-model="createForm.final_ratio" :min="0" :max="100" :precision="2" style="width:100%" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="最后发货日"><el-date-picker v-model="createForm.last_ship_date" type="date" value-format="YYYY-MM-DD" style="width:100%" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="账期(天)"><el-input-number v-model="createForm.account_period_days" :min="0" style="width:100%" /></el-form-item></el-col>
-        </el-row>
-        <div class="ratio-hint" :class="{ bad: ratioSum !== 100 }">定金+中期+尾款 = {{ ratioSum }}%（须=100%）</div>
-        <el-form-item label="备注"><el-input v-model="createForm.remark" type="textarea" :rows="2" /></el-form-item>
-
-        <el-divider>材料明细<span class="muted">（材料合同可留空，自动从订单用料核算带出）</span></el-divider>
-        <div v-for="(m, idx) in createForm.materials" :key="idx" class="item-row">
-          <el-row :gutter="8" align="middle">
-            <el-col :span="6"><el-input v-model="m.item_name" placeholder="材料名称" /></el-col>
-            <el-col :span="4"><el-input v-model="m.spec" placeholder="规格" /></el-col>
-            <el-col :span="3"><el-input v-model="m.unit" placeholder="单位" /></el-col>
-            <el-col :span="4"><el-input-number v-model="m.unit_price" :min="0" :precision="4" placeholder="单价" style="width:100%" /></el-col>
-            <el-col :span="4"><el-input-number v-model="m.qty" :min="0" :precision="4" placeholder="数量" style="width:100%" /></el-col>
-            <el-col :span="3"><el-button link type="danger" @click="removeMaterial(idx)">删除</el-button></el-col>
-          </el-row>
-        </div>
-        <el-button style="width:100%;margin-top:8px" @click="addMaterial">+ 添加材料行</el-button>
-      </el-form>
-      <template #footer>
-        <el-button @click="createVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="doCreate">保存</el-button>
-      </template>
-    </el-dialog>
 
     <!-- 详情 -->
     <el-drawer v-model="detailVisible" :title="`合同详情 ${detail?.contract_no || ''}`" size="640px">
@@ -173,7 +143,6 @@ import { ref, reactive, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { Search, Plus, Download } from '@element-plus/icons-vue';
-import type { FormInstance, FormRules } from 'element-plus';
 import { contractApi } from '@/api/contract';
 import { factoryApi } from '@/api/factory';
 import { printContract } from '@/utils/contractPrint';
@@ -207,7 +176,6 @@ const remarkAttachment = (remark?: string): string => {
 const remarkText = (remark?: string): string => (remark ? remark.replace(/\s*·?\s*附件:\S+/, '').trim() : '');
 
 const loading = ref(false);
-const saving = ref(false);
 const list = ref<any[]>([]);
 const total = ref(0);
 const factories = ref<any[]>([]);
@@ -255,11 +223,11 @@ async function printRow(row: any) {
     if (!factories.value.length) await loadRefs();
     const res: any = await contractApi.get(row.id);
     const detail = res.data ?? res;
-    const fname = factories.value.find((f: any) => f.id === detail.factory_id)?.name;
+    const factory = factories.value.find((f: any) => f.id === detail.factory_id);
     if (cachedCompany === null) {
       try { cachedCompany = (await companyApi.getDefault() as any)?.data ?? null; } catch { cachedCompany = undefined; }
     }
-    printContract(detail, fname, cachedCompany || undefined);
+    printContract(detail, factory, cachedCompany || undefined);
   } catch (e: any) { ElMessage.error(e?.message ?? e?.response?.data?.message ?? '打印失败'); }
 }
 async function doPush(row: any) {
@@ -284,40 +252,9 @@ function exportCsv() {
   URL.revokeObjectURL(url);
 }
 
-// create
-const createVisible = ref(false);
-const createFormRef = ref<FormInstance>();
-const createForm = reactive<any>({
-  type: 'MATERIAL', factory_id: undefined, order_id: undefined, currency: 'CNY',
-  deposit_ratio: 30, mid_ratio: 40, final_ratio: 30, last_ship_date: '', account_period_days: 45, remark: '', materials: [],
-});
-const ratioSum = computed(() => (+createForm.deposit_ratio || 0) + (+createForm.mid_ratio || 0) + (+createForm.final_ratio || 0));
-const createRules: FormRules = {
-  type: [{ required: true, message: '请选择合同类型', trigger: 'change' }],
-  factory_id: [{ required: true, message: '请选择工厂', trigger: 'change' }],
-  order_id: [{ required: true, message: '请选择订单', trigger: 'change' }],
-};
-function openCreate() { createVisible.value = true; }
-function resetCreateForm() {
-  Object.assign(createForm, { type: 'MATERIAL', factory_id: undefined, order_id: undefined, currency: 'CNY', deposit_ratio: 30, mid_ratio: 40, final_ratio: 30, last_ship_date: '', account_period_days: 45, remark: '', materials: [] });
-}
-function addMaterial() { createForm.materials.push({ item_name: '', spec: '', unit: '', unit_price: undefined, qty: undefined }); }
-function removeMaterial(idx: number) { createForm.materials.splice(idx, 1); }
-async function doCreate() {
-  await createFormRef.value?.validate();
-  if (ratioSum.value !== 100) { ElMessage.warning('定金+中期+尾款须等于100%'); return; }
-  saving.value = true;
-  try {
-    const dto = { ...createForm };
-    if (!dto.materials.length) delete dto.materials; // 材料合同触发自动带出
-    if (!dto.last_ship_date) delete dto.last_ship_date;
-    await contractApi.create(dto);
-    ElMessage.success('创建成功');
-    createVisible.value = false;
-    load();
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message ?? '创建失败');
-  } finally { saving.value = false; }
+// 供应商/加工厂列显示（factories 引用已在 loadRefs 装载）
+function factoryName(id: number): string {
+  return factories.value.find((f: any) => f.id === id)?.name ?? (id ? `工厂#${id}` : '—');
 }
 </script>
 
