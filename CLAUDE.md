@@ -70,5 +70,5 @@
 - ~~Redis 硬单点~~ **已解决（2026-07-10）**：`NumberingService` 加 `sys_sequence` DB 兜底——Redis 正常时发号后同步推进 DB 影子计数；Redis 挂时行锁原子发号（只降速不阻断）；恢复后检测计数落后自动用影子续发并追平 Redis。真栈杀 Redis 实测：断连期间照常发号、恢复后无重号。
 - 引入正式 **migration 体系**（全新装机走 `init.sql`，存量升级走 migration），替掉临时的 `hotfix-schema.sql`。（注：`gen-column-sync.py` 已实现"任意历史库→HEAD"的等效能力，migration 紧迫性降低）
 - 把 `deep-test.sh` **真机门禁接进部署/CI**——连真库没跑通不许发版。
-- **GitHub Actions merge→deploy**：合并 `main` 自动 SSH 上服务器跑 `deploy.sh`（需在 GitHub 存部署 SSH 密钥），实现"合并即发版"。
-- 运维 P0：**异地备份（含 `/data/uploads`）+ HTTPS + 恢复演练 + 告警**。当前 `backup.sh` 仅 `mysqldump`、**不含上传文件**，且备份只在本机（实例挂了陪葬）。
+- ~~GitHub Actions merge→deploy~~ **workflow 已就位（2026-07-10）**：模板在 `infra/ci/deploy.yml`（合并 `main` 自动 SSH 跑 `deploy.sh`+`health.sh`）。**待用户操作**：①复制为 `.github/workflows/deploy.yml` 提交（当前 PAT 无 workflow scope 推不了，需网页端建或换凭据）；②仓库 Settings→Secrets 配 `DEPLOY_SSH_HOST/USER/KEY`（未配时自动跳过、不报红）。
+- 运维 P0：**异地备份 + HTTPS + 恢复演练 + 告警**。`backup.sh` 已补上传文件打包（`uploads_*.tar.gz`，2026-07-10）；但备份仍只在本机（实例挂了陪葬），异地推送需配 OSS/rclone。

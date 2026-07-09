@@ -39,10 +39,21 @@ docker exec i9_mysql \
 SIZE=$(du -sh "$DUMP_FILE" | cut -f1)
 log "备份完成  大小=${SIZE}  文件=${DUMP_FILE}"
 
+# ── 上传文件备份（发票/水单/合同附件等；此前只备数据库，上传文件裸奔）──
+UPLOADS_DIR=${UPLOADS_DIR:-/data/uploads}
+if [[ -d "$UPLOADS_DIR" ]]; then
+  UP_FILE="$BACKUP_DIR/uploads_${TS}.tar.gz"
+  tar -czf "$UP_FILE" -C "$(dirname "$UPLOADS_DIR")" "$(basename "$UPLOADS_DIR")"
+  log "上传文件备份完成  大小=$(du -sh "$UP_FILE" | cut -f1)  文件=${UP_FILE}"
+else
+  log "上传目录不存在（$UPLOADS_DIR），跳过附件备份"
+fi
+
 # ── 清理旧备份 ────────────────────────────────────────────────
-DELETED=$(find "$BACKUP_DIR" -name "${DB_NAME}_*.sql.gz" -mtime +"$RETAIN_DAYS" -print -delete | wc -l)
+DELETED=$(find "$BACKUP_DIR" \( -name "${DB_NAME}_*.sql.gz" -o -name "uploads_*.tar.gz" \) -mtime +"$RETAIN_DAYS" -print -delete | wc -l)
 [[ $DELETED -gt 0 ]] && log "已删除 ${DELETED} 个超过 ${RETAIN_DAYS} 天的旧备份"
 
 # ── 列出当前备份 ──────────────────────────────────────────────
 COUNT=$(find "$BACKUP_DIR" -name "${DB_NAME}_*.sql.gz" | wc -l)
-log "当前共保留 ${COUNT} 个备份"
+log "当前共保留 ${COUNT} 个数据库备份"
+log "提醒：备份仍在本机（实例挂了陪葬）；异地备份需配 OSS/rclone 后加推送步骤（CLAUDE.md 运维 P0）"
