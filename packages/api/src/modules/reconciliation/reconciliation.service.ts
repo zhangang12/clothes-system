@@ -329,5 +329,9 @@ export class ReconciliationService {
     }
     rec.deleted = 1;
     await this.repo.save(rec);
+    // 释放被本单占用的发货批次（门户「我要对账」占用防重复；删单后供应商可重新勾选）
+    await this.dataSource.query(
+      'UPDATE contract_shipment SET reconcile_id = NULL WHERE reconcile_id = ?', [id],
+    );
   }
 }

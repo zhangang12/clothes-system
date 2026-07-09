@@ -616,6 +616,13 @@ CREATE TABLE IF NOT EXISTS `contract_shipment` (
   `amount`             DECIMAL(15,4)  DEFAULT NULL COMMENT '本批金额',
   `ship_date`          DATE           DEFAULT NULL,
   `operator`           VARCHAR(50)    DEFAULT NULL COMMENT '发货供应商账号',
+  `approval_status`    ENUM('PENDING','APPROVED','REJECTED') NOT NULL DEFAULT 'PENDING' COMMENT '发货业务审批(门户B2)',
+  `approved_by`        BIGINT         DEFAULT NULL,
+  `approved_at`        DATETIME       DEFAULT NULL,
+  `reconcile_id`       BIGINT         DEFAULT NULL COMMENT '被哪张对账单占用(防重复对账,删单释放)',
+  `express_company`    VARCHAR(50)    DEFAULT NULL COMMENT '快递公司',
+  `express_no`         VARCHAR(50)    DEFAULT NULL COMMENT '快递单号',
+  `attach_url`         VARCHAR(500)   DEFAULT NULL COMMENT '附件(装箱单/货物照片)',
   `created_at`         DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_contract` (`contract_id`)
@@ -1661,6 +1668,20 @@ CALL _i9_add_col('contract_shipment','ship_date',"DATE           DEFAULT NULL");
 CALL _i9_sync_col('contract_shipment','ship_date',"DATE","DATE           DEFAULT NULL");
 CALL _i9_add_col('contract_shipment','operator',"VARCHAR(50)    DEFAULT NULL COMMENT '发货供应商账号'");
 CALL _i9_sync_col('contract_shipment','operator',"VARCHAR(50)","VARCHAR(50)    DEFAULT NULL COMMENT '发货供应商账号'");
+CALL _i9_add_col('contract_shipment','approval_status',"ENUM('PENDING','APPROVED','REJECTED') NOT NULL DEFAULT 'PENDING' COMMENT '发货业务审批(门户B2)'");
+CALL _i9_sync_col('contract_shipment','approval_status',"ENUM('PENDING','APPROVED','REJECTED')","ENUM('PENDING','APPROVED','REJECTED') NOT NULL DEFAULT 'PENDING' COMMENT '发货业务审批(门户B2)'");
+CALL _i9_add_col('contract_shipment','approved_by',"BIGINT         DEFAULT NULL");
+CALL _i9_sync_col('contract_shipment','approved_by',"BIGINT","BIGINT         DEFAULT NULL");
+CALL _i9_add_col('contract_shipment','approved_at',"DATETIME       DEFAULT NULL");
+CALL _i9_sync_col('contract_shipment','approved_at',"DATETIME","DATETIME       DEFAULT NULL");
+CALL _i9_add_col('contract_shipment','reconcile_id',"BIGINT         DEFAULT NULL COMMENT '被哪张对账单占用(防重复对账,删单释放)'");
+CALL _i9_sync_col('contract_shipment','reconcile_id',"BIGINT","BIGINT         DEFAULT NULL COMMENT '被哪张对账单占用(防重复对账,删单释放)'");
+CALL _i9_add_col('contract_shipment','express_company',"VARCHAR(50)    DEFAULT NULL COMMENT '快递公司'");
+CALL _i9_sync_col('contract_shipment','express_company',"VARCHAR(50)","VARCHAR(50)    DEFAULT NULL COMMENT '快递公司'");
+CALL _i9_add_col('contract_shipment','express_no',"VARCHAR(50)    DEFAULT NULL COMMENT '快递单号'");
+CALL _i9_sync_col('contract_shipment','express_no',"VARCHAR(50)","VARCHAR(50)    DEFAULT NULL COMMENT '快递单号'");
+CALL _i9_add_col('contract_shipment','attach_url',"VARCHAR(500)   DEFAULT NULL COMMENT '附件(装箱单/货物照片)'");
+CALL _i9_sync_col('contract_shipment','attach_url',"VARCHAR(500)","VARCHAR(500)   DEFAULT NULL COMMENT '附件(装箱单/货物照片)'");
 CALL _i9_add_col('contract_shipment','created_at',"DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP");
 CALL _i9_sync_col('contract_shipment','created_at',"DATETIME","DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP");
 

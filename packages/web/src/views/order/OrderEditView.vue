@@ -141,6 +141,7 @@
             <el-table-column label="成份" width="100"><template #default="{ row }"><el-input v-model="row.composition" size="small" /></template></el-table-column>
             <el-table-column label="供应商" min-width="130"><template #default="{ row }"><el-select v-model="row.supplier" size="small" filterable allow-create default-first-option clearable placeholder="选工厂库或输入" style="width:100%"><el-option v-for="f in supplierFactories" :key="f.id" :label="f.name" :value="f.name" /></el-select></template></el-table-column>
             <el-table-column label="单位" width="70"><template #default="{ row }"><el-input v-model="row.unit" size="small" /></template></el-table-column>
+            <el-table-column label="单价(元)" width="90"><template #default="{ row }"><el-input v-model="row.unitPrice" size="small" type="number" /></template></el-table-column>
             <el-table-column label="取整" width="92"><template #default="{ row }"><el-select v-model="row.roundUp" size="small" style="width:100%" clearable placeholder="自动"><el-option label="强制取整" :value="1" /><el-option label="不取整" :value="0" /></el-select></template></el-table-column>
             <el-table-column label="单件耗用" width="90"><template #default="{ row }"><el-input v-model="row.netUsage" size="small" /></template></el-table-column>
             <el-table-column label="损耗%" width="80"><template #default="{ row }"><el-input v-model="row.lossRate" size="small" /></template></el-table-column>
@@ -248,7 +249,7 @@ const INT_UNITS = ['个', '条', '只', '件', '粒', '套', '对', 'pcs', 'PCS'
 // 尺码数量搭配矩阵（设计稿 03：行=款·色·尺码，列=各 PO（PO号/目的地/收货人），格=数量）
 const emptyPo = () => ({ po_no: '', destination: '', consignee: '' });
 const emptyMatrixRow = (poCount: number) => ({ style_no: '', color: '', size: '', qtys: Array(poCount).fill('') });
-const emptyMat = () => ({ itemName: '', part: '', width: '', color: '', composition: '', supplier: '', unit: '', netUsage: '', lossRate: 3, splitMode: 'NONE', finalPurchase: '', roundUp: null, remark: '' });
+const emptyMat = () => ({ itemName: '', part: '', width: '', color: '', composition: '', supplier: '', unit: '', unitPrice: '', netUsage: '', lossRate: 3, splitMode: 'NONE', finalPurchase: '', roundUp: null, remark: '' });
 const form = reactive<any>({
   orderNo: '', quoteId: undefined, customerPo: '', styleNo: '', unitPrice: '', currency: 'USD',
   deliveryDate: '', commissionRate: 0, factoryId: undefined, middlemanName: '', buyerName: '',
@@ -397,7 +398,7 @@ async function load() {
     matrix,
     materials: d.materials?.length ? d.materials.map((m: any) => ({
       itemName: m.item_name, part: m.part, width: m.width, color: m.color, composition: m.composition,
-      supplier: m.supplier, unit: m.unit, netUsage: m.net_usage, lossRate: m.loss_rate, splitMode: m.split_mode ?? 'NONE',
+      supplier: m.supplier, unit: m.unit, unitPrice: m.unit_price ?? '', netUsage: m.net_usage, lossRate: m.loss_rate, splitMode: m.split_mode ?? 'NONE',
       finalPurchase: m.final_purchase ?? '', roundUp: m.round_up ?? null, remark: m.remark,
     })) : [emptyMat()],
   });
@@ -422,7 +423,7 @@ function buildDto() {
     },
     materials: form.materials.filter((m: any) => m.itemName).map((m: any, i: number) => ({
       item_name: m.itemName, part: m.part, width: m.width, color: m.color, composition: m.composition,
-      supplier: m.supplier, unit: m.unit, net_usage: num(m.netUsage), loss_rate: num(m.lossRate) ?? 3,
+      supplier: m.supplier, unit: m.unit, unit_price: num(m.unitPrice), net_usage: num(m.netUsage), loss_rate: num(m.lossRate) ?? 3,
       split_mode: m.splitMode, final_purchase: num(m.finalPurchase),
       round_up: m.roundUp === 1 || m.roundUp === 0 ? m.roundUp : undefined, sort_order: i,
     })),

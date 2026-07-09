@@ -87,14 +87,34 @@
         </el-descriptions>
 
         <template v-if="detail.shipments?.length">
-          <h4 class="sec">发货批次（逐批锁价）</h4>
+          <h4 class="sec">发货批次（逐批锁价 · 审批通过后供应商方可勾选对账）</h4>
           <el-table :data="detail.shipments" size="small" border>
-            <el-table-column prop="ship_no" label="发货单号" width="150" />
-            <el-table-column prop="qty" label="数量" width="80" align="right" />
-            <el-table-column prop="snapshot_unit_price" label="锁定单价" width="100" align="right">
+            <el-table-column prop="ship_no" label="发货单号" width="140" />
+            <el-table-column prop="qty" label="数量" width="76" align="right" />
+            <el-table-column prop="snapshot_unit_price" label="锁定单价" width="90" align="right">
               <template #default="{ row }">{{ row.snapshot_unit_price != null ? (+row.snapshot_unit_price).toFixed(4) : '—' }}</template>
             </el-table-column>
-            <el-table-column prop="ship_date" label="发货日" width="110" />
+            <el-table-column prop="ship_date" label="发货日" width="104" />
+            <el-table-column label="物流" min-width="110">
+              <template #default="{ row }">{{ [row.express_company, row.express_no].filter(Boolean).join(' ') || '—' }}</template>
+            </el-table-column>
+            <el-table-column label="审批" width="86" align="center">
+              <template #default="{ row }">
+                <el-tag v-if="row.reconcile_id" type="primary" size="small" effect="plain">已对账</el-tag>
+                <el-tag v-else-if="row.approval_status === 'APPROVED'" type="success" size="small">已审批</el-tag>
+                <el-tag v-else-if="row.approval_status === 'REJECTED'" type="danger" size="small">已驳回</el-tag>
+                <el-tag v-else type="warning" size="small">待审批</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column v-if="canEdit" label="操作" width="110" align="center">
+              <template #default="{ row }">
+                <template v-if="!row.reconcile_id && row.approval_status !== 'APPROVED'">
+                  <el-button link type="success" size="small" @click="doApproveShipment(row, true)">通过</el-button>
+                  <el-button v-if="row.approval_status !== 'REJECTED'" link type="danger" size="small" @click="doApproveShipment(row, false)">驳回</el-button>
+                </template>
+                <span v-else>—</span>
+              </template>
+            </el-table-column>
           </el-table>
         </template>
 
@@ -216,6 +236,14 @@ async function viewDetail(row: any) {
 async function doApprove(row: any) {
   try { await contractApi.approve(row.id); ElMessage.success('已审批，合同可推送'); load(); }
   catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '审批失败'); }
+}
+// 发货批次审批（门户 B2：通过后供应商方可勾选该批次对账）
+async function doApproveShipment(row: any, approve: boolean) {
+  try {
+    await contractApi.approveShipment(detail.value.id, row.id, approve);
+    ElMessage.success(approve ? '批次已审批通过，供应商可对账' : '批次已驳回');
+    await viewDetail({ id: detail.value.id });
+  } catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '操作失败'); }
 }
 let cachedCompany: any = null;
 async function printRow(row: any) {

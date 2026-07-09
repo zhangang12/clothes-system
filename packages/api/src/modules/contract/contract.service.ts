@@ -561,6 +561,25 @@ export class ContractService {
     await this.repo.save(contract);
   }
 
+  // 发货批次业务审批（设计稿 门户 B2：每次发货提交走业务审批；对账只可勾选已审批批次）
+  async approveShipment(contractId: number, shipmentId: number, approverId: number, approve: boolean): Promise<ContractShipment> {
+    const shipment = await this.shipmentRepo.findOne({ where: { id: shipmentId, contract_id: contractId } });
+    if (!shipment) throw new NotFoundException(`发货批次 #${shipmentId} 不存在`);
+    if (shipment.reconcile_id) throw new BadRequestException('该批次已被对账单引用，不可改审批状态');
+    shipment.approval_status = approve ? 'APPROVED' : 'REJECTED';
+    shipment.approved_by = approverId;
+    shipment.approved_at = new Date();
+    const saved = await this.shipmentRepo.save(shipment);
+    await this.logRepo.save(this.logRepo.create({
+      contract_id: contractId,
+      action: approve ? 'SHIP_APPROVE' : 'SHIP_REJECT',
+      operator: String(approverId),
+      operator_type: PortalOperatorType.INTERNAL,
+      remark: `发货批次 ${shipment.ship_no ?? shipmentId} ${approve ? '审批通过' : '驳回'}`,
+    }));
+    return saved;
+  }
+
   async getLogs(id: number): Promise<ContractPortalLog[]> {
     return this.logRepo.find({
       where: { contract_id: id },

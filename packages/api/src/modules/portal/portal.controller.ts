@@ -7,6 +7,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { SupplierGuard } from '../../common/guards/supplier.guard';
 import { PortalService } from './portal.service';
 import { ConfirmShipDto } from './dto/confirm-ship.dto';
+import { CreateReconcileDto } from './dto/create-reconcile.dto';
 import { UploadInvoiceDto } from './dto/upload-invoice.dto';
 import { StampDto } from './dto/stamp.dto';
 
@@ -48,6 +49,16 @@ export class PortalController {
     @Body() dto: ConfirmShipDto,
   ) {
     return this.service.confirmShipping(id, req.user.username, req.user.factory_id, dto);
+  }
+
+  @Patch(':id/reconcile')
+  @ApiOperation({ summary: '我要对账：勾选已审批发货批次自动生成对账单并推业务复核（设计稿 05 §C）' })
+  createReconcile(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body() dto: CreateReconcileDto,
+  ) {
+    return this.service.createReconcile(id, req.user.username, req.user.factory_id, dto);
   }
 
   @Patch(':id/invoice')

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, DataSource, In } from 'typeorm';
 import { Contract } from '../contract/contract.entity';
 import { ContractMaterial } from '../contract/contract-material.entity';
 import { ContractShipment } from '../contract/contract-shipment.entity';
@@ -9,6 +9,7 @@ import { OrderMain } from '../order/order-main.entity';
 import { OrderMaterial } from '../order/order-material.entity';
 import { OrderSizeMatrix } from '../order/order-size-matrix.entity';
 import { Reconciliation, ReconciliationStatus } from '../reconciliation/reconciliation.entity';
+import { ReconciliationShipment } from '../reconciliation/reconciliation-shipment.entity';
 import { PaymentRequest } from '../payment/payment-request.entity';
 import { ContractPortalStatus, ContractType, ReconcileType, PaymentApprovalStatus } from '@i9/types';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
@@ -34,6 +35,7 @@ export class PortalService {
     @InjectRepository(Reconciliation) private readonly reconcileRepo: Repository<Reconciliation>,
     @InjectRepository(PaymentRequest) private readonly prRepo: Repository<PaymentRequest>,
     private readonly numbering: NumberingService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async getContracts(factoryId: number, page = 1, size = 20, portalStatus?: string) {
@@ -57,9 +59,11 @@ export class PortalService {
     if (!contract || !VISIBLE_STATUSES.includes(contract.portal_status)) {
       throw new NotFoundException('合同不存在');
     }
-    const [materials, logs] = await Promise.all([
+    const [materials, logs, shipments] = await Promise.all([
       this.materialRepo.find({ where: { contract_id: id }, order: { sort_order: 'ASC' } }),
       this.logRepo.find({ where: { contract_id: id }, order: { created_at: 'ASC' } }),
+      // 发货批次（含审批状态/是否已对账）：门户「我要对账」勾选数据源（设计稿 B2）
+      this.shipmentRepo.find({ where: { contract_id: id }, order: { id: 'ASC' } }),
     ]);
     // 加工合同：把订单明细同步给加工厂（材料/尺寸表/数量搭配/纸板/填充量，设计稿 门户 A2）
     let orderDetail: Record<string, unknown> | null = null;
@@ -84,7 +88,7 @@ export class PortalService {
         };
       }
     }
-    return { ...contract, materials, logs, orderDetail };
+    return { ...contract, materials, logs, shipments, orderDetail };
   }
 
   async stamp(id: number, supplierAccount: string, factoryId: number, agreed = false): Promise<Contract> {
@@ -151,7 +155,7 @@ export class PortalService {
     id: number,
     supplierAccount: string,
     factoryId: number,
-    dto: { remark?: string; qty?: number; force?: boolean } = {},
+    dto: { remark?: string; qty?: number; force?: boolean; express_company?: string; express_no?: string; attach_url?: string } = {},
   ): Promise<Contract> {
     const contract = await this.contractRepo.findOne({ where: { id, factory_id: factoryId, deleted: 0 } });
     if (!contract || !VISIBLE_STATUSES.includes(contract.portal_status)) {
@@ -190,7 +194,12 @@ export class PortalService {
         contract_id: id, ship_no: shipNo, qty: dto.qty,
         snapshot_unit_price: unitPrice, amount: unitPrice != null ? +(unitPrice * dto.qty).toFixed(4) : null,
         ship_date: shipDateStr, operator: supplierAccount,
-      }));
+        // 物流与附件（设计稿 门户发货步：快递公司/单号 + 装箱单/货物照片）；提交即进业务审批（B2）
+        express_company: dto.express_company ?? null,
+        express_no: dto.express_no ?? null,
+        attach_url: dto.attach_url ?? null,
+      } as any));
+      if (dto.express_company || dto.express_no) parts.push(`物流:${[dto.express_company, dto.express_no].filter(Boolean).join(' ')}`);
 
       // 到期日 = 最后一次发货日 + 账期（逾期判断依据，对账付款串流程 D15）
       contract.last_ship_date = shipDate;
@@ -218,6 +227,95 @@ export class PortalService {
     );
 
     return contract;
+  }
+
+  // 我要对账（设计稿 05 v2.2 §C 第三步）：勾选已审批发货批次 → 系统按批次快照单价×数量自动算
+  // → 生成对账单(直接 PENDING 推业务复核) → 占用批次防重复对账；业务复核确认后合同→已对账,解锁开票
+  async createReconcile(
+    id: number,
+    supplierAccount: string,
+    factoryId: number,
+    dto: { shipment_ids: number[] },
+  ) {
+    const contract = await this.contractRepo.findOne({ where: { id, factory_id: factoryId, deleted: 0 } });
+    if (!contract || !VISIBLE_STATUSES.includes(contract.portal_status)) {
+      throw new NotFoundException('合同不存在');
+    }
+    // 顺序锁定（B2）：对账须在发货阶段（至少一批已发货）进行
+    if (contract.portal_status !== ContractPortalStatus.SHIPPING) {
+      throw new BadRequestException('对账须在发货后进行（当前合同尚未发货或已完成对账）');
+    }
+    if (!dto.shipment_ids?.length) throw new BadRequestException('请至少勾选 1 个发货批次');
+
+    const batches = await this.shipmentRepo.find({ where: { id: In(dto.shipment_ids), contract_id: id } });
+    if (batches.length !== dto.shipment_ids.length) {
+      throw new BadRequestException('存在不属于本合同的发货批次');
+    }
+    const notApproved = batches.filter((b) => b.approval_status !== 'APPROVED');
+    if (notApproved.length) {
+      throw new BadRequestException(
+        `批次 ${notApproved.map((b) => b.ship_no ?? b.id).join('、')} 尚未通过业务审批，不可对账（B2）`,
+      );
+    }
+    const occupied = batches.filter((b) => b.reconcile_id);
+    if (occupied.length) {
+      throw new BadRequestException(
+        `批次 ${occupied.map((b) => b.ship_no ?? b.id).join('、')} 已在其他对账单中，不可重复对账`,
+      );
+    }
+
+    // 款号（DZ-款号-序号 + 对账单检索字段）
+    let styleNo: string | null = null;
+    if (contract.order_id) {
+      const order = await this.orderRepo.findOne({ where: { id: contract.order_id, deleted: 0 } });
+      styleNo = order?.style_no ?? null;
+    }
+    const reconcile_no = await this.numbering.nextWithSegment(NUM_PREFIX.RECONCILIATION, styleNo || 'NA');
+    const totalAmount = +batches.reduce((s, b) => s + (+b.amount || (+b.snapshot_unit_price || 0) * +b.qty), 0).toFixed(4);
+    if (!(totalAmount > 0)) throw new BadRequestException('勾选批次合计金额为 0，无法生成对账单');
+
+    const rec = await this.dataSource.transaction(async (manager) => {
+      const reconciliation = await manager.save(Reconciliation, manager.create(Reconciliation, {
+        reconcile_no,
+        type: ReconcileType.CONTRACT,
+        contract_id: id,
+        style_no: styleNo,
+        factory_id: factoryId,
+        total_amount: totalAmount,
+        description: `供应商门户发起（${supplierAccount} 勾选 ${batches.length} 个发货批次）`,
+        status: ReconciliationStatus.PENDING, // 直接推业务复核（设计稿：确认对账·推业务审批）
+        created_by: contract.created_by ?? 0,  // 归属合同业务员
+      }));
+
+      await manager.save(ReconciliationShipment, batches.map((b) => manager.create(ReconciliationShipment, {
+        reconcile_id: reconciliation.id,
+        shipment_id: b.id,
+        contract_id: id,
+        style_no: styleNo,
+        item_name: b.ship_no ?? `批次#${b.id}`,
+        snapshot_unit_price: +b.snapshot_unit_price || 0,
+        qty: +b.qty,
+        amount: +b.amount || +((+b.snapshot_unit_price || 0) * +b.qty).toFixed(4),
+      })));
+
+      // 占用批次（对账单被删除时释放）
+      for (const b of batches) {
+        b.reconcile_id = reconciliation.id;
+      }
+      await manager.save(ContractShipment, batches);
+
+      return reconciliation;
+    });
+
+    await this.logRepo.save(this.logRepo.create({
+      contract_id: id,
+      action: 'RECONCILE',
+      operator: supplierAccount,
+      operator_type: PortalOperatorType.SUPPLIER,
+      remark: `对账单:${rec.reconcile_no} · 批次:${batches.map((b) => b.ship_no ?? b.id).join('、')} · 金额:${totalAmount}`,
+    }));
+
+    return rec;
   }
 
   async uploadInvoice(id: number, supplierAccount: string, factoryId: number, dto: UploadInvoiceDto): Promise<void> {

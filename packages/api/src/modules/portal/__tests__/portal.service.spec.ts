@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PortalService } from '../portal.service';
 import { Contract } from '../../contract/contract.entity';
@@ -8,6 +9,7 @@ import { ContractShipment } from '../../contract/contract-shipment.entity';
 import { ContractPortalLog } from '../../contract/contract-portal-log.entity';
 import { OrderMain } from '../../order/order-main.entity';
 import { Reconciliation } from '../../reconciliation/reconciliation.entity';
+import { ReconciliationShipment } from '../../reconciliation/reconciliation-shipment.entity';
 import { PaymentRequest } from '../../payment/payment-request.entity';
 import { OrderMaterial } from '../../order/order-material.entity';
 import { OrderSizeMatrix } from '../../order/order-size-matrix.entity';
@@ -58,26 +60,36 @@ describe('PortalService', () => {
   let materialRepo: any;
   let logRepo: any;
   let reconcileRepo: any;
+  let shipmentRepo: any;
+  let mockManager: any;
 
   beforeEach(async () => {
     contractRepo = makeRepo();
     materialRepo = makeRepo();
     logRepo = makeRepo();
     reconcileRepo = makeRepo();
+    shipmentRepo = makeRepo();
+    mockManager = {
+      create: jest.fn().mockImplementation((_: any, v: any) => v),
+      save: jest.fn().mockImplementation((_: any, v: any) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 99 })),
+      findOne: jest.fn().mockResolvedValue(null),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PortalService,
         { provide: getRepositoryToken(Contract), useValue: contractRepo },
         { provide: getRepositoryToken(ContractMaterial), useValue: materialRepo },
-        { provide: getRepositoryToken(ContractShipment), useValue: makeRepo() },
+        { provide: getRepositoryToken(ContractShipment), useValue: shipmentRepo },
         { provide: getRepositoryToken(ContractPortalLog), useValue: logRepo },
         { provide: getRepositoryToken(OrderMain), useValue: makeRepo() },
         { provide: getRepositoryToken(OrderMaterial), useValue: makeRepo() },
         { provide: getRepositoryToken(OrderSizeMatrix), useValue: makeRepo() },
         { provide: getRepositoryToken(Reconciliation), useValue: reconcileRepo },
+        { provide: getRepositoryToken(ReconciliationShipment), useValue: makeRepo() },
         { provide: getRepositoryToken(PaymentRequest), useValue: makeRepo() },
-        { provide: NumberingService, useValue: { nextWithSegment: jest.fn().mockResolvedValue('FH-K-001'), next: jest.fn().mockResolvedValue('PR-20260709-001') } },
+        { provide: NumberingService, useValue: { nextWithSegment: jest.fn().mockResolvedValue('DZ-K-001'), next: jest.fn().mockResolvedValue('PR-20260709-001') } },
+        { provide: DataSource, useValue: { transaction: jest.fn().mockImplementation((cb: any) => cb(mockManager)) } },
       ],
     }).compile();
 
@@ -214,5 +226,53 @@ describe('PortalService', () => {
     const contract = makeContract({ portal_status: ContractPortalStatus.SHIPPING });
     contractRepo.findOne.mockResolvedValue(contract);
     await expect(service.uploadInvoice(1, 'supplier_A', 10, {})).rejects.toThrow(BadRequestException);
+  });
+
+  // ===== 我要对账（设计稿 05 v2.2 §C 第三步）=====
+  const makeBatch = (overrides = {}) => ({
+    id: 11, contract_id: 1, ship_no: 'FH-K-001', qty: 1520,
+    snapshot_unit_price: 1, amount: 1520,
+    approval_status: 'APPROVED', reconcile_id: null,
+    ...overrides,
+  });
+
+  // UT-PORTAL-13: 勾选已审批批次 → 自动算金额、生成 PENDING 对账单、占用批次、写 RECONCILE 日志
+  it('UT-PORTAL-13 createReconcile sums approved batches into PENDING reconciliation and occupies them', async () => {
+    contractRepo.findOne.mockResolvedValue(makeContract({ portal_status: ContractPortalStatus.SHIPPING, created_by: 7 }));
+    shipmentRepo.find.mockResolvedValue([
+      makeBatch({ id: 11, amount: 1520 }),
+      makeBatch({ id: 12, ship_no: 'FH-K-002', qty: 2300, amount: 2300 }),
+    ]);
+    const rec: any = await service.createReconcile(1, 'supplier_A', 10, { shipment_ids: [11, 12] });
+    expect(rec.total_amount).toBe(3820); // 合同单价×已发数量 自动算（设计稿 ¥3,820）
+    expect(rec.status).toBe('PENDING'); // 确认对账·推业务审批
+    expect(rec.created_by).toBe(7); // 归属合同业务员
+    // 批次被占用（manager.save(ContractShipment, batches) 且 reconcile_id 已写入）
+    const savedBatches = mockManager.save.mock.calls.find((c: any[]) => Array.isArray(c[1]) && c[1][0]?.ship_no?.startsWith('FH') && c[1][0]?.reconcile_id);
+    expect(savedBatches).toBeTruthy();
+    expect(logRepo.create).toHaveBeenCalledWith(expect.objectContaining({ action: 'RECONCILE' }));
+  });
+
+  // UT-PORTAL-13b: 未审批批次被拒（B2 顺序锁定：对账只可勾已审批批次）
+  it('UT-PORTAL-13b createReconcile rejects unapproved batch', async () => {
+    contractRepo.findOne.mockResolvedValue(makeContract({ portal_status: ContractPortalStatus.SHIPPING }));
+    shipmentRepo.find.mockResolvedValue([makeBatch({ approval_status: 'PENDING' })]);
+    await expect(service.createReconcile(1, 'supplier_A', 10, { shipment_ids: [11] }))
+      .rejects.toThrow(/尚未通过业务审批/);
+  });
+
+  // UT-PORTAL-13c: 已被其他对账单占用的批次被拒（防重复对账）
+  it('UT-PORTAL-13c createReconcile rejects batch already reconciled', async () => {
+    contractRepo.findOne.mockResolvedValue(makeContract({ portal_status: ContractPortalStatus.SHIPPING }));
+    shipmentRepo.find.mockResolvedValue([makeBatch({ reconcile_id: 5 })]);
+    await expect(service.createReconcile(1, 'supplier_A', 10, { shipment_ids: [11] }))
+      .rejects.toThrow(/不可重复对账/);
+  });
+
+  // UT-PORTAL-13d: 非发货中状态不可对账（顺序锁定）
+  it('UT-PORTAL-13d createReconcile rejects when contract not SHIPPING', async () => {
+    contractRepo.findOne.mockResolvedValue(makeContract({ portal_status: ContractPortalStatus.STAMPED }));
+    await expect(service.createReconcile(1, 'supplier_A', 10, { shipment_ids: [11] }))
+      .rejects.toThrow(/对账须在发货后/);
   });
 });

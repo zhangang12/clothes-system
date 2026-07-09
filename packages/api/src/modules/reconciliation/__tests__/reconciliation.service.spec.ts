@@ -69,6 +69,7 @@ const mockExpenseItemRepo = {
 const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn().mockResolvedValue(1) };
 const mockDataSource = {
   transaction: jest.fn().mockImplementation((cb) => cb(makeManager())),
+  query: jest.fn().mockResolvedValue([]), // remove() 释放发货批次占用
 };
 
 describe('ReconciliationService', () => {

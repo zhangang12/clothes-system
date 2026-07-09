@@ -74,6 +74,26 @@
       />
     </van-cell-group>
 
+    <!-- 发货批次（含业务审批状态；对账勾选数据源，设计稿 05 §B2/§C）-->
+    <van-cell-group v-if="contract.shipments && contract.shipments.length" title="发货批次" inset>
+      <van-cell
+        v-for="(s, i) in contract.shipments"
+        :key="s.id"
+        :title="`第${i + 1}次 · ${s.ship_no || ''}`"
+        :label="[`${(+s.qty)} 件/条`, s.express_company ? `${s.express_company} ${s.express_no || ''}` : '', s.ship_date].filter(Boolean).join(' · ')"
+      >
+        <template #value>
+          <div class="batch-value">
+            <div class="material-amount">¥{{ (+s.amount || 0).toFixed(2) }}</div>
+            <van-tag v-if="s.reconcile_id" type="primary" plain>已对账</van-tag>
+            <van-tag v-else-if="s.approval_status === 'APPROVED'" type="success">已审批</van-tag>
+            <van-tag v-else-if="s.approval_status === 'REJECTED'" type="danger">已驳回</van-tag>
+            <van-tag v-else type="warning">待审批</van-tag>
+          </div>
+        </template>
+      </van-cell>
+    </van-cell-group>
+
     <!-- Stamp info (shown after stamping) -->
     <van-cell-group v-if="contract.stamped_at" title="盖章信息" inset>
       <van-cell title="盖章账号" :value="contract.stamped_by_supplier" />
@@ -123,6 +143,20 @@
         {{ contract.portal_status === 'STAMPED' ? '确认出货' : '继续发货（累计 ' + (contract.shipped_qty || 0) + '）' }}
       </van-button>
 
+      <!-- 我要对账（设计稿 05 §C：至少一条发货被业务审批通过后可点）-->
+      <van-button
+        v-if="contract.portal_status === 'SHIPPING'"
+        type="primary"
+        block
+        round
+        size="large"
+        style="margin-top: 10px;"
+        :disabled="!reconcilableBatches.length"
+        @click="openReconcileDialog"
+      >
+        🧾 我要对账{{ reconcilableBatches.length ? '' : '（待发货审批）' }}
+      </van-button>
+
       <van-button
         v-if="contract.portal_status === 'RECONCILED'"
         type="default"
@@ -134,8 +168,48 @@
       >
         上传发票
       </van-button>
-      <div v-if="contract.portal_status === 'SHIPPING'" class="await-hint">可分批继续发货；待内部对账后可开票</div>
+      <div v-if="contract.portal_status === 'SHIPPING'" class="await-hint">可分批继续发货；发货经业务审批后可勾选对账，对账通过后解锁开票</div>
     </div>
+
+    <!-- 我要对账 Dialog：勾选已审批批次 → 自动算 → 推业务审批（设计稿 05 §C）-->
+    <van-dialog
+      v-model:show="showReconcileDialog"
+      title="🧾 我要对账"
+      show-cancel-button
+      confirm-button-text="确认对账 · 推业务审批"
+      :before-close="handleReconcileClose"
+    >
+      <div class="invoice-form">
+        <div class="rec-hint">勾选要对账的发货批次（仅可选已审批且未对账批次）</div>
+        <van-checkbox-group v-model="selectedBatchIds">
+          <van-cell
+            v-for="(s, i) in contract.shipments"
+            :key="s.id"
+            clickable
+            @click="toggleBatch(s)"
+          >
+            <template #title>
+              <van-checkbox
+                :name="s.id"
+                shape="square"
+                icon-size="16px"
+                :disabled="s.approval_status !== 'APPROVED' || !!s.reconcile_id"
+                @click.stop
+              >
+                第{{ i + 1 }}次 {{ (+s.qty) }}{{ s.reconcile_id ? '（已对账）' : (s.approval_status !== 'APPROVED' ? '（未审批）' : '') }}
+              </van-checkbox>
+            </template>
+            <template #value>¥{{ (+s.amount || 0).toFixed(2) }}</template>
+          </van-cell>
+        </van-checkbox-group>
+        <van-cell title="对账单（自动生成）" label="合同单价 × 已发数量">
+          <template #value>
+            <span class="amount-value">¥{{ selectedTotal.toFixed(2) }}</span>
+          </template>
+        </van-cell>
+        <div class="rec-hint">🧾 系统按合同单价×发货数量自动算；确认后推业务审批。</div>
+      </div>
+    </van-dialog>
 
     <!-- Shipping Dialog（批次累计 + 超发确认，设计稿 门户 B3/C4）-->
     <van-dialog
@@ -148,6 +222,19 @@
         <van-cell v-if="contract.ship_to_address" title="收货地址" :label="contract.ship_to_address" />
         <van-cell title="累计已发" :value="String(contract.shipped_qty || 0)" />
         <van-field v-model="shipForm.qty" label="本次实发" type="number" placeholder="本次发货数量（选填）" />
+        <van-field v-model="shipForm.express_company" label="快递公司" placeholder="选填" />
+        <van-field v-model="shipForm.express_no" label="快递单号" placeholder="选填" />
+        <div class="invoice-upload">
+          <span class="upload-label">附件（装箱单/货物照片）</span>
+          <van-uploader
+            v-model="shipFiles"
+            :after-read="onShipAttachRead"
+            :max-count="1"
+            accept="image/*,.pdf"
+            upload-text="装箱单/照片"
+            @delete="shipForm.attach_url = ''"
+          />
+        </div>
         <van-field v-model="shipForm.remark" label="备注" placeholder="可选" />
       </div>
     </van-dialog>
@@ -196,7 +283,56 @@ const loadingDetail = ref(true);
 const actioning = ref(false);
 const agreedTerms = ref(false); // 盖章前须勾选「已阅读并同意合同条款」
 const showShipDialog = ref(false);
-const shipForm = ref({ qty: '', remark: '' });
+const shipForm = ref({ qty: '', remark: '', express_company: '', express_no: '', attach_url: '' });
+const shipFiles = ref<any[]>([]);
+// 我要对账（设计稿 05 §C）
+const showReconcileDialog = ref(false);
+const selectedBatchIds = ref<number[]>([]);
+const reconcilableBatches = computed(() =>
+  (contract.value.shipments ?? []).filter((s: any) => s.approval_status === 'APPROVED' && !s.reconcile_id));
+const selectedTotal = computed(() =>
+  (contract.value.shipments ?? [])
+    .filter((s: any) => selectedBatchIds.value.includes(s.id))
+    .reduce((sum: number, s: any) => sum + (+s.amount || 0), 0));
+function toggleBatch(s: any) {
+  if (s.approval_status !== 'APPROVED' || s.reconcile_id) return;
+  const idx = selectedBatchIds.value.indexOf(s.id);
+  if (idx >= 0) selectedBatchIds.value.splice(idx, 1);
+  else selectedBatchIds.value.push(s.id);
+}
+function openReconcileDialog() {
+  selectedBatchIds.value = reconcilableBatches.value.map((s: any) => s.id); // 默认全选可对账批次
+  showReconcileDialog.value = true;
+}
+async function handleReconcileClose(action: string) {
+  if (action === 'cancel') return true;
+  if (!selectedBatchIds.value.length) {
+    showConfirmDialog({ title: '提示', message: '请至少勾选 1 个发货批次', showCancelButton: false });
+    return false;
+  }
+  try {
+    const res = await portalContractApi.createReconcile(contract.value.id, selectedBatchIds.value);
+    const rec = (res as any).data ?? res;
+    showSuccessToast(`对账单 ${rec.reconcile_no ?? ''} 已推业务审批`);
+    selectedBatchIds.value = [];
+    await load();
+    return true;
+  } catch {
+    return false;
+  }
+}
+// 发货附件上传（装箱单/货物照片）
+async function onShipAttachRead(item: any) {
+  const f = Array.isArray(item) ? item[0] : item;
+  f.status = 'uploading'; f.message = '上传中...';
+  try {
+    const res = await uploadApi.upload(f.file);
+    shipForm.value.attach_url = ((res as any).data ?? res).url;
+    f.status = 'done'; f.message = '';
+  } catch {
+    f.status = 'failed'; f.message = '上传失败'; shipForm.value.attach_url = '';
+  }
+}
 const showInvoiceDialog = ref(false);
 const invoiceForm = ref({ invoice_no: '', invoice_amount: '', remark: '', invoice_url: '' });
 const invoiceFiles = ref<any[]>([]);
@@ -277,11 +413,14 @@ async function handleShipClose(action: string) {
   const payload = {
     qty: shipForm.value.qty ? Number(shipForm.value.qty) : undefined,
     remark: shipForm.value.remark || undefined,
+    express_company: shipForm.value.express_company || undefined,
+    express_no: shipForm.value.express_no || undefined,
+    attach_url: shipForm.value.attach_url || undefined,
   };
   try {
     await portalContractApi.confirmShip(contract.value.id, payload);
     showSuccessToast('已确认出货');
-    shipForm.value = { qty: '', remark: '' };
+    shipForm.value = { qty: '', remark: '', express_company: '', express_no: '', attach_url: '' }; shipFiles.value = [];
     await load();
     return true;
   } catch (e: any) {
@@ -292,7 +431,7 @@ async function handleShipClose(action: string) {
         await showConfirmDialog({ title: '超发确认', message: '本次发货将超过合同量，确认超发？' });
         await portalContractApi.confirmShip(contract.value.id, { ...payload, force: true });
         showSuccessToast('已确认超发出货');
-        shipForm.value = { qty: '', remark: '' };
+        shipForm.value = { qty: '', remark: '', express_company: '', express_no: '', attach_url: '' }; shipFiles.value = [];
         await load();
         return true;
       } catch {
@@ -333,6 +472,8 @@ onMounted(load);
 .amount-value { color: #D17A40; font-weight: 600; }
 .material-value { text-align: right; font-size: 12px; color: #646566; }
 .material-amount { font-weight: 600; color: #323233; }
+.batch-value { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.rec-hint { padding: 8px 16px; font-size: 12px; color: #969799; }
 .action-area {
   position: fixed;
   bottom: 0;

@@ -81,6 +81,18 @@ export class ContractController {
     return this.service.approveContract(id, req.user.id);
   }
 
+  @Patch(':id/shipments/:sid/approval')
+  @Roles(UserRole.ADMIN, UserRole.BUSINESS, UserRole.SUPERVISOR)
+  @ApiOperation({ summary: '审批发货批次（通过后供应商门户方可勾选该批次对账，设计稿 门户 B2）' })
+  approveShipment(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('sid', ParseIntPipe) sid: number,
+    @Body('approve') approve: boolean,
+    @Request() req: any,
+  ) {
+    return this.service.approveShipment(id, sid, req.user.id, approve !== false);
+  }
+
   @Patch(':id/status')
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: '更新合同状态（ACTIVE/COMPLETED/CANCELLED）' })
