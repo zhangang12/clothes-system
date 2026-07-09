@@ -132,6 +132,13 @@ CREATE TABLE IF NOT EXISTS `sys_user` (
   UNIQUE KEY `uk_username` (`username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统用户';
 
+CREATE TABLE IF NOT EXISTS `sys_sequence` (
+  `name`       VARCHAR(64) NOT NULL COMMENT '计数器名(与 Redis seq:* key 同名)',
+  `value`      BIGINT      NOT NULL DEFAULT 0 COMMENT '已发出的最大序号(影子计数,Redis 挂时行锁兜底发号)',
+  `updated_at` DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='单号发号 DB 兜底(Redis 单点消除:挂了降速不阻断,恢复自动切回)';
+
 CREATE TABLE IF NOT EXISTS `supplier_account` (
   `id`            BIGINT       NOT NULL AUTO_INCREMENT,
   `account`       VARCHAR(50)  NOT NULL COMMENT '登录账号',
@@ -951,6 +958,14 @@ CALL _i9_add_col('sys_user','created_at',"DATETIME     NOT NULL DEFAULT CURRENT_
 CALL _i9_sync_col('sys_user','created_at',"DATETIME","DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP");
 CALL _i9_add_col('sys_user','updated_at',"DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
 CALL _i9_sync_col('sys_user','updated_at',"DATETIME","DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+
+-- sys_sequence
+CALL _i9_add_col('sys_sequence','name',"VARCHAR(64) NOT NULL COMMENT '计数器名(与 Redis seq:* key 同名)'");
+CALL _i9_sync_col('sys_sequence','name',"VARCHAR(64)","VARCHAR(64) NOT NULL COMMENT '计数器名(与 Redis seq:* key 同名)'");
+CALL _i9_add_col('sys_sequence','value',"BIGINT      NOT NULL DEFAULT 0 COMMENT '已发出的最大序号(影子计数,Redis 挂时行锁兜底发号)'");
+CALL _i9_sync_col('sys_sequence','value',"BIGINT","BIGINT      NOT NULL DEFAULT 0 COMMENT '已发出的最大序号(影子计数,Redis 挂时行锁兜底发号)'");
+CALL _i9_add_col('sys_sequence','updated_at',"DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+CALL _i9_sync_col('sys_sequence','updated_at',"DATETIME","DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
 
 -- supplier_account
 CALL _i9_add_col('supplier_account','account',"VARCHAR(50)  NOT NULL COMMENT '登录账号'");

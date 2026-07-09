@@ -1,4 +1,4 @@
-import { Injectable, Inject, Optional } from '@nestjs/common';
+import { Injectable, Inject, Optional, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import Redis from 'ioredis';
 
@@ -20,8 +20,23 @@ export const NUM_PREFIX = {
   SETTLEMENT: 'JS',
 } as const;
 
+/**
+ * 发号服务：Redis 快路径 + DB 影子兜底（消除 Redis 硬单点，CLAUDE.md 待办）。
+ *
+ * 三态均不重号：
+ * - Redis 正常：Lua INCR 发号后，同步把 sys_sequence 影子推进到 GREATEST(影子, 本号)——
+ *   保证 Redis 突然挂掉时 DB 兜底的起点不落后；
+ * - Redis 挂掉：捕获异常，改用 sys_sequence 行级原子发号（LAST_INSERT_ID(value+1)），
+ *   建单只降速、不阻断；
+ * - Redis 恢复但计数落后（兜底期间 DB 领先）：影子推进后检测 DB > Redis 号，
+ *   放弃 Redis 发出的旧号，改用 DB 续发，并把 Redis SET 追平——自动切回快路径。
+ *
+ * 纯单测（无 DataSource）时退化为原 Redis-only 行为。
+ */
 @Injectable()
 export class NumberingService {
+  private readonly logger = new Logger(NumberingService.name);
+
   // 全局递增号(nextGlobal)的取数来源:计数器首次创建时用库中现有最大号做基线,
   // 避免与 init.sql 种子/存量数据撞号(如种子工厂 S001),同时兜底 Redis 数据丢失后从 001 重发。
   private static readonly GLOBAL_SOURCE: Record<string, { table: string; col: string }> = {
@@ -44,14 +59,13 @@ export class NumberingService {
     const d = date ?? new Date();
     const ymd = this.formatDate(d);
     const key = `seq:${prefix}:${ymd}`;
-    // Atomic INCR + conditional EXPIRE in one Lua round-trip
-    const seq = await this.redis.eval(
+    const seq = await this.allocate(key, () => this.redis.eval(
       `local v = redis.call('INCR', KEYS[1])
        if v == 1 then redis.call('EXPIRE', KEYS[1], 172800) end
        return v`,
       1,
       key,
-    ) as number;
+    ) as Promise<number>);
     return `${prefix}-${ymd}-${String(seq).padStart(3, '0')}`;
   }
 
@@ -64,13 +78,13 @@ export class NumberingService {
     // 完整款号仍存于各表 style_no 字段，单号中的段仅作可读标签。
     const seg = ((segment && String(segment).trim()) || 'NA').slice(0, 20);
     const key = `seq:${prefix}:${seg}`;
-    const seq = await this.redis.eval(
+    const seq = await this.allocate(key, () => this.redis.eval(
       `local v = redis.call('INCR', KEYS[1])
        if v == 1 then redis.call('EXPIRE', KEYS[1], 2592000) end
        return v`,
       1,
       key,
-    ) as number;
+    ) as Promise<number>);
     return `${prefix}-${seg}-${String(seq).padStart(3, '0')}`;
   }
 
@@ -80,14 +94,76 @@ export class NumberingService {
    */
   async nextGlobal(prefix: string): Promise<string> {
     const key = `seq:global:${prefix}`;
-    // 计数器不存在时(全新装机 / Redis 数据丢失),用库中现有最大号做基线,避免撞号。
-    // 仅在有 DataSource(生产/集成)时播种;纯单测无 DataSource 时退化为原行为。
-    if (this.dataSource && !(await this.redis.exists(key))) {
-      const base = await this.currentMaxSeq(prefix);
-      if (base > 0) await this.redis.set(key, base, 'NX');
-    }
-    const seq = await this.redis.incr(key);
+    const seq = await this.allocate(
+      key,
+      async () => {
+        // 计数器不存在时(全新装机 / Redis 数据丢失),用库中现有最大号做基线,避免撞号。
+        if (this.dataSource && !(await this.redis.exists(key))) {
+          const base = await this.currentMaxSeq(prefix);
+          if (base > 0) await this.redis.set(key, base, 'NX');
+        }
+        return this.redis.incr(key);
+      },
+      () => this.currentMaxSeq(prefix), // DB 兜底首建时的基线（防撞 S001 种子）
+    );
     return `${prefix}${String(seq).padStart(3, '0')}`;
+  }
+
+  /**
+   * 发号核心：Redis 快路径 → DB 影子推进/落后检测 → 异常时 DB 行锁兜底。
+   */
+  private async allocate(
+    key: string,
+    redisAlloc: () => Promise<number>,
+    baseline?: () => Promise<number>,
+  ): Promise<number> {
+    let redisSeq: number | null = null;
+    try {
+      redisSeq = Number(await redisAlloc());
+    } catch (e) {
+      // Redis 挂了：DB 行锁兜底发号（降速不阻断；无 DataSource 的纯单测环境只能上抛）
+      if (!this.dataSource) throw e;
+      this.logger.warn(`Redis 发号失败，走 DB 兜底：${key}（${(e as Error).message}）`);
+      return this.dbAllocate(key, baseline);
+    }
+    if (!this.dataSource) return redisSeq;
+
+    // 影子推进 + 落后检测（同步一条 UPSERT + 一条 SELECT，建单低频可承受）
+    try {
+      await this.dataSource.query(
+        'INSERT INTO sys_sequence (name, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = GREATEST(value, VALUES(value))',
+        [key, redisSeq],
+      );
+      const rows = await this.dataSource.query('SELECT value FROM sys_sequence WHERE name = ?', [key]);
+      const dbSeq = Number(rows?.[0]?.value ?? 0);
+      if (dbSeq > redisSeq) {
+        // Redis 恢复但计数落后（兜底期间 DB 已发到 dbSeq）：放弃旧号，DB 续发并把 Redis 追平
+        const seq = await this.dbAllocate(key, baseline);
+        await this.redis.set(key, seq).catch(() => undefined);
+        this.logger.warn(`Redis 计数落后（redis=${redisSeq} < db=${dbSeq}），已用 DB 续发 ${seq} 并追平 Redis：${key}`);
+        return seq;
+      }
+    } catch {
+      // 影子推进失败不阻断发号（尽力而为；极端时序下兜底可能撞唯一索引报错重试，不静默错号）
+    }
+    return redisSeq;
+  }
+
+  /** DB 行级原子发号（同一 queryRunner 保证 LAST_INSERT_ID 会话一致） */
+  private async dbAllocate(key: string, baseline?: () => Promise<number>): Promise<number> {
+    const qr = this.dataSource!.createQueryRunner();
+    try {
+      const base = baseline ? await baseline() : 0;
+      const res: any = await qr.query(
+        'INSERT INTO sys_sequence (name, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = LAST_INSERT_ID(value + 1)',
+        [key, base + 1],
+      );
+      if (Number(res?.affectedRows) === 1) return base + 1; // 首建：直接以基线+1 起号
+      const rows = await qr.query('SELECT LAST_INSERT_ID() AS v');
+      return Number(rows?.[0]?.v);
+    } finally {
+      await qr.release();
+    }
   }
 
   /** 查库中该前缀现有最大序号(仅用于全局号基线,前缀取自固定白名单,非用户输入) */

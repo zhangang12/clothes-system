@@ -67,8 +67,8 @@
 - 运维脚本全在 `infra/scripts/`：`setup / deploy / rollback / backup / health / logs / upgrade-db / hotfix-schema / deep-test`。
 
 ## 📋 待办（认领后从此清单勾掉）
-- **Redis 是硬单点**：单号生成（`NumberingService`）依赖 Redis 且**无兜底**，Redis 一挂 → 所有"新建单据"失败（读取不受影响）。计划加 DB 兜底（`sys_sequence` 行锁发号，Redis 恢复自动切回），使 Redis 挂了只降速、不阻断建单。
-- 引入正式 **migration 体系**（全新装机走 `init.sql`，存量升级走 migration），替掉临时的 `hotfix-schema.sql`。
+- ~~Redis 硬单点~~ **已解决（2026-07-10）**：`NumberingService` 加 `sys_sequence` DB 兜底——Redis 正常时发号后同步推进 DB 影子计数；Redis 挂时行锁原子发号（只降速不阻断）；恢复后检测计数落后自动用影子续发并追平 Redis。真栈杀 Redis 实测：断连期间照常发号、恢复后无重号。
+- 引入正式 **migration 体系**（全新装机走 `init.sql`，存量升级走 migration），替掉临时的 `hotfix-schema.sql`。（注：`gen-column-sync.py` 已实现"任意历史库→HEAD"的等效能力，migration 紧迫性降低）
 - 把 `deep-test.sh` **真机门禁接进部署/CI**——连真库没跑通不许发版。
 - **GitHub Actions merge→deploy**：合并 `main` 自动 SSH 上服务器跑 `deploy.sh`（需在 GitHub 存部署 SSH 密钥），实现"合并即发版"。
 - 运维 P0：**异地备份（含 `/data/uploads`）+ HTTPS + 恢复演练 + 告警**。当前 `backup.sh` 仅 `mysqldump`、**不含上传文件**，且备份只在本机（实例挂了陪葬）。

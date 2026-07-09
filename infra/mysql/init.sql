@@ -21,6 +21,13 @@ CREATE TABLE IF NOT EXISTS `sys_user` (
   UNIQUE KEY `uk_username` (`username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统用户';
 
+CREATE TABLE IF NOT EXISTS `sys_sequence` (
+  `name`       VARCHAR(64) NOT NULL COMMENT '计数器名(与 Redis seq:* key 同名)',
+  `value`      BIGINT      NOT NULL DEFAULT 0 COMMENT '已发出的最大序号(影子计数,Redis 挂时行锁兜底发号)',
+  `updated_at` DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='单号发号 DB 兜底(Redis 单点消除:挂了降速不阻断,恢复自动切回)';
+
 -- 默认账号（密码均为 Admin@123，bcrypt）— admin 及各角色测试账号
 INSERT IGNORE INTO `sys_user` (`id`,`username`,`password`,`real_name`,`role`) VALUES
 (1,'admin','$2a$10$Y.NI2Bzr5gof2tpDSJsJ8exF2z2wuzkoqShu822RgpuJlrNC/GW5i','系统管理员','ADMIN'),
