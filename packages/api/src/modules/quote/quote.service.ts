@@ -2,7 +2,7 @@ import {
   Injectable, NotFoundException, BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, Like, DataSource, EntityManager } from 'typeorm';
+import { Repository, FindOptionsWhere, Like, In, Raw, DataSource, EntityManager } from 'typeorm';
 import { Quotation } from './quotation.entity';
 import { QuotationItem } from './quotation-item.entity';
 import { QuotationFee } from './quotation-fee.entity';
@@ -10,6 +10,7 @@ import { Customer } from '../customer/customer.entity';
 import { SampleGarment } from '../sample/sample-garment.entity';
 import { SampleMaterial } from '../sample/sample-material.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
+import { CustomerService } from '../customer/customer.service';
 import { SysConfigService } from '../../common/config/sys-config.service';
 import { QuoteStatus, SampleStatus, DEFAULT_QUOTE_FEES, ApprovalStatus, APPROVAL_THRESHOLD_KEYS } from '@i9/types';
 import { CreateQuoteDto, CreateQuoteItemDto, CreateQuoteFeeDto } from './dto/create-quote.dto';
@@ -33,6 +34,7 @@ export class QuoteService {
     @InjectRepository(Customer) private readonly customerRepo: Repository<Customer>,
     @InjectRepository(SampleGarment) private readonly sampleRepo: Repository<SampleGarment>,
     @InjectRepository(SampleMaterial) private readonly sampleMaterialRepo: Repository<SampleMaterial>,
+    private readonly customerService: CustomerService,
     private readonly numbering: NumberingService,
     private readonly config: SysConfigService,
     private readonly dataSource: DataSource,
@@ -116,10 +118,22 @@ export class QuoteService {
     });
   }
 
-  async findAll(query: QueryQuoteDto) {
+  async findAll(query: QueryQuoteDto, user?: { id: number; role?: string }) {
     const { page = 1, size = 20, keyword, status, customer_id } = query;
+    // 客户机密行级过滤（设计稿 01：非授权用户在报价中不可见该客户）：
+    // 中间商(customer_id)或最终买家(buyer_id)任一指向不可见客户 → 整单隐藏
+    const visibleIds = await this.customerService.visibleCustomerIds(user);
+    const secretCond: FindOptionsWhere<Quotation> = {};
+    if (visibleIds !== null) {
+      const set = visibleIds.length ? visibleIds.map(Number) : [0];
+      Object.assign(secretCond, {
+        customer_id: In(set),
+        buyer_id: Raw((a) => `(${a} IS NULL OR ${a} IN (${set.join(',')}))`),
+      });
+    }
     const base: FindOptionsWhere<Quotation> = {
       deleted: 0,
+      ...secretCond,
       ...(status !== undefined && { status }),
       ...(customer_id !== undefined && { customer_id }),
     };
@@ -135,8 +149,18 @@ export class QuoteService {
     return { items, total, page, size };
   }
 
-  async findOne(id: number) {
+  async findOne(id: number, user?: { id: number; role?: string }) {
     const quote = await this.quoteRepo.findOne({ where: { id, deleted: 0 } });
+    // 机密守卫：报价关联客户不可见 → 与不存在同响应（防探测）
+    if (quote) {
+      const visibleIds = await this.customerService.visibleCustomerIds(user);
+      if (visibleIds !== null) {
+        const set = new Set(visibleIds.map(Number));
+        const hidden = (quote.customer_id && !set.has(+quote.customer_id))
+          || (quote.buyer_id && !set.has(+quote.buyer_id));
+        if (hidden) throw new NotFoundException(`报价单 #${id} 不存在`);
+      }
+    }
     if (!quote) throw new NotFoundException(`报价单 #${id} 不存在`);
     const [items, fees] = await Promise.all([
       this.itemRepo.find({ where: { quote_id: id }, order: { sort_order: 'ASC' } }),

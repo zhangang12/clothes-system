@@ -30,14 +30,14 @@ export class QuoteController {
   @Roles(UserRole.ADMIN, UserRole.BUSINESS, UserRole.FINANCE, UserRole.SUPERVISOR)
   @ApiOperation({ summary: '报价单列表（分页；版师/打样不可见——F1）' })
   async findAll(@Query() query: QueryQuoteDto, @Request() req: any) {
-    return maskQuote(await this.service.findAll(query), req.user.role);
+    return maskQuote(await this.service.findAll(query, req.user), req.user.role);
   }
 
   @Get(':id')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS, UserRole.FINANCE, UserRole.SUPERVISOR)
   @ApiOperation({ summary: '报价单详情（含明细；版师/打样不可见——F1）' })
   async findOne(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
-    return maskQuote(await this.service.findOne(id), req.user.role);
+    return maskQuote(await this.service.findOne(id, req.user), req.user.role);
   }
 
   @Put(':id')

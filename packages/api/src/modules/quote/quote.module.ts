@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { CustomerModule } from '../customer/customer.module';
 import { QuoteController } from './quote.controller';
 import { QuoteService } from './quote.service';
 import { Quotation } from './quotation.entity';
@@ -10,7 +11,7 @@ import { SampleGarment } from '../sample/sample-garment.entity';
 import { SampleMaterial } from '../sample/sample-material.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([
+  imports: [CustomerModule, TypeOrmModule.forFeature([
     Quotation, QuotationItem, QuotationFee, Customer, SampleGarment, SampleMaterial,
   ])],
   controllers: [QuoteController],
