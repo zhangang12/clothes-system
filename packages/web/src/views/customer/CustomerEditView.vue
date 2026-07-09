@@ -124,6 +124,7 @@ import type { FormInstance, FormRules } from 'element-plus';
 import { Back, Check, Plus, Minus } from '@element-plus/icons-vue';
 import { ElButton, ElSelect, ElOption } from 'element-plus';
 import { customerApi } from '@/api/customer';
+import { useAuthStore } from '@/stores/auth';
 import { factoryApi } from '@/api/factory';
 import { CUSTOMER_TYPE_LABEL } from '@i9/types';
 import {
@@ -168,10 +169,11 @@ const emptyContact = () => ({ name: '', department: '', gender: '', title: '', p
 const emptyBank = () => ({ accountName: '', bankName: '', bankAccount: '', bankAddress: '', currency: '', swiftCode: '', remark: '' });
 const emptyExpress = () => ({ company: '', account: '', payMethod: '', remark: '' });
 
+const authStore = useAuthStore();
 const form = reactive<any>({
   customerNo: '', name: '', type: '', relatedMiddleman: '', tradeCountry: '', countryRegion: '',
   city: '', homepage: '', address: '', priceTerms: '', settlementMethod: '', grade: '',
-  cooperationLevel: '', customerSource: '', paymentDays: '', businessScope: '', salesperson: '',
+  cooperationLevel: '', customerSource: '', paymentDays: '', businessScope: '', salesperson: authStore.realName || '',
   developDate: new Date().toISOString().slice(0, 10), currency: 'USD', spare1: '', spare2: '', spare3: '',
   deliveryAddress: '', frontMark: '', sideMark: '', innerBoxText: '', customerRemark: '',
   contacts: [emptyContact()], banks: [emptyBank()], expresses: [emptyExpress()],

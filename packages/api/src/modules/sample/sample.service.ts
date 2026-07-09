@@ -269,8 +269,11 @@ export class SampleService {
     if (entity.status !== SampleStatus.PENDING) {
       throw new BadRequestException('仅「待派单」状态的样衣可删除');
     }
-    const refs = await this.quoteRepo.count({ where: { sample_id: id, deleted: 0 } });
-    if (refs > 0) throw new BadRequestException(`已被 ${refs} 张报价单引用，无法删除`);
+    const refQuotes = await this.quoteRepo.find({ where: { sample_id: id, deleted: 0 }, select: ['quote_no'] as any, take: 5 });
+    if (refQuotes.length > 0) {
+      const nos = refQuotes.map((q: any) => q.quote_no).join('、');
+      throw new BadRequestException(`已被报价单 ${nos} 引用，无法删除`);
+    }
     entity.deleted = 1;
     await this.repo.save(entity);
   }

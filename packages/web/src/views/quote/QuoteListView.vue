@@ -56,6 +56,8 @@
         <el-table-column label="操作" width="230" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
+            <el-button v-if="canEdit && ['DRAFT', 'ADJUSTING'].includes(row.status)" link type="warning" size="small" @click="doSubmit(row)">发出</el-button>
+            <el-button v-if="canEdit && row.status === 'QUOTED'" link size="small" @click="doAdjust(row)">客户调整</el-button>
             <el-button link size="small" @click="copyRow(row)">复制</el-button>
             <el-button link size="small" :icon="Printer" @click="printRow(row)">打印/PDF</el-button>
             <el-button v-if="row.approval_status === 'PENDING' && canReview" link type="success" size="small" @click="doApprove(row)">审批</el-button>
@@ -115,6 +117,18 @@ function goEdit(row: any) { router.push({ name: 'QuoteEdit', params: { id: row.i
 async function copyRow(row: any) {
   try { await quoteApi.copy(row.id); ElMessage.success('已复制为新报价（草稿）'); load(); }
   catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '复制失败'); }
+}
+// 发出报价 / 客户调整（此前 UI 缺状态流转入口，草稿无法走到已报价）
+async function doSubmit(row: any) {
+  try { await quoteApi.submit(row.id); ElMessage.success('已发出报价'); load(); }
+  catch (e: any) {
+    const msg = e?.response?.data?.message ?? '发出失败';
+    if (String(msg).includes('审批')) { ElMessage.warning(msg); load(); } else ElMessage.error(msg);
+  }
+}
+async function doAdjust(row: any) {
+  try { await quoteApi.adjust(row.id); ElMessage.success('已进入客户调整'); load(); }
+  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '操作失败'); }
 }
 async function doApprove(row: any) {
   try { await quoteApi.approve(row.id); ElMessage.success('已审批，报价可发出'); load(); }

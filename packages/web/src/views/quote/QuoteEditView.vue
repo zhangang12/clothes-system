@@ -10,7 +10,9 @@
       <div class="ops">
         <el-button v-if="!readonly" type="primary" :icon="Check" :loading="saving" @click="save">保存</el-button>
         <el-button v-if="!readonly && editId" :icon="Download" @click="importDialog = true">从样衣导入</el-button>
-        <el-button v-if="!readonly && editId" type="success" :icon="Promotion" @click="toContract">转销售合同</el-button>
+        <el-button v-if="!readonly && editId && ['DRAFT', 'ADJUSTING'].includes(form.status)" type="warning" @click="submitQuote">发出报价</el-button>
+        <el-button v-if="!readonly && editId && form.status === 'QUOTED'" plain @click="adjustQuote">客户调整</el-button>
+        <el-button v-if="!readonly && editId && ['QUOTED', 'ADJUSTING'].includes(form.status)" type="success" :icon="Promotion" @click="toContract">转销售合同</el-button>
         <el-button v-if="editId" :icon="CopyDocument" @click="copy">复制</el-button>
       </div>
     </div>
@@ -147,6 +149,7 @@ import type { FormInstance, FormRules } from 'element-plus';
 import { Back, Check, Plus, Minus, Download, Promotion, CopyDocument } from '@element-plus/icons-vue';
 import { ElSelect, ElOption } from 'element-plus';
 import { quoteApi } from '@/api/quote';
+import { useAuthStore } from '@/stores/auth';
 import { customerApi } from '@/api/customer';
 import { sampleApi } from '@/api/sample';
 import FileUpload from '@/components/FileUpload.vue';
@@ -182,11 +185,12 @@ const samples = ref<any[]>([]);
 const emptyItem = () => ({ part: '', itemName: '', width: '', color: '', supplier: '', unit: '', quoteUsage: '', rmbPrice: '', lossRate: 3, remark: '' });
 const emptyFee = (n = '') => ({ feeName: n, rmbPrice: '', quoteUsage: 1 });
 const DEFAULT_FEES = ['加工费', '线', '包装', '样衣费', '测试费', '运费'];
+const authStore = useAuthStore();
 const form = reactive<any>({
   quoteNo: '', inquiryDate: new Date().toISOString().slice(0, 10), sampleId: undefined,
   middlemanId: undefined, buyerId: undefined, styleNo: '', middlemanContact: '',
   currency: 'USD', exchangeRate: 7, tradeCountry: '', settlementMethod: '', priceTerms: '',
-  salesperson: '', profitRate: 0, quoteQty: '', totalRemark: '', status: '',
+  salesperson: authStore.realName || '', profitRate: 0, quoteQty: '', totalRemark: '', status: '',
   image1: '', image2: '',
   items: [emptyItem()], fees: DEFAULT_FEES.map((n) => emptyFee(n)),
 });
@@ -293,6 +297,22 @@ async function doImport() {
   if (!editId.value || !importSampleId.value) return;
   try { await quoteApi.importFromSample(editId.value, importSampleId.value); ElMessage.success('已从样衣导入'); importDialog.value = false; load(); }
   catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '导入失败'); }
+}
+// 发出报价（草稿/客户调整→已报价；超阈值转待审批并提示）——此前 UI 缺此入口,状态机断链
+async function submitQuote() {
+  if (!editId.value) return;
+  try { await quoteApi.submit(editId.value); ElMessage.success('已发出报价'); load(); }
+  catch (e: any) {
+    const msg = e?.response?.data?.message ?? '发出失败';
+    if (String(msg).includes('审批')) { ElMessage.warning(msg); load(); }
+    else ElMessage.error(msg);
+  }
+}
+// 客户调整（已报价→客户调整，改完可再次发出）
+async function adjustQuote() {
+  if (!editId.value) return;
+  try { await quoteApi.adjust(editId.value); ElMessage.success('已进入客户调整，修改后可再次发出'); load(); }
+  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '操作失败'); }
 }
 async function toContract() {
   if (!editId.value) return;

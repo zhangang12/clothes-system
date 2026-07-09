@@ -294,6 +294,9 @@ export class ContractService {
       }));
       await manager.save(ContractMaterial, materials);
 
+      // 最近交易日期回写（基础资料稿 §1.2：列表按最近交易超期标红——此前该字段无任何写入方，规则恒不触发）
+      await manager.update(Factory, { id: dto.factory_id }, { last_trade_date: new Date().toISOString().slice(0, 10) as any });
+
       // 生成合同后订单自动置「已生成合同」（设计稿 合同 A9）：仅从「已下单」推进，补料合同不改订单态
       if (dto.order_id && dto.type !== ContractType.SUPPLEMENT) {
         const order = await manager.findOne(OrderMain, { where: { id: dto.order_id, deleted: 0 } });

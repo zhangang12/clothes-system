@@ -15,6 +15,8 @@
         <template v-else>
           <el-button v-if="!readonly" type="primary" :icon="Check" :loading="saving" @click="save">保存</el-button>
           <el-button v-if="!readonly && editId" type="success" :icon="Promotion" @click="pushPatternmaker">推送版师</el-button>
+          <el-button v-if="!readonly && editId && ['SAMPLING', 'SHIPPED'].includes(form.status)" type="warning" plain @click="markShipped">标记已寄出</el-button>
+          <el-button v-if="!readonly && editId && ['RECONCILED', 'DONE'].includes(form.status)" type="success" plain @click="markComplete">标记完成</el-button>
           <el-button v-if="editId" :icon="CopyDocument" @click="copy">复制</el-button>
         </template>
       </div>
@@ -77,10 +79,12 @@
           <el-table :data="form.materials" size="small" border @selection-change="(v: any[]) => selMaterials = v">
             <el-table-column type="selection" width="38" />
             <el-table-column label="品名" min-width="130" fixed><template #default="{ row }"><el-input v-model="row.itemName" size="small" :disabled="bizDisabled" /></template></el-table-column>
+            <el-table-column label="安排日期" width="130"><template #default="{ row }"><el-date-picker v-model="row.arrangeDate" type="date" value-format="YYYY-MM-DD" size="small" style="width:100%" :disabled="bizDisabled" /></template></el-table-column>
             <el-table-column label="门幅" width="90"><template #default="{ row }"><el-input v-model="row.width" size="small" :disabled="bizDisabled" /></template></el-table-column>
             <el-table-column label="颜色" width="120"><template #default="{ row }"><el-input v-model="row.colors" size="small" :disabled="bizDisabled" placeholder="逗号分隔" /></template></el-table-column>
             <el-table-column label="部位" width="100"><template #default="{ row }"><el-input v-model="row.part" size="small" :disabled="bizDisabled" /></template></el-table-column>
             <el-table-column label="成份" width="120"><template #default="{ row }"><el-input v-model="row.composition" size="small" :disabled="bizDisabled" /></template></el-table-column>
+            <el-table-column label="码带" width="90"><template #default="{ row }"><el-input v-model="row.codeBand" size="small" :disabled="bizDisabled" /></template></el-table-column>
             <el-table-column label="拉链长度" width="100"><template #default="{ row }"><el-input v-model="row.zipperLength" size="small" :disabled="!pmEnabled && bizDisabled" /></template></el-table-column>
             <el-table-column label="拉头" width="80"><template #default="{ row }"><el-input v-model="row.puller" size="small" :disabled="bizDisabled" /></template></el-table-column>
             <el-table-column label="数量" width="90"><template #default="{ row }"><el-input v-model="row.qty" size="small" :disabled="bizDisabled" /></template></el-table-column>
@@ -92,6 +96,16 @@
                 <el-select v-model="row.supplierId" size="small" filterable clearable style="width:100%" :disabled="bizDisabled" @change="(v: number) => onSupplier(row, v)">
                   <el-option v-for="f in factories" :key="f.id" :label="f.name" :value="f.id" />
                 </el-select>
+              </template>
+            </el-table-column>
+            <el-table-column label="图片" width="88">
+              <template #default="{ row }">
+                <div class="mat-photo">
+                  <el-image v-if="row.image" :src="row.image" :preview-src-list="[row.image]" fit="cover" class="mat-thumb" />
+                  <el-upload v-if="!bizDisabled || pmEnabled" :show-file-list="false" :http-request="(o: any) => uploadMatImage(o, row)" accept="image/*">
+                    <el-button size="small" link>📷</el-button>
+                  </el-upload>
+                </div>
               </template>
             </el-table-column>
             <el-table-column label="备注" min-width="110"><template #default="{ row }"><el-input v-model="row.remark" size="small" :disabled="bizDisabled" /></template></el-table-column>
@@ -133,6 +147,8 @@ import { ElMessage } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
 import { Back, Check, Plus, Minus, Promotion, CopyDocument } from '@element-plus/icons-vue';
 import { sampleApi } from '@/api/sample';
+import { uploadApi } from '@/api/upload';
+import { useAuthStore } from '@/stores/auth';
 import { customerApi } from '@/api/customer';
 import { factoryApi } from '@/api/factory';
 import FileUpload from '@/components/FileUpload.vue';
@@ -150,6 +166,7 @@ const SectionBlock = (props: { title: string; badge?: string }, { slots }: any) 
 const route = useRoute();
 const router = useRouter();
 const readonly = computed(() => !!route.meta.readonly);
+const authStore = useAuthStore();
 const patternmaker = computed(() => !!route.meta.patternmaker);
 const editId = computed(() => (route.params.id ? Number(route.params.id) : null));
 const modeLabel = computed(() => (readonly.value ? '查看' : patternmaker.value ? '版师编辑' : editId.value ? '编辑' : '新建'));
@@ -162,10 +179,10 @@ const buyers = ref<any[]>([]);
 const factories = ref<any[]>([]);
 const versions = ref<any[]>([]);
 
-const emptyMaterial = () => ({ itemName: '', width: '', colors: '', part: '', composition: '', codeBand: '', zipperLength: '', puller: '', qty: '', size: '', refPrice: '', actualUsage: '', supplierId: undefined, supplierName: '', remark: '' });
+const emptyMaterial = () => ({ itemName: '', arrangeDate: '', width: '', colors: '', part: '', composition: '', codeBand: '', zipperLength: '', puller: '', qty: '', size: '', refPrice: '', actualUsage: '', supplierId: undefined, supplierName: '', image: '', remark: '' });
 const form = reactive<any>({
   sampleNo: '', categories: '', middlemanId: undefined, styleNo: '', buyerId: undefined,
-  patternmakerName: '', maker: '', makeDate: new Date().toISOString().slice(0, 10),
+  patternmakerName: '', maker: authStore.realName || '', makeDate: new Date().toISOString().slice(0, 10),
   shipSampleDate: '', recipient: '', fileLocation: '', garmentRemark: '',
   image1: '', image2: '', image3: '', materialShipNo: '', materialShipDate: '',
   returnNo: '', returnDate: '', pieceCount: '', laborUnitPrice: '', status: '',
@@ -224,7 +241,7 @@ async function load() {
     returnNo: d.return_no ?? '', returnDate: d.return_date ?? '', pieceCount: d.piece_count ?? '',
     laborUnitPrice: d.labor_unit_price ?? '', laborAmount: d.labor_amount ?? '', status: d.status,
     materials: d.materials?.length ? d.materials.map((m: any) => ({
-      id: m.id, itemName: m.item_name, width: m.width, colors: m.colors, part: m.part,
+      id: m.id, itemName: m.item_name, arrangeDate: m.arrange_date ?? '', image: m.image ?? '', width: m.width, colors: m.colors, part: m.part,
       composition: m.composition, codeBand: m.code_band, zipperLength: m.zipper_length, puller: m.puller,
       qty: m.qty, size: m.size, refPrice: m.ref_price, actualUsage: m.actual_usage,
       supplierId: m.supplier_id ?? undefined, supplierName: m.supplier_name, remark: m.remark,
@@ -259,6 +276,25 @@ async function save() {
   } finally { saving.value = false; }
 }
 
+// 标记已寄出 / 标记完成(此前接口在但界面无入口,已寄出/已完成两态在 UI 不可达)
+async function markShipped() {
+  if (!editId.value) return;
+  try { await sampleApi.ship(editId.value); ElMessage.success('已标记寄出'); load(); }
+  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '操作失败'); }
+}
+async function markComplete() {
+  if (!editId.value) return;
+  try { await sampleApi.complete(editId.value); ElMessage.success('样衣已完成'); load(); }
+  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '操作失败'); }
+}
+// 材料行图片上传(设计稿:每行材料图片)
+async function uploadMatImage(option: any, row: any) {
+  try {
+    const res: any = await uploadApi.upload(option.file as File);
+    row.image = (res.data ?? res)?.url ?? '';
+    option.onSuccess?.(res);
+  } catch (e: any) { ElMessage.error('上传失败'); option.onError?.(e); }
+}
 async function pushPatternmaker() {
   if (!editId.value) return;
   try {
@@ -312,4 +348,6 @@ onMounted(async () => { await loadRefs(); await load(); });
 .subtable-ops { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .subtable-ops .hint, .hint { font-size: 12px; color: var(--el-text-color-secondary); }
 .subtable-ops .hint { margin-left: auto; }
+.mat-photo { display: flex; align-items: center; gap: 4px; }
+.mat-thumb { width: 32px; height: 26px; border-radius: 3px; border: 1px solid var(--el-border-color); }
 </style>

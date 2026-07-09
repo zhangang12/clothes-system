@@ -68,6 +68,7 @@ const mockDataSource = {
     save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
     findOne: jest.fn().mockResolvedValue(null),
     delete: jest.fn().mockResolvedValue({ affected: 1 }),
+    update: jest.fn().mockResolvedValue({ affected: 1 }),
   })),
 };
 
@@ -112,6 +113,7 @@ describe('ContractService', () => {
       create: jest.fn().mockImplementation((_, v) => v),
       save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
       findOne: jest.fn().mockResolvedValue(null),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.create(dto as any, 1);
@@ -129,6 +131,7 @@ describe('ContractService', () => {
       create: jest.fn().mockImplementation((_, v) => v),
       save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
       findOne: jest.fn().mockResolvedValue(null),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.create(dto as any, 1);
@@ -146,6 +149,7 @@ describe('ContractService', () => {
       create: jest.fn().mockImplementation((_, v) => v),
       save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
       findOne: jest.fn().mockResolvedValue(null),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.create(dto as any, 1);
@@ -172,6 +176,7 @@ describe('ContractService', () => {
       create: jest.fn().mockImplementation((_, v) => v),
       save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
       findOne: jest.fn().mockResolvedValue(null),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.create(dto as any, 1);
@@ -376,6 +381,7 @@ describe('ContractService', () => {
       }),
       findOne: jest.fn().mockResolvedValue(null),
       delete: jest.fn(),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
     }));
     await service.create({
       type: ContractType.PROCESS, factory_id: 5, order_id: 10, guarantor: '丙方某',
@@ -411,6 +417,7 @@ describe('ContractService', () => {
       }),
       findOne: jest.fn().mockResolvedValue(null),
       delete: jest.fn(),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
     }));
     await service.create({ type: ContractType.MATERIAL, factory_id: 5, order_id: 10 } as any, 1);
     expect(savedLines).toHaveLength(2); // 黑色 + 藏青 各一行
@@ -443,6 +450,7 @@ describe('ContractService', () => {
       }),
       findOne: jest.fn().mockResolvedValue(null),
       delete: jest.fn(),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
     }));
     await service.create({ type: ContractType.MATERIAL, factory_id: 5, order_id: 10 } as any, 1);
     expect(savedLines).toHaveLength(2);
@@ -469,6 +477,7 @@ describe('ContractService', () => {
       }),
       findOne: jest.fn().mockResolvedValue(null),
       delete: jest.fn(),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
     }));
     await service.create({ type: ContractType.MATERIAL, factory_id: 5, order_id: 10 } as any, 1);
     expect(savedLines).toHaveLength(2); // 各退回单行

@@ -25,7 +25,7 @@ const mockMaterialRepo = {
 };
 const mockVersionRepo = { create: jest.fn().mockImplementation((v) => v), save: jest.fn().mockResolvedValue({}), find: jest.fn().mockResolvedValue([]) };
 const mockCustomerRepo = { findOne: jest.fn() };
-const mockQuoteRepo = { count: jest.fn() };
+const mockQuoteRepo = { count: jest.fn(), find: jest.fn().mockResolvedValue([]) };
 const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn(), expire: jest.fn() };
 const mockManager = {
   create: jest.fn().mockImplementation((_e: any, v: any) => v),
@@ -42,7 +42,7 @@ describe('SampleService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     mockCustomerRepo.findOne.mockResolvedValue({ id: 1, deleted: 0, name: '中间商A', customer_no: 'CN001' });
-    mockQuoteRepo.count.mockResolvedValue(0);
+    mockQuoteRepo.find.mockResolvedValue([]);
     mockDataSource.transaction.mockImplementation((cb: any) => cb(mockManager));
     const module = await Test.createTestingModule({
       providers: [
@@ -159,8 +159,8 @@ describe('SampleService', () => {
 
     it('UT-SAM-14: blocks delete when referenced by a quotation (A6)', async () => {
       mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.PENDING, deleted: 0 });
-      mockQuoteRepo.count.mockResolvedValue(1);
-      await expect(service.remove(1)).rejects.toThrow('无法删除');
+      mockQuoteRepo.find.mockResolvedValue([{ quote_no: 'Q-20260710-001' }]);
+      await expect(service.remove(1)).rejects.toThrow('已被报价单 Q-20260710-001 引用，无法删除');
     });
   });
 });
