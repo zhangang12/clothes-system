@@ -9,6 +9,7 @@ import { ContractShipment } from './contract-shipment.entity';
 import { ContractPortalLog, PortalOperatorType } from './contract-portal-log.entity';
 import { OrderMaterial } from '../order/order-material.entity';
 import { OrderMain } from '../order/order-main.entity';
+import { OrderSizeMatrix } from '../order/order-size-matrix.entity';
 import { Factory } from '../factory/factory.entity';
 import { SupplierAccount } from '../auth/supplier-account.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
@@ -43,6 +44,9 @@ function minusDays(date: Date | string | null | undefined, days: number): string
   return d.toISOString().slice(0, 10);
 }
 
+// 整数类单位（设计稿 订单⑤：损耗后向上取整）
+const INT_UNITS = ['个', '条', '只', '件', '粒', '套', '对', 'pcs', 'PCS', 'PC'];
+
 @Injectable()
 export class ContractService {
   constructor(
@@ -52,12 +56,79 @@ export class ContractService {
     @InjectRepository(ContractPortalLog) private readonly logRepo: Repository<ContractPortalLog>,
     @InjectRepository(OrderMaterial) private readonly orderMaterialRepo: Repository<OrderMaterial>,
     @InjectRepository(OrderMain) private readonly orderRepo: Repository<OrderMain>,
+    @InjectRepository(OrderSizeMatrix) private readonly matrixRepo: Repository<OrderSizeMatrix>,
     @InjectRepository(Factory) private readonly factoryRepo: Repository<Factory>,
     @InjectRepository(SupplierAccount) private readonly supplierRepo: Repository<SupplierAccount>,
     private readonly numbering: NumberingService,
     private readonly config: SysConfigService,
     private readonly dataSource: DataSource,
   ) {}
+
+  // 分色/分码出行（设计稿 合同 A4 / 订单 v1.0）：材料按订单【尺码数量搭配】矩阵拆行——
+  // 分色→各颜色一行、分码→各尺码一行；某色(码)该料量 = 该色(码)件数 × 单件耗用 × (1+损耗率)，
+  // 无耗用数据时按件数占比分摊最终采购量；整数类单位向上取整。不拆分则单行(采购量含损耗)。
+  private expandMaterialLines(
+    om: OrderMaterial,
+    matrixRows: any[],
+    styleNo: string | null,
+    deliveryDate: string | null,
+  ): Array<Record<string, any>> {
+    const base = {
+      item_name: om.item_name,
+      spec: [om.width, om.composition].filter(Boolean).join(' / ') || undefined,
+      unit: om.unit,
+      unit_price: +om.unit_price || 0,
+      style_no: styleNo || undefined,
+      delivery_date: deliveryDate || undefined,
+    };
+    const mode = om.split_mode;
+    if ((mode === 'BY_COLOR' || mode === 'BY_SIZE') && matrixRows?.length) {
+      const dim = mode === 'BY_COLOR' ? 'color' : 'size';
+      const groups = new Map<string, number>();
+      for (const r of matrixRows) {
+        const key = String(r?.[dim] ?? '').trim();
+        // 新矩阵结构 qtys=各PO数量数组；旧平铺行 qty 单值
+        const qty = Array.isArray(r?.qtys)
+          ? r.qtys.reduce((s: number, n: any) => s + (+n || 0), 0)
+          : +r?.qty || 0;
+        if (!key || !qty) continue;
+        groups.set(key, (groups.get(key) ?? 0) + qty);
+      }
+      if (groups.size) {
+        const per = +om.net_usage || 0;
+        const loss = 1 + (+om.loss_rate || 0) / 100;
+        const totalGroupQty = [...groups.values()].reduce((a, b) => a + b, 0);
+        const fallbackBase = +(om.final_purchase ?? om.total_purchase) || 0;
+        const round = om.round_up === 1
+          || (om.round_up == null && INT_UNITS.includes(om.unit ?? ''));
+        return [...groups].map(([key, groupQty]) => {
+          let qty = per > 0
+            ? groupQty * per * loss
+            : (totalGroupQty ? (fallbackBase * groupQty) / totalGroupQty : 0);
+          qty = round ? Math.ceil(qty) : +qty.toFixed(2);
+          return {
+            ...base,
+            color: mode === 'BY_COLOR' ? key : (om.color || undefined),
+            size: mode === 'BY_SIZE' ? key : undefined,
+            qty,
+            qty_source: mode === 'BY_COLOR' ? '采购量·分色' : '采购量·分码',
+          };
+        });
+      }
+    }
+    return [{
+      ...base,
+      color: om.color || undefined,
+      qty: +(om.final_purchase ?? om.total_purchase) || 0,
+      qty_source: '采购量含损耗',
+    }];
+  }
+
+  private async getMatrixRows(orderId: number | null | undefined): Promise<any[]> {
+    if (!orderId) return [];
+    const matrix = await this.matrixRepo.findOne({ where: { order_id: orderId } });
+    return ((matrix?.matrix_data as any)?.rows ?? []) as any[];
+  }
 
   // 供应商拆单：按订单材料的供应商分组，每个供应商生成一张材料合同（设计稿 合同 A1）
   async generateFromOrder(orderId: number, createdBy: number) {
@@ -74,6 +145,10 @@ export class ContractService {
       groups.get(key)!.push(m);
     }
 
+    // 分色/分码按订单尺码矩阵拆行（设计稿 合同 A4）；行交期默认=订单交期−45天
+    const matrixRows = await this.getMatrixRows(orderId);
+    const lineDelivery = minusDays(order.delivery_date as any, DELIVERY_OFFSET_DAYS[ContractType.MATERIAL]);
+
     const created: Contract[] = [];
     const unmatched: string[] = [];
     for (const [supplier, mats] of groups) {
@@ -88,12 +163,8 @@ export class ContractService {
           factory_id: factory.id,
           order_id: orderId,
           currency: order.currency ?? 'CNY',
-          materials: mats.map((m) => ({
-            item_name: m.item_name,
-            unit: m.unit,
-            unit_price: +m.unit_price || 0,
-            qty: +(m.final_purchase ?? m.total_purchase) || 0,
-          })),
+          materials: mats.flatMap((m) =>
+            this.expandMaterialLines(m, matrixRows, order.style_no ?? null, lineDelivery)) as any,
         } as CreateContractDto,
         createdBy,
       );
@@ -137,24 +208,16 @@ export class ContractService {
     // materials，自动从该订单已核算的用料清单（quote_item→order_material 链路，
     // total_purchase/unit_price 已按报价损耗率算好）带出，避免业务员凭空重新誊抄。
     let materialInputs: Array<Record<string, any>> = dto.materials ?? [];
-    // 材料合同：从订单用料核算带出，数量=采购量(含损耗)（设计稿 合同 A5/C3）
+    // 材料合同：从订单用料核算带出，数量=采购量(含损耗)（设计稿 合同 A5/C3）；
+    // 分色/分码材料按订单尺码矩阵拆行（设计稿 合同 A4）
     if (materialInputs.length === 0 && dto.type === ContractType.MATERIAL) {
       const orderMaterials = await this.orderMaterialRepo.find({
         where: { order_id: dto.order_id },
         order: { sort_order: 'ASC' },
       });
-      materialInputs = orderMaterials.map((om) => ({
-        item_name: om.item_name,
-        spec: [om.width, om.composition].filter(Boolean).join(' / ') || undefined,
-        color: om.color || undefined,
-        style_no: order?.style_no || undefined,
-        delivery_date: deliveryDeadline || undefined,
-        unit: om.unit,
-        unit_price: +om.unit_price || 0,
-        qty: +(om.final_purchase ?? om.total_purchase) || 0,
-        qty_source: '采购量含损耗',
-        sort_order: om.sort_order,
-      }));
+      const matrixRows = await this.getMatrixRows(dto.order_id);
+      materialInputs = orderMaterials.flatMap((om) =>
+        this.expandMaterialLines(om, matrixRows, order?.style_no ?? null, deliveryDeadline));
     }
     // 加工合同：数量取订单大货数（设计稿 合同 A4）；单价由业务填写
     if (materialInputs.length === 0 && dto.type === ContractType.PROCESS) {

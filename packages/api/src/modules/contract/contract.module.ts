@@ -8,12 +8,13 @@ import { ContractShipment } from './contract-shipment.entity';
 import { ContractPortalLog } from './contract-portal-log.entity';
 import { OrderMaterial } from '../order/order-material.entity';
 import { OrderMain } from '../order/order-main.entity';
+import { OrderSizeMatrix } from '../order/order-size-matrix.entity';
 import { Factory } from '../factory/factory.entity';
 import { SupplierAccount } from '../auth/supplier-account.entity';
 
 @Module({
   imports: [TypeOrmModule.forFeature([
-    Contract, ContractMaterial, ContractShipment, ContractPortalLog, OrderMaterial, OrderMain, Factory, SupplierAccount,
+    Contract, ContractMaterial, ContractShipment, ContractPortalLog, OrderMaterial, OrderMain, OrderSizeMatrix, Factory, SupplierAccount,
   ])],
   controllers: [ContractController],
   providers: [ContractService],

@@ -51,22 +51,49 @@
         </el-row>
       </section-block>
 
-      <!-- 尺码数量搭配 -->
-      <section-block title="▣ 尺码数量搭配" badge="大货总数=各格之和">
+      <!-- 尺码数量搭配（按 PO 号 · 可 Excel 导入，设计稿 03 v1.0 修订④） -->
+      <section-block title="▣ 尺码数量搭配（按 PO 号 · 可 Excel 导入）" badge="行=款·色·尺码，列=各PO；总计回填大货总数">
         <div v-if="!readonly" class="subtable-ops">
-          <el-button size="small" :icon="Plus" @click="addSize">加款/色·尺码行</el-button>
-          <el-button size="small" :icon="Minus" :disabled="!selSizes.length" @click="delSizes">删除</el-button>
-          <span class="hint">大货总数量 = 所有数量格之和，驱动用料核算</span>
+          <el-button size="small" :icon="Plus" @click="addMatrixRow">加款·色·尺码行</el-button>
+          <el-button size="small" :icon="Minus" :disabled="!selSizes.length" @click="delMatrixRows">删除行</el-button>
+          <el-button size="small" @click="addPoCol">＋ 加 PO 列</el-button>
+          <el-button size="small" type="primary" plain @click="excelDialog = true">📋 Excel 导入</el-button>
+          <span class="hint">一个 PO = 一列（目的地/收货人作列头）；TOTAL QTY = 该款·色·码跨 PO 合计</span>
         </div>
-        <el-table :data="form.sizes" size="small" border @selection-change="(v: any[]) => selSizes = v">
-          <el-table-column type="selection" width="38" />
-          <el-table-column label="款号" min-width="130"><template #default="{ row }"><el-input v-model="row.style" size="small" /></template></el-table-column>
-          <el-table-column label="颜色" width="110"><template #default="{ row }"><el-input v-model="row.color" size="small" /></template></el-table-column>
-          <el-table-column label="尺码" width="90"><template #default="{ row }"><el-input v-model="row.size" size="small" /></template></el-table-column>
-          <el-table-column label="PO号" width="130"><template #default="{ row }"><el-input v-model="row.po" size="small" /></template></el-table-column>
-          <el-table-column label="目的地" width="120"><template #default="{ row }"><el-input v-model="row.dest" size="small" /></template></el-table-column>
-          <el-table-column label="数量" width="100"><template #default="{ row }"><el-input v-model="row.qty" size="small" type="number" /></template></el-table-column>
-        </el-table>
+        <div class="table-scroll">
+          <el-table :data="form.matrix.rows" size="small" border show-summary :summary-method="matrixSummary" @selection-change="(v: any[]) => selSizes = v">
+            <el-table-column v-if="!readonly" type="selection" width="38" />
+            <el-table-column label="款号" min-width="120"><template #default="{ row }"><el-input v-model="row.style_no" size="small" :disabled="readonly" /></template></el-table-column>
+            <el-table-column label="颜色" width="96"><template #default="{ row }"><el-input v-model="row.color" size="small" :disabled="readonly" /></template></el-table-column>
+            <el-table-column label="尺码" width="84"><template #default="{ row }"><el-input v-model="row.size" size="small" :disabled="readonly" /></template></el-table-column>
+            <el-table-column v-for="(p, pi) in form.matrix.pos" :key="pi" :min-width="130" align="center">
+              <template #header>
+                <div class="po-head">
+                  <el-input v-model="p.po_no" size="small" placeholder="PO号" :disabled="readonly" />
+                  <el-input v-model="p.destination" size="small" placeholder="目的地" :disabled="readonly" />
+                  <el-input v-model="p.consignee" size="small" placeholder="收货人" :disabled="readonly" />
+                  <el-button v-if="!readonly && form.matrix.pos.length > 1" link type="danger" size="small" @click="delPoCol(pi)">删列</el-button>
+                </div>
+              </template>
+              <template #default="{ row }">
+                <el-input v-model="row.qtys[pi]" size="small" type="number" :disabled="readonly" />
+              </template>
+            </el-table-column>
+            <el-table-column label="TOTAL QTY" width="100" align="right">
+              <template #default="{ row }"><b>{{ rowTotal(row) }}</b></template>
+            </el-table-column>
+          </el-table>
+        </div>
+        <!-- 总数量搭配（不分 PO，系统自动汇总） -->
+        <div v-if="summaryRows.length" class="matrix-summary">
+          <div class="summary-title">📊 总数量搭配（不分 PO · 系统按款·色·码汇总所有 PO）</div>
+          <el-table :data="summaryRows" size="small" border>
+            <el-table-column prop="style_no" label="款号" min-width="120" />
+            <el-table-column prop="color" label="颜色" width="100" />
+            <el-table-column prop="size" label="尺码" width="90" />
+            <el-table-column prop="qty" label="数量" width="100" align="right" />
+          </el-table>
+        </div>
       </section-block>
 
       <!-- 附件档案 5 类 -->
@@ -89,6 +116,23 @@
         </div>
         <div class="table-scroll">
           <el-table :data="form.materials" size="small" border @selection-change="(v: any[]) => selMats = v">
+            <el-table-column type="expand" width="30">
+              <template #default="{ row }">
+                <div class="split-preview">
+                  <template v-if="row.splitMode !== 'NONE'">
+                    <div class="split-title">分{{ row.splitMode === 'BY_COLOR' ? '色' : '码' }}出量（{{ row.splitMode === 'BY_COLOR' ? '某色该料量=该色数量' : '某码该料量=该码数量' }}×单件耗用×(1+损耗率)；生成材料合同时按此分行）</div>
+                    <el-table :data="splitPreview(row)" size="small" border style="max-width:560px">
+                      <el-table-column prop="key" :label="row.splitMode === 'BY_COLOR' ? '颜色' : '尺码'" width="120" />
+                      <el-table-column prop="groupQty" label="件数" width="100" align="right" />
+                      <el-table-column prop="qty" label="该料采购量" width="130" align="right" />
+                      <el-table-column prop="formula" label="公式" min-width="200" />
+                    </el-table>
+                    <div v-if="!splitPreview(row).length" class="hint">尺码数量搭配暂无{{ row.splitMode === 'BY_COLOR' ? '颜色' : '尺码' }}数据，先在上方矩阵填写</div>
+                  </template>
+                  <span v-else class="hint">该料不拆分（整单量核算）；选「按颜色/按尺码」后此处按矩阵出分行预览</span>
+                </div>
+              </template>
+            </el-table-column>
             <el-table-column type="selection" width="38" />
             <el-table-column label="品名" min-width="130" fixed><template #default="{ row }"><el-input v-model="row.itemName" size="small" /></template></el-table-column>
             <el-table-column label="部位" width="90"><template #default="{ row }"><el-input v-model="row.part" size="small" /></template></el-table-column>
@@ -124,6 +168,37 @@
         <div class="hint">采购量公式：不拆分 = 大货总数×单件耗用×(1+损耗率)；按分码/分色分别出量。整数类材料(个/条)损耗后向上取整。</div>
       </section-block>
     </el-form>
+
+    <!-- Excel 导入尺码数量搭配（设计稿 03：4 步 · 含 PO 维度） -->
+    <el-dialog v-model="excelDialog" title="Excel 导入尺码数量搭配" width="680px">
+      <div class="excel-steps">
+        <p>① 下载固定模板（列：款号/颜色/尺码 + 各「PO号|目的地|收货人」列），用 Excel 打开按客户排期填好；</p>
+        <p>② 保存为 CSV（Excel 另存为 → CSV UTF-8）后上传；③ 系统校验（款号/尺码/数值，异常行红色标出）；④ 确认入库生成搭配表。</p>
+      </div>
+      <div class="excel-ops">
+        <el-button size="small" @click="downloadTemplate">📥 下载模板（含当前矩阵）</el-button>
+        <input ref="csvFileRef" type="file" accept=".csv,text/csv" style="display:none" @change="onCsvPicked" />
+        <el-button size="small" type="primary" plain @click="csvFileRef?.click()">📤 上传 CSV</el-button>
+      </div>
+      <template v-if="excelPreview">
+        <div class="excel-check" :class="{ bad: excelErrors.length }">
+          {{ excelErrors.length ? `✗ 发现 ${excelErrors.length} 处异常，请修正后重新上传：` : `✓ 校验通过：${excelPreview.rows.length} 行 × ${excelPreview.pos.length} 个 PO，总计 ${excelTotal}` }}
+        </div>
+        <ul v-if="excelErrors.length" class="excel-errors"><li v-for="(e, i) in excelErrors.slice(0, 8)" :key="i">{{ e }}</li></ul>
+        <el-table v-else :data="excelPreview.rows.slice(0, 6)" size="small" border>
+          <el-table-column prop="style_no" label="款号" min-width="110" />
+          <el-table-column prop="color" label="颜色" width="90" />
+          <el-table-column prop="size" label="尺码" width="80" />
+          <el-table-column v-for="(p, pi) in excelPreview.pos" :key="pi" :label="p.po_no" width="100" align="right">
+            <template #default="{ row }">{{ row.qtys[pi] || 0 }}</template>
+          </el-table-column>
+        </el-table>
+      </template>
+      <template #footer>
+        <el-button @click="excelDialog = false">取消</el-button>
+        <el-button type="primary" :disabled="!excelPreview || !!excelErrors.length" @click="confirmExcel">确认入库</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="importDialog" title="从报价一键导入" width="480px">
       <el-select v-model="importQuoteId" filterable placeholder="选择报价单" style="width:100%">
@@ -170,17 +245,63 @@ const factories = ref<any[]>([]);
 const supplierFactories = ref<any[]>([]);
 const INT_UNITS = ['个', '条', '只', '件', '粒', '套', '对', 'pcs', 'PCS', 'PC'];
 
-const emptySize = () => ({ style: '', color: '', size: '', po: '', dest: '', qty: '' });
+// 尺码数量搭配矩阵（设计稿 03：行=款·色·尺码，列=各 PO（PO号/目的地/收货人），格=数量）
+const emptyPo = () => ({ po_no: '', destination: '', consignee: '' });
+const emptyMatrixRow = (poCount: number) => ({ style_no: '', color: '', size: '', qtys: Array(poCount).fill('') });
 const emptyMat = () => ({ itemName: '', part: '', width: '', color: '', composition: '', supplier: '', unit: '', netUsage: '', lossRate: 3, splitMode: 'NONE', finalPurchase: '', roundUp: null, remark: '' });
 const form = reactive<any>({
   orderNo: '', quoteId: undefined, customerPo: '', styleNo: '', unitPrice: '', currency: 'USD',
   deliveryDate: '', commissionRate: 0, factoryId: undefined, middlemanName: '', buyerName: '',
   salesperson: '', makeDate: new Date().toISOString().slice(0, 10), splitMode: 'NONE', status: '',
   att1: '', att2: '', att3: '', att4: '', att5: '',
-  sizes: [emptySize()], materials: [emptyMat()],
+  matrix: { pos: [emptyPo()], rows: [emptyMatrixRow(1)] }, materials: [emptyMat()],
 });
 
-const qtyTotal = computed(() => form.sizes.reduce((s: number, r: any) => s + (Number(r.qty) || 0), 0));
+const rowTotal = (row: any) => (row.qtys ?? []).reduce((s: number, q: any) => s + (Number(q) || 0), 0);
+const qtyTotal = computed(() => form.matrix.rows.reduce((s: number, r: any) => s + rowTotal(r), 0));
+// 表尾：各 PO 合计 + 总计（设计稿：改动实时重算）
+function matrixSummary({ columns }: any) {
+  const fixed = readonly.value ? 3 : 4; // [选择列]+款号/颜色/尺码
+  return columns.map((_: any, i: number) => {
+    if (i === fixed - 3) return '各PO合计';
+    if (i < fixed) return '';
+    if (i === columns.length - 1) return String(qtyTotal.value);
+    const pi = i - fixed;
+    return String(form.matrix.rows.reduce((s: number, r: any) => s + (Number(r.qtys?.[pi]) || 0), 0));
+  });
+}
+// 总数量搭配（不分 PO）：按款·色·码汇总所有 PO（设计稿：回填大货总数量）
+const summaryRows = computed(() => {
+  const map = new Map<string, any>();
+  for (const r of form.matrix.rows) {
+    const qty = rowTotal(r);
+    if (!qty) continue;
+    const key = `${r.style_no}|${r.color}|${r.size}`;
+    const cur = map.get(key) ?? { style_no: r.style_no, color: r.color, size: r.size, qty: 0 };
+    cur.qty += qty;
+    map.set(key, cur);
+  }
+  return [...map.values()];
+});
+// 分色/分码出量预览（设计稿：某色该料量 = 该色数量×单件耗用×(1+损耗率)；整数类向上取整）
+function splitPreview(mat: any) {
+  const dim = mat.splitMode === 'BY_COLOR' ? 'color' : 'size';
+  const groups = new Map<string, number>();
+  for (const r of form.matrix.rows) {
+    const key = String(r[dim] ?? '').trim();
+    const qty = rowTotal(r);
+    if (!key || !qty) continue;
+    groups.set(key, (groups.get(key) ?? 0) + qty);
+  }
+  const per = Number(mat.netUsage) || 0;
+  const loss = 1 + (Number(mat.lossRate) || 0) / 100;
+  const shouldRound = mat.roundUp === 1 || mat.roundUp === 0 ? mat.roundUp === 1 : !!(mat.unit && INT_UNITS.includes(mat.unit));
+  return [...groups].map(([key, groupQty]) => {
+    let qty = groupQty * per * loss;
+    qty = shouldRound ? Math.ceil(qty) : +qty.toFixed(2);
+    return { key, groupQty, qty, formula: `${groupQty} × ${per} × ${loss.toFixed(2)}${shouldRound ? ' ↑取整' : ''}` };
+  });
+}
 const statusLabel = computed(() => (ORDER_STATUS_LABEL as any)[form.status] ?? '');
 function sysPurchase(row: any) {
   const per = (Number(row.netUsage) || 0) * (1 + (Number(row.lossRate) || 0) / 100);
@@ -213,8 +334,19 @@ const rules: FormRules = {
   deliveryDate: [{ required: true, message: '请选择约定交期', trigger: 'change' }],
 };
 
-function addSize() { form.sizes.push(emptySize()); }
-function delSizes() { form.sizes = form.sizes.filter((r: any) => !selSizes.value.includes(r)); if (!form.sizes.length) form.sizes.push(emptySize()); }
+function addMatrixRow() { form.matrix.rows.push(emptyMatrixRow(form.matrix.pos.length)); }
+function delMatrixRows() {
+  form.matrix.rows = form.matrix.rows.filter((r: any) => !selSizes.value.includes(r));
+  if (!form.matrix.rows.length) form.matrix.rows.push(emptyMatrixRow(form.matrix.pos.length));
+}
+function addPoCol() {
+  form.matrix.pos.push(emptyPo());
+  for (const r of form.matrix.rows) r.qtys.push('');
+}
+function delPoCol(pi: number) {
+  form.matrix.pos.splice(pi, 1);
+  for (const r of form.matrix.rows) r.qtys.splice(pi, 1);
+}
 function addMat() { form.materials.push(emptyMat()); }
 function delMats() { form.materials = form.materials.filter((r: any) => !selMats.value.includes(r)); if (!form.materials.length) form.materials.push(emptyMat()); }
 
@@ -233,14 +365,36 @@ async function load() {
   if (!editId.value) return;
   const res: any = await orderApi.get(editId.value);
   const d = res.data ?? res;
-  const cells = d.matrix?.matrix_data?.rows;
+  // 矩阵装载：新结构 {pos,rows(qtys[])} 直接用；旧平铺行 {style,color,size,po,dest,qty} 自动升级为 PO 列
+  const md = d.matrix?.matrix_data;
+  let matrix = { pos: [emptyPo()], rows: [emptyMatrixRow(1)] };
+  if (Array.isArray(md?.pos) && Array.isArray(md?.rows)) {
+    matrix = {
+      pos: md.pos.length ? md.pos : [emptyPo()],
+      rows: md.rows.length
+        ? md.rows.map((r: any) => ({ style_no: r.style_no ?? '', color: r.color ?? '', size: r.size ?? '', qtys: [...(r.qtys ?? [])].concat(Array(Math.max(0, (md.pos.length || 1) - (r.qtys?.length ?? 0))).fill('')) }))
+        : [emptyMatrixRow(md.pos.length || 1)],
+    };
+  } else if (Array.isArray(md?.rows) && md.rows.length) {
+    const poNames: string[] = [...new Set(md.rows.map((r: any) => String(r.po || '').trim()))] as string[];
+    const pos = poNames.map((p) => ({ po_no: p || '（未填PO）', destination: md.rows.find((r: any) => (r.po || '') === p)?.dest ?? '', consignee: '' }));
+    matrix = {
+      pos: pos.length ? pos : [emptyPo()],
+      rows: md.rows.map((r: any) => {
+        const qtys = Array(Math.max(pos.length, 1)).fill('');
+        const pi = Math.max(0, poNames.indexOf(String(r.po || '').trim()));
+        qtys[pi] = r.qty ?? '';
+        return { style_no: r.style ?? r.style_no ?? '', color: r.color ?? '', size: r.size ?? '', qtys };
+      }),
+    };
+  }
   Object.assign(form, {
     orderNo: d.order_no, quoteId: d.quote_id ?? undefined, customerPo: d.customer_po ?? '', styleNo: d.style_no ?? '',
     unitPrice: d.unit_price ?? '', currency: d.currency ?? 'USD', deliveryDate: d.delivery_date ?? '',
     commissionRate: d.commission_rate ?? 0, factoryId: d.factory_id ?? undefined, middlemanName: d.middleman_name ?? '',
     buyerName: d.buyer_name ?? '', salesperson: d.salesperson ?? '', makeDate: d.make_date ?? '', splitMode: d.split_mode ?? 'NONE', status: d.status,
     att1: d.att_artwork ?? '', att2: d.att_sizechart ?? '', att3: d.att_board ?? '', att4: d.att_packing ?? '', att5: d.att_filling ?? '',
-    sizes: Array.isArray(cells) && cells.length ? cells : [emptySize()],
+    matrix,
     materials: d.materials?.length ? d.materials.map((m: any) => ({
       itemName: m.item_name, part: m.part, width: m.width, color: m.color, composition: m.composition,
       supplier: m.supplier, unit: m.unit, netUsage: m.net_usage, lossRate: m.loss_rate, splitMode: m.split_mode ?? 'NONE',
@@ -260,7 +414,12 @@ function buildDto() {
     split_mode: form.splitMode, qty_total: qtyTotal.value,
     att_artwork: form.att1 || undefined, att_sizechart: form.att2 || undefined, att_board: form.att3 || undefined,
     att_packing: form.att4 || undefined, att_filling: form.att5 || undefined,
-    matrix_data: { rows: form.sizes.filter((s: any) => s.qty) },
+    matrix_data: {
+      pos: form.matrix.pos.map((p: any) => ({ po_no: p.po_no, destination: p.destination, consignee: p.consignee })),
+      rows: form.matrix.rows
+        .filter((r: any) => rowTotal(r) > 0 || r.style_no || r.color || r.size)
+        .map((r: any) => ({ style_no: r.style_no, color: r.color, size: r.size, qtys: r.qtys.map((q: any) => Number(q) || 0) })),
+    },
     materials: form.materials.filter((m: any) => m.itemName).map((m: any, i: number) => ({
       item_name: m.itemName, part: m.part, width: m.width, color: m.color, composition: m.composition,
       supplier: m.supplier, unit: m.unit, net_usage: num(m.netUsage), loss_rate: num(m.lossRate) ?? 3,
@@ -285,6 +444,97 @@ async function save() {
     ElMessage.error(e?.response?.data?.message ?? '保存失败（新建订单需先从报价导入带出客户）');
   } finally { saving.value = false; }
 }
+// ===== Excel(CSV) 导入尺码数量搭配（设计稿 03：模板→上传→校验→确认入库） =====
+const excelDialog = ref(false);
+const csvFileRef = ref<HTMLInputElement>();
+const excelPreview = ref<{ pos: any[]; rows: any[] } | null>(null);
+const excelErrors = ref<string[]>([]);
+const excelTotal = computed(() => (excelPreview.value?.rows ?? []).reduce((s: number, r: any) => s + rowTotal(r), 0));
+const csvCell = (v: any) => {
+  const s = String(v ?? '');
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+function downloadTemplate() {
+  const pos = form.matrix.pos.filter((p: any) => p.po_no) .length ? form.matrix.pos : [{ po_no: 'PO-0001', destination: '目的地', consignee: '收货人' }];
+  const head = ['款号', '颜色', '尺码', ...pos.map((p: any) => `${p.po_no || 'PO'}|${p.destination || ''}|${p.consignee || ''}`)];
+  const dataRows = form.matrix.rows.filter((r: any) => r.style_no || rowTotal(r) > 0);
+  const body = (dataRows.length ? dataRows : [{ style_no: form.styleNo || 'KH-0001', color: '黑色', size: 'S', qtys: [] }])
+    .map((r: any) => [r.style_no, r.color, r.size, ...pos.map((_: any, pi: number) => r.qtys?.[pi] ?? '')]);
+  const csv = '﻿' + [head, ...body].map((row) => row.map(csvCell).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a'); a.href = url; a.download = `尺码数量搭配-${form.styleNo || '模板'}.csv`; a.click();
+  URL.revokeObjectURL(url);
+}
+// 轻量 CSV 解析（支持引号包裹/转义引号）
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = []; let cur = ''; let row: string[] = []; let inQ = false;
+  const src = text.replace(/^﻿/, '');
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (inQ) {
+      if (c === '"') { if (src[i + 1] === '"') { cur += '"'; i++; } else inQ = false; }
+      else cur += c;
+    } else if (c === '"') inQ = true;
+    else if (c === ',') { row.push(cur); cur = ''; }
+    else if (c === '\n' || c === '\r') {
+      if (c === '\r' && src[i + 1] === '\n') i++;
+      row.push(cur); cur = '';
+      if (row.some((x) => x.trim() !== '')) rows.push(row);
+      row = [];
+    } else cur += c;
+  }
+  row.push(cur);
+  if (row.some((x) => x.trim() !== '')) rows.push(row);
+  return rows;
+}
+function onCsvPicked(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    excelErrors.value = []; excelPreview.value = null;
+    const grid = parseCsv(String(reader.result ?? ''));
+    if (grid.length < 2) { excelErrors.value = ['文件为空或只有表头']; return; }
+    const head = grid[0].map((h) => h.trim());
+    if (head[0] !== '款号' || head[1] !== '颜色' || head[2] !== '尺码') {
+      excelErrors.value = [`表头前三列须为 款号/颜色/尺码（当前:${head.slice(0, 3).join('/')}），请用「下载模板」的格式`]; return;
+    }
+    const pos = head.slice(3).map((h, i) => {
+      const [po_no, destination = '', consignee = ''] = h.split('|').map((x) => x.trim());
+      if (!po_no) excelErrors.value.push(`第 ${i + 4} 列 PO 表头为空（格式:PO号|目的地|收货人）`);
+      return { po_no, destination, consignee };
+    });
+    if (!pos.length) { excelErrors.value.push('至少需要 1 个 PO 列'); return; }
+    const rows = grid.slice(1).map((cells, ri) => {
+      const style_no = (cells[0] ?? '').trim(); const color = (cells[1] ?? '').trim(); const size = (cells[2] ?? '').trim();
+      if (!style_no) excelErrors.value.push(`第 ${ri + 2} 行：款号为空`);
+      if (!size) excelErrors.value.push(`第 ${ri + 2} 行：尺码为空`);
+      const qtys = pos.map((_, pi) => {
+        const raw = (cells[pi + 3] ?? '').trim();
+        if (raw === '') return 0;
+        const n = Number(raw);
+        if (!Number.isFinite(n) || n < 0 || !Number.isInteger(n)) {
+          excelErrors.value.push(`第 ${ri + 2} 行「${pos[pi].po_no}」列：数量“${raw}”须为非负整数`);
+          return 0;
+        }
+        return n;
+      });
+      return { style_no, color, size, qtys };
+    });
+    if (!rows.some((r) => rowTotal(r) > 0)) excelErrors.value.push('至少 1 个数量格需大于 0');
+    excelPreview.value = { pos, rows };
+  };
+  reader.readAsText(file, 'utf-8');
+  (e.target as HTMLInputElement).value = '';
+}
+function confirmExcel() {
+  if (!excelPreview.value || excelErrors.value.length) return;
+  form.matrix.pos = excelPreview.value.pos;
+  form.matrix.rows = excelPreview.value.rows.map((r) => ({ ...r, qtys: [...r.qtys] }));
+  excelDialog.value = false; excelPreview.value = null;
+  ElMessage.success(`已生成搭配表：${form.matrix.rows.length} 行 × ${form.matrix.pos.length} 个 PO，总计 ${qtyTotal.value}（已回填大货总数量）`);
+}
+
 async function doImport() {
   if (!editId.value || !importQuoteId.value) return;
   try { await orderApi.importFromQuote(editId.value, importQuoteId.value); ElMessage.success('已从报价导入'); importDialog.value = false; load(); }
@@ -317,6 +567,16 @@ onMounted(async () => { await loadRefs(); await load(); });
 :deep(.section-badge) { font-size: 12px; color: #C8901E; background: #fff; padding: 1px 8px; border-radius: 10px; }
 :deep(.section-body) { padding: 14px; }
 .subtable-ops { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.po-head { display: flex; flex-direction: column; gap: 3px; padding: 4px 0; }
+.matrix-summary { margin-top: 12px; }
+.summary-title { font-size: 13px; font-weight: 600; color: #1E3A5F; margin-bottom: 6px; }
+.split-preview { padding: 8px 12px; }
+.split-title { font-size: 12px; color: var(--el-text-color-secondary); margin-bottom: 6px; }
+.excel-steps p { font-size: 13px; color: var(--el-text-color-regular); margin: 4px 0; }
+.excel-ops { display: flex; gap: 8px; margin: 10px 0; }
+.excel-check { font-size: 13px; color: #3E8E7E; font-weight: 600; margin-bottom: 6px; }
+.excel-check.bad { color: #C04042; }
+.excel-errors { margin: 0 0 8px; padding-left: 18px; font-size: 12px; color: #C04042; }
 .subtable-ops .hint, .hint { font-size: 12px; color: var(--el-text-color-secondary); }
 .subtable-ops .hint { margin-left: auto; }
 </style>

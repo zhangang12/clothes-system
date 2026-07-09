@@ -149,6 +149,16 @@ export class OrderService {
         await manager.delete(OrderMaterial, { order_id: id });
         await manager.save(OrderMaterial, this.buildMaterials(id, order.qty_total, dto.materials));
       }
+      // 尺码数量搭配矩阵（修复：此前编辑从不落库——只有 create 存，编辑改矩阵会静默丢失）
+      if (dto.matrix_data !== undefined) {
+        const existing = await manager.findOne(OrderSizeMatrix, { where: { order_id: id } });
+        if (existing) {
+          existing.matrix_data = dto.matrix_data;
+          await manager.save(OrderSizeMatrix, existing);
+        } else {
+          await manager.save(OrderSizeMatrix, manager.create(OrderSizeMatrix, { order_id: id, matrix_data: dto.matrix_data }));
+        }
+      }
       return order;
     });
   }

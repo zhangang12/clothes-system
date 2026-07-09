@@ -9,6 +9,7 @@ import { ContractShipment } from '../contract-shipment.entity';
 import { ContractPortalLog, PortalOperatorType } from '../contract-portal-log.entity';
 import { OrderMaterial } from '../../order/order-material.entity';
 import { OrderMain } from '../../order/order-main.entity';
+import { OrderSizeMatrix } from '../../order/order-size-matrix.entity';
 import { Factory } from '../../factory/factory.entity';
 import { SupplierAccount } from '../../auth/supplier-account.entity';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
@@ -48,6 +49,9 @@ const mockLogRepo = {
 const mockOrderMaterialRepo = {
   find: jest.fn().mockResolvedValue([]),
 };
+const mockMatrixRepo = {
+  findOne: jest.fn().mockResolvedValue(null),
+};
 const mockSupplierRepo = {
   findOne: jest.fn().mockResolvedValue({ id: 1, factory_id: 5, status: 1 }),
 };
@@ -82,6 +86,7 @@ describe('ContractService', () => {
         { provide: getRepositoryToken(ContractPortalLog), useValue: mockLogRepo },
         { provide: getRepositoryToken(OrderMaterial), useValue: mockOrderMaterialRepo },
         { provide: getRepositoryToken(OrderMain), useValue: mockOrderRepo },
+        { provide: getRepositoryToken(OrderSizeMatrix), useValue: mockMatrixRepo },
         { provide: getRepositoryToken(Factory), useValue: mockFactoryRepo },
         { provide: getRepositoryToken(SupplierAccount), useValue: mockSupplierRepo },
         { provide: NumberingService, useValue: new NumberingService(mockRedis as any) },
@@ -380,5 +385,94 @@ describe('ContractService', () => {
     expect(savedContract.style_nos).toBe('MNA263M525'); // 默认=订单款号
     expect(savedContract.guarantor).toBe('丙方某');
     expect(savedContract.delivery_deadline).toBe('2026-07-20'); // 订单交期−10天（A7）
+  });
+
+  // ===== 分色/分码出行（设计稿 合同 A4 + 订单尺码矩阵）=====
+
+  // UT-CON-21: 分色材料按矩阵颜色拆行，量=该色件数×耗用×(1+损耗)，整数单位向上取整
+  it('UT-CON-21 create expands BY_COLOR material into per-color lines from size matrix', async () => {
+    mockRedis.eval.mockResolvedValue('HT-20260709-002');
+    mockOrderRepo.findOne.mockResolvedValue({ id: 10, style_no: 'M525', delivery_date: '2026-07-30', deleted: 0 });
+    mockOrderMaterialRepo.find.mockResolvedValue([{
+      item_name: '5#尼龙拉链', unit: '条', unit_price: 1, net_usage: 2, loss_rate: 5,
+      split_mode: 'BY_COLOR', round_up: null, sort_order: 0,
+    }]);
+    // 新矩阵结构：黑色 100 件(60+40 跨两 PO)、藏青 50 件
+    mockMatrixRepo.findOne.mockResolvedValue({ matrix_data: { rows: [
+      { style_no: 'M525', color: '黑色', size: 'S', qtys: [60, 40] },
+      { style_no: 'M525', color: '藏青', size: 'M', qtys: [50] },
+    ] } });
+    const savedLines: any[] = [];
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb({
+      create: jest.fn().mockImplementation((_: any, v: any) => v),
+      save: jest.fn().mockImplementation((_: any, v: any) => {
+        if (Array.isArray(v)) savedLines.push(...v);
+        return Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 });
+      }),
+      findOne: jest.fn().mockResolvedValue(null),
+      delete: jest.fn(),
+    }));
+    await service.create({ type: ContractType.MATERIAL, factory_id: 5, order_id: 10 } as any, 1);
+    expect(savedLines).toHaveLength(2); // 黑色 + 藏青 各一行
+    const black = savedLines.find((l) => l.color === '黑色');
+    const navy = savedLines.find((l) => l.color === '藏青');
+    expect(black.qty).toBe(210); // 100×2×1.05=210（条为整数单位）
+    expect(navy.qty).toBe(105);  // 50×2×1.05=105
+    expect(black.qty_source).toBe('采购量·分色');
+    expect(black.style_no).toBe('M525');
+  });
+
+  // UT-CON-22: 分码材料无耗用数据时按件数占比分摊最终采购量
+  it('UT-CON-22 create splits BY_SIZE material proportionally when net_usage missing', async () => {
+    mockRedis.eval.mockResolvedValue('HT-20260709-003');
+    mockOrderRepo.findOne.mockResolvedValue({ id: 10, style_no: 'M525', delivery_date: null, deleted: 0 });
+    mockOrderMaterialRepo.find.mockResolvedValue([{
+      item_name: '1×1螺纹', unit: '米', unit_price: 12, net_usage: null, loss_rate: 0,
+      split_mode: 'BY_SIZE', final_purchase: 420, round_up: null, sort_order: 0,
+    }]);
+    mockMatrixRepo.findOne.mockResolvedValue({ matrix_data: { rows: [
+      { style_no: 'M525', color: '黑', size: 'S', qtys: [180] },
+      { style_no: 'M525', color: '黑', size: 'M', qtys: [240] },
+    ] } });
+    const savedLines: any[] = [];
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb({
+      create: jest.fn().mockImplementation((_: any, v: any) => v),
+      save: jest.fn().mockImplementation((_: any, v: any) => {
+        if (Array.isArray(v)) savedLines.push(...v);
+        return Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 });
+      }),
+      findOne: jest.fn().mockResolvedValue(null),
+      delete: jest.fn(),
+    }));
+    await service.create({ type: ContractType.MATERIAL, factory_id: 5, order_id: 10 } as any, 1);
+    expect(savedLines).toHaveLength(2);
+    expect(savedLines.find((l) => l.size === 'S').qty).toBe(180); // 420×180/420
+    expect(savedLines.find((l) => l.size === 'M').qty).toBe(240); // 420×240/420
+    expect(savedLines[0].qty_source).toBe('采购量·分码');
+  });
+
+  // UT-CON-23: 不拆分材料仍单行；矩阵为空时分色材料退回单行（不炸）
+  it('UT-CON-23 NONE split or empty matrix falls back to single line', async () => {
+    mockRedis.eval.mockResolvedValue('HT-20260709-004');
+    mockOrderRepo.findOne.mockResolvedValue({ id: 10, style_no: 'M525', delivery_date: null, deleted: 0 });
+    mockOrderMaterialRepo.find.mockResolvedValue([
+      { item_name: '主面料', unit: '米', unit_price: 8, split_mode: 'NONE', final_purchase: 100, sort_order: 0, color: '藏青' },
+      { item_name: '胶标', unit: '个', unit_price: 0.3, split_mode: 'BY_COLOR', final_purchase: 500, sort_order: 1 },
+    ]);
+    mockMatrixRepo.findOne.mockResolvedValue(null); // 无矩阵
+    const savedLines: any[] = [];
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb({
+      create: jest.fn().mockImplementation((_: any, v: any) => v),
+      save: jest.fn().mockImplementation((_: any, v: any) => {
+        if (Array.isArray(v)) savedLines.push(...v);
+        return Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 });
+      }),
+      findOne: jest.fn().mockResolvedValue(null),
+      delete: jest.fn(),
+    }));
+    await service.create({ type: ContractType.MATERIAL, factory_id: 5, order_id: 10 } as any, 1);
+    expect(savedLines).toHaveLength(2); // 各退回单行
+    expect(savedLines[0].color).toBe('藏青');
+    expect(savedLines[1].qty).toBe(500);
   });
 });
