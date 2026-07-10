@@ -281,7 +281,7 @@
           <el-table-column label="方式" width="90"><template #default="{ row }">{{ payMethodLabel(row.pay_method) }}</template></el-table-column>
           <el-table-column prop="pay_date" label="付款日期" width="104" />
           <el-table-column prop="amount" label="金额" width="100" align="right"><template #default="{ row }">{{ (+row.amount).toFixed(2) }}</template></el-table-column>
-          <el-table-column label="水单" width="70" align="center"><template #default="{ row }"><el-link v-if="row.slip_url" type="primary" :href="row.slip_url" target="_blank">查看</el-link><span v-else>—</span></template></el-table-column>
+          <el-table-column label="水单" width="70" align="center"><template #default="{ row }"><el-link v-if="row.slip_url" type="primary" @click="openFile(row.slip_url)">查看</el-link><span v-else>—</span></template></el-table-column>
           <el-table-column prop="remark" label="备注" min-width="90" />
         </el-table>
       </template>
@@ -340,6 +340,7 @@ import { Search, Refresh, Plus, UploadFilled } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { prepaymentApi, paymentRequestApi } from '@/api/payment';
 import { uploadApi } from '@/api/upload';
+import { openFile } from '@/utils/secureFile';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole } from '@i9/types';
 
@@ -519,7 +520,7 @@ function resetSlip() { slipUrl.value = ''; slipUploading.value = false; }
 async function uploadSlipFile(file: File) {
   slipUploading.value = true;
   try {
-    const res: any = await uploadApi.upload(file);
+    const res: any = await uploadApi.upload(file, { sensitive: true }); // 水单属敏感附件
     slipUrl.value = (res?.data ?? res)?.url ?? '';
     if (slipUrl.value) ElMessage.success('水单上传成功');
   } catch {

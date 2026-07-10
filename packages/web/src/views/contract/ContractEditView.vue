@@ -68,8 +68,8 @@
           <el-col :span="8">
             <el-form-item label="担保人身份证照片">
               <div class="photo-cell">
-                <el-image v-if="form.guarantor_id_photo" :src="form.guarantor_id_photo" :preview-src-list="[form.guarantor_id_photo]" fit="cover" class="thumb" />
-                <el-upload :show-file-list="false" :http-request="(o: any) => uploadTo(o, (url) => (form.guarantor_id_photo = url))" accept="image/*" :disabled="!editable">
+                <el-image v-if="guarantorPhotoView" :src="guarantorPhotoView" :preview-src-list="[guarantorPhotoView]" fit="cover" class="thumb" />
+                <el-upload :show-file-list="false" :http-request="(o: any) => uploadTo(o, (url) => (form.guarantor_id_photo = url), true)" accept="image/*" :disabled="!editable">
                   <el-button size="small" plain>📎 {{ form.guarantor_id_photo ? '重新上传' : '点选上传(选填)' }}</el-button>
                 </el-upload>
               </div>
@@ -223,7 +223,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, nextTick } from 'vue';
+import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { contractApi } from '@/api/contract';
@@ -231,6 +231,7 @@ import { factoryApi } from '@/api/factory';
 import { orderApi } from '@/api/order';
 import { companyApi } from '@/api/company';
 import { uploadApi } from '@/api/upload';
+import { signedUrl } from '@/utils/secureFile';
 import { printContract } from '@/utils/contractPrint';
 import { useAuthStore } from '@/stores/auth';
 
@@ -382,10 +383,16 @@ function onOrderChange(id: number) {
   if (o?.style_no && !styleNoList.value.length) form.style_nos = o.style_no;
 }
 
+// 担保人身份证属敏感附件:缩略图/预览用短时签名链接(入库仍存原始URL)
+const guarantorPhotoView = ref('');
+watch(() => form.guarantor_id_photo, async (u) => {
+  guarantorPhotoView.value = u ? await signedUrl(u) : '';
+}, { immediate: true });
+
 // 上传（担保人身份证 / 材料照片）
-async function uploadTo(option: any, apply: (url: string) => void) {
+async function uploadTo(option: any, apply: (url: string) => void, sensitive = false) {
   try {
-    const res: any = await uploadApi.upload(option.file as File);
+    const res: any = await uploadApi.upload(option.file as File, { sensitive });
     const url = (res.data ?? res)?.url;
     if (url) { apply(url); ElMessage.success('上传成功'); }
     option.onSuccess?.(res);

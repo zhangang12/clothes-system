@@ -326,7 +326,7 @@ async function onShipAttachRead(item: any) {
   const f = Array.isArray(item) ? item[0] : item;
   f.status = 'uploading'; f.message = '上传中...';
   try {
-    const res = await uploadApi.upload(f.file);
+    const res = await uploadApi.upload(f.file, { sensitive: true });
     shipForm.value.attach_url = ((res as any).data ?? res).url;
     f.status = 'done'; f.message = '';
   } catch {

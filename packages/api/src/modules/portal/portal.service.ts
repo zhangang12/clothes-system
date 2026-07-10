@@ -83,7 +83,8 @@ export class PortalService {
           att_board: order.att_board,
           att_packing: order.att_packing,
           att_filling: order.att_filling,
-          materials: orderMaterials,
+          // 工厂不见任何单价(总览走查P0#5/ORD D5-D6):剥离采购单价/预算,只同步工艺所需字段
+          materials: orderMaterials.map(({ unit_price, budget, ...rest }) => rest),
           size_matrix: matrix?.matrix_data ?? null,
         };
       }

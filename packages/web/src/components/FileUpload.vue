@@ -34,6 +34,7 @@ import { ref, computed, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Plus, Upload } from '@element-plus/icons-vue';
 import { http } from '@/api';
+import { signedUrl } from '@/utils/secureFile';
 
 const props = withDefaults(defineProps<{
   modelValue?: string;
@@ -43,16 +44,23 @@ const props = withDefaults(defineProps<{
   listType?: 'picture-card' | 'text' | 'picture';
   disabled?: boolean;
   tip?: string;
+  sensitive?: boolean; // 敏感附件(身份证/水单/发票):存 private/ 子目录,读取须签名令牌
 }>(), {
-  modelValue: '', multiple: false, accept: 'image/*', limit: 6, listType: 'picture-card', disabled: false, tip: '',
+  modelValue: '', multiple: false, accept: 'image/*', limit: 6, listType: 'picture-card', disabled: false, tip: '', sensitive: false,
 });
 const emit = defineEmits<{ (e: 'update:modelValue', v: string): void }>();
 
 const effectiveLimit = computed(() => (props.multiple ? props.limit : 1));
 const urls = () => (props.modelValue ? props.modelValue.split(',').filter(Boolean) : []);
 const toList = () => urls().map((u, i) => ({ name: decodeURIComponent(u.split('=').pop() || `文件${i + 1}`).split('/').pop() || `文件${i + 1}`, url: u }));
-const fileList = ref<any[]>(toList());
-watch(() => props.modelValue, () => { fileList.value = toList(); });
+const fileList = ref<any[]>([]);
+// 敏感附件缩略图/预览用短时签名链接展示;v-model 始终存原始 URL(令牌会过期,不入库)
+async function rebuildList() {
+  const list = toList().map((it) => ({ ...it, raw: it.url }));
+  for (const it of list) it.url = await signedUrl(it.raw);
+  fileList.value = list;
+}
+watch(() => props.modelValue, rebuildList, { immediate: true });
 
 const previewVisible = ref(false);
 const previewUrl = ref('');
@@ -81,7 +89,7 @@ async function doUpload(opt: any) {
   const fd = new FormData();
   fd.append('file', opt.file);
   try {
-    const res: any = await http.post('/uploads', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+    const res: any = await http.post(props.sensitive ? '/uploads?sensitive=1' : '/uploads', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
     const url = res.data?.url ?? res.url;
     const next = props.multiple ? [...urls(), url] : [url];
     emit('update:modelValue', next.join(','));
@@ -92,12 +100,16 @@ async function doUpload(opt: any) {
     ElMessage.error(e?.response?.data?.msg ?? '上传失败');
   }
 }
+// el-upload 内部对新增项也用 raw 存原生 File,故仅认字符串型 raw(我们回填的原始 URL)
+const origUrlOf = (file: any) => (typeof file.raw === 'string' ? file.raw : file.url);
 function onRemove(file: any) {
-  emit('update:modelValue', urls().filter((u) => u !== file.url).join(','));
+  const orig = origUrlOf(file);
+  emit('update:modelValue', urls().filter((u) => u !== orig).join(','));
 }
-function onPreview(file: any) {
-  if (/\.(pdf|docx?|xlsx?)$/i.test(file.url) || file.url.includes('.pdf')) { window.open(file.url, '_blank'); return; }
-  previewUrl.value = file.url;
+async function onPreview(file: any) {
+  const url = await signedUrl(origUrlOf(file)); // 敏感附件换新令牌,防列表停留过久令牌过期
+  if (/\.(pdf|docx?|xlsx?)$/i.test(url) || url.includes('.pdf')) { window.open(url, '_blank'); return; }
+  previewUrl.value = url;
   previewVisible.value = true;
 }
 function onExceed() { ElMessage.warning(`最多上传 ${effectiveLimit.value} 个文件`); }

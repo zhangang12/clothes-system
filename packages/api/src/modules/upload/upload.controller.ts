@@ -1,6 +1,6 @@
 import {
   Controller, Post, Get, Query, Res, UploadedFile, UseInterceptors, UseGuards,
-  BadRequestException, NotFoundException,
+  BadRequestException, NotFoundException, ForbiddenException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
@@ -33,14 +33,29 @@ export class UploadController {
     };
   }
 
+  // 为敏感附件签发短时访问链接（须登录；<img>/window.open 用带令牌 URL 打开）
+  @Get('sign')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '签发敏感附件短时访问链接（5分钟有效）' })
+  sign(@Query('p') relativePath: string) {
+    if (!relativePath) throw new BadRequestException('缺少文件路径');
+    return {
+      url: `/api/v1/uploads/file?p=${encodeURIComponent(relativePath)}&t=${this.fileService.signToken(relativePath)}`,
+    };
+  }
+
   // 通过 API 前缀流式返回文件（<img>/<a> 直接引用；uuid 文件名作能力 URL）。
   // 安全:强制安全 Content-Type + nosniff + 非图片/PDF 一律附件下载,杜绝浏览器内联执行(存储型 XSS)。
   // 注:上传时已按 magic bytes 限定为图片/PDF/Excel,故此处不会出现可执行类型。
-  // 待办:端点级授权(签名 URL / 短时令牌),使敏感附件不再仅凭 UUID 能力 URL 可下载(需前端配合改动)。
+  // 敏感附件(private/ 子目录:身份证/水单/发票等)须携带 /uploads/sign 签发的短时令牌(总览走查P0#7)。
   @Get('file')
-  @ApiOperation({ summary: '读取已上传文件' })
-  getFile(@Query('p') relativePath: string, @Res() res: Response) {
+  @ApiOperation({ summary: '读取已上传文件（敏感附件须带签名令牌）' })
+  getFile(@Query('p') relativePath: string, @Query('t') token: string | undefined, @Res() res: Response) {
     if (!relativePath) throw new BadRequestException('缺少文件路径');
+    if (this.fileService.isPrivate(relativePath) && !this.fileService.verifyToken(relativePath, token)) {
+      throw new ForbiddenException('敏感附件需授权访问，请在系统内通过「查看」打开');
+    }
     const full = this.fileService.resolvePath(relativePath);
     if (!full) throw new NotFoundException('文件不存在');
     const contentType = this.fileService.contentTypeFor(relativePath);

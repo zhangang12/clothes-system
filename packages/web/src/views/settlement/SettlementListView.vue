@@ -222,7 +222,7 @@
           </el-table-column>
           <el-table-column label="水单" width="70" align="center">
             <template #default="{ row }">
-              <el-link v-if="row.slip_url" type="primary" :href="row.slip_url" target="_blank">查看</el-link>
+              <el-link v-if="row.slip_url" type="primary" @click="openFile(row.slip_url)">查看</el-link>
               <span v-else class="muted">—</span>
             </template>
           </el-table-column>
@@ -396,7 +396,7 @@
           <div class="hint-inline">各笔均带汇率时：结算金额=Σ(金额×汇率)，结算汇率=加权平均</div>
         </el-form-item>
         <el-form-item label="银行水单">
-          <FileUpload v-model="receiptForm.slip_url" :limit="1" accept="image/*,.pdf" list-type="text" />
+          <FileUpload v-model="receiptForm.slip_url" :limit="1" accept="image/*,.pdf" list-type="text" sensitive />
         </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="receiptForm.remark" />
@@ -420,6 +420,7 @@ import { orderApi } from '@/api/order';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole } from '@i9/types';
 import FileUpload from '@/components/FileUpload.vue';
+import { openFile } from '@/utils/secureFile';
 
 const authStore = useAuthStore();
 const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));

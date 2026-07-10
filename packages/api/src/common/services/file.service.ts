@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { diskStorage, Options } from 'multer';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface UploadedFileInfo {
@@ -42,11 +43,13 @@ export class FileService implements OnModuleInit {
   getMulterOptions(subDir: string): Options {
     return {
       storage: diskStorage({
-        destination: (_req, _file, cb) => {
+        destination: (req, _file, cb) => {
           const today = new Date();
+          // 敏感附件(身份证/水单/发票等)落 private/ 子目录,读取须签名令牌(总览走查P0#7)
+          const sensitive = (req as any)?.query?.sensitive === '1' || (req as any)?.body?.sensitive === '1';
           const dir = path.join(
             this.uploadRoot,
-            subDir,
+            sensitive ? 'private' : subDir,
             String(today.getFullYear()),
             String(today.getMonth() + 1).padStart(2, '0'),
           );
@@ -136,6 +139,38 @@ export class FileService implements OnModuleInit {
       size: file.size,
       mimeType: file.mimetype,
     };
+  }
+
+  /** 敏感附件判定：private/ 子目录下的文件读取须签名令牌 */
+  isPrivate(relativePath: string): boolean {
+    return (relativePath ?? '').replace(/^[/\\]+/, '').startsWith('private/');
+  }
+
+  /** 为敏感附件签发短时访问令牌（HMAC-SHA256(path:exp)，默认 5 分钟） */
+  signToken(relativePath: string, ttlSec = 300): string {
+    const exp = Math.floor(Date.now() / 1000) + ttlSec;
+    const sig = crypto.createHmac('sha256', this.signSecret()).update(`${relativePath}:${exp}`).digest('hex').slice(0, 32);
+    return `${exp}.${sig}`;
+  }
+
+  /** 校验敏感附件访问令牌（过期/签名不符均拒绝） */
+  verifyToken(relativePath: string, token?: string): boolean {
+    if (!token) return false;
+    const dot = token.indexOf('.');
+    if (dot <= 0) return false;
+    const exp = +token.slice(0, dot);
+    const sig = token.slice(dot + 1);
+    if (!exp || exp < Date.now() / 1000 || !sig) return false;
+    const want = crypto.createHmac('sha256', this.signSecret()).update(`${relativePath}:${exp}`).digest('hex').slice(0, 32);
+    try {
+      return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(want));
+    } catch {
+      return false;
+    }
+  }
+
+  private signSecret(): string {
+    return this.config.get('JWT_SECRET', 'i9-file-sign-fallback');
   }
 
   /**
