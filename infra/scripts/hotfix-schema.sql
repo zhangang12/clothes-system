@@ -665,10 +665,25 @@ CREATE TABLE IF NOT EXISTS `contract_shipment` (
   `express_company`    VARCHAR(50)    DEFAULT NULL COMMENT '快递公司',
   `express_no`         VARCHAR(50)    DEFAULT NULL COMMENT '快递单号',
   `attach_url`         VARCHAR(500)   DEFAULT NULL COMMENT '附件(装箱单/货物照片)',
+  `ship_address`   VARCHAR(255)  DEFAULT NULL COMMENT '本批收货地址(门户发货可临时改,P3#31)',
+  `merge_no`       VARCHAR(30)   DEFAULT NULL COMMENT '合并发货组号(跨合同合并,P3#29)',
   `created_at`         DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_contract` (`contract_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='合同发货批次（逐批锁价）';
+
+CREATE TABLE IF NOT EXISTS `contract_shipment_item` (
+  `id`           BIGINT        NOT NULL AUTO_INCREMENT,
+  `shipment_id`  BIGINT        NOT NULL,
+  `material_id`  BIGINT        DEFAULT NULL COMMENT '合同材料行',
+  `item_name`    VARCHAR(100)  DEFAULT NULL COMMENT '品名快照',
+  `qty`          DECIMAL(15,4) NOT NULL COMMENT '本行实发数',
+  `unit_price`   DECIMAL(15,4) DEFAULT NULL COMMENT '行单价快照',
+  `amount`       DECIMAL(15,4) DEFAULT NULL COMMENT '行金额=单价×实发数',
+  `created_at`   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_shipment` (`shipment_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='发货批次物料行(逐物料行实发数,P3#30)';
 
 CREATE TABLE IF NOT EXISTS `contract_portal_log` (
   `id`           BIGINT        NOT NULL AUTO_INCREMENT,
@@ -1827,8 +1842,28 @@ CALL _i9_add_col('contract_shipment','express_no',"VARCHAR(50)    DEFAULT NULL C
 CALL _i9_sync_col('contract_shipment','express_no',"VARCHAR(50)","VARCHAR(50)    DEFAULT NULL COMMENT '快递单号'");
 CALL _i9_add_col('contract_shipment','attach_url',"VARCHAR(500)   DEFAULT NULL COMMENT '附件(装箱单/货物照片)'");
 CALL _i9_sync_col('contract_shipment','attach_url',"VARCHAR(500)","VARCHAR(500)   DEFAULT NULL COMMENT '附件(装箱单/货物照片)'");
+CALL _i9_add_col('contract_shipment','ship_address',"VARCHAR(255)  DEFAULT NULL COMMENT '本批收货地址(门户发货可临时改,P3#31)'");
+CALL _i9_sync_col('contract_shipment','ship_address',"VARCHAR(255)","VARCHAR(255)  DEFAULT NULL COMMENT '本批收货地址(门户发货可临时改,P3#31)'");
+CALL _i9_add_col('contract_shipment','merge_no',"VARCHAR(30)   DEFAULT NULL COMMENT '合并发货组号(跨合同合并,P3#29)'");
+CALL _i9_sync_col('contract_shipment','merge_no',"VARCHAR(30)","VARCHAR(30)   DEFAULT NULL COMMENT '合并发货组号(跨合同合并,P3#29)'");
 CALL _i9_add_col('contract_shipment','created_at',"DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP");
 CALL _i9_sync_col('contract_shipment','created_at',"DATETIME","DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP");
+
+-- contract_shipment_item
+CALL _i9_add_col('contract_shipment_item','shipment_id',"BIGINT        NOT NULL");
+CALL _i9_sync_col('contract_shipment_item','shipment_id',"BIGINT","BIGINT        NOT NULL");
+CALL _i9_add_col('contract_shipment_item','material_id',"BIGINT        DEFAULT NULL COMMENT '合同材料行'");
+CALL _i9_sync_col('contract_shipment_item','material_id',"BIGINT","BIGINT        DEFAULT NULL COMMENT '合同材料行'");
+CALL _i9_add_col('contract_shipment_item','item_name',"VARCHAR(100)  DEFAULT NULL COMMENT '品名快照'");
+CALL _i9_sync_col('contract_shipment_item','item_name',"VARCHAR(100)","VARCHAR(100)  DEFAULT NULL COMMENT '品名快照'");
+CALL _i9_add_col('contract_shipment_item','qty',"DECIMAL(15,4) NOT NULL COMMENT '本行实发数'");
+CALL _i9_sync_col('contract_shipment_item','qty',"DECIMAL(15,4)","DECIMAL(15,4) NOT NULL COMMENT '本行实发数'");
+CALL _i9_add_col('contract_shipment_item','unit_price',"DECIMAL(15,4) DEFAULT NULL COMMENT '行单价快照'");
+CALL _i9_sync_col('contract_shipment_item','unit_price',"DECIMAL(15,4)","DECIMAL(15,4) DEFAULT NULL COMMENT '行单价快照'");
+CALL _i9_add_col('contract_shipment_item','amount',"DECIMAL(15,4) DEFAULT NULL COMMENT '行金额=单价×实发数'");
+CALL _i9_sync_col('contract_shipment_item','amount',"DECIMAL(15,4)","DECIMAL(15,4) DEFAULT NULL COMMENT '行金额=单价×实发数'");
+CALL _i9_add_col('contract_shipment_item','created_at',"DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP");
+CALL _i9_sync_col('contract_shipment_item','created_at',"DATETIME","DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP");
 
 -- contract_portal_log
 CALL _i9_add_col('contract_portal_log','contract_id',"BIGINT        NOT NULL");

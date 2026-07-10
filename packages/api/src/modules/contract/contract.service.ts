@@ -2,10 +2,11 @@ import {
   Injectable, NotFoundException, BadRequestException, ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, Like, DataSource } from 'typeorm';
+import { Repository, FindOptionsWhere, Like, DataSource, In } from 'typeorm';
 import { Contract, ContractStatus } from './contract.entity';
 import { ContractMaterial } from './contract-material.entity';
 import { ContractShipment } from './contract-shipment.entity';
+import { ContractShipmentItem } from './contract-shipment-item.entity';
 import { ContractPortalLog, PortalOperatorType } from './contract-portal-log.entity';
 import { OrderMaterial } from '../order/order-material.entity';
 import { OrderMain } from '../order/order-main.entity';
@@ -346,6 +347,18 @@ export class ContractService {
       order: { sort_order: 'ASC' },
     });
     const shipments = await this.shipmentRepo.find({ where: { contract_id: id }, order: { id: 'ASC' } });
+    // 批次物料行(P3#30)
+    if (shipments.length) {
+      const lines = await this.dataSource.getRepository(ContractShipmentItem)
+        .find({ where: { shipment_id: In(shipments.map((b) => b.id)) } });
+      const byShip = new Map<number, ContractShipmentItem[]>();
+      lines.forEach((it) => {
+        const k = +it.shipment_id;
+        if (!byShip.has(k)) byShip.set(k, []);
+        byShip.get(k)!.push(it);
+      });
+      (shipments as any[]).forEach((b) => { (b as any).items = byShip.get(+b.id) ?? []; });
+    }
     // 合同量 vs 累计实发 vs 差额（对账付款串流程 C12）
     const contractQty = +materials.reduce((s, m) => s + +m.qty, 0).toFixed(4);
     const shippedQty = +(+(contract.shipped_qty ?? 0)).toFixed(4);

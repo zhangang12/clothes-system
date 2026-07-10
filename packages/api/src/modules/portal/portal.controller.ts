@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Patch, Delete, Body, Param, Query,
+  Controller, Get, Patch, Post, Delete, Body, Param, Query,
   ParseIntPipe, DefaultValuePipe, UseGuards, Request,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
@@ -7,6 +7,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { SupplierGuard } from '../../common/guards/supplier.guard';
 import { PortalService } from './portal.service';
 import { ConfirmShipDto } from './dto/confirm-ship.dto';
+import { MergeShipDto } from './dto/merge-ship.dto';
 import { CreateReconcileDto } from './dto/create-reconcile.dto';
 import { UploadInvoiceDto } from './dto/upload-invoice.dto';
 import { StampDto } from './dto/stamp.dto';
@@ -39,6 +40,12 @@ export class PortalController {
   @ApiOperation({ summary: '供应商盖章（须勾选同意条款；PUSHED→STAMPED，锁定快照）' })
   stamp(@Param('id', ParseIntPipe) id: number, @Body() dto: StampDto, @Request() req: any) {
     return this.service.stamp(id, req.user.username, req.user.factory_id, dto.agreed, dto.paper_url);
+  }
+
+  @Post('merge-ship')
+  @ApiOperation({ summary: '跨合同合并发货：勾多张合同一套物流，明细分摊各合同（P3#29/门户C2）' })
+  mergeShip(@Body() dto: MergeShipDto, @Request() req: any) {
+    return this.service.mergeShip(req.user.username, req.user.factory_id, dto as any);
   }
 
   @Patch(':id/ship')

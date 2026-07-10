@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ContractShipmentItem } from '../../contract/contract-shipment-item.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
@@ -93,6 +94,7 @@ describe('PortalService', () => {
         { provide: getRepositoryToken(Contract), useValue: contractRepo },
         { provide: getRepositoryToken(ContractMaterial), useValue: materialRepo },
         { provide: getRepositoryToken(ContractShipment), useValue: shipmentRepo },
+        { provide: getRepositoryToken(ContractShipmentItem), useValue: makeRepo() },
         { provide: getRepositoryToken(ContractPortalLog), useValue: logRepo },
         { provide: getRepositoryToken(OrderMain), useValue: makeRepo() },
         { provide: getRepositoryToken(OrderMaterial), useValue: makeRepo() },

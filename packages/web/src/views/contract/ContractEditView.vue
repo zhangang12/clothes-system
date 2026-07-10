@@ -301,6 +301,12 @@ const filteredFactories = computed(() => {
   });
 });
 const selectedFactory = computed(() => factories.value.find((f: any) => f.id === form.factory_id));
+// 发货地址默认自动带加工厂地址(P3#31/rev2合同#1):为空时选厂即填,可改
+watch(() => form.factory_id, () => {
+  if (!form.ship_to_address && selectedFactory.value?.address) {
+    form.ship_to_address = selectedFactory.value.address;
+  }
+});
 const factoryContact = computed(() => {
   const f = selectedFactory.value;
   return f ? [f.contact_name, f.contact_phone].filter(Boolean).join(' / ') || '—' : '—';

@@ -104,7 +104,14 @@
         v-for="(s, i) in contract.shipments"
         :key="s.id"
         :title="`第${i + 1}次 · ${s.ship_no || ''}`"
-        :label="[`${(+s.qty)} 件/条`, s.express_company ? `${s.express_company} ${s.express_no || ''}` : '', s.ship_date].filter(Boolean).join(' · ')"
+        :label="[
+          `${(+s.qty)} 件/条`,
+          s.express_company ? `${s.express_company} ${s.express_no || ''}` : '',
+          s.ship_date,
+          s.merge_no ? `合并组 ${s.merge_no}` : '',
+          s.ship_address || '',
+          (s.items ?? []).map((it: any) => `${it.item_name ?? '行'}×${+it.qty}`).join(' / '),
+        ].filter(Boolean).join(' · ')"
       >
         <template #value>
           <div class="batch-value">
@@ -295,9 +302,25 @@
       :before-close="handleShipClose"
     >
       <div class="invoice-form">
-        <van-cell v-if="contract.ship_to_address" title="收货地址" :label="contract.ship_to_address" />
+        <van-field
+          v-model="shipForm.ship_address" label="收货地址" placeholder="默认合同发货地址,可临时改"
+          type="textarea" rows="1" autosize
+        />
         <van-cell title="累计已发" :value="String(contract.shipped_qty || 0)" />
-        <van-field v-model="shipForm.qty" label="本次实发" type="number" placeholder="本次发货数量（必填）" required />
+        <van-cell v-if="(contract.materials ?? []).length > 1" title="按物料行填写实发数" center>
+          <template #right-icon><van-switch v-model="shipByLine" size="20" /></template>
+        </van-cell>
+        <template v-if="shipByLine">
+          <div v-for="m in contract.materials" :key="m.id" class="ship-line">
+            <span class="line-name">{{ m.item_name }}<span class="line-sub">（合同量 {{ +m.qty }}）</span></span>
+            <van-field
+              v-model="shipLineQty[m.id]" type="number" placeholder="实发数"
+              class="line-input"
+            />
+          </div>
+          <van-cell title="本次合计" :value="String(lineTotal)" />
+        </template>
+        <van-field v-else v-model="shipForm.qty" label="本次实发" type="number" placeholder="本次发货数量（必填）" required />
         <van-field v-model="shipForm.express_company" label="快递公司" placeholder="必填" required />
         <van-field v-model="shipForm.express_no" label="快递单号" placeholder="必填" required />
         <div class="invoice-upload">
@@ -347,7 +370,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { showConfirmDialog, showSuccessToast } from 'vant';
 import { portalContractApi } from '../api/contract';
@@ -359,7 +382,12 @@ const loadingDetail = ref(true);
 const actioning = ref(false);
 const agreedTerms = ref(false); // 盖章前须勾选「已阅读并同意合同条款」
 const showShipDialog = ref(false);
-const shipForm = ref({ qty: '', remark: '', express_company: '', express_no: '', attach_url: '' });
+const shipForm = ref({ qty: '', remark: '', express_company: '', express_no: '', attach_url: '', ship_address: '' });
+// 逐物料行实发数(P3#30)
+const shipByLine = ref(false);
+const shipLineQty = ref<Record<number, string>>({});
+const lineTotal = computed(() =>
+  Object.values(shipLineQty.value).reduce((s: number, v: any) => s + (Number(v) || 0), 0));
 const shipFiles = ref<any[]>([]);
 // 我要对账（设计稿 05 §C）
 const showReconcileDialog = ref(false);
@@ -468,6 +496,15 @@ async function load() {
 }
 
 // 纸质盖章照片上传(A3)
+// 发货弹窗打开时预填收货地址(P3#31:默认带合同发货地址,可临时改)
+watch(showShipDialog, (v) => {
+  if (v) {
+    shipForm.value.ship_address = contract.value?.ship_to_address ?? '';
+    shipByLine.value = false;
+    shipLineQty.value = {};
+  }
+});
+
 // 数量搭配矩阵(门户A2):orderDetail.size_matrix {pos,rows}
 const matrixPos = computed(() => (contract.value?.orderDetail?.size_matrix?.pos ?? []) as any[]);
 const matrixRows = computed(() => (contract.value?.orderDetail?.size_matrix?.rows ?? []) as any[]);
@@ -510,9 +547,14 @@ async function doStamp() {
 
 async function handleShipClose(action: string) {
   if (action === 'cancel') return true;
-  // 数量/物流必填（总览走查P1#16）
-  if (!shipForm.value.qty || !(Number(shipForm.value.qty) > 0)) {
-    showConfirmDialog({ title: '提示', message: '请填写本次实发数量', showCancelButton: false });
+  // 数量/物流必填（总览走查P1#16）;逐物料行模式数量=Σ行(P3#30)
+  const items = shipByLine.value
+    ? Object.entries(shipLineQty.value)
+        .filter(([, v]) => Number(v) > 0)
+        .map(([mid, v]) => ({ material_id: Number(mid), qty: Number(v) }))
+    : [];
+  if (shipByLine.value ? !items.length : !(Number(shipForm.value.qty) > 0)) {
+    showConfirmDialog({ title: '提示', message: shipByLine.value ? '请至少为一行物料填写实发数' : '请填写本次实发数量', showCancelButton: false });
     return false;
   }
   if (!shipForm.value.express_company.trim() || !shipForm.value.express_no.trim()) {
@@ -520,16 +562,18 @@ async function handleShipClose(action: string) {
     return false;
   }
   const payload = {
-    qty: shipForm.value.qty ? Number(shipForm.value.qty) : undefined,
+    qty: !shipByLine.value && shipForm.value.qty ? Number(shipForm.value.qty) : undefined,
+    items: items.length ? items : undefined,
     remark: shipForm.value.remark || undefined,
     express_company: shipForm.value.express_company,
     express_no: shipForm.value.express_no,
     attach_url: shipForm.value.attach_url || undefined,
+    ship_address: shipForm.value.ship_address?.trim() || undefined,
   };
   try {
     await portalContractApi.confirmShip(contract.value.id, payload);
     showSuccessToast('已确认出货');
-    shipForm.value = { qty: '', remark: '', express_company: '', express_no: '', attach_url: '' }; shipFiles.value = [];
+    shipForm.value = { qty: '', remark: '', express_company: '', express_no: '', attach_url: '', ship_address: '' }; shipFiles.value = []; shipLineQty.value = {}; shipByLine.value = false;
     await load();
     return true;
   } catch (e: any) {
@@ -540,7 +584,7 @@ async function handleShipClose(action: string) {
         await showConfirmDialog({ title: '超发确认', message: '本次发货将超过合同量，确认超发？' });
         await portalContractApi.confirmShip(contract.value.id, { ...payload, force: true });
         showSuccessToast('已确认超发出货');
-        shipForm.value = { qty: '', remark: '', express_company: '', express_no: '', attach_url: '' }; shipFiles.value = [];
+        shipForm.value = { qty: '', remark: '', express_company: '', express_no: '', attach_url: '', ship_address: '' }; shipFiles.value = []; shipLineQty.value = {}; shipByLine.value = false;
         await load();
         return true;
       } catch {
@@ -643,6 +687,10 @@ onMounted(load);
 .matrix-table th, .matrix-table td { border: 1px solid #eee; padding: 4px 8px; text-align: center; white-space: nowrap; }
 .matrix-table th { background: #fafafa; color: #666; }
 .row-total { font-weight: 600; }
+.ship-line { display: flex; align-items: center; padding: 4px 16px; gap: 8px; }
+.line-name { flex: 1; font-size: 13px; }
+.line-sub { color: #999; font-size: 11px; }
+.line-input { width: 110px; flex: none; padding: 0; }
 .paper-stamp {
   margin-top: 10px;
   display: flex;

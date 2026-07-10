@@ -109,6 +109,15 @@
             <el-table-column label="物流" min-width="110">
               <template #default="{ row }">{{ [row.express_company, row.express_no].filter(Boolean).join(' ') || '—' }}</template>
             </el-table-column>
+            <el-table-column label="收货地址" min-width="120" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.ship_address || '—' }}</template>
+            </el-table-column>
+            <el-table-column label="合并组" width="110" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.merge_no || '—' }}</template>
+            </el-table-column>
+            <el-table-column label="物料行" min-width="130" show-overflow-tooltip>
+              <template #default="{ row }">{{ (row.items ?? []).map((it: any) => `${it.item_name ?? '行'}×${+it.qty}`).join(' / ') || '—' }}</template>
+            </el-table-column>
             <el-table-column label="附件" width="64" align="center">
               <template #default="{ row }">
                 <el-link v-if="row.attach_url" type="primary" :href="row.attach_url" target="_blank">查看</el-link>

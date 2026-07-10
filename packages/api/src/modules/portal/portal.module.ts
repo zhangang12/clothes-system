@@ -6,6 +6,7 @@ import { SupplierAccount } from '../auth/supplier-account.entity';
 import { Contract } from '../contract/contract.entity';
 import { ContractMaterial } from '../contract/contract-material.entity';
 import { ContractShipment } from '../contract/contract-shipment.entity';
+import { ContractShipmentItem } from '../contract/contract-shipment-item.entity';
 import { ContractPortalLog } from '../contract/contract-portal-log.entity';
 import { Reconciliation } from '../reconciliation/reconciliation.entity';
 import { ReconciliationShipment } from '../reconciliation/reconciliation-shipment.entity';
@@ -16,7 +17,7 @@ import { OrderSizeMatrix } from '../order/order-size-matrix.entity';
 
 @Module({
   imports: [TypeOrmModule.forFeature([
-    SupplierAccount, Contract, ContractMaterial, ContractShipment, ContractPortalLog, OrderMain, OrderMaterial, OrderSizeMatrix, Reconciliation, ReconciliationShipment, PaymentRequest,
+    SupplierAccount, Contract, ContractMaterial, ContractShipment, ContractShipmentItem, ContractPortalLog, OrderMain, OrderMaterial, OrderSizeMatrix, Reconciliation, ReconciliationShipment, PaymentRequest,
   ])],
   controllers: [PortalController],
   providers: [PortalService],

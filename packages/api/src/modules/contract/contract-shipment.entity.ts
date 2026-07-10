@@ -49,6 +49,12 @@ export class ContractShipment {
   @Column({ length: 500, nullable: true })
   attach_url: string; // 附件（装箱单/货物照片）
 
+  @Column({ length: 255, nullable: true })
+  ship_address: string; // 本批收货地址（默认带合同发货地址，门户发货可临时改，P3#31）
+
+  @Column({ length: 30, nullable: true })
+  merge_no: string; // 合并发货组号（跨合同合并发货：同组同物流，明细分摊各合同，P3#29）
+
   @CreateDateColumn()
   created_at: Date;
 }

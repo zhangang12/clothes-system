@@ -4,6 +4,7 @@ import { Repository, DataSource, In } from 'typeorm';
 import { Contract } from '../contract/contract.entity';
 import { ContractMaterial } from '../contract/contract-material.entity';
 import { ContractShipment } from '../contract/contract-shipment.entity';
+import { ContractShipmentItem } from '../contract/contract-shipment-item.entity';
 import { ContractPortalLog, PortalOperatorType } from '../contract/contract-portal-log.entity';
 import { OrderMain } from '../order/order-main.entity';
 import { OrderMaterial } from '../order/order-material.entity';
@@ -29,6 +30,7 @@ export class PortalService {
     @InjectRepository(Contract) private readonly contractRepo: Repository<Contract>,
     @InjectRepository(ContractMaterial) private readonly materialRepo: Repository<ContractMaterial>,
     @InjectRepository(ContractShipment) private readonly shipmentRepo: Repository<ContractShipment>,
+    @InjectRepository(ContractShipmentItem) private readonly shipmentItemRepo: Repository<ContractShipmentItem>,
     @InjectRepository(ContractPortalLog) private readonly logRepo: Repository<ContractPortalLog>,
     @InjectRepository(OrderMain) private readonly orderRepo: Repository<OrderMain>,
     @InjectRepository(OrderMaterial) private readonly orderMaterialRepo: Repository<OrderMaterial>,
@@ -101,6 +103,17 @@ export class PortalService {
         };
       }
     }
+    // 批次物料行(P3#30):按批次挂 items
+    if (shipments.length) {
+      const items = await this.shipmentItemRepo.find({ where: { shipment_id: In(shipments.map((b) => b.id)) } });
+      const byShip = new Map<number, ContractShipmentItem[]>();
+      items.forEach((it) => {
+        const k = +it.shipment_id;
+        if (!byShip.has(k)) byShip.set(k, []);
+        byShip.get(k)!.push(it);
+      });
+      (shipments as any[]).forEach((b) => { (b as any).items = byShip.get(+b.id) ?? []; });
+    }
     return { ...contract, materials, logs, shipments, reconciliations, orderDetail };
   }
 
@@ -167,11 +180,122 @@ export class PortalService {
     return contract;
   }
 
+  // 单批发货入参（P3#30 逐物料行 / P3#31 临时收货地址）
+  private async createShipmentBatch(
+    contract: Contract,
+    supplierAccount: string,
+    dto: { remark?: string; qty?: number; express_company?: string; express_no?: string; attach_url?: string;
+           ship_address?: string; items?: Array<{ material_id?: number; qty: number }> },
+    mergeNo?: string,
+  ): Promise<{ shipNo: string; qty: number; parts: string[] }> {
+    const materials = await this.materialRepo.find({ where: { contract_id: contract.id }, order: { sort_order: 'ASC' } });
+    const contractQty = materials.reduce((s, m) => s + +m.qty, 0);
+
+    // 逐物料行(P3#30):行=合同材料行,分行填实发数;批次数量=Σ行,金额=Σ(行单价×实发数)——比整单加权更准
+    let qty = dto.qty ?? 0;
+    let amount: number | null = null;
+    let unitPrice: number | null = null;
+    let lines: Array<{ material_id: number | null; item_name: string | null; qty: number; unit_price: number | null; amount: number | null }> = [];
+    if (dto.items?.length) {
+      const byId = new Map(materials.map((m) => [+m.id, m]));
+      lines = dto.items
+        .filter((it) => +it.qty > 0)
+        .map((it) => {
+          const m = it.material_id != null ? byId.get(+it.material_id) : undefined;
+          const up = m?.unit_price != null ? +m.unit_price : null;
+          return {
+            material_id: m ? +m.id : null,
+            item_name: m?.item_name ?? null,
+            qty: +it.qty,
+            unit_price: up,
+            amount: up != null ? +(up * +it.qty).toFixed(4) : null,
+          };
+        });
+      if (!lines.length) throw new BadRequestException('请至少为一行物料填写实发数');
+      qty = +lines.reduce((s, l) => s + l.qty, 0).toFixed(4);
+      if (lines.every((l) => l.amount != null)) {
+        amount = +lines.reduce((s, l) => s + (l.amount ?? 0), 0).toFixed(4);
+        unitPrice = qty > 0 ? +(amount / qty).toFixed(4) : null;
+      }
+    }
+    if (!(qty > 0)) throw new BadRequestException('请填写本次实发数量');
+    if (!dto.express_company?.trim() || !dto.express_no?.trim()) {
+      throw new BadRequestException('请填写物流信息（快递公司与单号）');
+    }
+
+    const parts: string[] = [];
+    const newShipped = +(+(contract.shipped_qty ?? 0) + qty).toFixed(4);
+    // 超合同量不再卡供应商发货(P2#28/补充B3 决议:货已实发,放行并记录;
+    // 超发确认移到对账复核——业务确认时须填写放行原因留痕,见 reconciliation.confirm)
+    if (contractQty > 0 && newShipped > contractQty + 0.01) {
+      parts.push(`⚠️超发:累计 ${newShipped}/合同量 ${contractQty}(对账复核时业务确认放行)`);
+    }
+    contract.shipped_qty = newShipped;
+
+    // 发货单号 FH-款号-序号（设计稿 补充确认 A2）
+    let styleNo = '';
+    if (contract.order_id) {
+      const order = await this.orderRepo.findOne({ where: { id: contract.order_id, deleted: 0 } });
+      styleNo = order?.style_no || '';
+    }
+    const shipNo = await this.numbering.nextWithSegment(NUM_PREFIX.SHIPMENT, styleNo);
+    parts.push(`发货单:${shipNo}`, `本次发货:${qty}`, `累计:${newShipped}/${contractQty}`);
+
+    // 逐批锁价：无物料行时按合同均价快照（对账付款串流程 B8）
+    if (amount == null) {
+      const contractAmount = materials.reduce((s, m) => s + +m.amount, 0);
+      unitPrice = contractQty > 0 ? +(contractAmount / contractQty).toFixed(4) : null;
+      amount = unitPrice != null ? +(unitPrice * qty).toFixed(4) : null;
+    }
+    const shipDate = new Date();
+    const batch = (await this.shipmentRepo.save(this.shipmentRepo.create({
+      contract_id: contract.id, ship_no: shipNo, qty,
+      snapshot_unit_price: unitPrice, amount,
+      ship_date: shipDate.toISOString().slice(0, 10), operator: supplierAccount,
+      express_company: dto.express_company ?? null,
+      express_no: dto.express_no ?? null,
+      attach_url: dto.attach_url ?? null,
+      // 收货地址默认带合同发货地址,门户可临时改(P3#31)
+      ship_address: dto.ship_address?.trim() || contract.ship_to_address || null,
+      merge_no: mergeNo ?? null,
+    } as any) as any)) as ContractShipment;
+    if (lines.length) {
+      await this.shipmentItemRepo.save(lines.map((l) => this.shipmentItemRepo.create({ ...l, shipment_id: batch.id }) as ContractShipmentItem));
+    }
+    if (dto.express_company || dto.express_no) parts.push(`物流:${[dto.express_company, dto.express_no].filter(Boolean).join(' ')}`);
+    if (dto.ship_address?.trim() && dto.ship_address.trim() !== (contract.ship_to_address ?? '')) {
+      parts.push(`收货地址(临时):${dto.ship_address.trim()}`);
+    }
+    if (mergeNo) parts.push(`合并发货组:${mergeNo}`);
+
+    // 到期日 = 最后一次发货日 + 账期（逾期判断依据，对账付款串流程 D15）
+    contract.last_ship_date = shipDate;
+    if (contract.account_period_days != null) {
+      const due = new Date(shipDate);
+      due.setDate(due.getDate() + contract.account_period_days);
+      contract.due_date = due;
+    }
+    if (dto.remark) parts.push(dto.remark);
+    if (contract.portal_status === ContractPortalStatus.STAMPED) {
+      contract.portal_status = ContractPortalStatus.SHIPPING;
+    }
+    await this.contractRepo.save(contract);
+    await this.logRepo.save(this.logRepo.create({
+      contract_id: contract.id,
+      action: 'SHIP',
+      operator: supplierAccount,
+      operator_type: PortalOperatorType.SUPPLIER,
+      remark: parts.length ? parts.join(' · ') : undefined,
+    }));
+    return { shipNo, qty, parts };
+  }
+
   async confirmShipping(
     id: number,
     supplierAccount: string,
     factoryId: number,
-    dto: { remark?: string; qty?: number; force?: boolean; express_company?: string; express_no?: string; attach_url?: string } = {},
+    dto: { remark?: string; qty?: number; force?: boolean; express_company?: string; express_no?: string; attach_url?: string;
+           ship_address?: string; items?: Array<{ material_id?: number; qty: number }> } = {},
   ): Promise<Contract> {
     const contract = await this.contractRepo.findOne({ where: { id, factory_id: factoryId, deleted: 0 } });
     if (!contract || !VISIBLE_STATUSES.includes(contract.portal_status)) {
@@ -181,74 +305,46 @@ export class PortalService {
     if (contract.portal_status !== ContractPortalStatus.STAMPED && contract.portal_status !== ContractPortalStatus.SHIPPING) {
       throw new BadRequestException('只有已盖章或发货中状态才可确认出货');
     }
+    await this.createShipmentBatch(contract, supplierAccount, dto);
+    return contract;
+  }
 
-    // 数量/物流必填（总览走查P1#16 决议:实发数量必填、物流信息须填）
-    if (dto.qty == null) throw new BadRequestException('请填写本次实发数量');
+  // 跨合同合并发货（P3#29/门户C2/qc G1）：同供应商（登录工厂）勾多张可发货合同，
+  // 一套物流信息，逐合同填数量（或逐物料行），明细分摊到各合同（各生成本合同批次，同 merge_no 组号）
+  async mergeShip(
+    supplierAccount: string,
+    factoryId: number,
+    dto: { express_company: string; express_no: string; attach_url?: string; ship_address?: string; remark?: string;
+           entries: Array<{ contract_id: number; qty?: number; items?: Array<{ material_id?: number; qty: number }> }> },
+  ) {
+    if (!dto.entries?.length || dto.entries.length < 2) {
+      throw new BadRequestException('合并发货请至少勾选 2 张合同');
+    }
     if (!dto.express_company?.trim() || !dto.express_no?.trim()) {
       throw new BadRequestException('请填写物流信息（快递公司与单号）');
     }
-
-    const parts: string[] = [];
-    if (dto.qty != null) {
-      const materials = await this.materialRepo.find({ where: { contract_id: id } });
-      const contractQty = materials.reduce((s, m) => s + +m.qty, 0);
-      const newShipped = +(+(contract.shipped_qty ?? 0) + dto.qty).toFixed(4);
-      // 超合同量不再卡供应商发货(P2#28/补充B3 决议:货已实发,放行并记录;
-      // 超发确认移到对账复核——业务确认时须填写放行原因留痕,见 reconciliation.confirm)
-      const overShip = contractQty > 0 && newShipped > contractQty + 0.01;
-      if (overShip) parts.push(`⚠️超发:累计 ${newShipped}/合同量 ${contractQty}(对账复核时业务确认放行)`);
-      contract.shipped_qty = newShipped;
-      // 发货单号 FH-款号-序号（设计稿 补充确认 A2）
-      let styleNo = '';
-      if (contract.order_id) {
-        const order = await this.orderRepo.findOne({ where: { id: contract.order_id, deleted: 0 } });
-        styleNo = order?.style_no || '';
+    const contracts: Contract[] = [];
+    for (const e of dto.entries) {
+      const c = await this.contractRepo.findOne({ where: { id: e.contract_id, factory_id: factoryId, deleted: 0 } });
+      if (!c || !VISIBLE_STATUSES.includes(c.portal_status)) throw new NotFoundException(`合同 #${e.contract_id} 不存在`);
+      if (c.portal_status !== ContractPortalStatus.STAMPED && c.portal_status !== ContractPortalStatus.SHIPPING) {
+        throw new BadRequestException(`合同 ${c.contract_no} 当前状态不可发货（须已盖章/发货中）`);
       }
-      const shipNo = await this.numbering.nextWithSegment(NUM_PREFIX.SHIPMENT, styleNo);
-      parts.push(`发货单:${shipNo}`, `本次发货:${dto.qty}`, `累计:${newShipped}/${contractQty}`);
-
-      // 逐批锁价：本批发货记录当时生效合同单价快照（对账付款串流程 B8）
-      const contractAmount = materials.reduce((s, m) => s + +m.amount, 0);
-      const unitPrice = contractQty > 0 ? +(contractAmount / contractQty).toFixed(4) : null;
-      const shipDate = new Date();
-      const shipDateStr = shipDate.toISOString().slice(0, 10);
-      await this.shipmentRepo.save(this.shipmentRepo.create({
-        contract_id: id, ship_no: shipNo, qty: dto.qty,
-        snapshot_unit_price: unitPrice, amount: unitPrice != null ? +(unitPrice * dto.qty).toFixed(4) : null,
-        ship_date: shipDateStr, operator: supplierAccount,
-        // 物流与附件（设计稿 门户发货步：快递公司/单号 + 装箱单/货物照片）；提交即进业务审批（B2）
-        express_company: dto.express_company ?? null,
-        express_no: dto.express_no ?? null,
-        attach_url: dto.attach_url ?? null,
-      } as any));
-      if (dto.express_company || dto.express_no) parts.push(`物流:${[dto.express_company, dto.express_no].filter(Boolean).join(' ')}`);
-
-      // 到期日 = 最后一次发货日 + 账期（逾期判断依据，对账付款串流程 D15）
-      contract.last_ship_date = shipDate;
-      if (contract.account_period_days != null) {
-        const due = new Date(shipDate);
-        due.setDate(due.getDate() + contract.account_period_days);
-        contract.due_date = due;
-      }
+      contracts.push(c);
     }
-    if (dto.remark) parts.push(dto.remark);
-
-    if (contract.portal_status === ContractPortalStatus.STAMPED) {
-      contract.portal_status = ContractPortalStatus.SHIPPING;
+    const mergeNo = await this.numbering.nextWithSegment(NUM_PREFIX.SHIPMENT, 'M');
+    const results: Array<{ contract_id: number; contract_no: string; ship_no: string; qty: number }> = [];
+    for (let i = 0; i < contracts.length; i++) {
+      const c = contracts[i];
+      const e = dto.entries[i];
+      const r = await this.createShipmentBatch(c, supplierAccount, {
+        qty: e.qty, items: e.items,
+        express_company: dto.express_company, express_no: dto.express_no,
+        attach_url: dto.attach_url, ship_address: dto.ship_address, remark: dto.remark,
+      }, mergeNo);
+      results.push({ contract_id: c.id, contract_no: c.contract_no, ship_no: r.shipNo, qty: r.qty });
     }
-    await this.contractRepo.save(contract);
-
-    await this.logRepo.save(
-      this.logRepo.create({
-        contract_id: id,
-        action: 'SHIP',
-        operator: supplierAccount,
-        operator_type: PortalOperatorType.SUPPLIER,
-        remark: parts.length ? parts.join(' · ') : undefined,
-      }),
-    );
-
-    return contract;
+    return { merge_no: mergeNo, count: results.length, results };
   }
 
   // 我要对账（设计稿 05 v2.2 §C 第三步）：勾选已审批发货批次 → 系统按批次快照单价×数量自动算
@@ -377,6 +473,7 @@ export class PortalService {
       throw new BadRequestException('该批次已被对账单占用，不可撤回（如需调整请联系业务退回对账）');
     }
     await this.shipmentRepo.delete({ id: shipmentId });
+    await this.shipmentItemRepo.delete({ shipment_id: shipmentId });
     contract.shipped_qty = Math.max(0, +((+(contract.shipped_qty ?? 0)) - +batch.qty).toFixed(4));
     if (contract.ship_done_at) contract.ship_done_at = null as any; // 撤回后不再视为发货完成
     await this.contractRepo.save(contract);

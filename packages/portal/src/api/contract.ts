@@ -14,6 +14,11 @@ export const portalContractApi = {
     http.patch<unknown, { data: any }>(`/portal/contracts/${id}/reconcile`, { shipment_ids }),
   uploadInvoice: (id: number, dto: { invoice_no?: string; invoice_amount?: number; invoice_url?: string; remark?: string }) =>
     http.patch(`/portal/contracts/${id}/invoice`, dto),
+  // 跨合同合并发货(P3#29):同供应商勾多张合同,一套物流,明细分摊各合同
+  mergeShip: (dto: {
+    express_company: string; express_no: string; attach_url?: string; ship_address?: string; remark?: string;
+    entries: Array<{ contract_id: number; qty?: number }>;
+  }) => http.post<unknown, { data: any }>('/portal/contracts/merge-ship', dto),
   // 发货完成（门户C3）：宣布后开票即闭环「已完成」
   shipDone: (id: number) =>
     http.patch<unknown, { data: any }>(`/portal/contracts/${id}/ship-done`),
