@@ -9,6 +9,7 @@ import { OrderMaterial } from './order-material.entity';
 import { OrderShipment } from './order-shipment.entity';
 import { Quotation } from '../quote/quotation.entity';
 import { QuotationItem } from '../quote/quotation-item.entity';
+import { SampleMaterial } from '../sample/sample-material.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { CustomerService } from '../customer/customer.service';
 import { SysConfigService } from '../../common/config/sys-config.service';
@@ -45,6 +46,7 @@ export class OrderService {
     @InjectRepository(OrderShipment) private readonly shipmentRepo: Repository<OrderShipment>,
     @InjectRepository(Quotation) private readonly quoteRepo: Repository<Quotation>,
     @InjectRepository(QuotationItem) private readonly quoteItemRepo: Repository<QuotationItem>,
+    @InjectRepository(SampleMaterial) private readonly sampleMaterialRepo: Repository<SampleMaterial>,
     private readonly numbering: NumberingService,
     private readonly config: SysConfigService,
     private readonly dataSource: DataSource,
@@ -129,6 +131,16 @@ export class OrderService {
     return { items, total, page, size };
   }
 
+  // 报价被哪些订单引用(P2#20/#23):报价详情显示关联订单号/状态,草稿引用=「占用中」软标记
+  async listByQuote(quoteId: number): Promise<Array<{ id: number; order_no: string; status: string }>> {
+    const orders = await this.orderRepo.find({
+      where: { quote_id: quoteId, deleted: 0 },
+      select: ['id', 'order_no', 'status'],
+      order: { id: 'DESC' },
+    });
+    return orders.map((o) => ({ id: o.id, order_no: o.order_no, status: o.status }));
+  }
+
   async findOne(id: number, user?: { id: number; role?: string }) {
     const order = await this.orderRepo.findOne({ where: { id, deleted: 0 } });
     if (!order) throw new NotFoundException(`订单 #${id} 不存在`);
@@ -138,7 +150,21 @@ export class OrderService {
       this.materialRepo.find({ where: { order_id: id }, order: { sort_order: 'ASC' } }),
       this.shipmentRepo.find({ where: { order_id: id }, order: { shipment_date: 'ASC' } }),
     ]);
-    return { ...order, matrix, materials, shipments };
+    // 变更标记(P2#20):①源报价已变更 ②样衣未实测成单→单耗为预估黄条
+    let source_quote_changed = false;
+    let usage_estimated = false;
+    if (order.quote_id) {
+      const quote = await this.quoteRepo.findOne({ where: { id: order.quote_id } });
+      if (quote?.content_updated_at) {
+        const baseline = order.quote_synced_at ?? order.created_at;
+        source_quote_changed = baseline != null && new Date(quote.content_updated_at) > new Date(baseline);
+      }
+      if (quote?.sample_id) {
+        const mats = await this.sampleMaterialRepo.find({ where: { sample_id: quote.sample_id } });
+        usage_estimated = mats.length > 0 && mats.some((m) => m.actual_usage == null);
+      }
+    }
+    return { ...order, matrix, materials, shipments, source_quote_changed, usage_estimated };
   }
 
   async update(id: number, dto: Partial<CreateOrderDto>): Promise<OrderMain> {
@@ -160,6 +186,7 @@ export class OrderService {
     if (order.unit_price && order.qty_total) order.total_amount = +(order.unit_price * order.qty_total).toFixed(4);
     // 编辑会重算金额:清除已有审批状态,避免「审批通过后改高金额再下单」绕过阈值校验
     order.approval_status = ApprovalStatus.NONE;
+    order.content_updated_at = new Date(); // 内容级修改——合同侧「源订单已变更」标记依据(P2#20)
 
     return this.dataSource.transaction(async (manager) => {
       await manager.save(OrderMain, order);
@@ -205,6 +232,7 @@ export class OrderService {
       order.currency = 'CNY';
       if (quote.rmb_total != null) order.unit_price = +(+quote.rmb_total).toFixed(4);
       order.approval_status = ApprovalStatus.NONE; // 导入改金额:清审批,避免绕过阈值
+      order.quote_synced_at = new Date(); // 「源报价已变更」= quote.content_updated_at > 此值(P2#20)
       await manager.save(OrderMain, order);
       await manager.delete(OrderMaterial, { order_id: id });
       const materials = this.buildMaterials(id, order.qty_total, items.map((it) => ({
@@ -281,6 +309,7 @@ export class OrderService {
     const order = await this.orderRepo.findOne({ where: { id, deleted: 0 } });
     if (!order) throw new NotFoundException(`订单 #${id} 不存在`);
     const existing = await this.matrixRepo.findOne({ where: { order_id: id } });
+    await this.orderRepo.update({ id }, { content_updated_at: new Date() }); // 矩阵改动=内容级修改(P2#20)
     if (existing) {
       existing.matrix_data = matrix_data;
       return this.matrixRepo.save(existing);

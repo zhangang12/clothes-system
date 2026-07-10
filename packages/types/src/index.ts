@@ -80,6 +80,7 @@ export enum SampleStatus {
   RECONCILED = 'RECONCILED', // 已对账（件数+单价填完自动生成对账单）
   DONE = 'DONE',             // 已完成
   ORDERED = 'ORDERED',       // 已成单（被客户报价转销售合同后自动置，列表绿色加粗 B1）
+  ABANDONED = 'ABANDONED',   // 已废弃（qc B4:不删改废弃,下游留快照,P2#25）
 }
 
 export const SAMPLE_STATUS_LABEL: Record<SampleStatus, string> = {
@@ -90,6 +91,7 @@ export const SAMPLE_STATUS_LABEL: Record<SampleStatus, string> = {
   [SampleStatus.RECONCILED]: '已对账',
   [SampleStatus.DONE]: '已完成',
   [SampleStatus.ORDERED]: '已成单',
+  [SampleStatus.ABANDONED]: '已废弃',
 };
 
 // 样衣类别（7 类，可多选）

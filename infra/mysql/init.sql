@@ -289,7 +289,7 @@ CREATE TABLE IF NOT EXISTS `sample_garment` (
   `piece_count`      INT           DEFAULT NULL COMMENT '件数(版师)',
   `labor_unit_price` DECIMAL(12,2) DEFAULT NULL COMMENT '版师工时单价CNY',
   `labor_amount`     DECIMAL(14,2) DEFAULT NULL COMMENT '工时金额CNY=件数×单价',
-  `status`           ENUM('PENDING','SAMPLING','SHIPPED','RETURNED','RECONCILED','DONE','ORDERED') NOT NULL DEFAULT 'PENDING',
+  `status`         ENUM('PENDING','SAMPLING','SHIPPED','RETURNED','RECONCILED','DONE','ORDERED','ABANDONED') NOT NULL DEFAULT 'PENDING',
   `version`          INT           NOT NULL DEFAULT 1,
   `created_by`       BIGINT        NOT NULL,
   `created_at`       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -377,6 +377,7 @@ CREATE TABLE IF NOT EXISTS `quotation` (
   `approved_at`      DATETIME     DEFAULT NULL,
   `remark`           TEXT           DEFAULT NULL,
   `created_by`       BIGINT         NOT NULL,
+  `content_updated_at` DATETIME DEFAULT NULL COMMENT '内容级修改时间(仅编辑写入)——下游源报价已变更标记(P2)',
   `created_at`       DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`       DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `deleted`          TINYINT        NOT NULL DEFAULT 0,
@@ -455,6 +456,8 @@ CREATE TABLE IF NOT EXISTS `order_main` (
   `approved_at`    DATETIME      DEFAULT NULL,
   `remark`         TEXT          DEFAULT NULL,
   `created_by`     BIGINT        NOT NULL,
+  `content_updated_at` DATETIME DEFAULT NULL COMMENT '内容级修改时间——合同侧源订单已变更标记(P2)',
+  `quote_synced_at`    DATETIME DEFAULT NULL COMMENT '最近从报价导入时间——源报价已变更标记(P2)',
   `created_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `deleted`        TINYINT       NOT NULL DEFAULT 0,
@@ -650,6 +653,7 @@ CREATE TABLE IF NOT EXISTS `reconciliation` (
   `status`           ENUM('DRAFT','PENDING','CONFIRMED','PAID') NOT NULL DEFAULT 'DRAFT',
   `confirmed_at`     DATETIME       DEFAULT NULL,
   `review_remark`    VARCHAR(500)   DEFAULT NULL COMMENT '主管复核批注/整单退回原因',
+  `over_reason`   VARCHAR(200)  DEFAULT NULL COMMENT '超发放行原因(对账确认时业务填,P2#28)',
   `description`      TEXT           DEFAULT NULL COMMENT '无合同费用说明',
   `created_by`       BIGINT         NOT NULL,
   `created_at`       DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -806,6 +810,7 @@ CREATE TABLE IF NOT EXISTS `settlement` (
   `unpaid_goods_tax`     DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '已确认未付对账金额(含税)——不计入总货款,灰显「未付·不计入」',
   `unpaid_count`         INT            NOT NULL DEFAULT 0 COMMENT '已确认未付对账笔数',
   `profit_ready`         TINYINT        NOT NULL DEFAULT 0 COMMENT '1=收汇与汇率齐备,毛利/净利可信(缺值不出误导性负毛利)',
+  `needs_recalc`         TINYINT        NOT NULL DEFAULT 0 COMMENT '1=已确认后上游变更,待重算(软锁提示,P2#22)',
   `tax_refund`           DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '出口退税(可退税不含税采购额×退税率,自动测算)',
   `refund_status`        VARCHAR(20)    NOT NULL DEFAULT 'ESTIMATED' COMMENT '退税状态:ESTIMATED预估/RECEIVED到账',
   `customer_name`        VARCHAR(100)   DEFAULT NULL COMMENT '中间商客户(利润按客户维度汇总)',
@@ -856,6 +861,19 @@ CREATE TABLE IF NOT EXISTS `settlement_receipt` (
   PRIMARY KEY (`id`),
   KEY `idx_settlement` (`settlement_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='结算收汇记录';
+
+CREATE TABLE IF NOT EXISTS `change_log` (
+  `id`           BIGINT       NOT NULL AUTO_INCREMENT,
+  `biz_type`     VARCHAR(20)  NOT NULL COMMENT 'QUOTE/ORDER/CONTRACT/SETTLEMENT',
+  `biz_id`       BIGINT       NOT NULL,
+  `field`        VARCHAR(50)  NOT NULL COMMENT '字段名或事件(RECALC/REOPEN)',
+  `old_value`    VARCHAR(500) DEFAULT NULL,
+  `new_value`    VARCHAR(500) DEFAULT NULL,
+  `operator_id`  BIGINT       DEFAULT NULL,
+  `created_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_biz` (`biz_type`,`biz_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='改值留痕(原值X→改为Y,P2#21)';
 
 -- ============================================================
 -- 系统配置

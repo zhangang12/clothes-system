@@ -237,6 +237,18 @@ export class ReconciliationService {
       take: size,
       order: { id: 'DESC' },
     });
+    // 发货批次 N 批列(P2#24/对账B2)
+    if (items.length) {
+      const counts = await this.shipmentRepo
+        .createQueryBuilder('rs')
+        .select('rs.reconcile_id', 'rid')
+        .addSelect('COUNT(*)', 'cnt')
+        .where('rs.reconcile_id IN (:...ids)', { ids: items.map((r) => r.id) })
+        .groupBy('rs.reconcile_id')
+        .getRawMany();
+      const byId = new Map(counts.map((c: any) => [+c.rid, +c.cnt]));
+      (items as any[]).forEach((r) => { (r as any).shipment_count = byId.get(+r.id) ?? 0; });
+    }
     return { items, total, page, size };
   }
 
@@ -297,7 +309,8 @@ export class ReconciliationService {
   }
 
   // 主管复核确认：待复核→已确认（二级审批第二级）
-  async confirm(id: number): Promise<Reconciliation> {
+  // over_reason:超发放行原因(P2#28/补充B3——超发确认由对账复核时业务填写留痕,不再卡供应商发货侧)
+  async confirm(id: number, overReason?: string): Promise<Reconciliation> {
     return this.dataSource.transaction(async (manager) => {
       const rec = await manager.findOne(Reconciliation, {
         where: { id, deleted: 0 },
@@ -306,6 +319,25 @@ export class ReconciliationService {
       if (!rec) throw new NotFoundException(`对账单 #${id} 不存在`);
       if (rec.status !== ReconciliationStatus.PENDING) {
         throw new BadRequestException('只有待复核状态才可复核确认（需业务员先提交）');
+      }
+      await this.assertBatchesStillHeld(id);
+      // 超发闸门(P2#28):累计实发超合同量时须业务填写放行原因留痕
+      if (rec.type === ReconcileType.CONTRACT && rec.contract_id) {
+        const contract = await manager.findOne(Contract, { where: { id: rec.contract_id, deleted: 0 } });
+        if (contract) {
+          const [{ cq } = { cq: 0 }] = await manager.query(
+            'SELECT COALESCE(SUM(qty),0) cq FROM contract_material WHERE contract_id = ?', [contract.id]);
+          const contractQty = +cq;
+          const shipped = +(contract.shipped_qty ?? 0);
+          if (contractQty > 0 && shipped > contractQty + 0.01) {
+            if (!overReason?.trim()) {
+              throw new BadRequestException(
+                `OVER_SHIP:累计实发 ${shipped} 超过合同量 ${contractQty}——确认放行须填写超发原因（业务留痕）`,
+              );
+            }
+            rec.over_reason = overReason.trim().slice(0, 200);
+          }
+        }
       }
       // 发票=对账金额校验（设计稿 门户 D2/G3）：含票时发票金额须与对账金额相等，允许 ≤¥0.01 舍入，否则拦截、不进付款
       if (rec.invoice_amount != null && Math.abs(+(rec.invoice_diff ?? 0)) > 0.01) {
@@ -316,6 +348,14 @@ export class ReconciliationService {
       rec.status = ReconciliationStatus.CONFIRMED;
       rec.confirmed_at = new Date();
       const saved = await manager.save(Reconciliation, rec);
+      // 软锁(P2#22):上游对账确认后,同订单已确认结算单标「待重算」
+      await manager.query(
+        `UPDATE settlement s
+           JOIN contract c ON c.order_id = s.order_id
+            SET s.needs_recalc = 1
+          WHERE c.id = ? AND s.status = 'CONFIRMED' AND s.deleted = 0`,
+        [rec.contract_id ?? 0],
+      );
 
       // 对账确认后推进合同门户至「已对账」，解锁供应商开票（设计稿 门户 B2/E4：开票须对账后）
       if (rec.type === ReconcileType.CONTRACT && rec.contract_id) {

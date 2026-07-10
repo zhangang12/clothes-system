@@ -94,6 +94,13 @@ export class SampleController {
     return this.service.copy(id, req.user.id);
   }
 
+  @Patch(':id/abandon')
+  @Roles(UserRole.ADMIN, UserRole.BUSINESS)
+  @ApiOperation({ summary: '废弃样衣（不删改废弃，下游留快照；已成单不可废弃，P2#25）' })
+  abandon(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.service.abandon(id, req.user.id);
+  }
+
   @Delete(':id')
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: '删除样衣（仅待派单，被引用拦截）' })

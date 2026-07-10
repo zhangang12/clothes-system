@@ -13,6 +13,7 @@ import { Reconciliation, ReconciliationStatus } from '../reconciliation/reconcil
 import { ReconciliationExpenseItem } from '../reconciliation/reconciliation-expense-item.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { SysConfigService } from '../../common/config/sys-config.service';
+import { ChangeLogService } from '../../common/changelog/change-log.service';
 import { CreateSettlementDto } from './dto/create-settlement.dto';
 import { AddCostDto } from './dto/add-cost.dto';
 import { AddReceiptDto } from './dto/add-receipt.dto';
@@ -107,6 +108,7 @@ export class SettlementService {
     @InjectRepository(ReconciliationExpenseItem) private readonly expenseItemRepo: Repository<ReconciliationExpenseItem>,
     private readonly numbering: NumberingService,
     private readonly config: SysConfigService,
+    private readonly changeLog: ChangeLogService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -371,7 +373,7 @@ export class SettlementService {
   }
 
   // 结算单编辑（草稿限定）：财务两步走——建单后回头补收汇/汇率/发票金额/费用（结算稿B/D 断链修复）
-  async update(id: number, dto: UpdateSettlementDto): Promise<Settlement> {
+  async update(id: number, dto: UpdateSettlementDto, userId?: number): Promise<Settlement> {
     const vatRate = await this.config.getNumber('vat_rate', 13);
     const financeFeeRate = await this.config.getNumber('finance_fee_rate', 7);
     return this.dataSource.transaction(async (manager) => {
@@ -384,6 +386,11 @@ export class SettlementService {
         throw new BadRequestException('只有草稿状态才可编辑结算单');
       }
 
+      const before = {
+        exchange_rate: settlement.exchange_rate, invoice_amount_usd: settlement.invoice_amount_usd,
+        receipt_usd: settlement.receipt_usd, freight_fee: settlement.freight_fee, express_fee: settlement.express_fee,
+        sample_fee: settlement.sample_fee, other_fee: settlement.other_fee, tax_refund: settlement.tax_refund,
+      };
       const receipts = await manager.find(SettlementReceipt, { where: { settlement_id: id } });
       if (dto.receipt_usd != null) {
         if (receipts.length) throw new BadRequestException('已有逐笔收汇记录，收汇总额由记录累计，不可手工覆盖');
@@ -409,7 +416,11 @@ export class SettlementService {
         }
       }
       this.applyDerived(settlement, goodsTax, goodsExtax, receipts, financeFeeRate);
-      return manager.save(Settlement, settlement);
+      const saved = await manager.save(Settlement, settlement);
+      // 改值留痕(P2#21):汇率/发票/收汇/费用/退税 原值→新值
+      await this.changeLog.record('SETTLEMENT', id, (Object.keys(before) as Array<keyof typeof before>)
+        .map((k) => ({ field: k, old: before[k], new: (saved as any)[k] })), userId);
+      return saved;
     });
   }
 
@@ -574,6 +585,35 @@ export class SettlementService {
 
       const receipts = await manager.find(SettlementReceipt, { where: { settlement_id: id } });
       this.applyDerived(settlement, goodsTax, goodsExtax, receipts, financeFeeRate);
+      settlement.needs_recalc = 0; // 重算完成,清「待重算」软锁(P2#22)
+      const saved = await manager.save(Settlement, settlement);
+      await this.changeLog.record('SETTLEMENT', id, [{
+        field: 'RECALC',
+        new: `货款${saved.goods_amount_tax}/未付${saved.unpaid_goods_tax}(${saved.unpaid_count}笔)/结算${saved.settle_amount}/净利${saved.net_profit}`,
+      }]);
+      return saved;
+    });
+  }
+
+  // 红冲重开(P2#22):已确认结算单退回草稿重算;关键数字快照留版本(change_log REOPEN)
+  async reopen(id: number, userId?: number): Promise<Settlement> {
+    return this.dataSource.transaction(async (manager) => {
+      const settlement = await manager.findOne(Settlement, {
+        where: { id, deleted: 0 },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!settlement) throw new NotFoundException(`结算单 #${id} 不存在`);
+      if (settlement.status !== SettlementStatus.CONFIRMED) {
+        throw new BadRequestException('只有已确认结算单才可红冲重开');
+      }
+      await this.changeLog.record('SETTLEMENT', id, [{
+        field: 'REOPEN',
+        old: `确认于${settlement.confirmed_at?.toISOString?.().slice(0, 19) ?? settlement.confirmed_at}`,
+        new: `版本快照:货款${settlement.goods_amount_tax}/结算${settlement.settle_amount}/毛利${settlement.gross_profit}/净利${settlement.net_profit}/退税${settlement.tax_refund}`,
+      }], userId);
+      settlement.status = SettlementStatus.DRAFT;
+      settlement.confirmed_at = null as any;
+      settlement.needs_recalc = 0;
       return manager.save(Settlement, settlement);
     });
   }

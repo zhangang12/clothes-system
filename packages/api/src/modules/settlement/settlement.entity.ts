@@ -91,6 +91,9 @@ export class Settlement {
   @Column({ type: 'tinyint', default: 0 })
   profit_ready: number; // 1=收汇与汇率齐备，毛利/净利可信（缺值不出误导性负毛利）
 
+  @Column({ type: 'tinyint', default: 0 })
+  needs_recalc: number; // 1=已确认后上游(对账/付款)变更,待重算(软锁提示,P2#22)
+
   @Column({ type: 'decimal', precision: 15, scale: 4, default: 0 })
   tax_refund: number; // 出口退税（可退税不含税采购额×退税率，自动测算）
 

@@ -55,6 +55,7 @@ const mockManager = {
   save: jest.fn().mockImplementation((v) => Promise.resolve(v)),
 };
 const mockDataSource = {
+  query: jest.fn().mockResolvedValue([]),
   transaction: jest.fn().mockImplementation((cb) => cb(mockManager)),
 };
 

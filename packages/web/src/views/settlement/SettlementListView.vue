@@ -52,11 +52,12 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="90">
+        <el-table-column prop="status" label="状态" width="130">
           <template #default="{ row }">
             <el-tag :type="row.status === 'CONFIRMED' ? 'success' : 'info'" size="small">
               {{ row.status === 'CONFIRMED' ? '已结算' : '待收汇' }}
             </el-tag>
+            <el-tag v-if="+(row.needs_recalc ?? 0)" type="warning" size="small" style="margin-left:4px">待重算</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="confirmed_at" label="确认时间" width="160">
@@ -99,6 +100,16 @@
           <el-button size="small" :loading="refreshing" @click="doRefreshCost">刷新付款汇总</el-button>
           <span class="hint-inline">重取出货件数并按本订单对账付款重建成本快照</span>
         </div>
+        <div class="detail-toolbar" v-if="detailData.status === 'CONFIRMED' && isAdmin">
+          <el-popconfirm title="红冲重开：本单退回草稿重算，当前数字将以版本快照留痕。确认？" width="300" @confirm="doReopen">
+            <template #reference><el-button size="small" type="danger" plain>红冲重开</el-button></template>
+          </el-popconfirm>
+        </div>
+        <el-alert
+          v-if="+(detailData.needs_recalc ?? 0)"
+          type="warning" :closable="false" show-icon style="margin-bottom:10px"
+          title="待重算——确认后上游对账/付款发生变动，成本口径可能已过期；草稿态点「刷新付款汇总」重算，已确认态请先红冲重开"
+        />
         <el-alert
           v-if="detailData.status === 'DRAFT' && !+(detailData.profit_ready ?? 0)"
           type="warning" :closable="false" show-icon style="margin-bottom:10px"
@@ -233,6 +244,22 @@
                 <template #reference><el-button link type="danger" size="small">删除</el-button></template>
               </el-popconfirm>
             </template>
+          </el-table-column>
+        </el-table>
+
+        <el-divider content-position="left">变更记录（改值留痕 · 原值→新值）</el-divider>
+        <el-table :data="changeLogs" border size="small" max-height="220">
+          <el-table-column prop="created_at" label="时间" width="160">
+            <template #default="{ row }">{{ String(row.created_at ?? '').slice(0, 19).replace('T', ' ') }}</template>
+          </el-table-column>
+          <el-table-column prop="field" label="字段/事件" width="140">
+            <template #default="{ row }">{{ fieldLabel(row.field) }}</template>
+          </el-table-column>
+          <el-table-column label="原值" min-width="120" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.old_value ?? '—' }}</template>
+          </el-table-column>
+          <el-table-column label="新值" min-width="120" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.new_value ?? '—' }}</template>
           </el-table-column>
         </el-table>
       </template>
@@ -465,10 +492,30 @@ async function viewDetail(id: number) {
   const res = await settlementApi.get(id);
   detailData.value = res?.data ?? res;
   detailVisible.value = true;
+  loadChangeLogs();
+}
+const changeLogs = ref<any[]>([]);
+const fieldLabel = (f: string) => ({
+  exchange_rate: '结算汇率', invoice_amount_usd: '发票金额$', receipt_usd: '实际收汇$',
+  freight_fee: '运杂费', express_fee: '快邮费', sample_fee: '打样费', other_fee: '其它费用',
+  tax_refund: '出口退税', RECALC: '🔄 刷新付款汇总', REOPEN: '🔴 红冲重开(版本快照)',
+} as Record<string, string>)[f] ?? f;
+async function loadChangeLogs() {
+  try {
+    const res = await settlementApi.changeLogs(detailData.value.id);
+    changeLogs.value = res?.data ?? [];
+  } catch { changeLogs.value = []; }
 }
 async function reloadDetail() {
   const full = await settlementApi.get(detailData.value.id);
   detailData.value = full?.data ?? full;
+  loadChangeLogs();
+}
+async function doReopen() {
+  await settlementApi.reopen(detailData.value.id);
+  await reloadDetail();
+  ElMessage.success('已红冲重开，本单回到草稿可重算');
+  load();
 }
 const hasReceiptRows = computed(() => (detailData.value?.receipts ?? []).length > 0);
 const hasRatedReceipts = computed(() => {

@@ -51,6 +51,8 @@
 
 ## 最近变更（新→旧，保留最近若干条）
 
+- （本次·P2标记留痕包）`feat(全模块)` 总览走查 #20-25/#28:①**变更标记5类**——报价内容改→订单「源报价已变更」黄条(content_updated_at vs quote_synced_at);订单内容改→合同「源订单已变更」;草稿订单引用→报价「占用中」+被引用订单号列表(可点跳转);报价行耗用≠样衣实测→「已偏离样衣」;样衣未实测→报价行「单耗为预估」+订单页黄条;②**改值留痕**——新全局表 change_log(原值X→改为Y)+GET /change-logs:报价(汇率/利润率/数量)、合同(数量/总额微调)、结算(汇率/发票/收汇/费用/退税)全挂钩,结算详情有变更记录区;③**软锁+版本+红冲**——settlement.needs_recalc:上游对账确认/付款PAID后自动标「待重算」(列表标签+详情横幅),刷新付款汇总清标;红冲重开 PATCH /settlements/:id/reopen(仅管理员,版本快照留 REOPEN 痕,回草稿重算);④**对账细节**——列表+发货批次N批列,详情头+款号,超发放行原因展示;⑤**样衣废弃态**——SampleStatus+ABANDONED(不删改废弃,下游留快照,已成单不可废,废弃后状态守卫禁编辑);⑥**超发确认移到对账**——门户发货超合同量直接放行(日志注记),对账复核确认时超发须业务填原因(rec.over_reason 留痕,web 弹窗引导);客户调整状态转单提示后放行。schema:change_log 新表+5列+样衣枚举扩值(40表/604列,真库验证✓);jest 221/221(5个spec适配) vitest 85/85;真栈E2E 25/25✓
+
 - （本次·P1-A项三连）`feat(sample/order/contract)` 总览走查 #11/#17/#18(用户已拍板):**A1 样衣改材料→同步未成单报价**——QuoteService.syncFromSample:按品名匹配保留议价(人民币单价/损耗率/单位/备注沿用),耗用/颜色/供应商随样衣刷新,已成单(ORDERED)不动,金额变化清审批;业务编辑材料与版师实测耗用两条路径均触发。**A2 机密名称遮蔽**——订单/样衣列表与详情,未授权用户看到的中间商/买家名称快照显示「🔒 机密」(行级可见性=创建人+被授权人+管理员,复用 customer_grant);OrderModule/SampleModule 接入 CustomerService。**A3 电子章体系**——company_profile/factory +seal_url(基础资料页可传章图);合同 PDF 落款自动贴双方电子章(供应商电子盖章后);门户盖章支持「纸质盖章照片」上传二选一,contract +stamp_mode/stamp_paper_url 留痕(上传人/时间沿用 stamped_by/at),web 详情显示盖章方式+照片。schema 4列(gen-column-sync 重跑,真库升级✓)。jest 221/221(order/sample spec 补 mock) vitest 85/85;真栈E2E 15/15✓
 
 - （本次·P1订单一致性）`fix(order)` 总览走查 #10/#12/#13:①客户改名 C1 同步补齐订单快照——middleman_name/buyer_name 在 草稿/已下单 同步,已生成合同(CONTRACTED)起冻结;②报价转销售合同自动建订单不再带入报价数量(qty_total=0,留空强制补尺码矩阵,矩阵合计回填);③订单材料供应商下拉去 allow-create(只可从工厂库点选)+限面/辅料(factories/select 支持逗号分隔多类型,主/附身份均命中)。jest 221/221(factory spec 适配+新增多类型用例) vitest 85/85;真栈E2E 8/8:三态订单改名同步/冻结、转单qty=0、多类型下拉✓

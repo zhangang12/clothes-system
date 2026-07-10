@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ChangeLogService } from '../../../common/changelog/change-log.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
@@ -105,6 +106,8 @@ const mockDataSource = {
   transaction: jest.fn().mockImplementation((cb) => cb(makeManager())),
 };
 
+const mockChangeLogDep = { record: jest.fn().mockResolvedValue(undefined), list: jest.fn().mockResolvedValue([]) };
+
 describe('SettlementService', () => {
   let service: SettlementService;
 
@@ -119,6 +122,7 @@ describe('SettlementService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SettlementService,
+        { provide: ChangeLogService, useValue: mockChangeLogDep },
         { provide: getRepositoryToken(Settlement), useValue: mockRepo },
         { provide: getRepositoryToken(SettlementCost), useValue: mockCostRepo },
         { provide: getRepositoryToken(SettlementReceipt), useValue: mockReceiptRepo },

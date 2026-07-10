@@ -44,8 +44,15 @@ export class SettlementController {
   @Patch(':id')
   @Roles(UserRole.ADMIN, UserRole.FINANCE)
   @ApiOperation({ summary: '编辑结算单（草稿限定；财务两步走——收汇后补汇率/发票金额/费用）' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateSettlementDto) {
-    return this.service.update(id, dto);
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateSettlementDto, @Request() req: any) {
+    return this.service.update(id, dto, req.user.id);
+  }
+
+  @Patch(':id/reopen')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: '红冲重开（已确认→草稿重算，版本快照留痕，P2#22）' })
+  reopen(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.service.reopen(id, req.user.id);
   }
 
   @Post(':id/costs')

@@ -204,6 +204,18 @@ export class SampleService {
     return saved;
   }
 
+  // 废弃(P2#25/qc B4):不删改废弃——下游(报价/订单)引用留快照;已成单不可废弃;废弃后不可编辑(状态守卫天然拦截)
+  async abandon(id: number, operatorId: number): Promise<SampleGarment> {
+    const entity = await this.repo.findOne({ where: { id, deleted: 0 } });
+    if (!entity) throw new NotFoundException(`样衣 #${id} 不存在`);
+    if (entity.status === SampleStatus.ORDERED) throw new BadRequestException('已成单样衣不可废弃');
+    if (entity.status === SampleStatus.ABANDONED) throw new BadRequestException('该样衣已是废弃状态');
+    entity.status = SampleStatus.ABANDONED;
+    const saved = await this.repo.save(entity);
+    await this.log(id, entity.version, 'ABANDON', operatorId);
+    return saved;
+  }
+
   // 推送版师：填材料寄出单号 / 指派制版师 → 打样中（设计稿页面事件）
   async pushPatternmaker(id: number, dto: PushPatternmakerDto, operatorId: number): Promise<SampleGarment> {
     const entity = await this.repo.findOne({ where: { id, deleted: 0 } });

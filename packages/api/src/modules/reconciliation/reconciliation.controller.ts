@@ -55,8 +55,8 @@ export class ReconciliationController {
   @Patch(':id/confirm')
   @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
   @ApiOperation({ summary: '主管复核确认（PENDING→CONFIRMED，二级审批）' })
-  confirm(@Param('id', ParseIntPipe) id: number) {
-    return this.service.confirm(id);
+  confirm(@Param('id', ParseIntPipe) id: number, @Body('over_reason') overReason?: string) {
+    return this.service.confirm(id, overReason);
   }
 
   @Patch(':id/reject')

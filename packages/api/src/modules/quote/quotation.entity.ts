@@ -108,6 +108,9 @@ export class Quotation {
   @CreateDateColumn()
   created_at: Date;
 
+
+  @Column({ type: 'datetime', nullable: true })
+  content_updated_at?: Date; // 内容级修改时间(仅编辑写入,状态流转不动)——下游「源报价已变更」标记依据(P2#20)
   @UpdateDateColumn()
   updated_at: Date;
 }

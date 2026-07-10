@@ -18,6 +18,17 @@
       </div>
     </div>
 
+    <!-- 关联订单/占用标记(P2#20/#23):被引用订单号可见;草稿订单引用=占用中软标记 -->
+    <div v-if="relatedOrders.length" class="mark-alert related-orders">
+      <el-tag v-if="occupiedByDraft" type="warning" size="small" effect="dark" style="margin-right:8px">占用中</el-tag>
+      <span class="ro-label">被引用订单：</span>
+      <el-tag
+        v-for="o in relatedOrders" :key="o.id" size="small" class="ro-tag"
+        :type="o.status === 'DRAFT' ? 'warning' : 'success'"
+        style="cursor:pointer" @click="$router.push({ name: 'OrderEdit', params: { id: o.id } })"
+      >{{ o.order_no }} · {{ orderStatusLabel(o.status) }}</el-tag>
+    </div>
+
     <el-form ref="formRef" :model="form" :rules="rules" label-width="104px" :disabled="readonly" class="form-body">
       <!-- 主要信息 -->
       <section-block title="▣ 主要信息" badge="18 字段">
@@ -101,7 +112,13 @@
           <el-table :data="form.items" size="small" border @selection-change="(v: any[]) => selItems = v">
             <el-table-column type="selection" width="38" />
             <el-table-column label="部位" width="90"><template #default="{ row }"><el-input v-model="row.part" size="small" /></template></el-table-column>
-            <el-table-column label="品名" min-width="130" fixed><template #default="{ row }"><el-input v-model="row.itemName" size="small" /></template></el-table-column>
+            <el-table-column label="品名" min-width="150" fixed>
+              <template #default="{ row }">
+                <el-input v-model="row.itemName" size="small" />
+                <el-tag v-if="row.deviatedFromSample" type="warning" size="small" style="margin-top:2px" :title="`样衣实测/预估耗用 ${row.sampleUsage}`">已偏离样衣</el-tag>
+                <el-tag v-else-if="row.usageIsEstimate" type="info" size="small" style="margin-top:2px">单耗为预估</el-tag>
+              </template>
+            </el-table-column>
             <el-table-column label="门幅" width="80"><template #default="{ row }"><el-input v-model="row.width" size="small" /></template></el-table-column>
             <el-table-column label="颜色" width="80"><template #default="{ row }"><el-input v-model="row.color" size="small" /></template></el-table-column>
             <el-table-column label="供应商" min-width="120"><template #default="{ row }"><el-input v-model="row.supplier" size="small" /></template></el-table-column>
@@ -351,10 +368,17 @@ async function loadRefs() {
   samples.value = (ss as any).data ?? [];
 }
 
+const relatedOrders = ref<any[]>([]);
+const occupiedByDraft = ref(false);
+const orderStatusLabel = (st: string) =>
+  ({ DRAFT: '草稿', CONFIRMED: '已下单', CONTRACTED: '已生成合同', PRODUCING: '生产中', DONE: '已完成' } as Record<string, string>)[st] ?? st;
+
 async function load() {
   if (!editId.value) return;
   const res: any = await quoteApi.get(editId.value);
   const d = res.data ?? res;
+  relatedOrders.value = d.related_orders ?? [];
+  occupiedByDraft.value = !!d.occupied_by_draft;
   Object.assign(form, {
     quoteNo: d.quote_no, inquiryDate: d.inquiry_date ?? '', sampleId: d.sample_id ?? undefined,
     middlemanId: d.customer_id, buyerId: d.buyer_id ?? undefined, buyerNo: d.buyer_no ?? '', styleNo: d.style_no ?? '',
@@ -365,6 +389,7 @@ async function load() {
     items: d.items?.length ? d.items.map((i: any) => ({
       part: i.part, itemName: i.item_name, width: i.width, color: i.color, supplier: i.supplier,
       unit: i.unit, quoteUsage: i.quote_usage, rmbPrice: i.rmb_price, lossRate: i.loss_rate, remark: i.remark,
+      usageIsEstimate: !!i.usage_is_estimate, deviatedFromSample: !!i.deviated_from_sample, sampleUsage: i.sample_usage,
     })) : [emptyItem()],
     fees: d.fees?.length ? d.fees.map((f: any) => ({ feeName: f.fee_name, rmbPrice: f.rmb_price, quoteUsage: f.quote_usage })) : DEFAULT_FEES.map((n) => emptyFee(n)),
   });
@@ -442,6 +467,15 @@ async function adjustQuote() {
 }
 async function toContract() {
   if (!editId.value) return;
+  // 客户调整状态建单:提示后放行(总览走查P2#28/ORD A7)
+  if (form.status === 'ADJUSTING') {
+    try {
+      await ElMessageBox.confirm(
+        '该报价处于「客户调整」中，价格尚未最终确认。确定按当前内容转销售合同并生成订单？',
+        '客户调整中建单', { type: 'warning', confirmButtonText: '继续建单', cancelButtonText: '取消' },
+      );
+    } catch { return; }
+  }
   try {
     const r: any = await quoteApi.toContract(editId.value);
     const d = r.data ?? r;
@@ -479,6 +513,10 @@ onMounted(async () => { await loadRefs(); await load(); });
 </script>
 
 <style scoped>
+.mark-alert { margin-bottom: 8px; }
+.related-orders { display:flex; align-items:center; flex-wrap:wrap; gap:4px; padding:8px 12px; background: var(--el-fill-color-light); border-radius:4px; font-size:12px; }
+.ro-label { color: var(--el-text-color-secondary); }
+.ro-tag { margin-right: 4px; }
 .edit-page { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
 .toolbar { position: sticky; top: 0; z-index: 5; display: flex; justify-content: space-between; align-items: center;
   background: var(--el-bg-color); padding: 10px 14px; border: 1px solid var(--el-border-color-light); border-radius: 6px; }

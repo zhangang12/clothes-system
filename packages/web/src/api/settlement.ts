@@ -19,6 +19,10 @@ export const settlementApi = {
     http.delete<unknown, any>(`/settlements/${id}/receipts/${receiptId}`),
   refreshCost: (id: number) =>
     http.patch<unknown, any>(`/settlements/${id}/refresh-cost`),
+  reopen: (id: number) =>
+    http.patch<unknown, any>(`/settlements/${id}/reopen`),
+  changeLogs: (id: number) =>
+    http.get<unknown, any>('/change-logs', { params: { biz_type: 'SETTLEMENT', biz_id: id } }),
   confirm: (id: number) =>
     http.patch<unknown, any>(`/settlements/${id}/confirm`),
   remove: (id: number) =>

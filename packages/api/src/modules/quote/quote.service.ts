@@ -11,6 +11,7 @@ import { SampleGarment } from '../sample/sample-garment.entity';
 import { SampleMaterial } from '../sample/sample-material.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { CustomerService } from '../customer/customer.service';
+import { ChangeLogService } from '../../common/changelog/change-log.service';
 import { OrderService } from '../order/order.service';
 import { CreateOrderDto } from '../order/dto/create-order.dto';
 import { SysConfigService } from '../../common/config/sys-config.service';
@@ -37,6 +38,7 @@ export class QuoteService {
     @InjectRepository(SampleGarment) private readonly sampleRepo: Repository<SampleGarment>,
     @InjectRepository(SampleMaterial) private readonly sampleMaterialRepo: Repository<SampleMaterial>,
     private readonly customerService: CustomerService,
+    private readonly changeLog: ChangeLogService,
     private readonly orderService: OrderService,
     private readonly numbering: NumberingService,
     private readonly config: SysConfigService,
@@ -185,7 +187,27 @@ export class QuoteService {
       this.itemRepo.find({ where: { quote_id: id }, order: { sort_order: 'ASC' } }),
       this.feeRepo.find({ where: { quote_id: id }, order: { sort_order: 'ASC' } }),
     ]);
-    return { ...quote, items, fees };
+    // 关联订单/被引用列表 + 草稿订单「占用中」软标记(P2#20/#23,ORD A8/A6)
+    const relatedOrders = await this.orderService.listByQuote(id);
+    const occupied_by_draft = relatedOrders.some((o) => o.status === 'DRAFT');
+    // 行级标记(P2#20):耗用偏离样衣实测「已偏离样衣」/样衣未实测「单耗为预估」
+    let outItems: any[] = items;
+    if (quote.sample_id) {
+      const mats = await this.sampleMaterialRepo.find({ where: { sample_id: quote.sample_id } });
+      const byName = new Map(mats.map((m) => [String(m.item_name || '').trim(), m]));
+      outItems = items.map((it) => {
+        const m = byName.get(String(it.item_name || '').trim());
+        if (!m) return it;
+        const sampleUsage = m.actual_usage != null ? +m.actual_usage : (m.qty != null ? +m.qty : null);
+        return {
+          ...it,
+          usage_is_estimate: m.actual_usage == null, // 样衣未实测→单耗为预估
+          deviated_from_sample: sampleUsage != null && Math.abs(+it.quote_usage - sampleUsage) > 1e-6,
+          sample_usage: sampleUsage,
+        };
+      });
+    }
+    return { ...quote, items: outItems, fees, related_orders: relatedOrders, occupied_by_draft };
   }
 
   async update(id: number, dto: Partial<CreateQuoteDto>): Promise<Quotation> {
@@ -202,9 +224,14 @@ export class QuoteService {
       ['profitRate', 'profit_rate'], ['quoteQty', 'quote_qty'], ['image1', 'image1'], ['image2', 'image2'],
       ['totalRemark', 'total_remark'],
     ];
+    // 改值留痕(P2#21):汇率/利润率/数量 原值→新值
+    const before = { exchange_rate: quote.exchange_rate, profit_rate: quote.profit_rate, quote_qty: quote.quote_qty };
     for (const [k, col] of map) if (dto[k] !== undefined) (quote as any)[col] = dto[k];
+    await this.changeLog.record('QUOTE', id, (Object.keys(before) as Array<keyof typeof before>)
+      .map((k) => ({ field: k, old: before[k], new: (quote as any)[k] })));
     // 编辑会重算金额:清除已有审批状态,避免「审批通过后改高金额再提交」绕过阈值校验
     quote.approval_status = ApprovalStatus.NONE;
+    quote.content_updated_at = new Date(); // 内容级修改——下游订单「源报价已变更」标记依据(P2#20)
     const rate = +quote.exchange_rate;
 
     return this.dataSource.transaction(async (manager) => {

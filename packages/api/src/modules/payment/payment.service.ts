@@ -179,6 +179,15 @@ export class PaymentService {
           await manager.update(Reconciliation,
             { id: pr.reconcile_id, status: ReconciliationStatus.CONFIRMED },
             { status: ReconciliationStatus.PAID });
+      // 软锁(P2#22):上游对账/付款变动后,已确认结算单标「待重算」(刷新付款汇总时清除)
+      await manager.query(
+        `UPDATE settlement s
+           JOIN contract c ON c.order_id = s.order_id
+           JOIN reconciliation r ON r.contract_id = c.id
+            SET s.needs_recalc = 1
+          WHERE r.id = ? AND s.status = 'CONFIRMED' AND s.deleted = 0`,
+        [pr.reconcile_id],
+      );
         }
       }
       const saved = await manager.save(PaymentRequest, pr);
@@ -293,6 +302,15 @@ export class PaymentService {
       await this.reconcileRepo.update(
         { id: pr.reconcile_id, status: ReconciliationStatus.CONFIRMED },
         { status: ReconciliationStatus.PAID },
+      );
+      // 软锁(P2#22):上游对账/付款变动后,已确认结算单标「待重算」(刷新付款汇总时清除)
+      await this.dataSource.query(
+        `UPDATE settlement s
+           JOIN contract c ON c.order_id = s.order_id
+           JOIN reconciliation r ON r.contract_id = c.id
+            SET s.needs_recalc = 1
+          WHERE r.id = ? AND s.status = 'CONFIRMED' AND s.deleted = 0`,
+        [pr.reconcile_id],
       );
     }
     return saved;

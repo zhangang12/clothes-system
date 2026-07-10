@@ -94,6 +94,13 @@
             <el-button link size="small" @click="goView(row)">查看</el-button>
             <el-button link size="small" @click="printRow(row)">打印</el-button>
             <el-button v-if="isPatternmaker" link type="warning" size="small" @click="goPatternmaker(row)">版师</el-button>
+            <el-popconfirm
+              v-if="canEdit && !['ORDERED', 'ABANDONED'].includes(row.status)"
+              title="废弃后不可编辑，下游引用保留快照。确认废弃？" width="240"
+              @confirm="doAbandon(row)"
+            >
+              <template #reference><el-button link type="danger" size="small">废弃</el-button></template>
+            </el-popconfirm>
           </template>
         </el-table-column>
       </el-table>
@@ -130,7 +137,15 @@ const isPatternmaker = computed(() => authStore.hasRole(UserRole.ADMIN) || authS
 const statuses = Object.entries(SAMPLE_STATUS_LABEL).map(([value, label]) => ({ value, label }));
 const sampleCategories = SAMPLE_CATEGORIES;
 const statusLabel = (s: string) => (SAMPLE_STATUS_LABEL as any)[s] ?? s;
-const statusTag = (s: string) => ({ PENDING: 'info', SAMPLING: 'warning', SHIPPED: 'primary', RETURNED: 'primary', RECONCILED: 'success', DONE: 'success' } as any)[s] ?? 'info';
+const statusTag = (s: string) => ({ PENDING: 'info', SAMPLING: 'warning', SHIPPED: 'primary', RETURNED: 'primary', RECONCILED: 'success', DONE: 'success', ABANDONED: 'danger' } as any)[s] ?? 'info';
+
+async function doAbandon(row: any) {
+  try {
+    await sampleApi.abandon(row.id);
+    ElMessage.success('已废弃（下游引用保留快照）');
+    load();
+  } catch (e: any) { ElMessage.error(e?.response?.data?.msg ?? e?.response?.data?.message ?? '废弃失败'); }
+}
 
 const loading = ref(false);
 const list = ref<any[]>([]);

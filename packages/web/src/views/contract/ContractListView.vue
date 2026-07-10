@@ -71,6 +71,10 @@
           <el-descriptions-item label="最后发货日">{{ detail.last_ship_date || '—' }}</el-descriptions-item>
           <el-descriptions-item label="盖章供应商">{{ detail.stamped_by_supplier || '—' }}</el-descriptions-item>
           <el-descriptions-item label="盖章时间">{{ detail.stamped_at || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="源订单">
+            <el-tag v-if="detail.source_order_changed" type="warning" size="small">源订单已变更，请核对材料明细</el-tag>
+            <span v-else>—</span>
+          </el-descriptions-item>
           <el-descriptions-item label="盖章方式">
             <template v-if="detail.stamp_mode === 'PAPER'">
               纸质盖章 <el-link v-if="detail.stamp_paper_url" type="primary" :href="detail.stamp_paper_url" target="_blank" style="margin-left:4px">盖章照片</el-link>

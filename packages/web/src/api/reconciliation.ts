@@ -12,8 +12,8 @@ export const reconciliationApi = {
     http.post<unknown, any>('/reconciliations/labor', { sampleIds }),
   submit: (id: number) =>
     http.patch<unknown, any>(`/reconciliations/${id}/submit`),
-  confirm: (id: number) =>
-    http.patch<unknown, any>(`/reconciliations/${id}/confirm`),
+  confirm: (id: number, overReason?: string) =>
+    http.patch<unknown, any>(`/reconciliations/${id}/confirm`, overReason ? { over_reason: overReason } : {}),
   reject: (id: number, remark?: string) =>
     http.patch<unknown, any>(`/reconciliations/${id}/reject`, { remark }),
   remove: (id: number) =>

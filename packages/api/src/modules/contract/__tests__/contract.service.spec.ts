@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ChangeLogService } from '../../../common/changelog/change-log.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
@@ -67,10 +68,14 @@ const mockDataSource = {
     create: jest.fn().mockImplementation((_, v) => v),
     save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
     findOne: jest.fn().mockResolvedValue(null),
+    find: jest.fn().mockResolvedValue([]),
     delete: jest.fn().mockResolvedValue({ affected: 1 }),
     update: jest.fn().mockResolvedValue({ affected: 1 }),
+    query: jest.fn().mockResolvedValue([]),
   })),
 };
+
+const mockChangeLogDep = { record: jest.fn().mockResolvedValue(undefined), list: jest.fn().mockResolvedValue([]) };
 
 describe('ContractService', () => {
   let service: ContractService;
@@ -81,6 +86,7 @@ describe('ContractService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ContractService,
+        { provide: ChangeLogService, useValue: mockChangeLogDep },
         { provide: getRepositoryToken(Contract), useValue: mockRepo },
         { provide: getRepositoryToken(ContractMaterial), useValue: mockMaterialRepo },
         { provide: getRepositoryToken(ContractShipment), useValue: { find: jest.fn().mockResolvedValue([]) } },

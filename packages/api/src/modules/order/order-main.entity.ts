@@ -104,6 +104,12 @@ export class OrderMain {
   @CreateDateColumn()
   created_at: Date;
 
+
+  @Column({ type: 'datetime', nullable: true })
+  content_updated_at?: Date; // 内容级修改时间(仅编辑/矩阵/材料写入)——合同侧「源订单已变更」标记依据(P2#20)
+
+  @Column({ type: 'datetime', nullable: true })
+  quote_synced_at?: Date; // 最近一次从报价导入时间——「源报价已变更」= quote.content_updated_at > 此值(P2#20)
   @UpdateDateColumn()
   updated_at: Date;
 }

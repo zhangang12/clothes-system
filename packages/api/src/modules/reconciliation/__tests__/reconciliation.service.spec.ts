@@ -43,6 +43,7 @@ const makeReconciliation = (overrides = {}) => ({
 });
 
 const makeManager = (findOneResult?: any) => ({
+  query: jest.fn().mockResolvedValue([]),
   create: jest.fn().mockImplementation((_, v) => v),
   save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
   findOne: jest.fn().mockResolvedValue(findOneResult),

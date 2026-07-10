@@ -188,10 +188,10 @@ export class PortalService {
       const materials = await this.materialRepo.find({ where: { contract_id: id } });
       const contractQty = materials.reduce((s, m) => s + +m.qty, 0);
       const newShipped = +(+(contract.shipped_qty ?? 0) + dto.qty).toFixed(4);
-      // 超合同量拦截，需超发确认（设计稿 门户 C4）
-      if (contractQty > 0 && newShipped > contractQty + 0.01 && !dto.force) {
-        throw new BadRequestException(`本次发货后累计 ${newShipped} 超过合同量 ${contractQty}，如确需超发请勾选确认`);
-      }
+      // 超合同量不再卡供应商发货(P2#28/补充B3 决议:货已实发,放行并记录;
+      // 超发确认移到对账复核——业务确认时须填写放行原因留痕,见 reconciliation.confirm)
+      const overShip = contractQty > 0 && newShipped > contractQty + 0.01;
+      if (overShip) parts.push(`⚠️超发:累计 ${newShipped}/合同量 ${contractQty}(对账复核时业务确认放行)`);
       contract.shipped_qty = newShipped;
       // 发货单号 FH-款号-序号（设计稿 补充确认 A2）
       let styleNo = '';

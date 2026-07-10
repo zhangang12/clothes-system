@@ -14,6 +14,7 @@ import { PortalModule } from './modules/portal/portal.module';
 import { ReconciliationModule } from './modules/reconciliation/reconciliation.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { SettlementModule } from './modules/settlement/settlement.module';
+import { ChangeLogModule } from './common/changelog/change-log.module';
 import { StatsModule } from './modules/stats/stats.module';
 import { CompanyModule } from './modules/company/company.module';
 import { DictModule } from './modules/dict/dict.module';
@@ -47,6 +48,7 @@ import { UploadModule } from './modules/upload/upload.module';
 
     // 公共服务
     NumberingModule,
+    ChangeLogModule,
     SysConfigModule,
     FileModule,
 

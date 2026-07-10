@@ -77,6 +77,9 @@ export class Reconciliation {
   @Column({ type: 'varchar', length: 500, nullable: true })
   review_remark: string; // 主管复核批注 / 整单退回原因（补充确认：可逐批批注、整单退回）
 
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  over_reason: string; // 超发放行原因（对账确认时业务勾选填写留痕,P2#28/补充B3）
+
   @Column({ type: 'text', nullable: true })
   description: string;
 

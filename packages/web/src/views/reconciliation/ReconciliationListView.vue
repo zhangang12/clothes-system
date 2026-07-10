@@ -46,6 +46,9 @@
         <el-table-column prop="style_no" label="款号" width="120" show-overflow-tooltip>
           <template #default="{ row }">{{ row.style_no || '—' }}</template>
         </el-table-column>
+        <el-table-column label="发货批次" width="86" align="center">
+          <template #default="{ row }">{{ row.shipment_count ? `${row.shipment_count} 批` : '—' }}</template>
+        </el-table-column>
         <el-table-column prop="type" label="类型" width="110">
           <template #default="{ row }">
             <el-tag size="small" :type="typeTag(row.type)">{{ typeLabel(row.type) }}</el-tag>
@@ -122,6 +125,7 @@
       <template v-if="detailData">
         <el-descriptions :column="3" border size="small">
           <el-descriptions-item label="对账单编号">{{ detailData.reconcile_no }}</el-descriptions-item>
+          <el-descriptions-item label="款号">{{ detailData.style_no || '—' }}</el-descriptions-item>
           <el-descriptions-item label="类型">{{ typeLabel(detailData.type) }}</el-descriptions-item>
           <el-descriptions-item label="状态">
             <el-tag :type="statusTagType(detailData.status)" size="small">{{ statusLabel(detailData.status) }}</el-tag>
@@ -139,6 +143,9 @@
           <el-descriptions-item label="确认时间">{{ detailData.confirmed_at ?? '--' }}</el-descriptions-item>
           <el-descriptions-item v-if="detailData.review_remark" label="退回批注" :span="3">
             <span style="color:var(--el-color-danger)">{{ detailData.review_remark }}</span>
+          </el-descriptions-item>
+          <el-descriptions-item v-if="detailData.over_reason" label="超发放行原因" :span="3">
+            <span style="color:var(--el-color-warning)">⚠️ {{ detailData.over_reason }}</span>
           </el-descriptions-item>
         </el-descriptions>
         <template v-if="detailData.type === 'LABOR'">
@@ -398,9 +405,27 @@ async function doSubmit(row: any) {
 }
 
 async function doConfirm(row: any) {
-  await reconciliationApi.confirm(row.id);
-  ElMessage.success('主管复核已确认');
-  load();
+  try {
+    await reconciliationApi.confirm(row.id);
+    ElMessage.success('主管复核已确认');
+    load();
+  } catch (e: any) {
+    const msg = String(e?.response?.data?.msg ?? e?.response?.data?.message ?? '');
+    // 超发闸门(P2#28):累计实发超合同量→业务填写放行原因留痕后确认
+    if (msg.startsWith('OVER_SHIP:')) {
+      try {
+        const { value } = await ElMessageBox.prompt(
+          `${msg.slice('OVER_SHIP:'.length)}`, '超发确认放行',
+          { inputPlaceholder: '请填写超发放行原因（留痕）', inputPattern: /\S+/, inputErrorMessage: '原因必填', type: 'warning' },
+        );
+        await reconciliationApi.confirm(row.id, value);
+        ElMessage.success('已确认（超发原因已留痕）');
+        load();
+      } catch { /* 取消 */ }
+      return;
+    }
+    ElMessage.error(msg || '复核确认失败');
+  }
 }
 
 async function doReject(row: any) {

@@ -26,6 +26,17 @@
       </div>
     </div>
 
+    <el-alert
+      v-if="flags.sourceQuoteChanged"
+      type="warning" :closable="false" show-icon class="mark-alert"
+      title="源报价已变更——转单后报价内容被修改过，可点「从报价导入」刷新明细（现有议价/矩阵会被覆盖，请核对）"
+    />
+    <el-alert
+      v-if="flags.usageEstimated"
+      type="warning" :closable="false" show-icon class="mark-alert"
+      title="单耗为预估——关联样衣未填实测耗用，用料核算基于预估值，请在实测后复核"
+    />
+
     <el-form ref="formRef" :model="form" :rules="rules" label-width="104px" :disabled="readonly" class="form-body">
       <!-- 基础信息 -->
       <section-block title="▣ 基础信息" badge="15 字段">
@@ -406,10 +417,14 @@ async function loadRefs() {
   factories.value = (((fs as any).data ?? fs) as any[]) ?? [];
   supplierFactories.value = (((allF as any).data ?? allF) as any[]) ?? [];
 }
+const flags = reactive({ sourceQuoteChanged: false, usageEstimated: false });
+
 async function load() {
   if (!editId.value) return;
   const res: any = await orderApi.get(editId.value);
   const d = res.data ?? res;
+  flags.sourceQuoteChanged = !!d.source_quote_changed;
+  flags.usageEstimated = !!d.usage_estimated;
   // 矩阵装载：新结构 {pos,rows(qtys[])} 直接用；旧平铺行 {style,color,size,po,dest,qty} 自动升级为 PO 列
   const md = d.matrix?.matrix_data;
   let matrix = { pos: [emptyPo()], rows: [emptyMatrixRow(1)] };
@@ -596,6 +611,7 @@ onMounted(async () => { await loadRefs(); await load(); });
 
 <style scoped>
 .edit-page { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.mark-alert { margin-bottom: 8px; }
 .toolbar { position: sticky; top: 0; z-index: 5; display: flex; justify-content: space-between; align-items: center;
   background: var(--el-bg-color); padding: 10px 14px; border: 1px solid var(--el-border-color-light); border-radius: 6px; }
 .title-wrap { display: flex; align-items: center; gap: 10px; }

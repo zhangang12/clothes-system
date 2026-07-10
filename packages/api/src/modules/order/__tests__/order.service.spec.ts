@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { SampleMaterial } from '../../sample/sample-material.entity';
 import { CustomerService } from '../../customer/customer.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
@@ -68,6 +69,7 @@ describe('OrderService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OrderService,
+        { provide: getRepositoryToken(SampleMaterial), useValue: { find: jest.fn().mockResolvedValue([]) } },
         { provide: CustomerService, useValue: mockCustomerServiceDep },
         { provide: getRepositoryToken(OrderMain), useValue: mockOrderRepo },
         { provide: getRepositoryToken(OrderSizeMatrix), useValue: mockMatrixRepo },

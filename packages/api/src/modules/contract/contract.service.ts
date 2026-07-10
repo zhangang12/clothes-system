@@ -13,6 +13,7 @@ import { OrderSizeMatrix } from '../order/order-size-matrix.entity';
 import { Factory } from '../factory/factory.entity';
 import { SupplierAccount } from '../auth/supplier-account.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
+import { ChangeLogService } from '../../common/changelog/change-log.service';
 import { SysConfigService } from '../../common/config/sys-config.service';
 import { ContractPortalStatus, ContractType, OrderStatus, ApprovalStatus, APPROVAL_THRESHOLD_KEYS } from '@i9/types';
 
@@ -60,6 +61,7 @@ export class ContractService {
     @InjectRepository(Factory) private readonly factoryRepo: Repository<Factory>,
     @InjectRepository(SupplierAccount) private readonly supplierRepo: Repository<SupplierAccount>,
     private readonly numbering: NumberingService,
+    private readonly changeLog: ChangeLogService,
     private readonly config: SysConfigService,
     private readonly dataSource: DataSource,
   ) {}
@@ -348,7 +350,15 @@ export class ContractService {
     const contractQty = +materials.reduce((s, m) => s + +m.qty, 0).toFixed(4);
     const shippedQty = +(+(contract.shipped_qty ?? 0)).toFixed(4);
     const qtyStats = { contractQty, shippedQty, diffQty: +(contractQty - shippedQty).toFixed(4) };
-    return { ...contract, materials, shipments, qtyStats };
+    // 变更标记(P2#20):源订单在合同生成后被内容级修改 → 提示核对材料明细
+    let source_order_changed = false;
+    if (contract.order_id) {
+      const order = await this.orderRepo.findOne({ where: { id: contract.order_id } });
+      if (order?.content_updated_at) {
+        source_order_changed = new Date(order.content_updated_at) > new Date(contract.created_at);
+      }
+    }
+    return { ...contract, materials, shipments, qtyStats, source_order_changed };
   }
 
   // 合同编辑（设计稿 04 v1.3 编辑页 + E5 锁定规则）：
@@ -394,6 +404,11 @@ export class ContractService {
 
       if (dto.materials) {
         if (!dto.materials.length) throw new BadRequestException('货物明细不能为空');
+        // 数量微调留痕(P2#21/qc C6):记录总数量/总金额 原值→新值
+        const oldRows = await manager.find(ContractMaterial, { where: { contract_id: id } });
+        const oldQty = +oldRows.reduce((sum, r) => sum + +r.qty, 0).toFixed(4);
+        const newQty = +dto.materials.reduce((sum, m) => sum + +m.qty, 0).toFixed(4);
+        const oldAmount = +contract.total_amount;
         await manager.delete(ContractMaterial, { contract_id: id });
         const rows = dto.materials.map((m, idx) => manager.create(ContractMaterial, {
           contract_id: id,
@@ -422,6 +437,10 @@ export class ContractService {
           contract.approved_at = null as any;
         }
         contract.total_amount = newTotal;
+        await this.changeLog.record('CONTRACT', id, [
+          { field: 'qty_total', old: oldQty, new: newQty },
+          { field: 'total_amount', old: oldAmount, new: newTotal },
+        ]);
       }
 
       return manager.save(Contract, contract);

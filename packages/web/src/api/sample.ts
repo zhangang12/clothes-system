@@ -26,6 +26,9 @@ export const sampleApi = {
     http.post<unknown, { data: SampleGarment }>(`/samples/${id}/copy`),
   remove: (id: number) =>
     http.delete(`/samples/${id}`),
+  // 废弃(P2#25):不删改废弃,下游留快照;已成单不可废弃
+  abandon: (id: number) =>
+    http.patch<unknown, any>(`/samples/${id}/abandon`),
   // 历史样衣批量导入（CSV 行）
   importBatch: (rows: any[]) =>
     http.post<unknown, { data: { ok: number; fail: number; failures: Array<{ row: number; reason: string }> } }>('/samples/import', { rows }),
