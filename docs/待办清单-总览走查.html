@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>总览走查 · 未实现待办清单 v1.0</title>
+<style>
+  :root {
+    --ink:#23282e; --ink2:#5c6670; --ink3:#8a939c; --bg:#faf9f6; --card:#fff;
+    --line:#e3e0d8; --soft:#eeebe3; --navy:#1E3A5F; --navysoft:#eaeff5;
+    --amber:#D17A40; --ambersoft:#faf0e6; --green:#3E8E7E; --greensoft:#e9f3f0;
+    --red:#C04042; --redsoft:#faecec; --gold:#C8901E; --goldsoft:#f8f1df;
+    --mono:"SF Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink:#e4e2dc; --ink2:#a8afb8; --ink3:#767e88; --bg:#17191d; --card:#1f2228;
+      --line:#34383f; --soft:#2a2d33; --navy:#7da4d4; --navysoft:#232c38;
+      --amber:#e09a63; --ambersoft:#322a22; --green:#6cb5a5; --greensoft:#20302c;
+      --red:#e08587; --redsoft:#362426; --gold:#d9b05e; --goldsoft:#322c1e; }
+  }
+  :root[data-theme="light"] { --ink:#23282e; --ink2:#5c6670; --ink3:#8a939c; --bg:#faf9f6; --card:#fff;
+    --line:#e3e0d8; --soft:#eeebe3; --navy:#1E3A5F; --navysoft:#eaeff5; --amber:#D17A40; --ambersoft:#faf0e6;
+    --green:#3E8E7E; --greensoft:#e9f3f0; --red:#C04042; --redsoft:#faecec; --gold:#C8901E; --goldsoft:#f8f1df; }
+  :root[data-theme="dark"] { --ink:#e4e2dc; --ink2:#a8afb8; --ink3:#767e88; --bg:#17191d; --card:#1f2228;
+    --line:#34383f; --soft:#2a2d33; --navy:#7da4d4; --navysoft:#232c38; --amber:#e09a63; --ambersoft:#322a22;
+    --green:#6cb5a5; --greensoft:#20302c; --red:#e08587; --redsoft:#362426; --gold:#d9b05e; --goldsoft:#322c1e; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14.5px/1.7 "PingFang SC","Microsoft YaHei",sans-serif; }
+  .wrap { max-width:1080px; margin:0 auto; padding:30px 22px 90px; }
+  header { border-bottom:3px solid var(--navy); padding-bottom:16px; margin-bottom:22px; }
+  h1 { margin:0 0 6px; font-size:24px; color:var(--navy); }
+  .sub { color:var(--ink2); font-size:13.5px; }
+  .meta { margin-top:8px; font-size:12px; color:var(--ink3); }
+  section { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:18px 22px; margin-bottom:20px; }
+  h2 { margin:0 0 10px; font-size:17px; color:var(--navy); }
+  h2 .n { font-family:var(--mono); color:var(--amber); font-size:12px; margin-right:8px; }
+  .tablebox { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th,td { border:1px solid var(--line); padding:5px 9px; text-align:left; vertical-align:top; }
+  th { background:var(--navysoft); color:var(--navy); white-space:nowrap; }
+  td.c { text-align:center; white-space:nowrap; }
+  .lv { display:inline-block; font-size:11px; font-weight:700; padding:0 7px; border-radius:9px; }
+  .p0 { background:var(--redsoft); color:var(--red); }
+  .p1 { background:var(--ambersoft); color:var(--amber); }
+  .p2 { background:var(--goldsoft); color:var(--gold); }
+  .p3 { background:var(--navysoft); color:var(--navy); }
+  .done { background:var(--greensoft); color:var(--green); }
+  .src { font-family:var(--mono); font-size:11px; color:var(--ink3); }
+  .callout { border-left:4px solid var(--gold); background:var(--goldsoft); padding:8px 13px; border-radius:0 6px 6px 0; margin:10px 0; font-size:13px; }
+  ul { margin:6px 0; padding-left:20px; } li { margin:2px 0; }
+  p { margin:6px 0; }
+  b { color:var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>🪡 总览走查 · 未实现待办清单</h1>
+  <div class="sub">以《样衣系统_UI与问题清单_总览_v1.0》内嵌 17 份文档为基准 · 逻辑走查 + UI/UE 走查 · 全部结论经代码实证</div>
+  <div class="meta">v1.0 · 2026-07-11 · 核对规模:三模块37 + 订单46 + 合同37 + 门户18 + 对账付款21 + 补充9 + 结算稿36 + 结算清单21 + 总纲56 + 修订说明59 ≈ <b>340 条</b>(跨清单去重后待办分组如下)</div>
+</header>
+
+<section>
+  <h2><span class="n">§0</span>总体结论</h2>
+  <div class="tablebox"><table>
+    <tr><th>核对路线</th><th class="c">条目</th><th class="c">✅ 完整实现</th><th class="c">⚠️ 简化/部分</th><th class="c">❌ 未实现</th></tr>
+    <tr><td>三模块 / 订单 / 合同 串流程题库</td><td class="c">120</td><td class="c">~86</td><td class="c">~28</td><td class="c">~6</td></tr>
+    <tr><td>门户 / 对账付款 / 补充确认</td><td class="c">48</td><td class="c">30</td><td class="c">17</td><td class="c">1</td></tr>
+    <tr><td>结算设计稿 + 结算清单(首次专项)</td><td class="c">57</td><td class="c">21</td><td class="c">26</td><td class="c">10</td></tr>
+    <tr><td>全流程总纲 56 题 + 两份修订说明</td><td class="c">115</td><td class="c">81</td><td class="c">28</td><td class="c">4(含被后稿取代)</td></tr>
+  </table></div>
+  <p><b>主线全通</b>:编号体系 / 状态机联动 / 审批阈值 / 门户四步顺序锁 / 对账二级审批 / 分批付款 / 机密授权 / 角色脱敏 / 报表——总纲九大主题的骨干规则均已落地。<b>缺口集中在四类</b>:①结算模块细则(差距最密)②变更提示与留痕体系 ③附件/图片随单继承链 ④门户供应商侧体验细节。</p>
+  <div class="callout">走查还揪出并<b>已当场修复</b>:HEAD 后端编译不过(付款筛选注入的双逗号,提交 53e5048)。</div>
+</section>
+
+<section>
+  <h2><span class="n">P0</span>流程断链 / 资损口径 / 安全(7 项,建议立即修)</h2>
+  <div class="tablebox"><table>
+    <tr><th>#</th><th>待办</th><th>说明</th><th>出处</th></tr>
+    <tr><td class="c">1</td><td><b>结算单无编辑通道</b></td><td>汇率/发票金额只能建单时填,财务「建单→收汇后补」两步走断链;汇率空则结算金额恒=0。需补 update 接口+编辑界面</td><td class="src">结算稿B/D</td></tr>
+    <tr><td class="c">2</td><td><b>刷新付款汇总前端不可达</b></td><td>后端 refresh-cost 在,前端未封装无按钮;出货件数也不随船务更新重算</td><td class="src">结算稿D</td></tr>
+    <tr><td class="c">3</td><td><b>总货款把「已确认未付」计入</b></td><td>决议=仅汇总已付款(PAID);未付行应灰显「未付·不计入」。当前口径虚增成本</td><td class="src">结算Q8/稿B</td></tr>
+    <tr><td class="c">4</td><td><b>同款多订单成本重复背</b></td><td>收入按订单、成本按款号聚合全部对账→每张结算单重复背整款成本,毛利失真</td><td class="src">结算Q1</td></tr>
+    <tr><td class="c">5</td><td><b>门户接口泄露采购单价给工厂</b></td><td>加工合同同步的订单材料原样返回 单价/预算/采购金额(前端没显示但接口给了);决议=工厂不见任何单价。API 层脱敏</td><td class="src">ORD D5/D6</td></tr>
+    <tr><td class="c">6</td><td><b>订单页无「生成材料/加工合同」按钮</b></td><td>拆单接口在、前端零调用——设计主流程入口缺失,业务只能从合同侧反向操作</td><td class="src">CON A1</td></tr>
+    <tr><td class="c">7</td><td><b>敏感附件无访问控制</b></td><td>身份证照片/水单等在 /uploads 公共可读;决议=加密存储、限授权可见</td><td class="src">CON B6 · qc E7</td></tr>
+  </table></div>
+</section>
+
+<section>
+  <h2><span class="n">P1</span>闭环与一致性缺口(12 项)</h2>
+  <div class="tablebox"><table>
+    <tr><th>#</th><th>待办</th><th>说明</th><th>出处</th></tr>
+    <tr><td class="c">8</td><td><b>门户看不到对账退回</b></td><td>退回批注已存但门户不回显;退回后批次仍被占用,供应商无法重勾(需内部删单);且门户无「撤回发货批次」</td><td class="src">门户B3 · 对账C1</td></tr>
+    <tr><td class="c">9</td><td><b>门户无「发货完成/已完成」</b></td><td>无发货完成动作;开票后状态停在「已对账」,门户"已完成"标签永不出现</td><td class="src">门户C3/E2</td></tr>
+    <tr><td class="c">10</td><td>客户改名同步漏订单</td><td>已同步报价/样衣快照;订单快照未接(决议:草稿/已下单同步,生成合同后冻结)</td><td class="src">ORD B1/B2</td></tr>
+    <tr><td class="c">11</td><td>样衣改材料→同步未成单报价 <span class="lv p1">已拍板=A1</span></td><td>三模块 A5/C8 链;做时按品名匹配保留报价议价</td><td class="src">TRI A5 · ORD C8</td></tr>
+    <tr><td class="c">12</td><td>转合同建订单带入了报价数量</td><td>决议=不导入、留空强制补尺码矩阵</td><td class="src">ORD A2</td></tr>
+    <tr><td class="c">13</td><td>订单材料供应商可填库外文本</td><td>决议=只能从工厂库点选(且按面/辅料类型过滤);现 allow-create+全库</td><td class="src">ORD B7/B3</td></tr>
+    <tr><td class="c">14</td><td><b>收汇记录无汇率字段</b></td><td>逐笔收汇×各自汇率求和 / 加权平均展示 / 银行水单汇率带入 / 出口发票逐笔——整条多汇率链未建</td><td class="src">结算Q2/Q13/Q15 · qc H2</td></tr>
+    <tr><td class="c">15</td><td>结算必填校验缺失</td><td>发票/收汇/汇率全选填,缺值按 0 计算出误导性负毛利;决议=必填才出毛利对比</td><td class="src">结算稿C/E</td></tr>
+    <tr><td class="c">16</td><td>门户发货数量/物流应必填</td><td>决议:数量必填(现选填);物流信息须填(现选填);web 批次审批表未展示附件</td><td class="src">门户C4/C5 · qc G6</td></tr>
+    <tr><td class="c">17</td><td>电子章体系 + 纸质盖章留痕 <span class="lv p1">已拍板=A3</span></td><td>本司章/供应商章图片上传→PDF 落款贴章;纸质盖章上传照片并记录上传人/时间</td><td class="src">CON D5 · qc E7 · 门户B1</td></tr>
+    <tr><td class="c">18</td><td>订单/样衣列表机密名称遮蔽 <span class="lv p1">已拍板=A2</span></td><td>未授权用户看到的中间商/买家名称快照显示 🔒</td><td class="src">机密体系延伸</td></tr>
+    <tr><td class="c">19</td><td>refreshCost 聚合不按行税率</td><td>聚合路径固定 ÷1.13;决议=按各行实际税率换算不含税</td><td class="src">结算Q10</td></tr>
+  </table></div>
+</section>
+
+<section>
+  <h2><span class="n">P2</span>变更提示 · 留痕 · 展示补齐(9 组)</h2>
+  <div class="tablebox"><table>
+    <tr><th>#</th><th>待办</th><th>说明</th><th>出处</th></tr>
+    <tr><td class="c">20</td><td><b>变更标记一组(5类)</b></td><td>报价被改→订单「源报价已变更」;订单改→合同「源订单已变更」;草稿订单→报价「占用中」;耗用改值「已偏离样衣」;样衣未实测成单「单耗为预估」黄条</td><td class="src">ORD A9/E8/C1/C5 · CON A8</td></tr>
+    <tr><td class="c">21</td><td><b>留痕体系一组</b></td><td>损耗/汇率/成本收汇改值留痕(原值X→改为Y);合同数量微调留痕;结算重算历史版本</td><td class="src">qc C6/D8 · 结算稿E</td></tr>
+    <tr><td class="c">22</td><td><b>软锁+版本+红冲</b></td><td>结算已确认后上游变更→「待重算」提示、复核后覆盖留版本;关账后红冲重开;工时对账后版师改件数→待重算</td><td class="src">结算Q17 · qc H3/G5</td></tr>
+    <tr><td class="c">23</td><td>报价显示关联订单号/被引用列表</td><td>转单后报价上看不到订单号,也看不到被几张(草稿)订单引用</td><td class="src">ORD A8/A6/E8</td></tr>
+    <tr><td class="c">24</td><td>对账详情头补款号/「共N张合同」;列表补「发货批次N批」列</td><td></td><td class="src">对账A2/B2 · rev2#2#3</td></tr>
+    <tr><td class="c">25</td><td>样衣「已废弃」状态</td><td>现只能删(未引用时);决议=改用废弃态、下游留快照</td><td class="src">qc B4</td></tr>
+    <tr><td class="c">26</td><td>结算列表体验一组</td><td>「待收汇N/亏损预警N」徽标;不含税货款/收汇/毛利列;「亏损」状态红标;高级筛选;「尚有N笔未付」「待船务出货」提示;品名/订单数量字段;成本明细行细化(颜色/实发数/单价/供应商/对账单号/付款状态)</td><td class="src">结算稿A/B/E</td></tr>
+    <tr><td class="c">27</td><td>门户列表体验一组</td><td>卡片显款号;待我处理优先排序;「进入处理/查看」区分;渲染数量搭配与包装资料</td><td class="src">门户E2/A2</td></tr>
+    <tr><td class="c">28</td><td>客户调整状态建单加提示;超发确认移到对账提交由业务勾原因留痕</td><td></td><td class="src">ORD A7 · 补充B3</td></tr>
+  </table></div>
+</section>
+
+<section>
+  <h2><span class="n">P3</span>功能增强(15 组)</h2>
+  <div class="tablebox"><table>
+    <tr><th>#</th><th>待办</th><th>出处</th></tr>
+    <tr><td class="c">29</td><td><b>跨合同合并发货</b>(同供应商同地址勾多张合同/多款,明细分摊)——唯一整题未实现</td><td class="src">门户C2 · qc G1 · rev2</td></tr>
+    <tr><td class="c">30</td><td>发货逐物料行带入、分行填实发数(现为整单一个数)</td><td class="src">门户C4</td></tr>
+    <tr><td class="c">31</td><td>发货地址默认自动带加工厂地址;门户发货时可临时改</td><td class="src">门户C1 · rev2合同#1</td></tr>
+    <tr><td class="c">32</td><td>订单打印/导出三套脱敏模板(对客/对工厂/内部);报价 PDF 补样衣图片、去客户信息与利润率、内容勾选、独立导出文件</td><td class="src">ORD E2 · rev G1/G2/G3 · qc I3</td></tr>
+    <tr><td class="c">33</td><td>附件/图片随单继承链:样衣图→报价/订单彩稿候选、样衣4附件带报价、一键引入订单、合同材料照片复用上游</td><td class="src">qc I4 · ORD C3/D9 · CON C4 · TRI G1</td></tr>
+    <tr><td class="c">34</td><td>订单复制;订单列表金额列(总金额/美金总计);订单维度统计(按PO/客户/工厂/币种)</td><td class="src">qc I5 · ORD E6/D8</td></tr>
+    <tr><td class="c">35</td><td>收货方台账(consignee 字典已建未消费:客户下维护目的地/收货人供 PO 复用带出)</td><td class="src">ORD B6 · qc A6</td></tr>
+    <tr><td class="c">36</td><td>中间商默认佣金率带出;佣金>阈值 或 USD 触发订单审批</td><td class="src">ORD B8/D7</td></tr>
+    <tr><td class="c">37</td><td>尺码档+颜色字典前置(矩阵从字典选、样衣色清单校验、跨款按 code 对齐)</td><td class="src">ORD E7 · qc C5</td></tr>
+    <tr><td class="c">38</td><td>可配置化一组:损耗按品类预设、财务费 7% 进系统参数、费用项字典+阶梯计费、字典维护管理页</td><td class="src">qc C6/D7 · 结算稿C · ORD B5</td></tr>
+    <tr><td class="c">39</td><td>结算深水区一组:期间费用四项分列、退税「到账确认」入口、退运/索赔负数冲减行、拼柜按发票占比分摊、结算关联出货批、出口发票子模块</td><td class="src">结算Q5/Q11/Q19/Q3/Q18/Q12 · qc H4</td></tr>
+    <tr><td class="c">40</td><td>付款补齐一组:无合同付款补 银行/相关款号 字段、BUSINESS 可发起、财务可审批;水单必填;预付登记款号;「付款日」检索维度;补料对账可并入原合同(业务选)</td><td class="src">对账E3/E2/A3 · 补充C2 · qc E8</td></tr>
+    <tr><td class="c">41</td><td>合同小项:待定供应商占位合同、加工价历史同款提示、首次推送自动开通门户、报价明细列序品名在前</td><td class="src">CON C2/C3/B3 · ORD C6</td></tr>
+    <tr><td class="c">42</td><td>治理类:利润率下限审批+分品类/客户利润率规划表+锁汇留痕;盖章后撤销走审批;门户关键操作二次验证/链接失效;供应商列按客户授权分级显示;工时单价可切币种</td><td class="src">qc D8/E4/F3/F5/G5</td></tr>
+    <tr><td class="c">43</td><td>数据迁移:在产订单导入+「外部单号」字段;报价历史导入(客户/工厂/样衣已有导入工具)</td><td class="src">ORD D10 · TRI J2 · qc I1</td></tr>
+  </table></div>
+</section>
+
+<section>
+  <h2><span class="n">§5</span>需业务拍板(3 项决议矛盾/含糊)</h2>
+  <ul>
+    <li><b>报价:订单 = 1:N 还是 1:1?</b> 订单清单 A6 定「1:N 可多次导入」,同清单 D2 又定「生成订单后报价锁定不可再引用(1:1)」——现实现为 1:N 无锁。</li>
+    <li><b>合同数量微调是否回写订单核算?</b> 合同清单 A3 定「不回写(独立采购依据)」,总纲 C3 定「回写订单核算并留痕」——现实现为不回写。</li>
+    <li><b>样衣材料行级「生成材料订单」</b>:系统无独立采购单实体(采购=材料合同),该按钮映射到什么单据需业务澄清。</li>
+  </ul>
+</section>
+
+<section>
+  <h2><span class="n">§6</span>外部依赖(代码之外)</h2>
+  <ul>
+    <li>合同推送的<b>专属链接 / 小程序 / 短信通知</b>——需通知渠道与模板资质;</li>
+    <li><b>第三方 CA 电子签 / 可信时间戳存证</b>——需接存证服务商。</li>
+  </ul>
+</section>
+
+<footer style="color:var(--ink3);font-size:12px;text-align:center;margin-top:30px">
+  总览走查待办清单 v1.0 · 2026-07-11 · 每条结论均经代码实证(文件/函数级证据存档于审计底稿)
+</footer>
+</div>
+</body>
+</html>
