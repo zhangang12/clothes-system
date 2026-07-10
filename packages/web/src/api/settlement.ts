@@ -19,6 +19,8 @@ export const settlementApi = {
     http.delete<unknown, any>(`/settlements/${id}/receipts/${receiptId}`),
   refreshCost: (id: number) =>
     http.patch<unknown, any>(`/settlements/${id}/refresh-cost`),
+  stats: () =>
+    http.get<unknown, any>('/settlements/stats'),
   reopen: (id: number) =>
     http.patch<unknown, any>(`/settlements/${id}/reopen`),
   changeLogs: (id: number) =>

@@ -23,11 +23,15 @@
           </div>
           <div class="card-body">
             <span class="type-label">{{ typeLabel(c.type) }}</span>
+            <span v-if="c.style_nos" class="style-nos">款号 {{ c.style_nos }}</span>
             <span class="amount">{{ c.currency }} {{ (+c.total_amount).toFixed(2) }}</span>
           </div>
           <div class="card-footer">
             <span>账期 {{ c.account_period_days }} 天</span>
-            <van-icon name="arrow" class="arrow-icon" />
+            <van-button
+              size="mini" :type="actionable(c.portal_status) ? 'primary' : 'default'" plain round
+              @click.stop="goDetail(c.id)"
+            >{{ actionable(c.portal_status) ? '进入处理' : '查看' }}</van-button>
           </div>
         </div>
         <van-empty v-if="!loading && !list.length" description="暂无合同记录" image="search" />
@@ -48,6 +52,8 @@ const loading = ref(false);
 const finished = ref(false);
 const refreshing = ref(false);
 const activeTab = ref('');
+// 待我处理(P2#27):待盖章/待发货/待对账/待开票=可操作,已完成=仅查看
+const actionable = (st: string) => ['PUSHED', 'STAMPED', 'SHIPPING', 'RECONCILED'].includes(st);
 const page = ref(1);
 const PAGE_SIZE = 20;
 
@@ -120,6 +126,7 @@ onMounted(() => {});
   margin-bottom: 6px;
 }
 .type-label { font-size: 13px; color: #646566; }
+.style-nos { font-size: 12px; color: #666; margin: 0 8px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .amount { font-size: 16px; font-weight: 600; color: #ee0a24; }
 .card-footer {
   display: flex;

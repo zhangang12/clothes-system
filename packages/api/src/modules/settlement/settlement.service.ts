@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like, In, FindOptionsWhere, DataSource } from 'typeorm';
+import { Repository, Like, In, LessThan, FindOptionsWhere, DataSource } from 'typeorm';
 import { SettlementStatus, ReconcileType } from '@i9/types';
 import { Settlement } from './settlement.entity';
 import { SettlementCost } from './settlement-cost.entity';
@@ -134,6 +134,12 @@ export class SettlementService {
     const factoryIds = [...new Set(recons.map((rc) => +rc.factory_id).filter(Boolean))];
     const factories = factoryIds.length ? await this.factoryRepo.find({ where: { id: In(factoryIds) } }) : [];
     const factoryName = new Map(factories.map((f) => [+f.id, f.short_name || f.name]));
+    // 实发数(P2#26):对账批次快照合计 → AUTO 行 qty,加权单价=金额/数量
+    const qtyRows: Array<{ rid: string; q: string }> = await this.dataSource.query(
+      'SELECT reconcile_id rid, SUM(qty) q FROM reconciliation_shipment WHERE reconcile_id IN (?) GROUP BY reconcile_id',
+      [recons.map((rc) => rc.id)],
+    ).catch(() => []);
+    const qtyByRec = new Map(qtyRows.map((r) => [+r.rid, +r.q]));
 
     const agg: GoodsAgg = { ...EMPTY_AGG, autoRows: [] };
     for (const rc of recons) {
@@ -148,6 +154,7 @@ export class SettlementService {
         agg.unpaidTax += amount;
         agg.unpaidCount += 1;
       }
+      const shippedQty = qtyByRec.get(+rc.id);
       agg.autoRows.push({
         cost_name: `对账 ${rc.reconcile_no}`,
         amount: r4(amount),
@@ -156,6 +163,8 @@ export class SettlementService {
         reconcile_no: rc.reconcile_no,
         supplier_name: rc.factory_id ? factoryName.get(+rc.factory_id) ?? null : null,
         pay_status: rc.status,
+        qty: shippedQty != null ? r4(shippedQty) : null,
+        unit_price: shippedQty ? r4(amount / shippedQty) : null,
         source: 'AUTO',
         included: paid ? 1 : 0,
       } as Partial<SettlementCost>);
@@ -297,6 +306,8 @@ export class SettlementService {
         settlement_no,
         order_id: dto.order_id,
         style_no: order.style_no ?? null,
+        style_name: (order as any).style_name ?? null,
+        order_qty: +(order.qty_total ?? 0),
         customer_name: order.middleman_name ?? null,
         shipped_qty: shippedQty,
         currency: order.currency ?? 'CNY',
@@ -346,6 +357,9 @@ export class SettlementService {
       deleted: 0,
       ...(status !== undefined && { status: status as SettlementStatus }),
       ...(order_id !== undefined && { order_id }),
+      // 高级筛选(P2#26):仅看亏损(净利<0且利润可信)/仅看待重算
+      ...((query as any).loss === '1' && { profit_ready: 1, net_profit: LessThan(0) as any }),
+      ...((query as any).needs_recalc === '1' && { needs_recalc: 1 }),
     };
     // 支持按结算单号或款号检索（设计稿：列表·搜款号带入）
     const where = keyword
@@ -362,6 +376,16 @@ export class SettlementService {
       order: { id: 'DESC' },
     });
     return { items, total, page, size };
+  }
+
+  // 列表徽标(P2#26):待收汇N/亏损预警N/待重算N
+  async stats() {
+    const [pending, loss, recalc] = await Promise.all([
+      this.repo.count({ where: { deleted: 0, status: SettlementStatus.DRAFT } }),
+      this.repo.count({ where: { deleted: 0, profit_ready: 1, net_profit: LessThan(0) as any } }),
+      this.repo.count({ where: { deleted: 0, needs_recalc: 1 } }),
+    ]);
+    return { pending, loss, recalc };
   }
 
   async findOne(id: number) {

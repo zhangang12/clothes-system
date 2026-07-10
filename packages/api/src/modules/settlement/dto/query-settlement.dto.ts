@@ -15,6 +15,16 @@ export class QuerySettlementDto {
   @IsInt()
   order_id?: number;
 
+  // 高级筛选(P2#26):'1'=仅看亏损(净利<0且利润可信)
+  @IsOptional()
+  @IsString()
+  loss?: string;
+
+  // '1'=仅看待重算
+  @IsOptional()
+  @IsString()
+  needs_recalc?: string;
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()

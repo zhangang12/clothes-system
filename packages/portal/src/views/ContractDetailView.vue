@@ -65,6 +65,8 @@
       <van-cell v-if="contract.orderDetail.att_board" title="大货纸板" is-link @click="openAtt(contract.orderDetail.att_board)" value="查看" />
       <van-cell v-if="contract.orderDetail.att_sizechart" title="尺寸表" is-link @click="openAtt(contract.orderDetail.att_sizechart)" value="查看" />
       <van-cell v-if="contract.orderDetail.att_filling" title="填充量" is-link @click="openAtt(contract.orderDetail.att_filling)" value="查看" />
+      <van-cell v-if="contract.orderDetail.att_packing" title="包装资料" is-link @click="openAtt(contract.orderDetail.att_packing)" value="查看" />
+      <van-cell v-if="contract.orderDetail.att_artwork" title="彩稿" is-link @click="openAtt(contract.orderDetail.att_artwork)" value="查看" />
       <van-cell
         v-for="(m, i) in contract.orderDetail.materials"
         :key="i"
@@ -72,6 +74,28 @@
         :label="`${m.part || ''} ${m.color || ''} ${m.unit || ''}`"
         :value="`订量 ${m.final_purchase ?? m.total_purchase ?? 0}`"
       />
+    </van-cell-group>
+
+    <!-- 数量搭配(尺码矩阵,门户A2:加工厂按色/码/PO 生产)-->
+    <van-cell-group v-if="matrixRows.length" title="数量搭配（色/码/PO）" inset>
+      <div class="matrix-scroll">
+        <table class="matrix-table">
+          <thead>
+            <tr>
+              <th>款号</th><th>颜色</th><th>尺码</th>
+              <th v-for="(po, pi) in matrixPos" :key="pi">{{ po.po_no || `PO${pi + 1}` }}</th>
+              <th>合计</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(r, ri) in matrixRows" :key="ri">
+              <td>{{ r.style_no || '—' }}</td><td>{{ r.color || '—' }}</td><td>{{ r.size || '—' }}</td>
+              <td v-for="(po, pi) in matrixPos" :key="pi">{{ r.qtys?.[pi] || 0 }}</td>
+              <td class="row-total">{{ (r.qtys ?? []).reduce((a: number, b: any) => a + (+b || 0), 0) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </van-cell-group>
 
     <!-- 发货批次（含业务审批状态；对账勾选数据源，设计稿 05 §B2/§C）-->
@@ -444,6 +468,10 @@ async function load() {
 }
 
 // 纸质盖章照片上传(A3)
+// 数量搭配矩阵(门户A2):orderDetail.size_matrix {pos,rows}
+const matrixPos = computed(() => (contract.value?.orderDetail?.size_matrix?.pos ?? []) as any[]);
+const matrixRows = computed(() => (contract.value?.orderDetail?.size_matrix?.rows ?? []) as any[]);
+
 const stampPaperFiles = ref<any[]>([]);
 const stampPaperUrl = ref('');
 async function onStampPaperRead(item: any) {
@@ -610,6 +638,11 @@ onMounted(load);
   align-items: center;
   height: 200px;
 }
+.matrix-scroll { overflow-x: auto; padding: 8px 12px; }
+.matrix-table { border-collapse: collapse; font-size: 12px; min-width: 100%; }
+.matrix-table th, .matrix-table td { border: 1px solid #eee; padding: 4px 8px; text-align: center; white-space: nowrap; }
+.matrix-table th { background: #fafafa; color: #666; }
+.row-total { font-weight: 600; }
 .paper-stamp {
   margin-top: 10px;
   display: flex;

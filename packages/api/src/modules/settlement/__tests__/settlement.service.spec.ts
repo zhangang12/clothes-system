@@ -104,6 +104,7 @@ const mockReconcileRepo = {
 const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn().mockResolvedValue(1) };
 const mockDataSource = {
   transaction: jest.fn().mockImplementation((cb) => cb(makeManager())),
+  query: jest.fn().mockResolvedValue([]), // 实发数聚合(reconciliation_shipment)
 };
 
 const mockChangeLogDep = { record: jest.fn().mockResolvedValue(undefined), list: jest.fn().mockResolvedValue([]) };

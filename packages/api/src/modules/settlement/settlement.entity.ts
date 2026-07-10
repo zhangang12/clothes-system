@@ -15,6 +15,12 @@ export class Settlement {
   @Column({ length: 60, nullable: true })
   style_no?: string; // 款号（核算口径，来自订单）
 
+  @Column({ length: 200, nullable: true })
+  style_name?: string; // 品名（建单时从订单带出，结算稿A/P2#26）
+
+  @Column({ type: 'int', default: 0 })
+  order_qty: number; // 订单数量（建单时从订单带出，与出货件数对照）
+
   @Column({ type: 'int', default: 0 })
   shipped_qty: number; // 出货件数（汇总自船务 order_shipment）
 

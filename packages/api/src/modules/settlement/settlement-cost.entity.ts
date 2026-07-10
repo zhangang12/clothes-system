@@ -29,6 +29,12 @@ export class SettlementCost {
   @Column({ length: 20, nullable: true, comment: '付款状态 PAID=已付 CONFIRMED=已确认未付' })
   pay_status?: string;
 
+  @Column({ type: 'decimal', precision: 15, scale: 4, nullable: true, comment: '实发数(来自对账批次合计,P2#26)' })
+  qty?: number;
+
+  @Column({ type: 'decimal', precision: 15, scale: 4, nullable: true, comment: '加权单价=金额/实发数(P2#26)' })
+  unit_price?: number;
+
   @Column({ length: 10, default: 'MANUAL', comment: 'AUTO=对账汇总快照 MANUAL=手工行' })
   source: string;
 

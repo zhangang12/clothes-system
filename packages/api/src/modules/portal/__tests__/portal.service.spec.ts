@@ -46,13 +46,25 @@ const makeMaterial = () => ({
   amount: 5000,
 });
 
-const makeRepo = () => ({
-  findOne: jest.fn().mockResolvedValue(null),
-  findAndCount: jest.fn().mockResolvedValue([[], 0]),
-  save: jest.fn().mockImplementation((v) => Promise.resolve(v)),
-  create: jest.fn().mockImplementation((v) => v),
-  find: jest.fn().mockResolvedValue([]),
-});
+const makeRepo = () => {
+  const repo: any = {
+    findOne: jest.fn().mockResolvedValue(null),
+    findAndCount: jest.fn().mockResolvedValue([[], 0]),
+    save: jest.fn().mockImplementation((v: any) => Promise.resolve(v)),
+    create: jest.fn().mockImplementation((v: any) => v),
+    find: jest.fn().mockResolvedValue([]),
+  };
+  repo.createQueryBuilder = jest.fn(() => {
+    const qb: any = {
+      where: jest.fn(() => qb), andWhere: jest.fn(() => qb), addSelect: jest.fn(() => qb),
+      orderBy: jest.fn(() => qb), addOrderBy: jest.fn(() => qb), skip: jest.fn(() => qb), take: jest.fn(() => qb),
+      // 复用 findAndCount 的桩数据,保持既有用例断言不变
+      getManyAndCount: jest.fn(() => repo.findAndCount()),
+    };
+    return qb;
+  });
+  return repo;
+};
 
 describe('PortalService', () => {
   let service: PortalService;
@@ -109,8 +121,9 @@ describe('PortalService', () => {
   it('UT-PORTAL-02 getContracts filters by portal_status', async () => {
     contractRepo.findAndCount.mockResolvedValue([[], 0]);
     await service.getContracts(10, 1, 20, 'STAMPED');
-    const call = contractRepo.findAndCount.mock.calls[0][0];
-    expect(call.where).toMatchObject({ portal_status: 'STAMPED' });
+    // 改为 qb 实现(待我处理优先排序,P2#27):校验状态过滤经 andWhere 注入
+    const qb = contractRepo.createQueryBuilder.mock.results[0].value;
+    expect(qb.andWhere).toHaveBeenCalledWith('c.portal_status = :ps', { ps: 'STAMPED' });
   });
 
   // UT-PORTAL-03: getContract returns contract with materials and logs

@@ -46,12 +46,17 @@ export class PortalService {
       ? { ...base, portal_status: portalStatus as ContractPortalStatus }
       : VISIBLE_STATUSES.map((s) => ({ ...base, portal_status: s }));
 
-    const [items, total] = await this.contractRepo.findAndCount({
-      where,
-      skip: (page - 1) * size,
-      take: size,
-      order: { id: 'DESC' },
-    });
+    // 待我处理优先(P2#27):待盖章>待发货>待对账>待开票>已完成,同级新单在前
+    const qb = this.contractRepo.createQueryBuilder('c')
+      .where('c.factory_id = :fid AND c.deleted = 0', { fid: factoryId });
+    if (portalStatus) qb.andWhere('c.portal_status = :ps', { ps: portalStatus });
+    else qb.andWhere('c.portal_status IN (:...vs)', { vs: VISIBLE_STATUSES });
+    qb.addSelect(`FIELD(c.portal_status,'PUSHED','STAMPED','SHIPPING','RECONCILED','COMPLETED')`, 'todo_rank')
+      .orderBy('todo_rank', 'ASC')
+      .addOrderBy('c.id', 'DESC')
+      .skip((page - 1) * size)
+      .take(size);
+    const [items, total] = await qb.getManyAndCount();
     return { items, total, page, size };
   }
 

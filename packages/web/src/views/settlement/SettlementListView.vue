@@ -14,11 +14,20 @@
         <el-form-item label="订单ID">
           <el-input-number v-model="query.order_id" :min="1" :controls="false" placeholder="订单ID" style="width:100px" @change="load" />
         </el-form-item>
+        <el-form-item label="高级">
+          <el-checkbox v-model="onlyLoss" @change="load">仅看亏损</el-checkbox>
+          <el-checkbox v-model="onlyRecalc" @change="load" style="margin-left:8px">仅看待重算</el-checkbox>
+        </el-form-item>
         <el-form-item>
           <el-button type="primary" :icon="Search" @click="load">搜索</el-button>
           <el-button :icon="Refresh" @click="reset">重置</el-button>
         </el-form-item>
       </el-form>
+      <div class="badge-bar">
+        <el-badge :value="stats.pending" :max="99" type="info" :hidden="!stats.pending"><el-tag size="small" type="info">待收汇</el-tag></el-badge>
+        <el-badge :value="stats.loss" :max="99" type="danger" :hidden="!stats.loss"><el-tag size="small" type="danger">亏损预警</el-tag></el-badge>
+        <el-badge :value="stats.recalc" :max="99" type="warning" :hidden="!stats.recalc"><el-tag size="small" type="warning">待重算</el-tag></el-badge>
+      </div>
     </el-card>
 
     <el-card>
@@ -32,17 +41,41 @@
       <el-table :data="list" v-loading="loading" border stripe>
         <el-table-column prop="settlement_no" label="结算单编号" width="180" />
         <el-table-column prop="order_id" label="订单ID" width="80" align="center" />
-        <el-table-column prop="style_no" label="款号" width="120" show-overflow-tooltip>
+        <el-table-column prop="style_no" label="款号" width="110" show-overflow-tooltip>
           <template #default="{ row }">{{ row.style_no || '—' }}</template>
         </el-table-column>
-        <el-table-column prop="settle_amount" label="结算金额" width="120" align="right">
+        <el-table-column prop="style_name" label="品名" width="110" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.style_name || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="订单/出货数" width="106" align="right">
+          <template #default="{ row }">
+            {{ row.order_qty || '—' }} / {{ row.shipped_qty ?? 0 }}
+            <el-tag v-if="!+(row.shipped_qty ?? 0)" type="info" size="small">待船务出货</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="settle_amount" label="结算金额" width="110" align="right">
           <template #default="{ row }">{{ (+(row.settle_amount ?? row.revenue ?? 0)).toFixed(2) }}</template>
         </el-table-column>
-        <el-table-column prop="goods_amount_tax" label="总货款(含税)" width="120" align="right">
-          <template #default="{ row }">{{ (+(row.goods_amount_tax ?? row.total_cost ?? 0)).toFixed(2) }}</template>
+        <el-table-column prop="goods_amount_tax" label="总货款(含税)" width="112" align="right">
+          <template #default="{ row }">
+            {{ (+(row.goods_amount_tax ?? row.total_cost ?? 0)).toFixed(2) }}
+            <div v-if="+(row.unpaid_count ?? 0)" class="muted" style="font-size:11px">尚有{{ row.unpaid_count }}笔未付</div>
+          </template>
         </el-table-column>
-        <el-table-column prop="gross_margin" label="毛利率" width="90" align="right">
-          <template #default="{ row }">{{ row.gross_margin != null ? (+row.gross_margin).toFixed(2) + '%' : '—' }}</template>
+        <el-table-column prop="goods_amount_extax" label="不含税货款" width="106" align="right">
+          <template #default="{ row }">{{ (+(row.goods_amount_extax ?? 0)).toFixed(2) }}</template>
+        </el-table-column>
+        <el-table-column prop="receipt_usd" label="收汇$" width="92" align="right">
+          <template #default="{ row }">{{ (+(row.receipt_usd ?? 0)).toFixed(2) }}</template>
+        </el-table-column>
+        <el-table-column label="毛利/毛利率" width="118" align="right">
+          <template #default="{ row }">
+            <template v-if="+(row.profit_ready ?? 0)">
+              <span :class="{ 'text-danger': +row.gross_profit < 0, 'text-success': +row.gross_profit > 0 }">{{ (+(row.gross_profit ?? 0)).toFixed(2) }}</span>
+              <span class="muted"> {{ row.gross_margin != null ? (+row.gross_margin).toFixed(1) + '%' : '' }}</span>
+            </template>
+            <span v-else class="muted">待收汇</span>
+          </template>
         </el-table-column>
         <el-table-column prop="net_profit" label="含退税净利" width="120" align="right">
           <template #default="{ row }">
@@ -58,6 +91,7 @@
               {{ row.status === 'CONFIRMED' ? '已结算' : '待收汇' }}
             </el-tag>
             <el-tag v-if="+(row.needs_recalc ?? 0)" type="warning" size="small" style="margin-left:4px">待重算</el-tag>
+            <el-tag v-if="+(row.profit_ready ?? 0) && +(row.net_profit ?? 0) < 0" type="danger" size="small" style="margin-left:4px">亏损</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="confirmed_at" label="确认时间" width="160">
@@ -188,6 +222,12 @@
           <el-table-column prop="cost_name" label="费用名称" min-width="150" show-overflow-tooltip />
           <el-table-column prop="supplier_name" label="供应商" width="110" show-overflow-tooltip>
             <template #default="{ row }">{{ row.supplier_name || '—' }}</template>
+          </el-table-column>
+          <el-table-column prop="qty" label="实发数" width="80" align="right">
+            <template #default="{ row }">{{ row.qty != null ? +row.qty : '—' }}</template>
+          </el-table-column>
+          <el-table-column prop="unit_price" label="单价" width="86" align="right">
+            <template #default="{ row }">{{ row.unit_price != null ? (+row.unit_price).toFixed(4) : '—' }}</template>
           </el-table-column>
           <el-table-column prop="amount" label="金额" width="110" align="right">
             <template #default="{ row }">{{ (+row.amount).toFixed(2) }}</template>
@@ -459,6 +499,15 @@ const loading = ref(false);
 const saving = ref(false);
 const list = ref<any[]>([]);
 const total = ref(0);
+const stats = reactive({ pending: 0, loss: 0, recalc: 0 });
+const onlyLoss = ref(false);
+const onlyRecalc = ref(false);
+async function loadStats() {
+  try {
+    const res: any = await settlementApi.stats();
+    Object.assign(stats, res?.data ?? {});
+  } catch { /* 非财务角色无徽标 */ }
+}
 const query = reactive({
   page: 1, size: 20, keyword: '',
   status: undefined as string | undefined,
@@ -468,7 +517,12 @@ const query = reactive({
 async function load() {
   loading.value = true;
   try {
-    const res = await settlementApi.list(query);
+    const res = await settlementApi.list({
+      ...query,
+      ...(onlyLoss.value ? { loss: '1' } : {}),
+      ...(onlyRecalc.value ? { needs_recalc: '1' } : {}),
+    });
+    loadStats();
     list.value = res?.data ?? [];
     total.value = res?.data?.total ?? res?.total ?? 0;
   } finally { loading.value = false; }
@@ -476,6 +530,8 @@ async function load() {
 
 function reset() {
   Object.assign(query, { keyword: '', status: undefined, order_id: undefined, page: 1 });
+  onlyLoss.value = false;
+  onlyRecalc.value = false;
   load();
 }
 
@@ -716,6 +772,7 @@ async function doAddReceipt() {
 .text-danger { color: #f56c6c; }
 .text-success { color: #67c23a; }
 .muted { color: var(--el-text-color-secondary); }
+.badge-bar { display:flex; gap:18px; padding: 0 4px 12px; }
 .unpaid-grey { color: var(--el-text-color-secondary); }
 .hint-inline { font-size: 12px; color: var(--el-text-color-secondary); margin-left: 8px; }
 :deep(.row-unpaid) { color: var(--el-text-color-disabled); background: var(--el-fill-color-lighter); }

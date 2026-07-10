@@ -35,6 +35,13 @@ export class SettlementController {
     return maskSettlement(await this.service.findAll(query), req.user.role);
   }
 
+  @Get('stats')
+  @Roles(UserRole.ADMIN, UserRole.FINANCE)
+  @ApiOperation({ summary: '列表徽标统计:待收汇/亏损预警/待重算(P2#26)' })
+  stats() {
+    return this.service.stats();
+  }
+
   @Get(':id')
   @ApiOperation({ summary: '结算单详情（含费用/回款；成本/毛利限财务/管理）' })
   async findOne(@Param('id', ParseIntPipe) id: number, @Request() req: any) {

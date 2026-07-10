@@ -829,6 +829,8 @@ CREATE TABLE IF NOT EXISTS `settlement` (
   `settlement_no`        VARCHAR(30)    NOT NULL COMMENT '结算单号 JS-YYYYMMDD-001',
   `order_id`             BIGINT         NOT NULL,
   `style_no`             VARCHAR(60)    DEFAULT NULL COMMENT '款号(核算口径,来自订单)',
+  `style_name`           VARCHAR(200)   DEFAULT NULL COMMENT '品名(建单时从订单带出,P2#26)',
+  `order_qty`            INT            NOT NULL DEFAULT 0 COMMENT '订单数量(与出货件数对照,P2#26)',
   `shipped_qty`          INT            NOT NULL DEFAULT 0 COMMENT '出货件数(汇总自 order_shipment)',
   `currency`             VARCHAR(5)     NOT NULL DEFAULT 'CNY',
   `exchange_rate`        DECIMAL(10,4)  DEFAULT NULL COMMENT '结算汇率',
@@ -885,6 +887,8 @@ CREATE TABLE IF NOT EXISTS `settlement_cost` (
   `reconcile_no`    VARCHAR(30)    DEFAULT NULL COMMENT '来源对账单号(AUTO行)',
   `supplier_name`   VARCHAR(100)   DEFAULT NULL COMMENT '供应商(AUTO行)',
   `pay_status`      VARCHAR(20)    DEFAULT NULL COMMENT '付款状态 PAID=已付 CONFIRMED=已确认未付',
+  `qty`             DECIMAL(15,4)  DEFAULT NULL COMMENT '实发数(对账批次合计,P2#26)',
+  `unit_price`      DECIMAL(15,4)  DEFAULT NULL COMMENT '加权单价=金额/实发数(P2#26)',
   `source`          VARCHAR(10)    NOT NULL DEFAULT 'MANUAL' COMMENT 'AUTO=对账汇总快照 MANUAL=手工行',
   `included`        TINYINT        NOT NULL DEFAULT 1 COMMENT '1=计入总货款 0=未付不计入(灰显)',
   `created_at`      DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -2041,6 +2045,10 @@ CALL _i9_add_col('settlement','order_id',"BIGINT         NOT NULL");
 CALL _i9_sync_col('settlement','order_id',"BIGINT","BIGINT         NOT NULL");
 CALL _i9_add_col('settlement','style_no',"VARCHAR(60)    DEFAULT NULL COMMENT '款号(核算口径,来自订单)'");
 CALL _i9_sync_col('settlement','style_no',"VARCHAR(60)","VARCHAR(60)    DEFAULT NULL COMMENT '款号(核算口径,来自订单)'");
+CALL _i9_add_col('settlement','style_name',"VARCHAR(200)   DEFAULT NULL COMMENT '品名(建单时从订单带出,P2#26)'");
+CALL _i9_sync_col('settlement','style_name',"VARCHAR(200)","VARCHAR(200)   DEFAULT NULL COMMENT '品名(建单时从订单带出,P2#26)'");
+CALL _i9_add_col('settlement','order_qty',"INT            NOT NULL DEFAULT 0 COMMENT '订单数量(与出货件数对照,P2#26)'");
+CALL _i9_sync_col('settlement','order_qty',"INT","INT            NOT NULL DEFAULT 0 COMMENT '订单数量(与出货件数对照,P2#26)'");
 CALL _i9_add_col('settlement','shipped_qty',"INT            NOT NULL DEFAULT 0 COMMENT '出货件数(汇总自 order_shipment)'");
 CALL _i9_sync_col('settlement','shipped_qty',"INT","INT            NOT NULL DEFAULT 0 COMMENT '出货件数(汇总自 order_shipment)'");
 CALL _i9_add_col('settlement','currency',"VARCHAR(5)     NOT NULL DEFAULT 'CNY'");
@@ -2137,6 +2145,10 @@ CALL _i9_add_col('settlement_cost','supplier_name',"VARCHAR(100)   DEFAULT NULL 
 CALL _i9_sync_col('settlement_cost','supplier_name',"VARCHAR(100)","VARCHAR(100)   DEFAULT NULL COMMENT '供应商(AUTO行)'");
 CALL _i9_add_col('settlement_cost','pay_status',"VARCHAR(20)    DEFAULT NULL COMMENT '付款状态 PAID=已付 CONFIRMED=已确认未付'");
 CALL _i9_sync_col('settlement_cost','pay_status',"VARCHAR(20)","VARCHAR(20)    DEFAULT NULL COMMENT '付款状态 PAID=已付 CONFIRMED=已确认未付'");
+CALL _i9_add_col('settlement_cost','qty',"DECIMAL(15,4)  DEFAULT NULL COMMENT '实发数(对账批次合计,P2#26)'");
+CALL _i9_sync_col('settlement_cost','qty',"DECIMAL(15,4)","DECIMAL(15,4)  DEFAULT NULL COMMENT '实发数(对账批次合计,P2#26)'");
+CALL _i9_add_col('settlement_cost','unit_price',"DECIMAL(15,4)  DEFAULT NULL COMMENT '加权单价=金额/实发数(P2#26)'");
+CALL _i9_sync_col('settlement_cost','unit_price',"DECIMAL(15,4)","DECIMAL(15,4)  DEFAULT NULL COMMENT '加权单价=金额/实发数(P2#26)'");
 CALL _i9_add_col('settlement_cost','source',"VARCHAR(10)    NOT NULL DEFAULT 'MANUAL' COMMENT 'AUTO=对账汇总快照 MANUAL=手工行'");
 CALL _i9_sync_col('settlement_cost','source',"VARCHAR(10)","VARCHAR(10)    NOT NULL DEFAULT 'MANUAL' COMMENT 'AUTO=对账汇总快照 MANUAL=手工行'");
 CALL _i9_add_col('settlement_cost','included',"TINYINT        NOT NULL DEFAULT 1 COMMENT '1=计入总货款 0=未付不计入(灰显)'");
