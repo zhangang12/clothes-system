@@ -300,6 +300,13 @@ export class CustomerService {
         await manager.query(
           "UPDATE sample_garment SET middleman_name = ? WHERE customer_id = ? AND status <> 'ORDERED' AND deleted = 0",
           [nameChanged.to, id]);
+        // 订单快照同步(总览走查P1#10 决议):草稿/已下单同步,已生成合同(CONTRACTED)起冻结
+        await manager.query(
+          "UPDATE order_main SET middleman_name = ? WHERE customer_id = ? AND status IN ('DRAFT','CONFIRMED') AND deleted = 0",
+          [nameChanged.to, id]);
+        await manager.query(
+          "UPDATE order_main SET buyer_name = ? WHERE buyer_id = ? AND status IN ('DRAFT','CONFIRMED') AND deleted = 0",
+          [nameChanged.to, id]);
       }
       const { contacts, banks, expresses } = this.buildSubtables(id, dto, saved.name);
       if (dto.contacts !== undefined) {

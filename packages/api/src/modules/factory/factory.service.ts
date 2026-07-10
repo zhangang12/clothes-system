@@ -244,9 +244,11 @@ export class FactoryService {
       .createQueryBuilder('f')
       .select(['f.id', 'f.factory_no', 'f.name', 'f.short_name', 'f.type', 'f.extra_types'])
       .where('f.status = 1 AND f.deleted = 0');
-    // 工厂双身份：主身份 或 附加身份 命中即返回（设计稿 A4）
+    // 工厂双身份：主身份 或 附加身份 命中即返回（设计稿 A4）；支持逗号分隔多类型(如 FABRIC,ACCESSORY)
     if (type) {
-      qb.andWhere('(f.type = :type OR FIND_IN_SET(:type, f.extra_types))', { type });
+      const types = type.split(',').map((t) => t.trim()).filter(Boolean);
+      const conds = types.map((_, i) => `(f.type = :t${i} OR FIND_IN_SET(:t${i}, f.extra_types))`).join(' OR ');
+      qb.andWhere(`(${conds})`, Object.fromEntries(types.map((t, i) => [`t${i}`, t])));
     }
     return qb.orderBy('f.factory_no', 'ASC').getMany();
   }

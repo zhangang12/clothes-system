@@ -197,7 +197,17 @@ describe('FactoryService', () => {
       await service.listForSelect('OUTSOURCE');
       expect(qb.andWhere).toHaveBeenCalledWith(
         expect.stringContaining('FIND_IN_SET'),
-        { type: 'OUTSOURCE' },
+        { t0: 'OUTSOURCE' },
+      );
+    });
+
+    it('UT-FAC-12b: 多类型过滤(FABRIC,ACCESSORY)——材料供应商下拉限面/辅料', async () => {
+      const qb = makeQb();
+      mockRepo.createQueryBuilder.mockReturnValueOnce(qb);
+      await service.listForSelect('FABRIC,ACCESSORY');
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining(':t1'),
+        { t0: 'FABRIC', t1: 'ACCESSORY' },
       );
     });
   });

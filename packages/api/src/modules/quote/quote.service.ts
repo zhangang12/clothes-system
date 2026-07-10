@@ -323,7 +323,8 @@ export class QuoteService {
       buyer_id: quote.buyer_id ?? undefined,
       salesperson: quote.salesperson ?? undefined,
       currency: quote.currency ?? undefined,
-      qty_total: +quote.quote_qty || 0,
+      // 报价数量不导入订单(总览走查P1#12/ORD A2 决议):留空强制在尺码矩阵补录,矩阵合计回填大货总数
+      qty_total: 0,
     } as CreateOrderDto, userId);
     // 报价明细 → 订单材料明细（快照；importFromQuote 会带出中间商/买家等基础字段）
     await this.orderService.importFromQuote(order.id, id);

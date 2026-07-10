@@ -151,7 +151,7 @@
             <el-table-column label="门幅/尺寸" width="100"><template #default="{ row }"><el-input v-model="row.width" size="small" /></template></el-table-column>
             <el-table-column label="颜色" width="90"><template #default="{ row }"><el-input v-model="row.color" size="small" /></template></el-table-column>
             <el-table-column label="成份" width="100"><template #default="{ row }"><el-input v-model="row.composition" size="small" /></template></el-table-column>
-            <el-table-column label="供应商" min-width="130"><template #default="{ row }"><el-select v-model="row.supplier" size="small" filterable allow-create default-first-option clearable placeholder="选工厂库或输入" style="width:100%"><el-option v-for="f in supplierFactories" :key="f.id" :label="f.name" :value="f.name" /></el-select></template></el-table-column>
+            <el-table-column label="供应商" min-width="130"><template #default="{ row }"><el-select v-model="row.supplier" size="small" filterable clearable placeholder="从工厂库选(面/辅料)" style="width:100%"><el-option v-for="f in supplierFactories" :key="f.id" :label="f.name" :value="f.name" /></el-select></template></el-table-column>
             <el-table-column label="单位" width="70"><template #default="{ row }"><el-input v-model="row.unit" size="small" /></template></el-table-column>
             <el-table-column label="单价(元)" width="90"><template #default="{ row }"><el-input v-model="row.unitPrice" size="small" type="number" /></template></el-table-column>
             <el-table-column label="取整" width="92"><template #default="{ row }"><el-select v-model="row.roundUp" size="small" style="width:100%" clearable placeholder="自动"><el-option label="强制取整" :value="1" /><el-option label="不取整" :value="0" /></el-select></template></el-table-column>
@@ -400,7 +400,7 @@ async function loadRefs() {
   const [qs, fs, allF] = await Promise.all([
     quoteApi.list({ page: 1, size: 100 }),
     factoryApi.select('OUTSOURCE'),
-    factoryApi.select(),
+    factoryApi.select('FABRIC,ACCESSORY'), // 材料供应商只可从工厂库点选且限面/辅料(总览走查P1#13)
   ]);
   quotes.value = (qs as any).data ?? [];
   factories.value = (((fs as any).data ?? fs) as any[]) ?? [];

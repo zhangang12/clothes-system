@@ -51,6 +51,8 @@
 
 ## 最近变更（新→旧，保留最近若干条）
 
+- （本次·P1订单一致性）`fix(order)` 总览走查 #10/#12/#13:①客户改名 C1 同步补齐订单快照——middleman_name/buyer_name 在 草稿/已下单 同步,已生成合同(CONTRACTED)起冻结;②报价转销售合同自动建订单不再带入报价数量(qty_total=0,留空强制补尺码矩阵,矩阵合计回填);③订单材料供应商下拉去 allow-create(只可从工厂库点选)+限面/辅料(factories/select 支持逗号分隔多类型,主/附身份均命中)。jest 221/221(factory spec 适配+新增多类型用例) vitest 85/85;真栈E2E 8/8:三态订单改名同步/冻结、转单qty=0、多类型下拉✓
+
 - （本次·P1门户闭环）`feat(portal)` 总览走查 #8/#9/#16:①**对账退回闭环**——整单退回时自动释放占用批次(供应商可重勾重发起),退回留痕单不可再提交(防同批次双计费);门户详情回显对账单列表+退回批注红条;②**发货完成→已完成**——新门户动作「发货完成」(SHIPPING/RECONCILED 可宣布,ship_done_at 留痕);开票后 已宣布→COMPLETED(新枚举值,门户「已完成」tab/标签),未宣布→回 SHIPPING 允许续批再对账(顺带修复"开票后停在RECONCILED无法续批"断链);③**撤回发货批次**——未被对账占用前门户可撤,累计发货量回退+日志;④**发货必填**——实发数量+快递公司/单号 DTO+服务端+H5三层必填;web 批次审批表补附件列。schema:contract +ship_done_at, portal_status 枚举+COMPLETED(gen-column-sync 重跑,本地真库枚举扩值✓)。jest 220/220(改3处spec适配) vitest 85/85;真栈E2E 22/22:必填拦截/两批发货/撤回回退/审批→对账占用→退回释放→批注回显→留痕单拒提→重发起→确认→发货完成→开票→COMPLETED✓
 
 - （本次·P0#6 订单生成合同入口）`feat(order)` 订单列表操作列+订单编辑页工具栏均加「生成合同」下拉(已下单/已生成合同/生产中可用):①材料合同——调既有 generate-from-order 按供应商拆单批量建草稿,弹窗确认+未匹配供应商清单提示+跳合同列表;②加工合同——跳 /contracts/new?type=PROCESS&order_id= 带入订单明细(复用既有从订单带入)。web contractApi +generateFromOrder。真栈验证:2供应商(1入库/1未入库)→created:1+unmatched:['某供应商']✓;vue-tsc/构建绿
