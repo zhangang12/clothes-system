@@ -49,11 +49,23 @@
           </template>
         </el-table-column>
         <el-table-column prop="salesperson" label="业务员" width="90"><template #default="{ row }">{{ row.salesperson || '-' }}</template></el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="230" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
             <el-button link size="small" @click="goView(row)">查看</el-button>
             <el-button v-if="row.approval_status === 'PENDING' && canReview" link type="success" size="small" @click="doApprove(row)">审批</el-button>
+            <el-dropdown
+              v-if="canEdit && ['CONFIRMED', 'CONTRACTED', 'PRODUCING'].includes(row.status)"
+              trigger="click" @command="(cmd: string) => onGenContract(cmd, row)"
+            >
+              <el-button link type="warning" size="small">生成合同<el-icon><ArrowDown /></el-icon></el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="material">材料合同（按供应商拆单）</el-dropdown-item>
+                  <el-dropdown-item command="process">加工合同（带入订单明细）</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -74,6 +86,7 @@ import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search, Plus, Download, Delete, ArrowDown } from '@element-plus/icons-vue';
 import { orderApi } from '@/api/order';
+import { contractApi } from '@/api/contract';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole, ORDER_STATUS_LABEL } from '@i9/types';
 
@@ -105,6 +118,37 @@ async function load() {
 function reset() { query.keyword = ''; query.status = undefined; query.page = 1; load(); }
 function goCreate() { router.push({ name: 'OrderCreate' }); }
 function goEdit(row: any) { router.push({ name: 'OrderEdit', params: { id: row.id } }); }
+
+// 生成合同入口（设计稿 合同 A1 主流程:订单侧拆单,而非只能从合同侧反向带入）
+async function onGenContract(cmd: string, row: any) {
+  if (cmd === 'process') {
+    router.push({ path: '/contracts/new', query: { type: 'PROCESS', order_id: row.id } });
+    return;
+  }
+  try {
+    await ElMessageBox.confirm(
+      '将按订单「用料核算」中的供应商分组，每个供应商各生成一张材料合同草稿（分色/分码材料按尺码矩阵拆行）。',
+      '生成材料合同', { type: 'info', confirmButtonText: '生成', cancelButtonText: '取消' },
+    );
+  } catch { return; }
+  try {
+    const res: any = await contractApi.generateFromOrder(row.id);
+    const d = res?.data ?? res;
+    const unmatched: string[] = d?.unmatched ?? [];
+    if (d?.created) ElMessage.success(`已生成 ${d.created} 张材料合同草稿`);
+    if (unmatched.length) {
+      ElMessageBox.alert(
+        `以下供应商未在工厂库中登记，对应材料未生成合同：${unmatched.join('、')}。请先在基础资料·工厂库补录后重试。`,
+        '部分供应商未匹配', { type: 'warning' },
+      );
+    } else if (!d?.created) {
+      ElMessage.warning('没有可生成的材料行');
+    }
+    if (d?.created) router.push({ path: '/contracts', query: { order_id: row.id } });
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.msg ?? e?.response?.data?.message ?? '生成失败');
+  }
+}
 function goView(row: any) { router.push({ name: 'OrderView', params: { id: row.id } }); }
 async function doApprove(row: any) {
   try { await orderApi.approve(row.id); ElMessage.success('已审批，订单可下单'); load(); }

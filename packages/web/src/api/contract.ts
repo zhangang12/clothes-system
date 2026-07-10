@@ -10,6 +10,9 @@ export const contractApi = {
     http.get<unknown, { data: any[] }>(`/contracts/${id}/logs`),
   create: (dto: Record<string, unknown>) =>
     http.post<unknown, { data: Contract }>('/contracts', dto),
+  // 按订单材料供应商拆单批量生成材料合同（设计稿 合同 A1 主流程入口）
+  generateFromOrder: (orderId: number) =>
+    http.post<unknown, { data: { created: number; contracts: any[]; unmatched: string[] } }>(`/contracts/generate-from-order/${orderId}`),
   update: (id: number, dto: Record<string, unknown>) =>
     http.patch<unknown, { data: Contract }>(`/contracts/${id}`, dto),
   push: (id: number) =>

@@ -11,6 +11,18 @@
         <el-button v-if="!readonly" type="primary" :icon="Check" :loading="saving" @click="save">保存</el-button>
         <el-button v-if="!readonly && editId" :icon="Download" @click="importDialog = true">从报价导入</el-button>
         <el-button v-if="!readonly && editId && form.status !== 'DONE'" type="success" :icon="Promotion" @click="advance">推进状态</el-button>
+        <el-dropdown
+          v-if="editId && ['CONFIRMED', 'CONTRACTED', 'PRODUCING'].includes(form.status)"
+          trigger="click" @command="onGenContract"
+        >
+          <el-button type="warning" plain>生成合同<el-icon><ArrowDown /></el-icon></el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="material">材料合同（按供应商拆单）</el-dropdown-item>
+              <el-dropdown-item command="process">加工合同（带入订单明细）</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </div>
 
@@ -219,8 +231,9 @@ import { ref, reactive, computed, onMounted, h } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
-import { Back, Check, Plus, Minus, Download, Promotion } from '@element-plus/icons-vue';
+import { Back, Check, Plus, Minus, Download, Promotion, ArrowDown } from '@element-plus/icons-vue';
 import { orderApi } from '@/api/order';
+import { contractApi } from '@/api/contract';
 import { quoteApi } from '@/api/quote';
 import { factoryApi } from '@/api/factory';
 import FileUpload from '@/components/FileUpload.vue';
@@ -237,6 +250,37 @@ const SectionBlock = (props: { title: string; badge?: string }, { slots }: any) 
 
 const route = useRoute();
 const router = useRouter();
+
+// 生成合同入口（设计稿 合同 A1 主流程:订单侧拆单）
+async function onGenContract(cmd: string) {
+  if (cmd === 'process') {
+    router.push({ path: '/contracts/new', query: { type: 'PROCESS', order_id: editId.value } });
+    return;
+  }
+  try {
+    await ElMessageBox.confirm(
+      '将按订单「用料核算」中的供应商分组，每个供应商各生成一张材料合同草稿（分色/分码材料按尺码矩阵拆行）。',
+      '生成材料合同', { type: 'info', confirmButtonText: '生成', cancelButtonText: '取消' },
+    );
+  } catch { return; }
+  try {
+    const res: any = await contractApi.generateFromOrder(Number(editId.value));
+    const d = res?.data ?? res;
+    const unmatched: string[] = d?.unmatched ?? [];
+    if (d?.created) ElMessage.success(`已生成 ${d.created} 张材料合同草稿`);
+    if (unmatched.length) {
+      ElMessageBox.alert(
+        `以下供应商未在工厂库中登记，对应材料未生成合同：${unmatched.join('、')}。请先在基础资料·工厂库补录后重试。`,
+        '部分供应商未匹配', { type: 'warning' },
+      );
+    } else if (!d?.created) {
+      ElMessage.warning('没有可生成的材料行');
+    }
+    if (d?.created) router.push({ path: '/contracts', query: { order_id: editId.value } });
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.msg ?? e?.response?.data?.message ?? '生成失败');
+  }
+}
 const readonly = computed(() => !!route.meta.readonly);
 const editId = computed(() => (route.params.id ? Number(route.params.id) : null));
 const modeLabel = computed(() => (readonly.value ? '查看' : editId.value ? '编辑' : '新建'));
