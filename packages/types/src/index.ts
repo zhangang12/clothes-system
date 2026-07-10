@@ -149,6 +149,7 @@ export enum ContractPortalStatus {
   STAMPED = 'STAMPED',
   SHIPPING = 'SHIPPING',
   RECONCILED = 'RECONCILED',
+  COMPLETED = 'COMPLETED', // 已完成（供应商宣布发货完成 + 开票后闭环，门户C3/E2）
 }
 
 export enum ReconcileType {

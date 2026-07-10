@@ -59,6 +59,7 @@ const mockShipmentRepo = {
   create: jest.fn().mockImplementation((v) => v),
   save: jest.fn().mockResolvedValue([]),
   find: jest.fn().mockResolvedValue([]),
+  count: jest.fn().mockResolvedValue(0),
 };
 const mockLaborItemRepo = {
   find: jest.fn().mockResolvedValue([]),
@@ -210,18 +211,23 @@ describe('ReconciliationService', () => {
     expect(result.status).toBe(ReconciliationStatus.PENDING);
   });
 
-  // UT-REC-17: reject 整单退回 PENDING→DRAFT 并记录退回批注
+  // UT-REC-17: reject 整单退回 PENDING→DRAFT 并记录退回批注 + 释放占用批次(门户B3)
   it('UT-REC-17 reject transitions PENDING→DRAFT and records review_remark', async () => {
     const rec = makeReconciliation({ status: ReconciliationStatus.PENDING });
-    mockReconciliationRepo.findOne.mockResolvedValue(rec);
-    mockReconciliationRepo.save.mockImplementation((r: any) => Promise.resolve(r));
+    const manager = makeManager(rec);
+    (manager as any).update = jest.fn().mockResolvedValue({ affected: 1 });
+    manager.save.mockImplementation((_: any, r: any) => Promise.resolve(r));
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     const result = await service.reject(1, '金额与合同不符，请核对');
     expect(result.status).toBe(ReconciliationStatus.DRAFT);
     expect(result.review_remark).toBe('金额与合同不符，请核对');
+    expect((manager as any).update).toHaveBeenCalled(); // 释放批次
   });
 
   it('UT-REC-18 reject throws when not PENDING', async () => {
-    mockReconciliationRepo.findOne.mockResolvedValue(makeReconciliation({ status: ReconciliationStatus.DRAFT }));
+    const manager = makeManager(makeReconciliation({ status: ReconciliationStatus.DRAFT }));
+    (manager as any).update = jest.fn();
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await expect(service.reject(1, 'x')).rejects.toThrow(BadRequestException);
   });
 

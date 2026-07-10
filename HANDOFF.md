@@ -51,6 +51,8 @@
 
 ## 最近变更（新→旧，保留最近若干条）
 
+- （本次·P1门户闭环）`feat(portal)` 总览走查 #8/#9/#16:①**对账退回闭环**——整单退回时自动释放占用批次(供应商可重勾重发起),退回留痕单不可再提交(防同批次双计费);门户详情回显对账单列表+退回批注红条;②**发货完成→已完成**——新门户动作「发货完成」(SHIPPING/RECONCILED 可宣布,ship_done_at 留痕);开票后 已宣布→COMPLETED(新枚举值,门户「已完成」tab/标签),未宣布→回 SHIPPING 允许续批再对账(顺带修复"开票后停在RECONCILED无法续批"断链);③**撤回发货批次**——未被对账占用前门户可撤,累计发货量回退+日志;④**发货必填**——实发数量+快递公司/单号 DTO+服务端+H5三层必填;web 批次审批表补附件列。schema:contract +ship_done_at, portal_status 枚举+COMPLETED(gen-column-sync 重跑,本地真库枚举扩值✓)。jest 220/220(改3处spec适配) vitest 85/85;真栈E2E 22/22:必填拦截/两批发货/撤回回退/审批→对账占用→退回释放→批注回显→留痕单拒提→重发起→确认→发货完成→开票→COMPLETED✓
+
 - （本次·P0#6 订单生成合同入口）`feat(order)` 订单列表操作列+订单编辑页工具栏均加「生成合同」下拉(已下单/已生成合同/生产中可用):①材料合同——调既有 generate-from-order 按供应商拆单批量建草稿,弹窗确认+未匹配供应商清单提示+跳合同列表;②加工合同——跳 /contracts/new?type=PROCESS&order_id= 带入订单明细(复用既有从订单带入)。web contractApi +generateFromOrder。真栈验证:2供应商(1入库/1未入库)→created:1+unmatched:['某供应商']✓;vue-tsc/构建绿
 
 - （本次·P0安全包）`fix(security)` 总览走查 #5/#7:①**门户不泄露采购单价**——加工合同 orderDetail.materials API 层剥离 unit_price/budget(工厂只见品名/耗用/尺寸等工艺字段);②**敏感附件访问控制**——上传带 ?sensitive=1 落 uploads/private/ 子目录,读取须 HMAC 短时令牌(5分钟);新端点 GET /uploads/sign(JWT)签发带令牌链接;web FileUpload +sensitive 属性(缩略图/预览自动换签名链接,v-model 始终存原始URL)+utils/secureFile.ts(openFile/signedUrl);已接入四处敏感上传:担保人身份证/付款水单/结算收汇水单/门户发票。存量公共文件不受影响(能力URL不变);历史已传敏感件仍在公共目录(已知边界,未迁移)。真栈E2E 12/12:公共可读/敏感403/伪造令牌403/签名端点401门禁/带令牌200/门户材料无单价字段✓

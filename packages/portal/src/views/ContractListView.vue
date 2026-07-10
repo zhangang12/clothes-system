@@ -6,6 +6,7 @@
       <van-tab title="待发货" name="STAMPED" />
       <van-tab title="待对账" name="SHIPPING" />
       <van-tab title="待开票" name="RECONCILED" />
+      <van-tab title="已完成" name="COMPLETED" />
     </van-tabs>
 
     <van-pull-refresh v-model="refreshing" @refresh="onRefresh">
@@ -54,7 +55,7 @@ function statusLabel(s: string) {
   return ({ PUSHED: '待盖章', STAMPED: '待发货', SHIPPING: '待对账', RECONCILED: '待开票', COMPLETED: '已完成' } as Record<string, string>)[s] ?? s;
 }
 function statusTagType(s: string): any {
-  return ({ PUSHED: 'warning', STAMPED: 'primary', SHIPPING: 'success', RECONCILED: '' } as Record<string, string>)[s] ?? 'default';
+  return ({ PUSHED: 'warning', STAMPED: 'primary', SHIPPING: 'success', RECONCILED: '', COMPLETED: 'success' } as Record<string, string>)[s] ?? 'default';
 }
 function typeLabel(t: string) {
   return ({ MATERIAL: '面料合同', PROCESS: '加工合同', SUPPLEMENT: '补料合同' } as Record<string, string>)[t] ?? t;

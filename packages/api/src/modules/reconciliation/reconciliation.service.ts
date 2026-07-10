@@ -8,6 +8,7 @@ import { ReconciliationShipment } from './reconciliation-shipment.entity';
 import { ReconciliationLaborItem } from './reconciliation-labor-item.entity';
 import { ReconciliationExpenseItem } from './reconciliation-expense-item.entity';
 import { Contract } from '../contract/contract.entity';
+import { ContractShipment } from '../contract/contract-shipment.entity';
 import { OrderMain } from '../order/order-main.entity';
 import { SampleGarment } from '../sample/sample-garment.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
@@ -261,20 +262,38 @@ export class ReconciliationService {
     if (rec.status !== ReconciliationStatus.DRAFT) {
       throw new BadRequestException('只有草稿状态才可提交复核');
     }
+    await this.assertBatchesStillHeld(id);
     rec.status = ReconciliationStatus.PENDING;
     return this.repo.save(rec);
   }
 
-  // 主管整单退回：待复核→草稿，记录退回批注（补充确认：可逐批批注、整单退回）
+  // 主管整单退回：待复核→草稿，记录退回批注（补充确认：可逐批批注、整单退回）。
+  // 同时释放被本单占用的发货批次——供应商在门户看到批注后可修正并重新勾选发起（门户B3）；
+  // 释放后的批次型对账单不可再提交（防同批次两单重复计费），仅作退回留痕。
   async reject(id: number, remark?: string): Promise<Reconciliation> {
-    const rec = await this.repo.findOne({ where: { id, deleted: 0 } });
-    if (!rec) throw new NotFoundException(`对账单 #${id} 不存在`);
-    if (rec.status !== ReconciliationStatus.PENDING) {
-      throw new BadRequestException('只有待复核状态才可整单退回');
+    return this.dataSource.transaction(async (manager) => {
+      const rec = await manager.findOne(Reconciliation, { where: { id, deleted: 0 } });
+      if (!rec) throw new NotFoundException(`对账单 #${id} 不存在`);
+      if (rec.status !== ReconciliationStatus.PENDING) {
+        throw new BadRequestException('只有待复核状态才可整单退回');
+      }
+      rec.status = ReconciliationStatus.DRAFT;
+      rec.review_remark = remark ?? null;
+      await manager.update(ContractShipment, { reconcile_id: id }, { reconcile_id: null as any });
+      return manager.save(Reconciliation, rec);
+    });
+  }
+
+  // 批次型对账单（门户勾选发货批次生成）被退回后批次已释放——不可再提交/确认，防同批次重复计费
+  private async assertBatchesStillHeld(id: number): Promise<void> {
+    const linked = await this.shipmentRepo.count({ where: { reconcile_id: id } });
+    if (!linked) return; // 非批次型对账单
+    const held = await this.dataSource.getRepository(ContractShipment).count({ where: { reconcile_id: id } });
+    if (!held) {
+      throw new BadRequestException(
+        '该对账单为门户批次对账且已整单退回、批次已释放——请由供应商在门户按批注重新发起，本单仅作退回留痕',
+      );
     }
-    rec.status = ReconciliationStatus.DRAFT;
-    rec.review_remark = remark ?? null;
-    return this.repo.save(rec);
   }
 
   // 主管复核确认：待复核→已确认（二级审批第二级）

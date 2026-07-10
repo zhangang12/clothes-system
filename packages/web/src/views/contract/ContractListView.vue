@@ -98,6 +98,12 @@
             <el-table-column label="物流" min-width="110">
               <template #default="{ row }">{{ [row.express_company, row.express_no].filter(Boolean).join(' ') || '—' }}</template>
             </el-table-column>
+            <el-table-column label="附件" width="64" align="center">
+              <template #default="{ row }">
+                <el-link v-if="row.attach_url" type="primary" :href="row.attach_url" target="_blank">查看</el-link>
+                <span v-else>—</span>
+              </template>
+            </el-table-column>
             <el-table-column label="审批" width="86" align="center">
               <template #default="{ row }">
                 <el-tag v-if="row.reconcile_id" type="primary" size="small" effect="plain">已对账</el-tag>
@@ -183,11 +189,11 @@ function isOverdue(row: any): boolean {
   const due = new Date(String(row.due_date).slice(0, 10));
   return !isNaN(due.getTime()) && due < new Date() && row.portal_status !== 'RECONCILED';
 }
-const portalStatuses = [{ v: 'DRAFT', l: '草稿' }, { v: 'PUSHED', l: '已推送' }, { v: 'STAMPED', l: '已盖章' }, { v: 'SHIPPING', l: '出货中' }, { v: 'RECONCILED', l: '已对账' }];
+const portalStatuses = [{ v: 'DRAFT', l: '草稿' }, { v: 'PUSHED', l: '已推送' }, { v: 'STAMPED', l: '已盖章' }, { v: 'SHIPPING', l: '出货中' }, { v: 'RECONCILED', l: '已对账' }, { v: 'COMPLETED', l: '已完成' }];
 const typeLabel = (t: string) => ({ MATERIAL: '面料合同', PROCESS: '加工合同', SUPPLEMENT: '补料合同' } as any)[t] ?? t;
-const portalLabel = (s: string) => ({ DRAFT: '草稿', PUSHED: '已推送', STAMPED: '已盖章', SHIPPING: '出货中', RECONCILED: '已对账' } as any)[s] ?? s;
-const portalTagType = (s: string): any => ({ DRAFT: 'info', PUSHED: 'warning', STAMPED: 'primary', SHIPPING: 'success', RECONCILED: 'success' } as any)[s] ?? 'info';
-const actionLabel = (a: string) => ({ PUSH: '推送门户', RECALL: '撤销推送', STAMP: '供应商盖章', SHIP: '发货', INVOICE: '上传发票', RECONCILE: '对账' } as any)[a] ?? a;
+const portalLabel = (s: string) => ({ DRAFT: '草稿', PUSHED: '已推送', STAMPED: '已盖章', SHIPPING: '出货中', RECONCILED: '已对账', COMPLETED: '已完成' } as any)[s] ?? s;
+const portalTagType = (s: string): any => ({ DRAFT: 'info', PUSHED: 'warning', STAMPED: 'primary', SHIPPING: 'success', RECONCILED: 'success', COMPLETED: 'success' } as any)[s] ?? 'info';
+const actionLabel = (a: string) => ({ PUSH: '推送门户', RECALL: '撤销推送', STAMP: '供应商盖章', SHIP: '发货', SHIP_DONE: '发货完成', WITHDRAW_SHIP: '撤回发货批次', INVOICE: '上传发票', RECONCILE: '对账' } as any)[a] ?? a;
 // 门户流水备注：抽取 附件:<url> 作可点击链接，剩余文本正常展示
 const remarkAttachment = (remark?: string): string => {
   const m = remark?.match(/附件:(\S+)/);

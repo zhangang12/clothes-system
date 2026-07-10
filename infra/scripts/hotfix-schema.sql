@@ -583,6 +583,7 @@ CREATE TABLE IF NOT EXISTS `contract` (
   `mid_ratio`           DECIMAL(5,2)   NOT NULL DEFAULT 40.00 COMMENT '中期款比例%',
   `final_ratio`         DECIMAL(5,2)   NOT NULL DEFAULT 30.00 COMMENT '尾款比例%',
   `last_ship_date`      DATE           DEFAULT NULL COMMENT '最后发货日',
+  `ship_done_at`     DATETIME       DEFAULT NULL COMMENT '供应商宣布发货完成时间(门户C3;开票后闭环到已完成)',
   `ship_to_address`     VARCHAR(200)   DEFAULT NULL COMMENT '收货地址(发货带入)',
   `shipped_qty`         DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '累计已发数量(批次累计)',
   `account_period_days` INT            NOT NULL DEFAULT 90 COMMENT '账期天数(材料90/加工45,发货日+账期=到期日)',
@@ -599,7 +600,7 @@ CREATE TABLE IF NOT EXISTS `contract` (
   `vat_rate`            DECIMAL(5,2)   DEFAULT NULL COMMENT '增值税%(加工默认13,含税不另计)',
   `price_other`         VARCHAR(200)   DEFAULT NULL COMMENT '价格包含项·其他说明',
   `terms_json`          JSON           DEFAULT NULL COMMENT '合同条款模板填空(key→条款文本)',
-  `portal_status`       ENUM('DRAFT','PUSHED','STAMPED','SHIPPING','RECONCILED') NOT NULL DEFAULT 'DRAFT',
+  `portal_status`       ENUM('DRAFT','PUSHED','STAMPED','SHIPPING','RECONCILED','COMPLETED') NOT NULL DEFAULT 'DRAFT',
   `pushed_at`           DATETIME       DEFAULT NULL COMMENT '推送门户时间',
   `stamped_at`          DATETIME       DEFAULT NULL COMMENT '供应商盖章时间',
   `stamped_by_supplier` VARCHAR(100)   DEFAULT NULL COMMENT '盖章供应商账号',
@@ -1662,6 +1663,8 @@ CALL _i9_add_col('contract','final_ratio',"DECIMAL(5,2)   NOT NULL DEFAULT 30.00
 CALL _i9_sync_col('contract','final_ratio',"DECIMAL(5,2)","DECIMAL(5,2)   NOT NULL DEFAULT 30.00 COMMENT '尾款比例%'");
 CALL _i9_add_col('contract','last_ship_date',"DATE           DEFAULT NULL COMMENT '最后发货日'");
 CALL _i9_sync_col('contract','last_ship_date',"DATE","DATE           DEFAULT NULL COMMENT '最后发货日'");
+CALL _i9_add_col('contract','ship_done_at',"DATETIME       DEFAULT NULL COMMENT '供应商宣布发货完成时间(门户C3;开票后闭环到已完成)'");
+CALL _i9_sync_col('contract','ship_done_at',"DATETIME","DATETIME       DEFAULT NULL COMMENT '供应商宣布发货完成时间(门户C3;开票后闭环到已完成)'");
 CALL _i9_add_col('contract','ship_to_address',"VARCHAR(200)   DEFAULT NULL COMMENT '收货地址(发货带入)'");
 CALL _i9_sync_col('contract','ship_to_address',"VARCHAR(200)","VARCHAR(200)   DEFAULT NULL COMMENT '收货地址(发货带入)'");
 CALL _i9_add_col('contract','shipped_qty',"DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '累计已发数量(批次累计)'");
@@ -1694,8 +1697,8 @@ CALL _i9_add_col('contract','price_other',"VARCHAR(200)   DEFAULT NULL COMMENT '
 CALL _i9_sync_col('contract','price_other',"VARCHAR(200)","VARCHAR(200)   DEFAULT NULL COMMENT '价格包含项·其他说明'");
 CALL _i9_add_col('contract','terms_json',"JSON           DEFAULT NULL COMMENT '合同条款模板填空(key→条款文本)'");
 CALL _i9_sync_col('contract','terms_json',"JSON","JSON           DEFAULT NULL COMMENT '合同条款模板填空(key→条款文本)'");
-CALL _i9_add_col('contract','portal_status',"ENUM('DRAFT','PUSHED','STAMPED','SHIPPING','RECONCILED') NOT NULL DEFAULT 'DRAFT'");
-CALL _i9_sync_col('contract','portal_status',"ENUM('DRAFT','PUSHED','STAMPED','SHIPPING','RECONCILED')","ENUM('DRAFT','PUSHED','STAMPED','SHIPPING','RECONCILED') NOT NULL DEFAULT 'DRAFT'");
+CALL _i9_add_col('contract','portal_status',"ENUM('DRAFT','PUSHED','STAMPED','SHIPPING','RECONCILED','COMPLETED') NOT NULL DEFAULT 'DRAFT'");
+CALL _i9_sync_col('contract','portal_status',"ENUM('DRAFT','PUSHED','STAMPED','SHIPPING','RECONCILED','COMPLETED')","ENUM('DRAFT','PUSHED','STAMPED','SHIPPING','RECONCILED','COMPLETED') NOT NULL DEFAULT 'DRAFT'");
 CALL _i9_add_col('contract','pushed_at',"DATETIME       DEFAULT NULL COMMENT '推送门户时间'");
 CALL _i9_sync_col('contract','pushed_at',"DATETIME","DATETIME       DEFAULT NULL COMMENT '推送门户时间'");
 CALL _i9_add_col('contract','stamped_at',"DATETIME       DEFAULT NULL COMMENT '供应商盖章时间'");

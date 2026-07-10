@@ -89,9 +89,32 @@
             <van-tag v-else-if="s.approval_status === 'APPROVED'" type="success">已审批</van-tag>
             <van-tag v-else-if="s.approval_status === 'REJECTED'" type="danger">已驳回</van-tag>
             <van-tag v-else type="warning">待审批</van-tag>
+            <van-button
+              v-if="!s.reconcile_id && ['SHIPPING', 'RECONCILED'].includes(contract.portal_status)"
+              size="mini" plain type="danger" style="margin-left:6px"
+              @click.stop="doWithdrawBatch(s)"
+            >撤回</van-button>
           </div>
         </template>
       </van-cell>
+    </van-cell-group>
+
+    <!-- 对账单回执（含退回批注,门户B3:供应商可见退回原因并重新发起）-->
+    <van-cell-group v-if="contract.reconciliations && contract.reconciliations.length" title="对账单" inset>
+      <template v-for="r in contract.reconciliations" :key="r.id">
+        <van-cell :title="r.reconcile_no" :label="`金额 ¥${(+r.total_amount).toFixed(2)}${r.invoice_no ? ' · 发票 ' + r.invoice_no : ''}`">
+          <template #value>
+            <van-tag v-if="r.status === 'PAID'" type="success">已付款</van-tag>
+            <van-tag v-else-if="r.status === 'CONFIRMED'" type="primary">已确认</van-tag>
+            <van-tag v-else-if="r.status === 'PENDING'" type="warning">业务复核中</van-tag>
+            <van-tag v-else-if="r.status === 'DRAFT' && r.review_remark" type="danger">已退回</van-tag>
+            <van-tag v-else plain>草稿</van-tag>
+          </template>
+        </van-cell>
+        <div v-if="r.status === 'DRAFT' && r.review_remark" class="reject-remark">
+          ⚠️ 退回原因：{{ r.review_remark }}——批次已释放，请修正后重新勾选发起对账
+        </div>
+      </template>
     </van-cell-group>
 
     <!-- Stamp info (shown after stamping) -->
@@ -168,6 +191,22 @@
       >
         上传发票
       </van-button>
+
+      <!-- 发货完成（门户C3）：宣布后开票即闭环「已完成」;未宣布则开票后可继续发后续批次 -->
+      <van-button
+        v-if="['SHIPPING', 'RECONCILED'].includes(contract.portal_status) && !contract.ship_done_at"
+        type="warning"
+        plain
+        block
+        round
+        size="large"
+        style="margin-top: 10px;"
+        :loading="actioning"
+        @click="doShipDone"
+      >
+        ✅ 发货完成（本合同不再发货）
+      </van-button>
+      <div v-if="contract.ship_done_at" class="await-hint">已宣布发货完成（{{ String(contract.ship_done_at).slice(0, 10) }}）——开票后本合同将标记「已完成」</div>
       <div v-if="contract.portal_status === 'SHIPPING'" class="await-hint">可分批继续发货；发货经业务审批后可勾选对账，对账通过后解锁开票</div>
     </div>
 
@@ -221,9 +260,9 @@
       <div class="invoice-form">
         <van-cell v-if="contract.ship_to_address" title="收货地址" :label="contract.ship_to_address" />
         <van-cell title="累计已发" :value="String(contract.shipped_qty || 0)" />
-        <van-field v-model="shipForm.qty" label="本次实发" type="number" placeholder="本次发货数量（选填）" />
-        <van-field v-model="shipForm.express_company" label="快递公司" placeholder="选填" />
-        <van-field v-model="shipForm.express_no" label="快递单号" placeholder="选填" />
+        <van-field v-model="shipForm.qty" label="本次实发" type="number" placeholder="本次发货数量（必填）" required />
+        <van-field v-model="shipForm.express_company" label="快递公司" placeholder="必填" required />
+        <van-field v-model="shipForm.express_no" label="快递单号" placeholder="必填" required />
         <div class="invoice-upload">
           <span class="upload-label">附件（装箱单/货物照片）</span>
           <van-uploader
@@ -371,7 +410,7 @@ function portalStatusLabel(s: string) {
 
 function logActionLabel(action: string) {
   return (
-    { PUSH: '已推送', RECALL: '撤销推送', STAMP: '供应商盖章', SHIP: '确认出货', INVOICE: '上传发票', RECONCILE: '对账完成' } as Record<string, string>
+    { PUSH: '已推送', RECALL: '撤销推送', STAMP: '供应商盖章', SHIP: '确认出货', SHIP_DONE: '发货完成', WITHDRAW_SHIP: '撤回发货批次', INVOICE: '上传发票', RECONCILE: '对账完成' } as Record<string, string>
   )[action] ?? action;
 }
 
@@ -410,11 +449,20 @@ async function doStamp() {
 
 async function handleShipClose(action: string) {
   if (action === 'cancel') return true;
+  // 数量/物流必填（总览走查P1#16）
+  if (!shipForm.value.qty || !(Number(shipForm.value.qty) > 0)) {
+    showConfirmDialog({ title: '提示', message: '请填写本次实发数量', showCancelButton: false });
+    return false;
+  }
+  if (!shipForm.value.express_company.trim() || !shipForm.value.express_no.trim()) {
+    showConfirmDialog({ title: '提示', message: '请填写物流信息（快递公司与单号）', showCancelButton: false });
+    return false;
+  }
   const payload = {
     qty: shipForm.value.qty ? Number(shipForm.value.qty) : undefined,
     remark: shipForm.value.remark || undefined,
-    express_company: shipForm.value.express_company || undefined,
-    express_no: shipForm.value.express_no || undefined,
+    express_company: shipForm.value.express_company,
+    express_no: shipForm.value.express_no,
     attach_url: shipForm.value.attach_url || undefined,
   };
   try {
@@ -439,6 +487,41 @@ async function handleShipClose(action: string) {
       }
     }
     return false;
+  }
+}
+
+// 发货完成（门户C3）：宣布后开票即闭环「已完成」
+async function doShipDone() {
+  try {
+    await showConfirmDialog({
+      title: '发货完成',
+      message: '确认本合同发货已全部完成？宣布后不可继续发货，开票后合同将标记「已完成」。',
+    });
+  } catch { return; }
+  actioning.value = true;
+  try {
+    await portalContractApi.shipDone(contract.value.id);
+    showSuccessToast('已宣布发货完成');
+    await load();
+  } catch (e: any) {
+    showConfirmDialog({ title: '操作失败', message: e?.response?.data?.msg ?? '请稍后重试', showCancelButton: false });
+  } finally { actioning.value = false; }
+}
+
+// 撤回发货批次（门户B3）：未被对账占用前可撤,累计发货量回退
+async function doWithdrawBatch(batch: any) {
+  try {
+    await showConfirmDialog({
+      title: '撤回发货批次',
+      message: `确认撤回 ${batch.ship_no || '该批次'}（数量 ${+batch.qty}）？撤回后累计发货量同步回退。`,
+    });
+  } catch { return; }
+  try {
+    await portalContractApi.withdrawShipment(contract.value.id, batch.id);
+    showSuccessToast('批次已撤回');
+    await load();
+  } catch (e: any) {
+    showConfirmDialog({ title: '撤回失败', message: e?.response?.data?.msg ?? '请稍后重试', showCancelButton: false });
   }
 }
 
@@ -493,5 +576,14 @@ onMounted(load);
   justify-content: center;
   align-items: center;
   height: 200px;
+}
+.reject-remark {
+  margin: 0 16px 10px;
+  padding: 8px 10px;
+  background: #fff1f0;
+  color: #cf1322;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.6;
 }
 </style>

@@ -45,6 +45,9 @@ export class Contract {
   @Column({ type: 'date', nullable: true })
   last_ship_date: Date;
 
+  @Column({ type: 'datetime', nullable: true })
+  ship_done_at: Date; // 供应商宣布「发货完成」时间（门户C3；开票后据此闭环到已完成）
+
   @Column({ length: 200, nullable: true })
   ship_to_address: string; // 收货地址（发货时带入，设计稿 门户 C1）
 

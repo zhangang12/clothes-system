@@ -20,6 +20,7 @@ const VISIBLE_STATUSES = [
   ContractPortalStatus.STAMPED,
   ContractPortalStatus.SHIPPING,
   ContractPortalStatus.RECONCILED,
+  ContractPortalStatus.COMPLETED, // 已完成仍可回看（门户E2「已完成」标签）
 ];
 
 @Injectable()
@@ -59,11 +60,17 @@ export class PortalService {
     if (!contract || !VISIBLE_STATUSES.includes(contract.portal_status)) {
       throw new NotFoundException('合同不存在');
     }
-    const [materials, logs, shipments] = await Promise.all([
+    const [materials, logs, shipments, reconciliations] = await Promise.all([
       this.materialRepo.find({ where: { contract_id: id }, order: { sort_order: 'ASC' } }),
       this.logRepo.find({ where: { contract_id: id }, order: { created_at: 'ASC' } }),
       // 发货批次（含审批状态/是否已对账）：门户「我要对账」勾选数据源（设计稿 B2）
       this.shipmentRepo.find({ where: { contract_id: id }, order: { id: 'ASC' } }),
+      // 对账单回显（含退回批注 review_remark）：供应商可见退回原因并重新发起（门户B3/补充确认）
+      this.reconcileRepo.find({
+        where: { contract_id: id, deleted: 0 },
+        select: ['id', 'reconcile_no', 'status', 'review_remark', 'total_amount', 'invoice_no', 'created_at'],
+        order: { id: 'DESC' },
+      }),
     ]);
     // 加工合同：把订单明细同步给加工厂（材料/尺寸表/数量搭配/纸板/填充量，设计稿 门户 A2）
     let orderDetail: Record<string, unknown> | null = null;
@@ -89,7 +96,7 @@ export class PortalService {
         };
       }
     }
-    return { ...contract, materials, logs, shipments, orderDetail };
+    return { ...contract, materials, logs, shipments, reconciliations, orderDetail };
   }
 
   async stamp(id: number, supplierAccount: string, factoryId: number, agreed = false): Promise<Contract> {
@@ -165,6 +172,12 @@ export class PortalService {
     // 发货可在「已盖章」（首批）或「发货中」（续批）进行（设计稿 门户 B3：批次累计）
     if (contract.portal_status !== ContractPortalStatus.STAMPED && contract.portal_status !== ContractPortalStatus.SHIPPING) {
       throw new BadRequestException('只有已盖章或发货中状态才可确认出货');
+    }
+
+    // 数量/物流必填（总览走查P1#16 决议:实发数量必填、物流信息须填）
+    if (dto.qty == null) throw new BadRequestException('请填写本次实发数量');
+    if (!dto.express_company?.trim() || !dto.express_no?.trim()) {
+      throw new BadRequestException('请填写物流信息（快递公司与单号）');
     }
 
     const parts: string[] = [];
@@ -319,6 +332,55 @@ export class PortalService {
     return rec;
   }
 
+  // 发货完成（门户C3）：供应商宣布本合同发货全部完成;开票后据此闭环到「已完成」
+  async shipDone(id: number, supplierAccount: string, factoryId: number): Promise<Contract> {
+    const contract = await this.contractRepo.findOne({ where: { id, factory_id: factoryId, deleted: 0 } });
+    if (!contract || !VISIBLE_STATUSES.includes(contract.portal_status)) {
+      throw new NotFoundException('合同不存在');
+    }
+    if (
+      contract.portal_status !== ContractPortalStatus.SHIPPING &&
+      contract.portal_status !== ContractPortalStatus.RECONCILED
+    ) {
+      throw new BadRequestException('至少完成一批发货后才可宣布发货完成');
+    }
+    if (contract.ship_done_at) throw new BadRequestException('本合同已宣布发货完成，请勿重复操作');
+    contract.ship_done_at = new Date();
+    await this.contractRepo.save(contract);
+    await this.logRepo.save(this.logRepo.create({
+      contract_id: id,
+      action: 'SHIP_DONE',
+      operator: supplierAccount,
+      operator_type: PortalOperatorType.SUPPLIER,
+      remark: `供应商宣布发货完成（累计已发 ${contract.shipped_qty ?? 0}）`,
+    }));
+    return contract;
+  }
+
+  // 撤回发货批次（门户B3）：错发/多发在未被对账占用前可撤回，累计发货量同步回退
+  async withdrawShipment(id: number, shipmentId: number, supplierAccount: string, factoryId: number): Promise<void> {
+    const contract = await this.contractRepo.findOne({ where: { id, factory_id: factoryId, deleted: 0 } });
+    if (!contract || !VISIBLE_STATUSES.includes(contract.portal_status)) {
+      throw new NotFoundException('合同不存在');
+    }
+    const batch = await this.shipmentRepo.findOne({ where: { id: shipmentId, contract_id: id } });
+    if (!batch) throw new NotFoundException('发货批次不存在');
+    if (batch.reconcile_id) {
+      throw new BadRequestException('该批次已被对账单占用，不可撤回（如需调整请联系业务退回对账）');
+    }
+    await this.shipmentRepo.delete({ id: shipmentId });
+    contract.shipped_qty = Math.max(0, +((+(contract.shipped_qty ?? 0)) - +batch.qty).toFixed(4));
+    if (contract.ship_done_at) contract.ship_done_at = null as any; // 撤回后不再视为发货完成
+    await this.contractRepo.save(contract);
+    await this.logRepo.save(this.logRepo.create({
+      contract_id: id,
+      action: 'WITHDRAW_SHIP',
+      operator: supplierAccount,
+      operator_type: PortalOperatorType.SUPPLIER,
+      remark: `撤回发货批次 ${batch.ship_no ?? '#' + shipmentId}（数量 ${batch.qty}），累计已发回退至 ${contract.shipped_qty}`,
+    }));
+  }
+
   async uploadInvoice(id: number, supplierAccount: string, factoryId: number, dto: UploadInvoiceDto): Promise<void> {
     const contract = await this.contractRepo.findOne({ where: { id, factory_id: factoryId, deleted: 0 } });
     if (!contract || !VISIBLE_STATUSES.includes(contract.portal_status)) {
@@ -382,6 +444,12 @@ export class PortalService {
         created_by: rec.created_by ?? null,
       }));
     }
+
+    // 开票后闭环（门户C3/E2）：供应商已宣布发货完成→「已完成」；否则回「发货中」允许继续发后续批次再对账
+    contract.portal_status = contract.ship_done_at
+      ? ContractPortalStatus.COMPLETED
+      : ContractPortalStatus.SHIPPING;
+    await this.contractRepo.save(contract);
 
     const parts: string[] = [`发票号:${dto.invoice_no}`, `金额:${dto.invoice_amount}`];
     if (dto.invoice_url) parts.push(`附件:${dto.invoice_url}`);

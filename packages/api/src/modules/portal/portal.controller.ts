@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Patch, Body, Param, Query,
+  Controller, Get, Patch, Delete, Body, Param, Query,
   ParseIntPipe, DefaultValuePipe, UseGuards, Request,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
@@ -49,6 +49,22 @@ export class PortalController {
     @Body() dto: ConfirmShipDto,
   ) {
     return this.service.confirmShipping(id, req.user.username, req.user.factory_id, dto);
+  }
+
+  @Patch(':id/ship-done')
+  @ApiOperation({ summary: '发货完成：供应商宣布本合同发货全部完成（开票后闭环到已完成，门户C3）' })
+  shipDone(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.service.shipDone(id, req.user.username, req.user.factory_id);
+  }
+
+  @Delete(':id/shipments/:sid')
+  @ApiOperation({ summary: '撤回发货批次（未被对账占用前；累计发货量回退，门户B3）' })
+  withdrawShipment(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('sid', ParseIntPipe) sid: number,
+    @Request() req: any,
+  ) {
+    return this.service.withdrawShipment(id, sid, req.user.username, req.user.factory_id);
   }
 
   @Patch(':id/reconcile')

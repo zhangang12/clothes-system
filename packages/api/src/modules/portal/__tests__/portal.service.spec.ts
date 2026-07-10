@@ -184,7 +184,7 @@ describe('PortalService', () => {
     contractRepo.findOne.mockResolvedValue(contract);
     contractRepo.save.mockResolvedValue({ ...contract, portal_status: ContractPortalStatus.SHIPPING });
 
-    const result = await service.confirmShipping(1, 'supplier_A', 10);
+    const result = await service.confirmShipping(1, 'supplier_A', 10, { qty: 100, express_company: '顺丰', express_no: 'SF1' } as any);
     expect(result.portal_status).toBe(ContractPortalStatus.SHIPPING);
     expect(logRepo.create).toHaveBeenCalledWith(expect.objectContaining({ action: 'SHIP' }));
   });
