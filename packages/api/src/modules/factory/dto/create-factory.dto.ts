@@ -25,6 +25,9 @@ export class CreateFactoryDto {
   @ApiPropertyOptional({ enum: FactoryType, isArray: true, description: '附加身份（工厂双身份，如材料供应商+加工厂）' })
   @IsOptional() @IsArray() @IsEnum(FactoryType, { each: true }) extraTypes?: FactoryType[];
 
+  // 供应商电子章图片(盖章后 PDF 落款贴章,A3)
+  @IsOptional() @IsString() @MaxLength(500) sealUrl?: string;
+
   @ApiPropertyOptional({ example: true })
   @IsOptional() @IsBoolean() canInvoice?: boolean;
 

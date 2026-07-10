@@ -13,6 +13,7 @@ export class CreateCompanyProfileDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(40) bankAccount?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) legalRep?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500) logoUrl?: string;
+  @ApiPropertyOptional({ description: '本司电子章图片(PDF落款自动贴章,A3)' }) @IsOptional() @IsString() @MaxLength(500) sealUrl?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) remark?: string;
 
   @ApiPropertyOptional({ description: '设为默认主体（PDF/合同默认取此）' })

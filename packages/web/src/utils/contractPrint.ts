@@ -16,8 +16,8 @@ const d10 = (v: unknown): string => (v ? esc(String(v).slice(0, 10)) : '—');
 const typeLabel = (t: string): string =>
   ({ MATERIAL: '原料/辅料购销协议', PROCESS: '委托加工合同', SUPPLEMENT: '补料合同（原料/辅料购销协议）' } as Record<string, string>)[t] ?? '合同';
 
-interface FactoryLike { name?: string; address?: string; contact_name?: string; contact_phone?: string }
-interface CompanyLike { name?: string; address?: string; phone?: string; legal_rep?: string; bank_name?: string; bank_account?: string }
+interface FactoryLike { name?: string; address?: string; contact_name?: string; contact_phone?: string; seal_url?: string }
+interface CompanyLike { name?: string; address?: string; phone?: string; legal_rep?: string; bank_name?: string; bank_account?: string; seal_url?: string }
 
 // 条款模板兜底（与编辑页一致；terms_json 有值优先）
 const MATERIAL_TERM_DEFS: Array<[string, string, string]> = [
@@ -112,8 +112,13 @@ export function printContract(
     : '';
 
   const stampState = detail.stamped_at
-    ? `已盖章（${esc(detail.stamped_by_supplier)} · ${d10(detail.stamped_at)}）`
+    ? `已盖章（${esc(detail.stamped_by_supplier)} · ${d10(detail.stamped_at)}${detail.stamp_mode === 'PAPER' ? ' · 纸质盖章照片留档' : ''}）`
     : '（供应商门户「我要盖章」处加盖）';
+  // 电子章贴图（A3）：供应商已电子盖章且工厂库配置章图→贴乙方/受托方落款；本司章有配置即贴
+  const factorySeal = detail.stamped_at && detail.stamp_mode !== 'PAPER' && f.seal_url
+    ? `<img class="seal-img" src="${esc(f.seal_url)}" alt="供应商电子章">` : '';
+  const companySeal = company?.seal_url
+    ? `<img class="seal-img" src="${esc(company.seal_url)}" alt="本司电子章">` : '';
 
   const html = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
 <title>合同-${esc(detail.contract_no)}</title>
@@ -139,8 +144,9 @@ export function printContract(
   .term b { color:#1E3A5F; }
   .term.guarantor { background:#FBF3E2; padding:6px 8px; border-radius:4px; }
   .sign { margin-top:36px; display:flex; justify-content:space-between; gap:12px; }
-  .sign > div { flex:1; }
+  .sign > div { flex:1; position:relative; }
   .stamp-hint { font-size:11px; color:#666; margin-top:4px; }
+  .seal-img { position:absolute; top:-34px; left:96px; width:110px; height:110px; object-fit:contain; opacity:.88; pointer-events:none; }
   @media screen { body { max-width:820px; margin:20px auto; } }
 </style></head><body onload="window.print()">
   <div class="head">
@@ -169,14 +175,16 @@ export function printContract(
 
   <div class="sign">
     <div>
+      ${factorySeal}
       <div>${factoryTitle}（盖章）：＿＿＿＿＿＿＿＿</div>
       <div class="stamp-hint">${stampState}</div>
       <div class="stamp-hint">代表：${[f.contact_name].filter(Boolean).map(esc).join('') || '＿＿＿＿'}</div>
     </div>
     ${detail.guarantor ? `<div><div>丙方（签字）：＿＿＿＿＿＿＿＿</div><div class="stamp-hint">担保人：${esc(detail.guarantor)}</div></div>` : ''}
     <div>
+      ${companySeal}
       <div>${companyTitle}（盖章）：＿＿＿＿＿＿＿＿</div>
-      <div class="stamp-hint">✓ 本司电子章随 PDF 生成自动贴入落款</div>
+      <div class="stamp-hint">${company?.seal_url ? '✓ 本司电子章已贴入落款' : '✓ 本司电子章随 PDF 生成自动贴入落款（公司抬头未配章图）'}</div>
       <div class="stamp-hint">代表：${esc(detail.company_rep) || '＿＿＿＿'}　日期：${d10(detail.sign_date)}</div>
     </div>
   </div>

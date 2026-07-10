@@ -33,6 +33,9 @@ export class CompanyProfile {
   @Column({ length: 500, nullable: true })
   logo_url: string; // 抬头 Logo（上传返回的 URL）
 
+  @Column({ length: 500, nullable: true })
+  seal_url: string; // 本司电子章图片（PDF 落款自动贴章，A3）
+
   @Column({ type: 'tinyint', default: 0 })
   is_default: number; // 1=默认主体（PDF/合同默认取此）
 

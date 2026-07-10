@@ -5,8 +5,8 @@ export const portalContractApi = {
     http.get<unknown, { data: any }>('/portal/contracts', { params }),
   get: (id: number) =>
     http.get<unknown, { data: any }>(`/portal/contracts/${id}`),
-  stamp: (id: number, agreed = true) =>
-    http.patch<unknown, { data: any }>(`/portal/contracts/${id}/stamp`, { agreed }),
+  stamp: (id: number, agreed = true, paper_url?: string) =>
+    http.patch<unknown, { data: any }>(`/portal/contracts/${id}/stamp`, { agreed, ...(paper_url ? { paper_url } : {}) }),
   confirmShip: (id: number, dto: { qty?: number; remark?: string; force?: boolean; express_company?: string; express_no?: string; attach_url?: string } = {}) =>
     http.patch<unknown, { data: any }>(`/portal/contracts/${id}/ship`, dto),
   // 我要对账：勾选已审批发货批次生成对账单并推业务复核（设计稿 05 §C）

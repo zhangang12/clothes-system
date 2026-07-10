@@ -99,7 +99,7 @@ export class PortalService {
     return { ...contract, materials, logs, shipments, reconciliations, orderDetail };
   }
 
-  async stamp(id: number, supplierAccount: string, factoryId: number, agreed = false): Promise<Contract> {
+  async stamp(id: number, supplierAccount: string, factoryId: number, agreed = false, paperUrl?: string): Promise<Contract> {
     // 盖章=电子签约的意思表示，须先勾选「已阅读并同意合同条款」（供应商门户设计稿 §B）
     if (!agreed) {
       throw new BadRequestException('请先阅读并勾选「已阅读并同意合同条款」后再盖章');
@@ -142,6 +142,9 @@ export class PortalService {
     contract.portal_status = ContractPortalStatus.STAMPED;
     contract.stamped_at = new Date();
     contract.stamped_by_supplier = supplierAccount;
+    // 电子章/纸质盖章二选一留痕（A3）：传照片=纸质,否则电子章(PDF 落款贴 factory.seal_url)
+    contract.stamp_mode = paperUrl ? 'PAPER' : 'ESEAL';
+    contract.stamp_paper_url = paperUrl ?? null;
     contract.snapshot_json = snapshot;
     contract.revised = 0; // 供应商已对更新后的合同重新盖章确认，清除「已更新」标记
     await this.contractRepo.save(contract);

@@ -1,4 +1,6 @@
 import { Test } from '@nestjs/testing';
+import { QuoteService } from '../../quote/quote.service';
+import { CustomerService } from '../../customer/customer.service';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
@@ -36,6 +38,9 @@ const mockDataSource = { transaction: jest.fn((cb: any) => cb(mockManager)) };
 
 const MATERIALS = [{ itemName: '32S 全棉府绸', part: '主面料' }];
 
+const mockQuoteServiceDep = { syncFromSample: jest.fn().mockResolvedValue(0) };
+const mockCustomerServiceDep = { visibleCustomerIds: jest.fn().mockResolvedValue(null) };
+
 describe('SampleService', () => {
   let service: SampleService;
 
@@ -47,6 +52,8 @@ describe('SampleService', () => {
     const module = await Test.createTestingModule({
       providers: [
         SampleService,
+        { provide: QuoteService, useValue: mockQuoteServiceDep },
+        { provide: CustomerService, useValue: mockCustomerServiceDep },
         NumberingService,
         { provide: getRepositoryToken(SampleGarment), useValue: mockRepo },
         { provide: getRepositoryToken(SampleMaterial), useValue: mockMaterialRepo },

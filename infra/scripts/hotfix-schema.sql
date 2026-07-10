@@ -169,6 +169,7 @@ CREATE TABLE IF NOT EXISTS `factory` (
   `factory_no`     VARCHAR(20)   NOT NULL COMMENT '厂商编号 S001（自动生成/大写/唯一）',
   `type`           ENUM('FABRIC','ACCESSORY','OUTSOURCE','FORWARDER','TESTING','EXPORT','OTHER') NOT NULL DEFAULT 'FABRIC' COMMENT '工厂主身份',
   `extra_types`    VARCHAR(100)   DEFAULT NULL COMMENT '附加身份(逗号分隔,工厂双身份)',
+  `seal_url`        VARCHAR(500)  DEFAULT NULL COMMENT '供应商电子章图片(盖章后PDF落款贴章,A3)',
   `can_invoice`    TINYINT       NOT NULL DEFAULT 1 COMMENT '能否开票 1=是 0=否',
   `name`           VARCHAR(100)  NOT NULL COMMENT '厂商名称（唯一）',
   `short_name`     VARCHAR(50)   DEFAULT NULL COMMENT '简称',
@@ -584,6 +585,8 @@ CREATE TABLE IF NOT EXISTS `contract` (
   `final_ratio`         DECIMAL(5,2)   NOT NULL DEFAULT 30.00 COMMENT '尾款比例%',
   `last_ship_date`      DATE           DEFAULT NULL COMMENT '最后发货日',
   `ship_done_at`     DATETIME       DEFAULT NULL COMMENT '供应商宣布发货完成时间(门户C3;开票后闭环到已完成)',
+  `stamp_mode`       VARCHAR(10)    DEFAULT NULL COMMENT '盖章方式 ESEAL/PAPER(A3)',
+  `stamp_paper_url`  VARCHAR(500)   DEFAULT NULL COMMENT '纸质盖章照片(A3)',
   `ship_to_address`     VARCHAR(200)   DEFAULT NULL COMMENT '收货地址(发货带入)',
   `shipped_qty`         DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '累计已发数量(批次累计)',
   `account_period_days` INT            NOT NULL DEFAULT 90 COMMENT '账期天数(材料90/加工45,发货日+账期=到期日)',
@@ -919,6 +922,7 @@ CREATE TABLE IF NOT EXISTS `company_profile` (
   `bank_account` VARCHAR(40)  DEFAULT NULL,
   `legal_rep`    VARCHAR(50)  DEFAULT NULL COMMENT '法定代表人',
   `logo_url`     VARCHAR(500) DEFAULT NULL,
+  `seal_url`     VARCHAR(500) DEFAULT NULL COMMENT '本司电子章图片(PDF落款自动贴章,A3)',
   `is_default`   TINYINT      NOT NULL DEFAULT 0 COMMENT '1=默认主体',
   `remark`       VARCHAR(200) DEFAULT NULL,
   `deleted`      TINYINT      NOT NULL DEFAULT 0,
@@ -1031,6 +1035,8 @@ CALL _i9_add_col('factory','type',"ENUM('FABRIC','ACCESSORY','OUTSOURCE','FORWAR
 CALL _i9_sync_col('factory','type',"ENUM('FABRIC','ACCESSORY','OUTSOURCE','FORWARDER','TESTING','EXPORT','OTHER')","ENUM('FABRIC','ACCESSORY','OUTSOURCE','FORWARDER','TESTING','EXPORT','OTHER') NOT NULL DEFAULT 'FABRIC' COMMENT '工厂主身份'");
 CALL _i9_add_col('factory','extra_types',"VARCHAR(100)   DEFAULT NULL COMMENT '附加身份(逗号分隔,工厂双身份)'");
 CALL _i9_sync_col('factory','extra_types',"VARCHAR(100)","VARCHAR(100)   DEFAULT NULL COMMENT '附加身份(逗号分隔,工厂双身份)'");
+CALL _i9_add_col('factory','seal_url',"VARCHAR(500)  DEFAULT NULL COMMENT '供应商电子章图片(盖章后PDF落款贴章,A3)'");
+CALL _i9_sync_col('factory','seal_url',"VARCHAR(500)","VARCHAR(500)  DEFAULT NULL COMMENT '供应商电子章图片(盖章后PDF落款贴章,A3)'");
 CALL _i9_add_col('factory','can_invoice',"TINYINT       NOT NULL DEFAULT 1 COMMENT '能否开票 1=是 0=否'");
 CALL _i9_sync_col('factory','can_invoice',"TINYINT","TINYINT       NOT NULL DEFAULT 1 COMMENT '能否开票 1=是 0=否'");
 CALL _i9_add_col('factory','name',"VARCHAR(100)  NOT NULL COMMENT '厂商名称（唯一）'");
@@ -1665,6 +1671,10 @@ CALL _i9_add_col('contract','last_ship_date',"DATE           DEFAULT NULL COMMEN
 CALL _i9_sync_col('contract','last_ship_date',"DATE","DATE           DEFAULT NULL COMMENT '最后发货日'");
 CALL _i9_add_col('contract','ship_done_at',"DATETIME       DEFAULT NULL COMMENT '供应商宣布发货完成时间(门户C3;开票后闭环到已完成)'");
 CALL _i9_sync_col('contract','ship_done_at',"DATETIME","DATETIME       DEFAULT NULL COMMENT '供应商宣布发货完成时间(门户C3;开票后闭环到已完成)'");
+CALL _i9_add_col('contract','stamp_mode',"VARCHAR(10)    DEFAULT NULL COMMENT '盖章方式 ESEAL/PAPER(A3)'");
+CALL _i9_sync_col('contract','stamp_mode',"VARCHAR(10)","VARCHAR(10)    DEFAULT NULL COMMENT '盖章方式 ESEAL/PAPER(A3)'");
+CALL _i9_add_col('contract','stamp_paper_url',"VARCHAR(500)   DEFAULT NULL COMMENT '纸质盖章照片(A3)'");
+CALL _i9_sync_col('contract','stamp_paper_url',"VARCHAR(500)","VARCHAR(500)   DEFAULT NULL COMMENT '纸质盖章照片(A3)'");
 CALL _i9_add_col('contract','ship_to_address',"VARCHAR(200)   DEFAULT NULL COMMENT '收货地址(发货带入)'");
 CALL _i9_sync_col('contract','ship_to_address',"VARCHAR(200)","VARCHAR(200)   DEFAULT NULL COMMENT '收货地址(发货带入)'");
 CALL _i9_add_col('contract','shipped_qty',"DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '累计已发数量(批次累计)'");
@@ -2153,6 +2163,8 @@ CALL _i9_add_col('company_profile','legal_rep',"VARCHAR(50)  DEFAULT NULL COMMEN
 CALL _i9_sync_col('company_profile','legal_rep',"VARCHAR(50)","VARCHAR(50)  DEFAULT NULL COMMENT '法定代表人'");
 CALL _i9_add_col('company_profile','logo_url',"VARCHAR(500) DEFAULT NULL");
 CALL _i9_sync_col('company_profile','logo_url',"VARCHAR(500)","VARCHAR(500) DEFAULT NULL");
+CALL _i9_add_col('company_profile','seal_url',"VARCHAR(500) DEFAULT NULL COMMENT '本司电子章图片(PDF落款自动贴章,A3)'");
+CALL _i9_sync_col('company_profile','seal_url',"VARCHAR(500)","VARCHAR(500) DEFAULT NULL COMMENT '本司电子章图片(PDF落款自动贴章,A3)'");
 CALL _i9_add_col('company_profile','is_default',"TINYINT      NOT NULL DEFAULT 0 COMMENT '1=默认主体'");
 CALL _i9_sync_col('company_profile','is_default',"TINYINT","TINYINT      NOT NULL DEFAULT 0 COMMENT '1=默认主体'");
 CALL _i9_add_col('company_profile','remark',"VARCHAR(200) DEFAULT NULL");

@@ -14,6 +14,7 @@ const mapDto = (dto: Partial<CreateCompanyProfileDto>): Partial<CompanyProfile> 
   bank_account: dto.bankAccount,
   legal_rep: dto.legalRep,
   logo_url: dto.logoUrl,
+  seal_url: dto.sealUrl,
   remark: dto.remark,
 });
 

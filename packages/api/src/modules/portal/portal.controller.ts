@@ -38,7 +38,7 @@ export class PortalController {
   @Patch(':id/stamp')
   @ApiOperation({ summary: '供应商盖章（须勾选同意条款；PUSHED→STAMPED，锁定快照）' })
   stamp(@Param('id', ParseIntPipe) id: number, @Body() dto: StampDto, @Request() req: any) {
-    return this.service.stamp(id, req.user.username, req.user.factory_id, dto.agreed);
+    return this.service.stamp(id, req.user.username, req.user.factory_id, dto.agreed, dto.paper_url);
   }
 
   @Patch(':id/ship')

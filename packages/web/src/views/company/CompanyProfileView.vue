@@ -45,6 +45,9 @@
           <el-col :span="12"><el-form-item label="开户行"><el-input v-model="form.bankName" /></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="银行账号"><el-input v-model="form.bankAccount" /></el-form-item></el-col>
         </el-row>
+        <el-form-item label="电子章">
+          <FileUpload v-model="form.sealUrl" :limit="1" accept="image/*" list-type="picture-card" tip="合同 PDF 落款自动贴本司章（A3）" />
+        </el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item>
         <el-form-item label="设为默认"><el-switch v-model="form.isDefault" /></el-form-item>
       </el-form>
@@ -57,6 +60,7 @@
 </template>
 
 <script setup lang="ts">
+import FileUpload from '@/components/FileUpload.vue';
 import { ref, reactive, computed, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Plus } from '@element-plus/icons-vue';
@@ -83,7 +87,7 @@ const dlgVisible = ref(false);
 const formRef = ref<FormInstance>();
 const emptyForm = () => ({
   id: 0, name: '', shortName: '', legalRep: '', address: '', phone: '',
-  taxNo: '', bankName: '', bankAccount: '', remark: '', isDefault: false,
+  taxNo: '', bankName: '', bankAccount: '', remark: '', isDefault: false, sealUrl: '',
 });
 const form = reactive<any>(emptyForm());
 const rules: FormRules = { name: [{ required: true, message: '请输入公司全称', trigger: 'blur' }] };
@@ -93,7 +97,7 @@ function openEdit(row: any) {
   Object.assign(form, {
     id: row.id, name: row.name, shortName: row.short_name, legalRep: row.legal_rep,
     address: row.address, phone: row.phone, taxNo: row.tax_no, bankName: row.bank_name,
-    bankAccount: row.bank_account, remark: row.remark, isDefault: row.is_default === 1,
+    bankAccount: row.bank_account, remark: row.remark, isDefault: row.is_default === 1, sealUrl: row.seal_url ?? '',
   });
   dlgVisible.value = true;
 }
@@ -104,7 +108,7 @@ async function doSave() {
     const dto = {
       name: form.name, shortName: form.shortName, legalRep: form.legalRep, address: form.address,
       phone: form.phone, taxNo: form.taxNo, bankName: form.bankName, bankAccount: form.bankAccount,
-      remark: form.remark, isDefault: form.isDefault,
+      remark: form.remark, isDefault: form.isDefault, sealUrl: form.sealUrl || undefined,
     };
     if (form.id) await companyApi.update(form.id, dto);
     else await companyApi.create(dto);

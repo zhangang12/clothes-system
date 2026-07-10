@@ -51,6 +51,8 @@
 
 ## 最近变更（新→旧，保留最近若干条）
 
+- （本次·P1-A项三连）`feat(sample/order/contract)` 总览走查 #11/#17/#18(用户已拍板):**A1 样衣改材料→同步未成单报价**——QuoteService.syncFromSample:按品名匹配保留议价(人民币单价/损耗率/单位/备注沿用),耗用/颜色/供应商随样衣刷新,已成单(ORDERED)不动,金额变化清审批;业务编辑材料与版师实测耗用两条路径均触发。**A2 机密名称遮蔽**——订单/样衣列表与详情,未授权用户看到的中间商/买家名称快照显示「🔒 机密」(行级可见性=创建人+被授权人+管理员,复用 customer_grant);OrderModule/SampleModule 接入 CustomerService。**A3 电子章体系**——company_profile/factory +seal_url(基础资料页可传章图);合同 PDF 落款自动贴双方电子章(供应商电子盖章后);门户盖章支持「纸质盖章照片」上传二选一,contract +stamp_mode/stamp_paper_url 留痕(上传人/时间沿用 stamped_by/at),web 详情显示盖章方式+照片。schema 4列(gen-column-sync 重跑,真库升级✓)。jest 221/221(order/sample spec 补 mock) vitest 85/85;真栈E2E 15/15✓
+
 - （本次·P1订单一致性）`fix(order)` 总览走查 #10/#12/#13:①客户改名 C1 同步补齐订单快照——middleman_name/buyer_name 在 草稿/已下单 同步,已生成合同(CONTRACTED)起冻结;②报价转销售合同自动建订单不再带入报价数量(qty_total=0,留空强制补尺码矩阵,矩阵合计回填);③订单材料供应商下拉去 allow-create(只可从工厂库点选)+限面/辅料(factories/select 支持逗号分隔多类型,主/附身份均命中)。jest 221/221(factory spec 适配+新增多类型用例) vitest 85/85;真栈E2E 8/8:三态订单改名同步/冻结、转单qty=0、多类型下拉✓
 
 - （本次·P1门户闭环）`feat(portal)` 总览走查 #8/#9/#16:①**对账退回闭环**——整单退回时自动释放占用批次(供应商可重勾重发起),退回留痕单不可再提交(防同批次双计费);门户详情回显对账单列表+退回批注红条;②**发货完成→已完成**——新门户动作「发货完成」(SHIPPING/RECONCILED 可宣布,ship_done_at 留痕);开票后 已宣布→COMPLETED(新枚举值,门户「已完成」tab/标签),未宣布→回 SHIPPING 允许续批再对账(顺带修复"开票后停在RECONCILED无法续批"断链);③**撤回发货批次**——未被对账占用前门户可撤,累计发货量回退+日志;④**发货必填**——实发数量+快递公司/单号 DTO+服务端+H5三层必填;web 批次审批表补附件列。schema:contract +ship_done_at, portal_status 枚举+COMPLETED(gen-column-sync 重跑,本地真库枚举扩值✓)。jest 220/220(改3处spec适配) vitest 85/85;真栈E2E 22/22:必填拦截/两批发货/撤回回退/审批→对账占用→退回释放→批注回显→留痕单拒提→重发起→确认→发货完成→开票→COMPLETED✓

@@ -27,6 +27,7 @@ export class FactoryService {
     const e: Partial<Factory> = {};
     if (dto.type !== undefined) e.type = dto.type;
     if (dto.extraTypes !== undefined) e.extra_types = (dto.extraTypes ?? []).join(',') || null;
+    if (dto.sealUrl !== undefined) e.seal_url = dto.sealUrl || null;
     if (dto.canInvoice !== undefined) e.can_invoice = dto.canInvoice ? 1 : 0;
     if (dto.name !== undefined) e.name = dto.name;
     if (dto.shortName !== undefined) e.short_name = dto.shortName;

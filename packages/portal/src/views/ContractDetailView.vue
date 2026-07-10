@@ -121,6 +121,7 @@
     <van-cell-group v-if="contract.stamped_at" title="盖章信息" inset>
       <van-cell title="盖章账号" :value="contract.stamped_by_supplier" />
       <van-cell title="盖章时间" :value="contract.stamped_at" />
+      <van-cell title="盖章方式" :value="contract.stamp_mode === 'PAPER' ? '纸质盖章照片' : '电子章'" />
     </van-cell-group>
 
     <!-- Operation Logs -->
@@ -140,6 +141,18 @@
         <van-checkbox v-model="agreedTerms" shape="square" icon-size="18px">
           我已阅读并同意合同条款
         </van-checkbox>
+        <!-- 纸质盖章照片(A3):上传则按纸质盖章留痕;不传则电子章(PDF 落款自动贴章) -->
+        <div class="paper-stamp">
+          <span class="upload-label">纸质盖章照片(选填)</span>
+          <van-uploader
+            v-model="stampPaperFiles"
+            :after-read="onStampPaperRead"
+            :max-count="1"
+            accept="image/*"
+            upload-text="盖章页照片"
+            @delete="stampPaperUrl = ''"
+          />
+        </div>
       </div>
       <van-button
         v-if="contract.portal_status === 'PUSHED'"
@@ -430,15 +443,35 @@ async function load() {
   }
 }
 
+// 纸质盖章照片上传(A3)
+const stampPaperFiles = ref<any[]>([]);
+const stampPaperUrl = ref('');
+async function onStampPaperRead(item: any) {
+  const f = Array.isArray(item) ? item[0] : item;
+  f.status = 'uploading';
+  try {
+    const res = await uploadApi.upload(f.file);
+    stampPaperUrl.value = ((res as any).data ?? res).url;
+    f.status = 'done';
+  } catch {
+    f.status = 'failed'; f.message = '上传失败'; stampPaperUrl.value = '';
+  }
+}
+
 async function doStamp() {
   if (!agreedTerms.value) {
     showConfirmDialog({ title: '提示', message: '请先勾选「我已阅读并同意合同条款」后再盖章', showCancelButton: false });
     return;
   }
-  await showConfirmDialog({ title: '确认盖章', message: '盖章即视为同意合同条款，盖章后合同材料明细将被锁定，无法修改，确认盖章？' });
+  await showConfirmDialog({
+    title: '确认盖章',
+    message: stampPaperUrl.value
+      ? '将以「纸质盖章照片」留痕完成签约，盖章后合同材料明细将被锁定，确认？'
+      : '盖章即视为同意合同条款（电子章将贴入合同 PDF 落款），盖章后合同材料明细将被锁定，确认盖章？',
+  });
   actioning.value = true;
   try {
-    const res = await portalContractApi.stamp(contract.value.id, agreedTerms.value);
+    const res = await portalContractApi.stamp(contract.value.id, agreedTerms.value, stampPaperUrl.value || undefined);
     contract.value = { ...contract.value, ...((res as any).data ?? res) };
     showSuccessToast('盖章成功');
     await load();
@@ -576,6 +609,12 @@ onMounted(load);
   justify-content: center;
   align-items: center;
   height: 200px;
+}
+.paper-stamp {
+  margin-top: 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
 }
 .reject-remark {
   margin: 0 16px 10px;

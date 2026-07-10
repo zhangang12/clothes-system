@@ -38,6 +38,11 @@
             </el-form-item>
           </el-col>
           <el-col :span="8">
+            <el-form-item label="电子章">
+              <FileUpload v-model="form.sealUrl" :limit="1" accept="image/*" list-type="picture-card" tip="盖章后 PDF 落款自动贴章" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
             <el-form-item label="能否开票">
               <el-switch v-model="form.canInvoice" active-text="是" inactive-text="否" />
             </el-form-item>
@@ -174,6 +179,7 @@
 </template>
 
 <script setup lang="ts">
+import FileUpload from '@/components/FileUpload.vue';
 import { ref, reactive, computed, onMounted, h } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
@@ -212,7 +218,7 @@ const form = reactive<any>({
   bankName: '', bankAccount: '', taxNo: '', invoicePhone: '', invoiceAddress: '',
   bankName2: '', bankAccount2: '', taxNo2: '', invoicePhone2: '', invoiceAddress2: '',
   legalRep: '', registeredCapital: '', establishedDate: '', annualSales: '',
-  representativeCustomers: '', qualityCerts: '', remark: '',
+  representativeCustomers: '', qualityCerts: '', remark: '', sealUrl: '',
   portalAccount: '', portalPassword: '',
   contacts: [emptyContact()],
 });
@@ -253,7 +259,7 @@ async function load() {
     legalRep: d.legal_rep ?? '', registeredCapital: d.registered_capital ?? '',
     establishedDate: d.established_date ?? '', annualSales: d.annual_sales ?? '',
     representativeCustomers: d.representative_customers ?? '', qualityCerts: d.quality_certs ?? '',
-    remark: d.remark ?? '',
+    remark: d.remark ?? '', sealUrl: d.seal_url ?? '',
     contacts: (d.contacts?.length ? d.contacts.map((c: any) => ({
       name: c.name ?? '', department: c.department ?? '', title: c.title ?? '',
       phone: c.phone ?? '', mobile: c.mobile ?? '', email: c.email ?? '', remark: c.remark ?? '',
@@ -265,6 +271,7 @@ function buildDto() {
   const num = (v: any) => (v === '' || v == null ? undefined : Number(v));
   return {
     type: form.type, extraTypes: form.extraTypes ?? [], canInvoice: form.canInvoice, name: form.name,
+    sealUrl: form.sealUrl || undefined,
     province: form.province || undefined, city: form.city || undefined,
     address: form.address || undefined, businessScope: form.businessScope || undefined,
     developDate: form.developDate || undefined,

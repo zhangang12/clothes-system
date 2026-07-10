@@ -11,6 +11,8 @@ import { SampleVersion } from './sample-version.entity';
 import { Customer } from '../customer/customer.entity';
 import { Quotation } from '../quote/quotation.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
+import { QuoteService } from '../quote/quote.service';
+import { CustomerService } from '../customer/customer.service';
 import { SampleStatus } from '@i9/types';
 import {
   CreateSampleDto, PushPatternmakerDto, PatternmakerSaveDto, ShipSampleDto, ImportSampleRowDto,
@@ -29,6 +31,8 @@ export class SampleService {
     @InjectRepository(Quotation) private readonly quoteRepo: Repository<Quotation>,
     private readonly numbering: NumberingService,
     private readonly dataSource: DataSource,
+    private readonly quoteService: QuoteService,
+    private readonly customerService: CustomerService,
   ) {}
 
   private buildMaterials(sampleId: number, materials: CreateSampleDto['materials']): SampleMaterial[] {
@@ -122,13 +126,29 @@ export class SampleService {
     const [items, total] = await this.repo.findAndCount({
       where, skip: (page - 1) * size, take: size, order: { id: 'DESC' },
     });
+    await this.maskConfidentialNames(items, user);
     return { items, total, page, size };
   }
 
-  async findOne(id: number) {
+  // 机密客户名称快照遮蔽(P1#18/A2):未授权用户在样衣列表/详情看到 🔒
+  private async maskConfidentialNames<T extends { customer_id?: number; buyer_id?: number; middleman_name?: string; buyer_name?: string }>(
+    rows: T[], user?: { id: number; role?: string },
+  ): Promise<void> {
+    if (!user) return;
+    const ids = await this.customerService.visibleCustomerIds(user);
+    if (ids === null) return;
+    const visible = new Set(ids);
+    for (const r of rows) {
+      if (r.customer_id && !visible.has(+r.customer_id)) r.middleman_name = '🔒 机密' as any;
+      if (r.buyer_id && !visible.has(+r.buyer_id)) r.buyer_name = '🔒 机密' as any;
+    }
+  }
+
+  async findOne(id: number, user?: { id: number; role?: string }) {
     const entity = await this.repo.findOne({ where: { id, deleted: 0 } });
     if (!entity) throw new NotFoundException(`样衣 #${id} 不存在`);
     const materials = await this.materialRepo.find({ where: { sample_id: id }, order: { sort_order: 'ASC' } });
+    await this.maskConfidentialNames([entity], user);
     return { ...entity, materials };
   }
 
@@ -177,6 +197,10 @@ export class SampleService {
       return updated;
     });
     await this.log(id, entity.version, 'UPDATE', operatorId ?? entity.created_by);
+    // 样衣材料修改→同步未成单报价(P1#11 已拍板):品名匹配保留议价,已成单不动
+    if (dto.materials !== undefined) {
+      await this.quoteService.syncFromSample(id);
+    }
     return saved;
   }
 
@@ -216,6 +240,8 @@ export class SampleService {
           );
         }
       }
+      // 版师实测耗用落库→同步未成单报价的报价耗用(P1#11:实耗替换预估)
+      await this.quoteService.syncFromSample(id);
     }
     if (dto.returnNo) {
       entity.return_no = dto.returnNo;

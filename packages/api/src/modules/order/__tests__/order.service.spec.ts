@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { CustomerService } from '../../customer/customer.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
@@ -57,6 +58,8 @@ const mockDataSource = {
   })),
 };
 
+const mockCustomerServiceDep = { visibleCustomerIds: jest.fn().mockResolvedValue(null) };
+
 describe('OrderService', () => {
   let service: OrderService;
 
@@ -65,6 +68,7 @@ describe('OrderService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OrderService,
+        { provide: CustomerService, useValue: mockCustomerServiceDep },
         { provide: getRepositoryToken(OrderMain), useValue: mockOrderRepo },
         { provide: getRepositoryToken(OrderSizeMatrix), useValue: mockMatrixRepo },
         { provide: getRepositoryToken(OrderMaterial), useValue: mockMaterialRepo },

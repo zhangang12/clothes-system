@@ -15,6 +15,9 @@ export class Factory {
   @Column({ length: 100, nullable: true })
   extra_types: string; // 附加身份（逗号分隔 FactoryType，工厂双身份：如材料供应商+加工厂，设计稿 A4）
 
+  @Column({ length: 500, nullable: true })
+  seal_url: string; // 供应商电子章图片（盖章后 PDF 落款贴章，A3）
+
   @Column({ type: 'tinyint', default: 1 })
   can_invoice: number;
 

@@ -48,6 +48,12 @@ export class Contract {
   @Column({ type: 'datetime', nullable: true })
   ship_done_at: Date; // 供应商宣布「发货完成」时间（门户C3；开票后据此闭环到已完成）
 
+  @Column({ length: 10, nullable: true })
+  stamp_mode: string; // 盖章方式 ESEAL=电子章 / PAPER=纸质盖章照片（A3）
+
+  @Column({ length: 500, nullable: true })
+  stamp_paper_url: string; // 纸质盖章照片（上传人/时间见 stamped_by_supplier/stamped_at）
+
   @Column({ length: 200, nullable: true })
   ship_to_address: string; // 收货地址（发货时带入，设计稿 门户 C1）
 

@@ -10,6 +10,7 @@ import { OrderShipment } from './order-shipment.entity';
 import { Quotation } from '../quote/quotation.entity';
 import { QuotationItem } from '../quote/quotation-item.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
+import { CustomerService } from '../customer/customer.service';
 import { SysConfigService } from '../../common/config/sys-config.service';
 import { OrderStatus, QuoteStatus, ApprovalStatus, APPROVAL_THRESHOLD_KEYS } from '@i9/types';
 import { CreateOrderDto, CreateOrderMaterialDto, AddShipmentDto } from './dto/create-order.dto';
@@ -47,6 +48,7 @@ export class OrderService {
     private readonly numbering: NumberingService,
     private readonly config: SysConfigService,
     private readonly dataSource: DataSource,
+    private readonly customerService: CustomerService,
   ) {}
 
   private buildMaterials(orderId: number, qtyTotal: number, materials: CreateOrderMaterialDto[]): OrderMaterial[] {
@@ -94,7 +96,21 @@ export class OrderService {
     });
   }
 
-  async findAll(query: QueryOrderDto) {
+  // 机密客户名称快照遮蔽(P1#18/A2):未授权用户在订单列表/详情看到 🔒(客户属机密单据的延伸)
+  private async maskConfidentialNames<T extends { customer_id?: number; buyer_id?: number; middleman_name?: string; buyer_name?: string }>(
+    rows: T[], user?: { id: number; role?: string },
+  ): Promise<void> {
+    if (!user) return;
+    const ids = await this.customerService.visibleCustomerIds(user);
+    if (ids === null) return; // 管理员全量可见
+    const visible = new Set(ids);
+    for (const r of rows) {
+      if (r.customer_id && !visible.has(+r.customer_id)) r.middleman_name = '🔒 机密' as any;
+      if (r.buyer_id && !visible.has(+r.buyer_id)) r.buyer_name = '🔒 机密' as any;
+    }
+  }
+
+  async findAll(query: QueryOrderDto, user?: { id: number; role?: string }) {
     const { page = 1, size = 20, keyword, status, customer_id } = query;
     const base: FindOptionsWhere<OrderMain> = {
       deleted: 0,
@@ -109,12 +125,14 @@ export class OrderService {
     const [items, total] = await this.orderRepo.findAndCount({
       where, skip: (page - 1) * size, take: size, order: { id: 'DESC' },
     });
+    await this.maskConfidentialNames(items, user);
     return { items, total, page, size };
   }
 
-  async findOne(id: number) {
+  async findOne(id: number, user?: { id: number; role?: string }) {
     const order = await this.orderRepo.findOne({ where: { id, deleted: 0 } });
     if (!order) throw new NotFoundException(`订单 #${id} 不存在`);
+    await this.maskConfidentialNames([order], user);
     const [matrix, materials, shipments] = await Promise.all([
       this.matrixRepo.findOne({ where: { order_id: id } }),
       this.materialRepo.find({ where: { order_id: id }, order: { sort_order: 'ASC' } }),

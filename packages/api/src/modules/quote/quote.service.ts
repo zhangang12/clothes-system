@@ -256,6 +256,40 @@ export class QuoteService {
     });
   }
 
+  // 样衣材料修改→同步未成单报价（总览走查P1#11/TRI A5/ORD C8，已拍板）：
+  // 按品名匹配保留议价（人民币单价/损耗率/单位/备注沿用原行），耗用/颜色/供应商等随样衣刷新；
+  // 已成单(ORDERED)报价不动；金额变化清审批（同 importFromSample 语义）。
+  async syncFromSample(sampleId: number): Promise<number> {
+    const quotes = await this.quoteRepo.find({ where: { sample_id: sampleId, deleted: 0 } });
+    const targets = quotes.filter((q) => q.status !== QuoteStatus.ORDERED);
+    if (!targets.length) return 0;
+    const materials = await this.sampleMaterialRepo.find({ where: { sample_id: sampleId }, order: { sort_order: 'ASC' } });
+    for (const quote of targets) {
+      const rate = +quote.exchange_rate;
+      await this.dataSource.transaction(async (manager) => {
+        const oldItems = await manager.find(QuotationItem, { where: { quote_id: quote.id } });
+        const byName = new Map(oldItems.map((i) => [String(i.item_name || '').trim(), i]));
+        const items = this.buildItems(quote.id, materials.map((m) => {
+          const old = byName.get(String(m.item_name || '').trim());
+          return {
+            part: m.part, itemName: m.item_name, width: m.width, color: m.colors,
+            supplier: m.supplier_name, quoteUsage: +m.actual_usage || +m.qty || 0,
+            rmbPrice: old ? +old.rmb_price : undefined,
+            lossRate: old != null ? +old.loss_rate : 3,
+            unit: old?.unit, remark: old?.remark,
+          } as CreateQuoteItemDto;
+        }), rate);
+        await manager.delete(QuotationItem, { quote_id: quote.id });
+        if (items.length) await manager.save(QuotationItem, items);
+        const fees = await manager.find(QuotationFee, { where: { quote_id: quote.id } });
+        quote.approval_status = ApprovalStatus.NONE;
+        await manager.save(Quotation, quote);
+        await this.persistTotals(manager, quote, items, fees);
+      });
+    }
+    return targets.length;
+  }
+
   // 保存/发出报价：草稿 → 已报价
   async submitQuote(id: number): Promise<Quotation> {
     const quote = await this.quoteRepo.findOne({ where: { id, deleted: 0 } });
