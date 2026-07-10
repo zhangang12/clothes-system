@@ -38,6 +38,13 @@ export class OrderController {
     return maskOrder(await this.service.findOne(id, req.user), req.user.role);
   }
 
+  @Post(':id/copy')
+  @Roles(UserRole.ADMIN, UserRole.BUSINESS)
+  @ApiOperation({ summary: '复制订单（主表+用料+矩阵为新草稿，P3#34）' })
+  copy(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.service.copy(id, req.user.id);
+  }
+
   @Put(':id')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
   @ApiOperation({ summary: '编辑订单（草稿状态）' })

@@ -42,6 +42,12 @@
         <el-table-column label="大货总数" width="90" align="right"><template #default="{ row }">{{ row.qty_total ?? 0 }}</template></el-table-column>
         <el-table-column label="单品单价" width="100" align="right"><template #default="{ row }">{{ row.unit_price != null ? `${row.currency === 'RMB' ? '¥' : '$'}${row.unit_price}` : '-' }}</template></el-table-column>
         <el-table-column prop="delivery_date" label="约定交期" width="110"><template #default="{ row }">{{ row.delivery_date || '-' }}</template></el-table-column>
+        <el-table-column label="总金额" width="120" align="right">
+          <template #default="{ row }">
+            <span v-if="row.total_amount != null">{{ row.currency || '' }} {{ (+row.total_amount).toFixed(2) }}</span>
+            <span v-else>—</span>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="130">
           <template #default="{ row }">
             <el-tag :type="statusTag(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
@@ -49,11 +55,22 @@
           </template>
         </el-table-column>
         <el-table-column prop="salesperson" label="业务员" width="90"><template #default="{ row }">{{ row.salesperson || '-' }}</template></el-table-column>
-        <el-table-column label="操作" width="230" fixed="right">
+        <el-table-column label="操作" width="320" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
             <el-button link size="small" @click="goView(row)">查看</el-button>
             <el-button v-if="row.approval_status === 'PENDING' && canReview" link type="success" size="small" @click="doApprove(row)">审批</el-button>
+            <el-dropdown trigger="click" @command="(cmd: string) => onPrint(cmd, row)">
+              <el-button link size="small">打印<el-icon><ArrowDown /></el-icon></el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="customer">对客确认单（无成本）</el-dropdown-item>
+                  <el-dropdown-item command="factory">生产通知单（无客户/价格）</el-dropdown-item>
+                  <el-dropdown-item command="internal">内部单据（全量）</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+            <el-button v-if="canEdit" link type="info" size="small" @click="doCopy(row)">复制</el-button>
             <el-dropdown
               v-if="canEdit && ['CONFIRMED', 'CONTRACTED', 'PRODUCING'].includes(row.status)"
               trigger="click" @command="(cmd: string) => onGenContract(cmd, row)"
@@ -87,6 +104,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search, Plus, Download, Delete, ArrowDown } from '@element-plus/icons-vue';
 import { orderApi } from '@/api/order';
 import { contractApi } from '@/api/contract';
+import { printOrder } from '@/utils/orderPrint';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole, ORDER_STATUS_LABEL } from '@i9/types';
 
@@ -118,6 +136,22 @@ async function load() {
 function reset() { query.keyword = ''; query.status = undefined; query.page = 1; load(); }
 function goCreate() { router.push({ name: 'OrderCreate' }); }
 function goEdit(row: any) { router.push({ name: 'OrderEdit', params: { id: row.id } }); }
+
+// 三套脱敏打印(P3#32/ORD E2)
+async function onPrint(mode: string, row: any) {
+  const res: any = await orderApi.get(row.id);
+  printOrder(res.data ?? res, mode as any);
+}
+
+// 订单复制(P3#34)
+async function doCopy(row: any) {
+  try {
+    const res: any = await orderApi.copy(row.id);
+    const d = res?.data ?? res;
+    ElMessage.success(`已复制为新草稿 ${d.order_no ?? ''}`);
+    load();
+  } catch (e: any) { ElMessage.error(e?.response?.data?.msg ?? '复制失败'); }
+}
 
 // 生成合同入口（设计稿 合同 A1 主流程:订单侧拆单,而非只能从合同侧反向带入）
 async function onGenContract(cmd: string, row: any) {

@@ -20,6 +20,14 @@ export class StatsController {
     return this.service.funnel();
   }
 
+  @Get('orders')
+  @ApiQuery({ name: 'dimension', required: false, enum: ['po', 'customer', 'factory', 'currency'] })
+  @ApiOperation({ summary: '订单维度统计:按PO/客户/工厂/币种聚合(P3#34/ORD D8)' })
+  orderStats(@Query('dimension') dimension?: string) {
+    const d = (['po', 'customer', 'factory', 'currency'].includes(dimension ?? '') ? dimension : 'customer') as any;
+    return this.service.orderStats(d);
+  }
+
   @Get('win-rate')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS, UserRole.FINANCE, UserRole.SUPERVISOR)
   @ApiOperation({ summary: '成单率（按业务员/客户）' })

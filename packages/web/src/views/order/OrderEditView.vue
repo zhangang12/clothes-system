@@ -11,6 +11,16 @@
         <el-button v-if="!readonly" type="primary" :icon="Check" :loading="saving" @click="save">保存</el-button>
         <el-button v-if="!readonly && editId" :icon="Download" @click="importDialog = true">从报价导入</el-button>
         <el-button v-if="!readonly && editId && form.status !== 'DONE'" type="success" :icon="Promotion" @click="advance">推进状态</el-button>
+        <el-dropdown v-if="editId" trigger="click" @command="onPrintOrder">
+          <el-button :icon="Printer">打印<el-icon><ArrowDown /></el-icon></el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="customer">对客确认单（无成本）</el-dropdown-item>
+              <el-dropdown-item command="factory">生产通知单（无客户/价格）</el-dropdown-item>
+              <el-dropdown-item command="internal">内部单据（全量）</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
         <el-dropdown
           v-if="editId && ['CONFIRMED', 'CONTRACTED', 'PRODUCING'].includes(form.status)"
           trigger="click" @command="onGenContract"
@@ -93,8 +103,8 @@
               <template #header>
                 <div class="po-head">
                   <el-input v-model="p.po_no" size="small" placeholder="PO号" :disabled="readonly" />
-                  <el-input v-model="p.destination" size="small" placeholder="目的地" :disabled="readonly" />
-                  <el-input v-model="p.consignee" size="small" placeholder="收货人" :disabled="readonly" />
+                  <DictSelect v-model="p.destination" type="destination" size="small" placeholder="目的地(台账可选)" :disabled="readonly" />
+                  <DictSelect v-model="p.consignee" type="consignee" size="small" placeholder="收货人(台账可选)" :disabled="readonly" />
                   <el-button v-if="!readonly && form.matrix.pos.length > 1" link type="danger" size="small" @click="delPoCol(pi)">删列</el-button>
                 </div>
               </template>
@@ -242,8 +252,10 @@ import { ref, reactive, computed, onMounted, h } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
-import { Back, Check, Plus, Minus, Download, Promotion, ArrowDown } from '@element-plus/icons-vue';
+import { Back, Check, Plus, Minus, Download, Promotion, ArrowDown, Printer } from '@element-plus/icons-vue';
 import { orderApi } from '@/api/order';
+import DictSelect from '@/components/DictSelect.vue';
+import { printOrder } from '@/utils/orderPrint';
 import { contractApi } from '@/api/contract';
 import { quoteApi } from '@/api/quote';
 import { factoryApi } from '@/api/factory';
@@ -261,6 +273,13 @@ const SectionBlock = (props: { title: string; badge?: string }, { slots }: any) 
 
 const route = useRoute();
 const router = useRouter();
+
+// 三套脱敏打印(P3#32)
+async function onPrintOrder(mode: string) {
+  if (!editId.value) return;
+  const res: any = await orderApi.get(editId.value);
+  printOrder(res.data ?? res, mode as any);
+}
 
 // 生成合同入口（设计稿 合同 A1 主流程:订单侧拆单）
 async function onGenContract(cmd: string) {

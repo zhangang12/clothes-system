@@ -269,6 +269,9 @@ export class QuoteService {
       quote.sample_id = sampleId;
       quote.sample_no = sample.sample_no;
       if (!quote.style_no) quote.style_no = sample.style_no;
+      // 图片随单继承(P3#33/TRI G1):样衣款图带到报价,已有不覆盖
+      if (!quote.image1 && sample.image1) quote.image1 = sample.image1;
+      if (!quote.image2 && (sample.image2 || sample.image3)) quote.image2 = sample.image2 || sample.image3;
       quote.approval_status = ApprovalStatus.NONE; // 导入改金额:清审批,避免绕过阈值
       await manager.save(Quotation, quote);
       await manager.delete(QuotationItem, { quote_id: id });

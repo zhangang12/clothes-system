@@ -25,12 +25,24 @@ describe('printQuote', () => {
     const html = captureHtml(() => printQuote(detail, { name: '本司主体测试公司' }));
     expect(html).toContain('本司主体测试公司'); // 抬头取本司主体
     expect(html).toContain('Q-2026-01');
-    expect(html).toContain('中间商甲');
+    // 对外口径默认(P3#32/rev G2):去客户信息与利润率
+    expect(html).not.toContain('中间商甲');
+    expect(html).not.toContain('<b>利润率：</b>'); // 元信息行去利润率(合计"含利润率"公式标注保留)
     expect(html).toContain('主面料');
     expect(html).toContain('打样费');
     expect(html).toContain('1234.50'); // 人民币合计
     // 脱敏：供应商名不得出现在对客报价单
     expect(html).not.toContain('机密供应商XYZ');
+  });
+
+  it('internal 选项:内部留档含客户信息与利润率(P3#32)', () => {
+    const detail = {
+      quote_no: 'Q-2026-02', middleman_name: '中间商甲', profit_rate: 10,
+      items: [], fees: [], rmb_total: 1, usd_total: 1,
+    };
+    const html = captureHtml(() => printQuote(detail, undefined, { internal: true }));
+    expect(html).toContain('中间商甲');
+    expect(html).toContain('<b>利润率：</b>');
   });
 });
 

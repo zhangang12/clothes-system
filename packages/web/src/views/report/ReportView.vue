@@ -104,6 +104,29 @@
         </el-table-column>
       </el-table>
     </el-card>
+
+    <!-- 订单维度统计(P3#34/ORD D8) -->
+    <el-card v-loading="loading.orders">
+      <template #header>
+        <div class="card-header">
+          <span>订单统计（单数 / 数量 / 金额）</span>
+          <el-radio-group v-model="orderDim" size="small" @change="loadOrders">
+            <el-radio-button value="customer">按客户</el-radio-button>
+            <el-radio-button value="po">按PO</el-radio-button>
+            <el-radio-button value="factory">按工厂</el-radio-button>
+            <el-radio-button value="currency">按币种</el-radio-button>
+          </el-radio-group>
+        </div>
+      </template>
+      <el-table :data="orderRows" border stripe size="small">
+        <el-table-column prop="key" :label="({ customer: '客户', po: 'PO号', factory: '加工厂', currency: '币种' } as any)[orderDim]" />
+        <el-table-column prop="count" label="订单数" width="100" align="right" />
+        <el-table-column prop="qtyTotal" label="数量合计" width="120" align="right" />
+        <el-table-column prop="amountTotal" label="金额合计" width="140" align="right">
+          <template #default="{ row }">{{ fmt(row.amountTotal) }}</template>
+        </el-table-column>
+      </el-table>
+    </el-card>
   </div>
 </template>
 
@@ -121,7 +144,7 @@ const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
 const thresholds = reactive({ quote: 0, order: 0, contract: 0 });
 const savingThreshold = ref(false);
 
-const loading = reactive({ funnel: false, win: false, profit: false });
+const loading = reactive({ funnel: false, win: false, profit: false, orders: false });
 const funnel = ref<any>({});
 const winRows = ref<any[]>([]);
 const profitRows = ref<any[]>([]);
@@ -189,9 +212,19 @@ async function saveThresholds() {
   } finally { savingThreshold.value = false; }
 }
 
+const orderDim = ref<'po' | 'customer' | 'factory' | 'currency'>('customer');
+const orderRows = ref<any[]>([]);
+async function loadOrders() {
+  loading.orders = true;
+  try {
+    const res: any = await statsApi.orders(orderDim.value);
+    orderRows.value = res?.data ?? [];
+  } finally { loading.orders = false; }
+}
+
 onMounted(() => {
   loadFunnel(); loadWin(); loadProfit();
-  if (isAdmin.value) loadThresholds();
+  if (isAdmin.value) loadThresholds(); loadOrders();
 });
 </script>
 

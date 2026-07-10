@@ -9,7 +9,7 @@
       </div>
       <div class="ops">
         <el-button v-if="!readonly" type="primary" :icon="Check" :loading="saving" @click="save">保存</el-button>
-        <el-button v-if="editId" :icon="Printer" @click="printCurrent">打印/PDF</el-button>
+        <el-button v-if="editId" :icon="Printer" @click="printDialog = true">打印/PDF</el-button>
         <el-button v-if="!readonly && editId" :icon="Download" @click="importDialog = true">从样衣导入</el-button>
         <el-button v-if="!readonly && editId && ['DRAFT', 'ADJUSTING'].includes(form.status)" type="warning" @click="submitQuote">发出报价</el-button>
         <el-button v-if="!readonly && editId && form.status === 'QUOTED'" plain @click="adjustQuote">客户调整</el-button>
@@ -28,6 +28,18 @@
         style="cursor:pointer" @click="$router.push({ name: 'OrderEdit', params: { id: o.id } })"
       >{{ o.order_no }} · {{ orderStatusLabel(o.status) }}</el-tag>
     </div>
+
+    <!-- 打印内容勾选(P3#32/rev G1-G3):对外默认去客户信息与利润率 -->
+    <el-dialog v-model="printDialog" title="打印 / 导出 PDF" width="380px">
+      <el-checkbox v-model="printOpts.internal">内部留档（含客户信息与利润率）</el-checkbox><br>
+      <el-checkbox v-model="printOpts.withImages">含款图（样衣图）</el-checkbox><br>
+      <el-checkbox v-model="printOpts.withFees">含费用明细</el-checkbox>
+      <div class="hint" style="margin-top:8px">对外报价单不含供应商/成本/客户信息与利润率；打印窗口中「另存为 PDF」即可独立导出文件。</div>
+      <template #footer>
+        <el-button @click="printDialog = false">取消</el-button>
+        <el-button type="primary" @click="printCurrent">打印</el-button>
+      </template>
+    </el-dialog>
 
     <el-form ref="formRef" :model="form" :rules="rules" label-width="104px" :disabled="readonly" class="form-body">
       <!-- 主要信息 -->
@@ -347,13 +359,16 @@ async function pasteItems() {
 }
 
 // 编辑页直接打印当前报价单（取详情 + 默认公司抬头）
+const printDialog = ref(false);
+const printOpts = reactive({ internal: false, withImages: true, withFees: true });
 async function printCurrent() {
   if (!editId.value) return;
+  printDialog.value = false;
   try {
     const res: any = await quoteApi.get(editId.value);
     let company: any;
     try { company = (await companyApi.getDefault() as any)?.data ?? undefined; } catch { company = undefined; }
-    printQuote(res.data ?? res, company || undefined);
+    printQuote(res.data ?? res, company || undefined, { ...printOpts });
   } catch (e: any) { ElMessage.error(e?.message ?? e?.response?.data?.message ?? '打印失败'); }
 }
 

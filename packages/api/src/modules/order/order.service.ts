@@ -231,6 +231,8 @@ export class OrderService {
       // 导入默认币种 RMB、报价人民币价→订单单品单价（设计稿 订单 A3/Q3，可改）
       order.currency = 'CNY';
       if (quote.rmb_total != null) order.unit_price = +(+quote.rmb_total).toFixed(4);
+      // 图片随单继承(P3#33/ORD C3):报价款图(源自样衣)作订单彩稿候选,已有不覆盖
+      if (!order.att_artwork && (quote.image1 || quote.image2)) order.att_artwork = quote.image1 || quote.image2;
       order.approval_status = ApprovalStatus.NONE; // 导入改金额:清审批,避免绕过阈值
       order.quote_synced_at = new Date(); // 「源报价已变更」= quote.content_updated_at > 此值(P2#20)
       await manager.save(OrderMain, order);
@@ -242,6 +244,37 @@ export class OrderService {
       } as CreateOrderMaterialDto)));
       if (materials.length) await manager.save(OrderMaterial, materials);
       return order;
+    });
+  }
+
+  // 订单复制(P3#34/qc I5):同客户复购/同款改单——复制主表+用料+尺码矩阵为新草稿
+  async copy(id: number, createdBy: number): Promise<OrderMain> {
+    const src = await this.orderRepo.findOne({ where: { id, deleted: 0 } });
+    if (!src) throw new NotFoundException(`订单 #${id} 不存在`);
+    const order_no = await this.numbering.next(NUM_PREFIX.ORDER);
+    return this.dataSource.transaction(async (manager) => {
+      const { id: _id, created_at, updated_at, ...rest } = src as any;
+      const copy = manager.create(OrderMain, {
+        ...rest,
+        order_no,
+        status: OrderStatus.DRAFT,
+        approval_status: ApprovalStatus.NONE,
+        approved_by: null, approved_at: null,
+        quote_synced_at: null, content_updated_at: null,
+        created_by: createdBy,
+        deleted: 0,
+      });
+      const saved = await manager.save(OrderMain, copy);
+      const materials = await manager.find(OrderMaterial, { where: { order_id: id } });
+      if (materials.length) {
+        await manager.save(OrderMaterial, materials.map(({ id: _mid, ...m }: any) =>
+          manager.create(OrderMaterial, { ...m, order_id: saved.id })));
+      }
+      const matrix = await manager.findOne(OrderSizeMatrix, { where: { order_id: id } });
+      if (matrix) {
+        await manager.save(OrderSizeMatrix, manager.create(OrderSizeMatrix, { order_id: saved.id, matrix_data: matrix.matrix_data }));
+      }
+      return saved;
     });
   }
 

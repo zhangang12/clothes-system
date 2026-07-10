@@ -22,6 +22,33 @@ export class StatsService {
   }
 
   // 转化漏斗：样衣建档 → 客户报价 → 销售订单（成单）
+  // 订单维度统计(P3#34/ORD D8):按 PO/客户/工厂/币种 聚合 单数/数量/金额
+  async orderStats(dimension: 'po' | 'customer' | 'factory' | 'currency' = 'customer') {
+    const col = { po: 'o.customer_po', customer: 'o.middleman_name', factory: 'o.factory_id', currency: 'o.currency' }[dimension];
+    const rows = await this.orderRepo.createQueryBuilder('o')
+      .select(`${col}`, 'k')
+      .addSelect('COUNT(*)', 'cnt')
+      .addSelect('COALESCE(SUM(o.qty_total),0)', 'qty')
+      .addSelect('COALESCE(SUM(o.total_amount),0)', 'amount')
+      .where('o.deleted = 0')
+      .groupBy(col)
+      .orderBy('amount', 'DESC')
+      .getRawMany();
+    let nameOf: (k: any) => string = (k) => (k == null || k === '' ? '未指定' : String(k));
+    if (dimension === 'factory') {
+      const ids = rows.map((r) => +r.k).filter(Boolean);
+      const fs = ids.length ? await this.orderRepo.manager.getRepository('factory').find({ where: ids.map((id) => ({ id })) as any }) : [];
+      const byId = new Map((fs as any[]).map((f) => [+f.id, f.short_name || f.name]));
+      nameOf = (k) => (k ? byId.get(+k) ?? `工厂#${k}` : '未指定');
+    }
+    return rows.map((r) => ({
+      key: nameOf(r.k),
+      count: +r.cnt,
+      qtyTotal: +r.qty,
+      amountTotal: +(+r.amount).toFixed(2),
+    }));
+  }
+
   async funnel() {
     const [samples, quotes, orders, wonQuotes] = await Promise.all([
       this.sampleRepo.count({ where: { deleted: 0 } }),
