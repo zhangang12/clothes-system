@@ -65,7 +65,7 @@ export class PaymentController {
     @Query('due_end') dueEnd?: string,
   ) {
     return this.service.findPaymentRequests(
-      factoryId ? Number(factoryId) : undefined, approvalStatus, page, size, startDate, endDate,, dueStart, dueEnd);
+      factoryId ? Number(factoryId) : undefined, approvalStatus, page, size, startDate, endDate, dueStart, dueEnd);
   }
 
   @Patch('requests/:id/submit')
