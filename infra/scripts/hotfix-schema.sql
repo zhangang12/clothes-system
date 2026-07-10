@@ -842,6 +842,9 @@ CREATE TABLE IF NOT EXISTS `settlement` (
   `gross_margin`         DECIMAL(8,2)   DEFAULT NULL COMMENT '毛利率%',
   `breakeven_rate_tax`   DECIMAL(10,4)  DEFAULT NULL COMMENT '保本汇率(含税)=成本单价含税÷美金单价',
   `breakeven_rate_extax` DECIMAL(10,4)  DEFAULT NULL COMMENT '保本汇率(不含税)',
+  `unpaid_goods_tax`     DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '已确认未付对账金额(含税)——不计入总货款,灰显「未付·不计入」',
+  `unpaid_count`         INT            NOT NULL DEFAULT 0 COMMENT '已确认未付对账笔数',
+  `profit_ready`         TINYINT        NOT NULL DEFAULT 0 COMMENT '1=收汇与汇率齐备,毛利/净利可信(缺值不出误导性负毛利)',
   `tax_refund`           DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '出口退税(可退税不含税采购额×退税率,自动测算)',
   `refund_status`        VARCHAR(20)    NOT NULL DEFAULT 'ESTIMATED' COMMENT '退税状态:ESTIMATED预估/RECEIVED到账',
   `customer_name`        VARCHAR(100)   DEFAULT NULL COMMENT '中间商客户(利润按客户维度汇总)',
@@ -870,6 +873,11 @@ CREATE TABLE IF NOT EXISTS `settlement_cost` (
   `amount`          DECIMAL(15,4)  NOT NULL COMMENT '金额',
   `has_invoice`     TINYINT        NOT NULL DEFAULT 1 COMMENT '1=有票 0=无票',
   `tax_rate`        DECIMAL(5,2)   NOT NULL DEFAULT 13 COMMENT '该行税率%(有票按此换不含税)',
+  `reconcile_no`    VARCHAR(30)    DEFAULT NULL COMMENT '来源对账单号(AUTO行)',
+  `supplier_name`   VARCHAR(100)   DEFAULT NULL COMMENT '供应商(AUTO行)',
+  `pay_status`      VARCHAR(20)    DEFAULT NULL COMMENT '付款状态 PAID=已付 CONFIRMED=已确认未付',
+  `source`          VARCHAR(10)    NOT NULL DEFAULT 'MANUAL' COMMENT 'AUTO=对账汇总快照 MANUAL=手工行',
+  `included`        TINYINT        NOT NULL DEFAULT 1 COMMENT '1=计入总货款 0=未付不计入(灰显)',
   `created_at`      DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_settlement` (`settlement_id`)
@@ -880,6 +888,8 @@ CREATE TABLE IF NOT EXISTS `settlement_receipt` (
   `settlement_id`  BIGINT        NOT NULL,
   `amount`         DECIMAL(15,4) NOT NULL COMMENT '收款金额',
   `receipt_date`   DATE          NOT NULL COMMENT '收款日期',
+  `exchange_rate`  DECIMAL(10,4) DEFAULT NULL COMMENT '该笔收汇汇率(银行水单带入,逐笔×汇率)',
+  `slip_url`       VARCHAR(500)  DEFAULT NULL COMMENT '银行水单',
   `remark`         VARCHAR(255)  DEFAULT NULL,
   `created_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -2034,6 +2044,12 @@ CALL _i9_add_col('settlement','breakeven_rate_tax',"DECIMAL(10,4)  DEFAULT NULL 
 CALL _i9_sync_col('settlement','breakeven_rate_tax',"DECIMAL(10,4)","DECIMAL(10,4)  DEFAULT NULL COMMENT '保本汇率(含税)=成本单价含税÷美金单价'");
 CALL _i9_add_col('settlement','breakeven_rate_extax',"DECIMAL(10,4)  DEFAULT NULL COMMENT '保本汇率(不含税)'");
 CALL _i9_sync_col('settlement','breakeven_rate_extax',"DECIMAL(10,4)","DECIMAL(10,4)  DEFAULT NULL COMMENT '保本汇率(不含税)'");
+CALL _i9_add_col('settlement','unpaid_goods_tax',"DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '已确认未付对账金额(含税)——不计入总货款,灰显「未付·不计入」'");
+CALL _i9_sync_col('settlement','unpaid_goods_tax',"DECIMAL(15,4)","DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '已确认未付对账金额(含税)——不计入总货款,灰显「未付·不计入」'");
+CALL _i9_add_col('settlement','unpaid_count',"INT            NOT NULL DEFAULT 0 COMMENT '已确认未付对账笔数'");
+CALL _i9_sync_col('settlement','unpaid_count',"INT","INT            NOT NULL DEFAULT 0 COMMENT '已确认未付对账笔数'");
+CALL _i9_add_col('settlement','profit_ready',"TINYINT        NOT NULL DEFAULT 0 COMMENT '1=收汇与汇率齐备,毛利/净利可信(缺值不出误导性负毛利)'");
+CALL _i9_sync_col('settlement','profit_ready',"TINYINT","TINYINT        NOT NULL DEFAULT 0 COMMENT '1=收汇与汇率齐备,毛利/净利可信(缺值不出误导性负毛利)'");
 CALL _i9_add_col('settlement','tax_refund',"DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '出口退税(可退税不含税采购额×退税率,自动测算)'");
 CALL _i9_sync_col('settlement','tax_refund',"DECIMAL(15,4)","DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '出口退税(可退税不含税采购额×退税率,自动测算)'");
 CALL _i9_add_col('settlement','refund_status',"VARCHAR(20)    NOT NULL DEFAULT 'ESTIMATED' COMMENT '退税状态:ESTIMATED预估/RECEIVED到账'");
@@ -2074,6 +2090,16 @@ CALL _i9_add_col('settlement_cost','has_invoice',"TINYINT        NOT NULL DEFAUL
 CALL _i9_sync_col('settlement_cost','has_invoice',"TINYINT","TINYINT        NOT NULL DEFAULT 1 COMMENT '1=有票 0=无票'");
 CALL _i9_add_col('settlement_cost','tax_rate',"DECIMAL(5,2)   NOT NULL DEFAULT 13 COMMENT '该行税率%(有票按此换不含税)'");
 CALL _i9_sync_col('settlement_cost','tax_rate',"DECIMAL(5,2)","DECIMAL(5,2)   NOT NULL DEFAULT 13 COMMENT '该行税率%(有票按此换不含税)'");
+CALL _i9_add_col('settlement_cost','reconcile_no',"VARCHAR(30)    DEFAULT NULL COMMENT '来源对账单号(AUTO行)'");
+CALL _i9_sync_col('settlement_cost','reconcile_no',"VARCHAR(30)","VARCHAR(30)    DEFAULT NULL COMMENT '来源对账单号(AUTO行)'");
+CALL _i9_add_col('settlement_cost','supplier_name',"VARCHAR(100)   DEFAULT NULL COMMENT '供应商(AUTO行)'");
+CALL _i9_sync_col('settlement_cost','supplier_name',"VARCHAR(100)","VARCHAR(100)   DEFAULT NULL COMMENT '供应商(AUTO行)'");
+CALL _i9_add_col('settlement_cost','pay_status',"VARCHAR(20)    DEFAULT NULL COMMENT '付款状态 PAID=已付 CONFIRMED=已确认未付'");
+CALL _i9_sync_col('settlement_cost','pay_status',"VARCHAR(20)","VARCHAR(20)    DEFAULT NULL COMMENT '付款状态 PAID=已付 CONFIRMED=已确认未付'");
+CALL _i9_add_col('settlement_cost','source',"VARCHAR(10)    NOT NULL DEFAULT 'MANUAL' COMMENT 'AUTO=对账汇总快照 MANUAL=手工行'");
+CALL _i9_sync_col('settlement_cost','source',"VARCHAR(10)","VARCHAR(10)    NOT NULL DEFAULT 'MANUAL' COMMENT 'AUTO=对账汇总快照 MANUAL=手工行'");
+CALL _i9_add_col('settlement_cost','included',"TINYINT        NOT NULL DEFAULT 1 COMMENT '1=计入总货款 0=未付不计入(灰显)'");
+CALL _i9_sync_col('settlement_cost','included',"TINYINT","TINYINT        NOT NULL DEFAULT 1 COMMENT '1=计入总货款 0=未付不计入(灰显)'");
 CALL _i9_add_col('settlement_cost','created_at',"DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP");
 CALL _i9_sync_col('settlement_cost','created_at',"DATETIME","DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP");
 
@@ -2084,6 +2110,10 @@ CALL _i9_add_col('settlement_receipt','amount',"DECIMAL(15,4) NOT NULL COMMENT '
 CALL _i9_sync_col('settlement_receipt','amount',"DECIMAL(15,4)","DECIMAL(15,4) NOT NULL COMMENT '收款金额'");
 CALL _i9_add_col('settlement_receipt','receipt_date',"DATE          NOT NULL COMMENT '收款日期'");
 CALL _i9_sync_col('settlement_receipt','receipt_date',"DATE","DATE          NOT NULL COMMENT '收款日期'");
+CALL _i9_add_col('settlement_receipt','exchange_rate',"DECIMAL(10,4) DEFAULT NULL COMMENT '该笔收汇汇率(银行水单带入,逐笔×汇率)'");
+CALL _i9_sync_col('settlement_receipt','exchange_rate',"DECIMAL(10,4)","DECIMAL(10,4) DEFAULT NULL COMMENT '该笔收汇汇率(银行水单带入,逐笔×汇率)'");
+CALL _i9_add_col('settlement_receipt','slip_url',"VARCHAR(500)  DEFAULT NULL COMMENT '银行水单'");
+CALL _i9_sync_col('settlement_receipt','slip_url',"VARCHAR(500)","VARCHAR(500)  DEFAULT NULL COMMENT '银行水单'");
 CALL _i9_add_col('settlement_receipt','remark',"VARCHAR(255)  DEFAULT NULL");
 CALL _i9_sync_col('settlement_receipt','remark',"VARCHAR(255)","VARCHAR(255)  DEFAULT NULL");
 CALL _i9_add_col('settlement_receipt','created_at',"DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP");

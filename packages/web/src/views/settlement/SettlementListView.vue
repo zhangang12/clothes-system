@@ -94,6 +94,16 @@
     <!-- 详情弹窗 -->
     <el-dialog v-model="detailVisible" title="结算单详情" width="900px" destroy-on-close>
       <template v-if="detailData">
+        <div class="detail-toolbar" v-if="detailData.status === 'DRAFT' && canEdit">
+          <el-button size="small" type="primary" @click="openEdit">编辑（补收汇/汇率/费用）</el-button>
+          <el-button size="small" :loading="refreshing" @click="doRefreshCost">刷新付款汇总</el-button>
+          <span class="hint-inline">重取出货件数并按本订单对账付款重建成本快照</span>
+        </div>
+        <el-alert
+          v-if="detailData.status === 'DRAFT' && !+(detailData.profit_ready ?? 0)"
+          type="warning" :closable="false" show-icon style="margin-bottom:10px"
+          title="收汇金额与结算汇率尚未齐备——毛利/净利暂不生成（防误导性负毛利），补齐后方可确认结算"
+        />
         <el-descriptions :column="3" border size="small">
           <el-descriptions-item label="结算单编号">{{ detailData.settlement_no }}</el-descriptions-item>
           <el-descriptions-item label="订单ID">{{ detailData.order_id }}</el-descriptions-item>
@@ -104,39 +114,56 @@
           </el-descriptions-item>
           <el-descriptions-item label="款号">{{ detailData.style_no || '—' }}</el-descriptions-item>
           <el-descriptions-item label="出货件数">{{ detailData.shipped_qty ?? 0 }}</el-descriptions-item>
-          <el-descriptions-item label="结算汇率">{{ detailData.exchange_rate != null ? (+detailData.exchange_rate).toFixed(4) : '—' }}</el-descriptions-item>
+          <el-descriptions-item label="结算汇率">
+            {{ detailData.exchange_rate != null ? (+detailData.exchange_rate).toFixed(4) : '—' }}
+            <span v-if="hasRatedReceipts" class="muted">（逐笔加权平均）</span>
+          </el-descriptions-item>
         </el-descriptions>
 
         <el-divider content-position="left">成本明细（对账付款汇总）</el-divider>
         <el-descriptions :column="3" border size="small">
           <el-descriptions-item label="总货款(含税)">{{ money(detailData.goods_amount_tax ?? detailData.total_cost) }}</el-descriptions-item>
           <el-descriptions-item label="总货款(不含税)">{{ money(detailData.goods_amount_extax) }}</el-descriptions-item>
-          <el-descriptions-item label="—"><span style="color:#999">含税÷1.13（无票行按含税全额）</span></el-descriptions-item>
+          <el-descriptions-item label="未付·不计入">
+            <span v-if="+(detailData.unpaid_count ?? 0) > 0" class="unpaid-grey">
+              {{ money(detailData.unpaid_goods_tax) }}（{{ detailData.unpaid_count }} 笔已确认未付）
+            </span>
+            <span v-else class="muted">无</span>
+          </el-descriptions-item>
           <el-descriptions-item label="成本单价(含税)">{{ num4(detailData.cost_per_unit_tax) }}</el-descriptions-item>
           <el-descriptions-item label="成本单价(不含税)">{{ num4(detailData.cost_per_unit_extax ?? detailData.cost_per_unit) }}</el-descriptions-item>
           <el-descriptions-item label="美金单价">{{ num4(detailData.usd_unit_price) }}</el-descriptions-item>
         </el-descriptions>
+        <div class="hint-inline" style="margin-top:4px">总货款仅汇总【已付款】对账；有票行按各行税率换算不含税，无票行按含税全额计入。</div>
 
         <el-divider content-position="left">财务收汇 · 毛利对比</el-divider>
         <el-descriptions :column="3" border size="small">
           <el-descriptions-item label="发票金额$">{{ money(detailData.invoice_amount_usd) }}</el-descriptions-item>
           <el-descriptions-item label="实际收汇$">{{ money(detailData.receipt_usd) }}</el-descriptions-item>
           <el-descriptions-item label="结算金额¥">{{ money(detailData.settle_amount ?? detailData.revenue) }}</el-descriptions-item>
-          <el-descriptions-item label="毛利">{{ money(detailData.gross_profit) }}</el-descriptions-item>
-          <el-descriptions-item label="毛利率">{{ detailData.gross_margin != null ? `${(+detailData.gross_margin).toFixed(2)}%` : '—' }}</el-descriptions-item>
-          <el-descriptions-item label="财务及管理费(7%)">{{ money(detailData.finance_fee) }}</el-descriptions-item>
+          <el-descriptions-item label="毛利">
+            <span v-if="!+(detailData.profit_ready ?? 0)" class="muted">待补收汇/汇率</span>
+            <span v-else>{{ money(detailData.gross_profit) }}</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="毛利率">
+            <span v-if="!+(detailData.profit_ready ?? 0)" class="muted">—</span>
+            <span v-else>{{ detailData.gross_margin != null ? `${(+detailData.gross_margin).toFixed(2)}%` : '—' }}</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="财务及管理费">{{ money(detailData.finance_fee) }}</el-descriptions-item>
           <el-descriptions-item label="期间费用合计">{{ money(periodFeeTotal(detailData)) }}</el-descriptions-item>
           <el-descriptions-item label="出口退税">{{ money(detailData.tax_refund) }}<el-tag size="small" :type="detailData.refund_status === 'RECEIVED' ? 'success' : 'info'" style="margin-left:6px">{{ detailData.refund_status === 'RECEIVED' ? '已到账' : '预估' }}</el-tag></el-descriptions-item>
           <el-descriptions-item label="保本汇率(含税/不含税)">
             {{ num4(detailData.breakeven_rate_tax) }} / {{ num4(detailData.breakeven_rate_extax) }}
           </el-descriptions-item>
           <el-descriptions-item label="含退税净利">
-            <span :class="{ 'text-danger': +detailData.net_profit < 0, 'text-success': +detailData.net_profit > 0 }">
+            <span v-if="!+(detailData.profit_ready ?? 0)" class="muted">待补收汇/汇率</span>
+            <span v-else :class="{ 'text-danger': +detailData.net_profit < 0, 'text-success': +detailData.net_profit > 0 }">
               {{ (+detailData.net_profit).toFixed(2) }}
             </span>
           </el-descriptions-item>
           <el-descriptions-item label="不含退税净利">
-            <span :class="{ 'text-danger': +detailData.net_profit_ex_refund < 0, 'text-success': +detailData.net_profit_ex_refund > 0 }">
+            <span v-if="!+(detailData.profit_ready ?? 0)" class="muted">待补收汇/汇率</span>
+            <span v-else :class="{ 'text-danger': +detailData.net_profit_ex_refund < 0, 'text-success': +detailData.net_profit_ex_refund > 0 }">
               {{ (+detailData.net_profit_ex_refund).toFixed(2) }}
             </span>
           </el-descriptions-item>
@@ -146,29 +173,114 @@
         <div class="detail-toolbar" v-if="detailData.status === 'DRAFT' && canEdit">
           <el-button size="small" type="primary" @click="openAddCost">+ 添加成本行</el-button>
         </div>
-        <el-table :data="detailData.costs ?? []" border size="small">
-          <el-table-column prop="cost_name" label="费用名称" />
-          <el-table-column prop="amount" label="金额" width="120" align="right">
+        <el-table :data="detailData.costs ?? []" border size="small" :row-class-name="costRowClass">
+          <el-table-column prop="cost_name" label="费用名称" min-width="150" show-overflow-tooltip />
+          <el-table-column prop="supplier_name" label="供应商" width="110" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.supplier_name || '—' }}</template>
+          </el-table-column>
+          <el-table-column prop="amount" label="金额" width="110" align="right">
             <template #default="{ row }">{{ (+row.amount).toFixed(2) }}</template>
           </el-table-column>
-          <el-table-column prop="has_invoice" label="是否有票" width="90" align="center">
+          <el-table-column prop="has_invoice" label="发票" width="70" align="center">
             <template #default="{ row }">
               <el-tag size="small" :type="row.has_invoice ? 'success' : 'info'">{{ row.has_invoice ? '有票' : '无票' }}</el-tag>
             </template>
           </el-table-column>
+          <el-table-column prop="tax_rate" label="税率%" width="70" align="right">
+            <template #default="{ row }">{{ row.tax_rate != null ? +row.tax_rate : '—' }}</template>
+          </el-table-column>
+          <el-table-column label="付款状态" width="110" align="center">
+            <template #default="{ row }">
+              <el-tag v-if="row.pay_status === 'PAID'" size="small" type="success">已付·计入</el-tag>
+              <el-tag v-else-if="row.pay_status === 'CONFIRMED'" size="small" type="info">未付·不计入</el-tag>
+              <el-tag v-else size="small">手工行</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column v-if="detailData.status === 'DRAFT' && canEdit" label="操作" width="70" align="center">
+            <template #default="{ row }">
+              <el-popconfirm title="删除该成本行？" @confirm="doRemoveCost(row.id)">
+                <template #reference><el-button link type="danger" size="small">删除</el-button></template>
+              </el-popconfirm>
+            </template>
+          </el-table-column>
         </el-table>
 
-        <el-divider content-position="left">回款记录</el-divider>
+        <el-divider content-position="left">收汇记录（逐笔×各自汇率）</el-divider>
         <div class="detail-toolbar" v-if="canEdit">
-          <el-button size="small" type="primary" @click="openAddReceipt">+ 登记回款</el-button>
+          <el-button size="small" type="primary" @click="openAddReceipt">+ 登记收汇</el-button>
         </div>
         <el-table :data="detailData.receipts ?? []" border size="small">
-          <el-table-column prop="receipt_date" label="回款日期" width="120" />
-          <el-table-column prop="amount" label="回款金额" width="120" align="right">
+          <el-table-column prop="receipt_date" label="收汇日期" width="110" />
+          <el-table-column prop="amount" label="收汇金额$" width="110" align="right">
             <template #default="{ row }">{{ (+row.amount).toFixed(2) }}</template>
           </el-table-column>
-          <el-table-column prop="remark" label="备注" />
+          <el-table-column prop="exchange_rate" label="该笔汇率" width="100" align="right">
+            <template #default="{ row }">{{ row.exchange_rate != null ? (+row.exchange_rate).toFixed(4) : '—' }}</template>
+          </el-table-column>
+          <el-table-column label="折RMB" width="110" align="right">
+            <template #default="{ row }">{{ row.exchange_rate != null ? (+row.amount * +row.exchange_rate).toFixed(2) : '—' }}</template>
+          </el-table-column>
+          <el-table-column label="水单" width="70" align="center">
+            <template #default="{ row }">
+              <el-link v-if="row.slip_url" type="primary" :href="row.slip_url" target="_blank">查看</el-link>
+              <span v-else class="muted">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="remark" label="备注" show-overflow-tooltip />
+          <el-table-column v-if="detailData.status === 'DRAFT' && canEdit" label="操作" width="70" align="center">
+            <template #default="{ row }">
+              <el-popconfirm title="删除该收汇记录？" @confirm="doRemoveReceipt(row.id)">
+                <template #reference><el-button link type="danger" size="small">删除</el-button></template>
+              </el-popconfirm>
+            </template>
+          </el-table-column>
         </el-table>
+      </template>
+    </el-dialog>
+
+    <!-- 编辑结算单弹窗（草稿限定：财务两步走——收汇后补汇率/发票/费用） -->
+    <el-dialog v-model="editVisible" title="编辑结算单" width="640px">
+      <el-form :model="editForm" label-width="100px">
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="结算汇率">
+              <el-input-number v-model="editForm.exchange_rate" :min="0" :precision="4" :disabled="hasRatedReceipts" placeholder="收汇后填" style="width:100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="发票金额$">
+              <el-input-number v-model="editForm.invoice_amount_usd" :min="0" :precision="2" style="width:100%" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="实际收汇$">
+              <el-input-number v-model="editForm.receipt_usd" :min="0" :precision="2" :disabled="hasReceiptRows" style="width:100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="出口退税">
+              <el-input-number v-model="editForm.tax_refund" :min="0" :precision="2" style="width:100%" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <div v-if="hasReceiptRows" class="hint-inline" style="margin:-6px 0 8px 100px">已有逐笔收汇记录，收汇总额由记录自动累计</div>
+        <div v-if="hasRatedReceipts" class="hint-inline" style="margin:-6px 0 8px 100px">各笔收汇均带汇率，结算汇率取加权平均自动覆盖</div>
+        <el-divider>期间费用（进净利扣减）</el-divider>
+        <el-row :gutter="12">
+          <el-col :span="6"><el-form-item label="运杂费" label-width="56px"><el-input-number v-model="editForm.freight_fee" :min="0" :precision="2" :controls="false" style="width:100%" /></el-form-item></el-col>
+          <el-col :span="6"><el-form-item label="快邮费" label-width="56px"><el-input-number v-model="editForm.express_fee" :min="0" :precision="2" :controls="false" style="width:100%" /></el-form-item></el-col>
+          <el-col :span="6"><el-form-item label="打样费" label-width="56px"><el-input-number v-model="editForm.sample_fee" :min="0" :precision="2" :controls="false" style="width:100%" /></el-form-item></el-col>
+          <el-col :span="6"><el-form-item label="其它" label-width="56px"><el-input-number v-model="editForm.other_fee" :min="0" :precision="2" :controls="false" style="width:100%" /></el-form-item></el-col>
+        </el-row>
+        <el-form-item label="备注">
+          <el-input v-model="editForm.description" type="textarea" :rows="2" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="doUpdate">保存并重算</el-button>
       </template>
     </el-dialog>
 
@@ -270,14 +382,21 @@
       </template>
     </el-dialog>
 
-    <!-- 登记回款弹窗 -->
-    <el-dialog v-model="addReceiptVisible" title="登记回款" width="420px">
+    <!-- 登记收汇弹窗（逐笔汇率+银行水单） -->
+    <el-dialog v-model="addReceiptVisible" title="登记收汇" width="460px">
       <el-form ref="addReceiptFormRef" :model="receiptForm" :rules="receiptRules" label-width="90px">
-        <el-form-item label="回款金额" prop="amount">
+        <el-form-item label="收汇金额$" prop="amount">
           <el-input-number v-model="receiptForm.amount" :min="0.01" :precision="2" style="width:100%" />
         </el-form-item>
-        <el-form-item label="回款日期" prop="receipt_date">
+        <el-form-item label="收汇日期" prop="receipt_date">
           <el-date-picker v-model="receiptForm.receipt_date" type="date" value-format="YYYY-MM-DD" style="width:100%" />
+        </el-form-item>
+        <el-form-item label="该笔汇率">
+          <el-input-number v-model="receiptForm.exchange_rate" :min="0" :precision="4" placeholder="按银行水单填" style="width:100%" />
+          <div class="hint-inline">各笔均带汇率时：结算金额=Σ(金额×汇率)，结算汇率=加权平均</div>
+        </el-form-item>
+        <el-form-item label="银行水单">
+          <FileUpload v-model="receiptForm.slip_url" :limit="1" accept="image/*,.pdf" list-type="text" />
         </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="receiptForm.remark" />
@@ -300,6 +419,7 @@ import { settlementApi } from '@/api/settlement';
 import { orderApi } from '@/api/order';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole } from '@i9/types';
+import FileUpload from '@/components/FileUpload.vue';
 
 const authStore = useAuthStore();
 const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
@@ -344,6 +464,82 @@ async function viewDetail(id: number) {
   const res = await settlementApi.get(id);
   detailData.value = res?.data ?? res;
   detailVisible.value = true;
+}
+async function reloadDetail() {
+  const full = await settlementApi.get(detailData.value.id);
+  detailData.value = full?.data ?? full;
+}
+const hasReceiptRows = computed(() => (detailData.value?.receipts ?? []).length > 0);
+const hasRatedReceipts = computed(() => {
+  const rs = detailData.value?.receipts ?? [];
+  return rs.length > 0 && rs.every((r: any) => r.exchange_rate != null && +r.exchange_rate > 0);
+});
+const costRowClass = ({ row }: { row: any }) => (row.included === 0 || row.pay_status === 'CONFIRMED' ? 'row-unpaid' : '');
+
+// 刷新付款汇总（结算稿D：重取出货件数 + 按订单对账重建成本快照）
+const refreshing = ref(false);
+async function doRefreshCost() {
+  refreshing.value = true;
+  try {
+    await settlementApi.refreshCost(detailData.value.id);
+    await reloadDetail();
+    ElMessage.success('付款汇总已刷新');
+    load();
+  } finally { refreshing.value = false; }
+}
+
+async function doRemoveCost(costId: number) {
+  await settlementApi.removeCost(detailData.value.id, costId);
+  await reloadDetail();
+  ElMessage.success('成本行已删除');
+  load();
+}
+async function doRemoveReceipt(receiptId: number) {
+  await settlementApi.removeReceipt(detailData.value.id, receiptId);
+  await reloadDetail();
+  ElMessage.success('收汇记录已删除');
+  load();
+}
+
+// 编辑结算单（草稿限定）
+const editVisible = ref(false);
+const editForm = reactive({
+  exchange_rate: undefined as number | undefined,
+  invoice_amount_usd: undefined as number | undefined,
+  receipt_usd: undefined as number | undefined,
+  freight_fee: undefined as number | undefined,
+  express_fee: undefined as number | undefined,
+  sample_fee: undefined as number | undefined,
+  other_fee: undefined as number | undefined,
+  tax_refund: undefined as number | undefined,
+  description: '',
+});
+function openEdit() {
+  const d = detailData.value;
+  Object.assign(editForm, {
+    exchange_rate: d.exchange_rate != null ? +d.exchange_rate : undefined,
+    invoice_amount_usd: d.invoice_amount_usd != null ? +d.invoice_amount_usd : undefined,
+    receipt_usd: d.receipt_usd != null ? +d.receipt_usd : undefined,
+    freight_fee: d.freight_fee != null ? +d.freight_fee : undefined,
+    express_fee: d.express_fee != null ? +d.express_fee : undefined,
+    sample_fee: d.sample_fee != null ? +d.sample_fee : undefined,
+    other_fee: d.other_fee != null ? +d.other_fee : undefined,
+    tax_refund: d.tax_refund != null ? +d.tax_refund : undefined,
+    description: d.description ?? '',
+  });
+  editVisible.value = true;
+}
+async function doUpdate() {
+  saving.value = true;
+  try {
+    const dto: Record<string, unknown> = { ...editForm };
+    if (hasReceiptRows.value) delete dto.receipt_usd; // 已有逐笔收汇由后端累计
+    await settlementApi.update(detailData.value.id, dto);
+    await reloadDetail();
+    ElMessage.success('已保存并重算');
+    editVisible.value = false;
+    load();
+  } finally { saving.value = false; }
 }
 
 async function doConfirm(row: any) {
@@ -431,24 +627,33 @@ async function doAddCost() {
 // Add Receipt (in detail)
 const addReceiptVisible = ref(false);
 const addReceiptFormRef = ref<FormInstance>();
-const receiptForm = reactive({ amount: undefined as number | undefined, receipt_date: '', remark: '' });
+const receiptForm = reactive({
+  amount: undefined as number | undefined,
+  receipt_date: '',
+  exchange_rate: undefined as number | undefined,
+  slip_url: '',
+  remark: '',
+});
 const receiptRules: FormRules = {
-  amount: [{ required: true, message: '请填写回款金额', trigger: 'blur' }],
-  receipt_date: [{ required: true, message: '请选择回款日期', trigger: 'change' }],
+  amount: [{ required: true, message: '请填写收汇金额', trigger: 'blur' }],
+  receipt_date: [{ required: true, message: '请选择收汇日期', trigger: 'change' }],
 };
 function openAddReceipt() {
-  Object.assign(receiptForm, { amount: undefined, receipt_date: '', remark: '' });
+  Object.assign(receiptForm, { amount: undefined, receipt_date: '', exchange_rate: undefined, slip_url: '', remark: '' });
   addReceiptVisible.value = true;
 }
 async function doAddReceipt() {
   await addReceiptFormRef.value?.validate();
   saving.value = true;
   try {
-    await settlementApi.addReceipt(detailData.value.id, receiptForm as any);
-    const full = await settlementApi.get(detailData.value.id);
-    detailData.value = full?.data ?? full;
-    ElMessage.success('回款已登记');
+    const dto: Record<string, unknown> = { ...receiptForm };
+    if (!dto.exchange_rate) delete dto.exchange_rate;
+    if (!dto.slip_url) delete dto.slip_url;
+    await settlementApi.addReceipt(detailData.value.id, dto);
+    await reloadDetail();
+    ElMessage.success('收汇已登记');
     addReceiptVisible.value = false;
+    load();
   } finally { saving.value = false; }
 }
 </script>
@@ -462,5 +667,9 @@ async function doAddReceipt() {
 .detail-toolbar { margin-bottom: 8px; }
 .text-danger { color: #f56c6c; }
 .text-success { color: #67c23a; }
+.muted { color: var(--el-text-color-secondary); }
+.unpaid-grey { color: var(--el-text-color-secondary); }
+.hint-inline { font-size: 12px; color: var(--el-text-color-secondary); margin-left: 8px; }
+:deep(.row-unpaid) { color: var(--el-text-color-disabled); background: var(--el-fill-color-lighter); }
 .agg-hint { font-size: 12px; color: #3E8E7E; background: var(--el-fill-color-light); border-radius: 4px; padding: 8px 10px; margin-bottom: 12px; }
 </style>

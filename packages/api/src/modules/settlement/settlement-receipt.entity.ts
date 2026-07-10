@@ -14,6 +14,12 @@ export class SettlementReceipt {
   @Column({ type: 'date' })
   receipt_date: Date;
 
+  @Column({ type: 'decimal', precision: 10, scale: 4, nullable: true, comment: '该笔收汇汇率(银行水单带入,逐笔×汇率)' })
+  exchange_rate?: number;
+
+  @Column({ length: 500, nullable: true, comment: '银行水单' })
+  slip_url?: string;
+
   @Column({ length: 255, nullable: true })
   remark?: string;
 

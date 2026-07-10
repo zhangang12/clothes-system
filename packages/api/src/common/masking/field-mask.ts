@@ -54,6 +54,7 @@ const SETTLEMENT_SENSITIVE = [
   'gross_profit', 'gross_margin', 'net_profit', 'net_profit_ex_refund',
   'cost_per_unit_tax', 'cost_per_unit_extax', 'goods_amount_tax', 'goods_amount_extax',
   'breakeven_rate_tax', 'breakeven_rate_extax', 'finance_fee', 'total_cost', 'cost_per_unit',
+  'unpaid_goods_tax', 'unpaid_count',
 ];
 export function maskSettlement(payload: any, role: string): any {
   if (FINANCE_PRIVILEGED.includes(role)) return payload;

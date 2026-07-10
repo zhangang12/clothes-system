@@ -20,6 +20,21 @@ export class SettlementCost {
   @Column({ type: 'decimal', precision: 5, scale: 2, default: 13, comment: '该行税率%(有票按此换不含税,禁一刀切13)' })
   tax_rate: number;
 
+  @Column({ length: 30, nullable: true, comment: '来源对账单号(AUTO行)' })
+  reconcile_no?: string;
+
+  @Column({ length: 100, nullable: true, comment: '供应商(AUTO行)' })
+  supplier_name?: string;
+
+  @Column({ length: 20, nullable: true, comment: '付款状态 PAID=已付 CONFIRMED=已确认未付' })
+  pay_status?: string;
+
+  @Column({ length: 10, default: 'MANUAL', comment: 'AUTO=对账汇总快照 MANUAL=手工行' })
+  source: string;
+
+  @Column({ type: 'tinyint', default: 1, comment: '1=计入总货款 0=未付不计入(灰显)' })
+  included: number;
+
   @CreateDateColumn()
   created_at: Date;
 }

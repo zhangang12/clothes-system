@@ -83,6 +83,15 @@ export class Settlement {
   breakeven_rate_extax?: number; // 保本汇率(不含税)
 
   @Column({ type: 'decimal', precision: 15, scale: 4, default: 0 })
+  unpaid_goods_tax: number; // 已确认未付对账金额(含税)——不计入总货款，灰显「未付·不计入」
+
+  @Column({ type: 'int', default: 0 })
+  unpaid_count: number; // 已确认未付对账笔数
+
+  @Column({ type: 'tinyint', default: 0 })
+  profit_ready: number; // 1=收汇与汇率齐备，毛利/净利可信（缺值不出误导性负毛利）
+
+  @Column({ type: 'decimal', precision: 15, scale: 4, default: 0 })
   tax_refund: number; // 出口退税（可退税不含税采购额×退税率，自动测算）
 
   @Column({ length: 20, default: 'ESTIMATED' })

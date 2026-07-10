@@ -12,6 +12,7 @@ import { maskSettlement } from '../../common/masking/field-mask';
 import { CreateSettlementDto } from './dto/create-settlement.dto';
 import { AddCostDto } from './dto/add-cost.dto';
 import { AddReceiptDto } from './dto/add-receipt.dto';
+import { UpdateSettlementDto } from './dto/update-settlement.dto';
 import { QuerySettlementDto } from './dto/query-settlement.dto';
 
 @ApiTags('结算管理')
@@ -40,6 +41,13 @@ export class SettlementController {
     return maskSettlement(await this.service.findOne(id), req.user.role);
   }
 
+  @Patch(':id')
+  @Roles(UserRole.ADMIN, UserRole.FINANCE)
+  @ApiOperation({ summary: '编辑结算单（草稿限定；财务两步走——收汇后补汇率/发票金额/费用）' })
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateSettlementDto) {
+    return this.service.update(id, dto);
+  }
+
   @Post(':id/costs')
   @Roles(UserRole.ADMIN, UserRole.FINANCE)
   @ApiOperation({ summary: '添加费用明细' })
@@ -47,11 +55,25 @@ export class SettlementController {
     return this.service.addCost(id, dto);
   }
 
+  @Delete(':id/costs/:costId')
+  @Roles(UserRole.ADMIN, UserRole.FINANCE)
+  @ApiOperation({ summary: '删除成本行（草稿限定；AUTO 行可由「刷新付款汇总」重建）' })
+  removeCost(@Param('id', ParseIntPipe) id: number, @Param('costId', ParseIntPipe) costId: number) {
+    return this.service.removeCost(id, costId);
+  }
+
   @Post(':id/receipts')
   @Roles(UserRole.ADMIN, UserRole.FINANCE)
-  @ApiOperation({ summary: '登记回款' })
+  @ApiOperation({ summary: '登记回款（可带该笔汇率+银行水单；各笔齐备时结算金额=Σ金额×汇率）' })
   addReceipt(@Param('id', ParseIntPipe) id: number, @Body() dto: AddReceiptDto) {
     return this.service.addReceipt(id, dto);
+  }
+
+  @Delete(':id/receipts/:receiptId')
+  @Roles(UserRole.ADMIN, UserRole.FINANCE)
+  @ApiOperation({ summary: '删除收汇记录（草稿限定）' })
+  removeReceipt(@Param('id', ParseIntPipe) id: number, @Param('receiptId', ParseIntPipe) receiptId: number) {
+    return this.service.removeReceipt(id, receiptId);
   }
 
   @Patch(':id/refresh-cost')

@@ -7,12 +7,14 @@ import { SettlementCost } from './settlement-cost.entity';
 import { SettlementReceipt } from './settlement-receipt.entity';
 import { OrderMain } from '../order/order-main.entity';
 import { OrderShipment } from '../order/order-shipment.entity';
+import { Contract } from '../contract/contract.entity';
+import { Factory } from '../factory/factory.entity';
 import { Reconciliation } from '../reconciliation/reconciliation.entity';
 import { ReconciliationExpenseItem } from '../reconciliation/reconciliation-expense-item.entity';
 
 @Module({
   imports: [TypeOrmModule.forFeature([
-    Settlement, SettlementCost, SettlementReceipt, OrderMain, OrderShipment, Reconciliation, ReconciliationExpenseItem,
+    Settlement, SettlementCost, SettlementReceipt, OrderMain, OrderShipment, Contract, Factory, Reconciliation, ReconciliationExpenseItem,
   ])],
   controllers: [SettlementController],
   providers: [SettlementService],
