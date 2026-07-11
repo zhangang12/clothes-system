@@ -230,6 +230,7 @@
 </template>
 
 <script setup lang="ts">
+import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -405,7 +406,7 @@ async function doImport() {
     form.materials = importMode.value === 'replace' ? lines : [...form.materials, ...lines];
     importDialogVisible.value = false;
     ElMessage.success(`已带入 ${lines.length} 行（数量来源：${isProcess.value ? '大货数' : '采购量含损耗'}，可微调、不回写订单）`);
-  } catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '带入失败'); }
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? '带入失败'); }
   finally { importing.value = false; }
 }
 function onOrderChange(id: number) {
@@ -426,7 +427,7 @@ async function uploadTo(option: any, apply: (url: string) => void, sensitive = f
     const url = (res.data ?? res)?.url;
     if (url) { apply(url); ElMessage.success('上传成功'); }
     option.onSuccess?.(res);
-  } catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '上传失败'); option.onError?.(e); }
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? '上传失败'); option.onError?.(e); }
 }
 
 // 保存（新建 / 草稿编辑）
@@ -486,14 +487,14 @@ async function save() {
       router.replace(`/contracts/${created.id}/edit`);
       await loadDetail(created.id);
     }
-  } catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '保存失败'); }
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? '保存失败'); }
   finally { saving.value = false; }
 }
 async function saveRemarkOnly() {
   if (!contractId.value) return;
   saving.value = true;
   try { await contractApi.update(contractId.value, { remark: form.remark || '' }); ElMessage.success('备注已保存（其余字段已锁定）'); }
-  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '保存失败'); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? '保存失败'); }
   finally { saving.value = false; }
 }
 
@@ -504,7 +505,7 @@ async function doPush() {
     ElMessage.success(`已推送至${isProcess.value ? '工厂' : '供应商'}门户`);
     await loadDetail(contractId.value);
   } catch (e: any) {
-    const msg = e?.response?.data?.message ?? '推送失败';
+    const msg = e?.response?.data?.msg ?? '推送失败';
     if (String(msg).includes('审批')) { ElMessage.warning(msg + '（已转入待审批，主管审批通过后可推送）'); await loadDetail(contractId.value); }
     else ElMessage.error(msg);
   }

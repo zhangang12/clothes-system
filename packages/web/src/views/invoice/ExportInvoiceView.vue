@@ -190,6 +190,7 @@
 </template>
 
 <script setup lang="ts">
+import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Search, Plus } from '@element-plus/icons-vue';
@@ -253,7 +254,7 @@ async function doCreate() {
     createVisible.value = false;
     load();
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.msg ?? e?.response?.data?.message ?? '登记失败');
+    errToast(e?.response?.data?.msg ?? e?.response?.data?.msg ?? '登记失败');
   } finally { saving.value = false; }
 }
 

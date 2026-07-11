@@ -185,6 +185,7 @@
 </template>
 
 <script setup lang="ts">
+import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
@@ -261,7 +262,7 @@ async function viewDetail(row: any) {
 }
 async function doApprove(row: any) {
   try { await contractApi.approve(row.id); ElMessage.success('已审批，合同可推送'); load(); }
-  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '审批失败'); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? '审批失败'); }
 }
 // 发货批次审批（门户 B2：通过后供应商方可勾选该批次对账）
 async function doApproveShipment(row: any, approve: boolean) {
@@ -269,7 +270,7 @@ async function doApproveShipment(row: any, approve: boolean) {
     await contractApi.approveShipment(detail.value.id, row.id, approve);
     ElMessage.success(approve ? '批次已审批通过，供应商可对账' : '批次已驳回');
     await viewDetail({ id: detail.value.id });
-  } catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '操作失败'); }
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? '操作失败'); }
 }
 let cachedCompany: any = null;
 async function printRow(row: any) {
@@ -282,19 +283,19 @@ async function printRow(row: any) {
       try { cachedCompany = (await companyApi.getDefault() as any)?.data ?? null; } catch { cachedCompany = undefined; }
     }
     printContract(detail, factory, cachedCompany || undefined);
-  } catch (e: any) { ElMessage.error(e?.message ?? e?.response?.data?.message ?? '打印失败'); }
+  } catch (e: any) { errToast(e?.message ?? e?.response?.data?.msg ?? '打印失败'); }
 }
 async function doPush(row: any) {
   try { await contractApi.push(row.id); ElMessage.success('已推送至供应商门户'); load(); }
-  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '推送失败'); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? '推送失败'); }
 }
 async function doRecall(row: any) {
   try { await contractApi.recall(row.id); ElMessage.success('已撤销推送，合同回到草稿，可修改后重新推送'); load(); }
-  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '撤销失败'); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? '撤销失败'); }
 }
 async function remove(id: number) {
   try { await contractApi.remove(id); ElMessage.success('删除成功'); load(); }
-  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '删除失败'); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? '删除失败'); }
 }
 function exportCsv() {
   const cols = ['contract_no', 'type', 'total_amount', 'currency', 'account_period_days', 'portal_status'];

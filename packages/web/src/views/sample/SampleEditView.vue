@@ -163,6 +163,7 @@
 </template>
 
 <script setup lang="ts">
+import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted, h } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -256,7 +257,7 @@ async function doPurchase(row: any) {
     const d = res?.data ?? res;
     ElMessage.success(`已生成对账单 ${d.reconcile_no ?? ''}，可在「对账管理」提交复核`);
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.msg ?? e?.response?.data?.message ?? '生成失败');
+    errToast(e?.response?.data?.msg ?? e?.response?.data?.msg ?? '生成失败');
   }
 }
 
@@ -339,12 +340,12 @@ async function save() {
         ElMessage.success('已自动推送版师(打样中)');
         if (editId.value) { await load(); return; } // 停留当前页并刷新
       } catch (e: any) {
-        ElMessage.error(e?.response?.data?.message ?? '自动推送版师失败');
+        errToast(e?.response?.data?.msg ?? '自动推送版师失败');
       }
     }
     router.push({ name: 'Samples' });
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message ?? '保存失败');
+    errToast(e?.response?.data?.msg ?? '保存失败');
   } finally { saving.value = false; }
 }
 
@@ -352,12 +353,12 @@ async function save() {
 async function markShipped() {
   if (!editId.value) return;
   try { await sampleApi.ship(editId.value); ElMessage.success('已标记寄出'); load(); }
-  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '操作失败'); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? '操作失败'); }
 }
 async function markComplete() {
   if (!editId.value) return;
   try { await sampleApi.complete(editId.value); ElMessage.success('样衣已完成'); load(); }
-  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '操作失败'); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? '操作失败'); }
 }
 // 材料行图片上传(设计稿:每行材料图片)
 async function uploadMatImage(option: any, row: any) {
@@ -373,7 +374,7 @@ async function pushPatternmaker() {
     await sampleApi.push(editId.value, { patternmakerName: form.patternmakerName || undefined, materialShipNo: form.materialShipNo || undefined });
     ElMessage.success('已推送版师工作台（状态→打样中）');
     load();
-  } catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '推送失败'); }
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? '推送失败'); }
 }
 
 async function savePatternmaker() {
@@ -395,27 +396,27 @@ async function savePatternmaker() {
     ElMessage.success('版师保存成功');
     router.push({ name: 'Samples' });
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message ?? '保存失败');
+    errToast(e?.response?.data?.msg ?? '保存失败');
   } finally { saving.value = false; }
 }
 
 async function copy() {
   if (!editId.value) return;
   try { const r: any = await sampleApi.copy(editId.value); ElMessage.success('已复制'); router.push({ name: 'SampleEdit', params: { id: (r.data ?? r).id } }); }
-  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '复制失败'); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? '复制失败'); }
 }
 // 删除(仅管理员;仅待派单可删,被报价引用后端拦截)
 async function removeSample() {
   if (!editId.value) return;
   try { await ElMessageBox.confirm('确认删除该样衣?仅「待派单」状态可删,此操作不可恢复。', '删除样衣', { type: 'warning' }); } catch { return; }
   try { await sampleApi.remove(editId.value); ElMessage.success('已删除'); router.push({ name: 'Samples' }); }
-  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '删除失败'); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? '删除失败'); }
 }
 // 打印/PDF(A4;材料明细脱敏,不含参考价格)
 async function print() {
   if (!editId.value) return;
   try { const res: any = await sampleApi.get(editId.value); printSample(res.data ?? res); }
-  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? e?.message ?? '打印失败'); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '打印失败'); }
 }
 function goBack() { router.push({ name: 'Samples' }); }
 

@@ -248,6 +248,7 @@
 </template>
 
 <script setup lang="ts">
+import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted, h } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -308,10 +309,11 @@ async function onGenContract(cmd: string) {
     }
     if (d?.created) router.push({ path: '/contracts', query: { order_id: editId.value } });
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.msg ?? e?.response?.data?.message ?? '生成失败');
+    errToast(e?.response?.data?.msg ?? e?.response?.data?.msg ?? '生成失败');
   }
 }
-const readonly = computed(() => !!route.meta.readonly);
+// 只读=查看路由,或订单非草稿(非草稿仅可看不可改,与后端"只有草稿可编辑"一致,防误操作)
+const readonly = computed(() => !!route.meta.readonly || (!!editId.value && !!form.status && form.status !== 'DRAFT'));
 const editId = computed(() => (route.params.id ? Number(route.params.id) : null));
 const modeLabel = computed(() => (readonly.value ? '查看' : editId.value ? '编辑' : '新建'));
 
@@ -520,7 +522,7 @@ async function save() {
     }
     router.push({ name: 'Orders' });
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message ?? '保存失败（新建订单需先从报价导入带出客户）');
+    errToast(e?.response?.data?.msg ?? '保存失败（新建订单需先从报价导入带出客户）');
   } finally { saving.value = false; }
 }
 // ===== Excel(CSV) 导入尺码数量搭配（设计稿 03：模板→上传→校验→确认入库） =====
@@ -617,12 +619,12 @@ function confirmExcel() {
 async function doImport() {
   if (!editId.value || !importQuoteId.value) return;
   try { await orderApi.importFromQuote(editId.value, importQuoteId.value); ElMessage.success('已从报价导入'); importDialog.value = false; load(); }
-  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '导入失败'); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? '导入失败'); }
 }
 async function advance() {
   if (!editId.value) return;
   try { await orderApi.advance(editId.value); ElMessage.success('状态已推进'); load(); }
-  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '推进失败'); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? '推进失败'); }
 }
 function goBack() { router.push({ name: 'Orders' }); }
 onMounted(async () => { await loadRefs(); await load(); });

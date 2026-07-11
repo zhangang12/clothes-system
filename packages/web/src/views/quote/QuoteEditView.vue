@@ -186,6 +186,7 @@
 </template>
 
 <script setup lang="ts">
+import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted, h } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -369,7 +370,7 @@ async function printCurrent() {
     let company: any;
     try { company = (await companyApi.getDefault() as any)?.data ?? undefined; } catch { company = undefined; }
     printQuote(res.data ?? res, company || undefined, { ...printOpts });
-  } catch (e: any) { ElMessage.error(e?.message ?? e?.response?.data?.message ?? '打印失败'); }
+  } catch (e: any) { errToast(e?.message ?? e?.response?.data?.msg ?? '打印失败'); }
 }
 
 async function loadRefs() {
@@ -456,20 +457,20 @@ async function save() {
       router.push({ name: 'Quotes' });
     }
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message ?? '保存失败');
+    errToast(e?.response?.data?.msg ?? '保存失败');
   } finally { saving.value = false; }
 }
 async function doImport() {
   if (!editId.value || !importSampleId.value) return;
   try { await quoteApi.importFromSample(editId.value, importSampleId.value); ElMessage.success('已从样衣导入'); importDialog.value = false; load(); }
-  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '导入失败'); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? '导入失败'); }
 }
 // 发出报价（草稿/客户调整→已报价；超阈值转待审批并提示）——此前 UI 缺此入口,状态机断链
 async function submitQuote() {
   if (!editId.value) return;
   try { await quoteApi.submit(editId.value); ElMessage.success('已发出报价'); load(); }
   catch (e: any) {
-    const msg = e?.response?.data?.message ?? '发出失败';
+    const msg = e?.response?.data?.msg ?? '发出失败';
     if (String(msg).includes('审批')) { ElMessage.warning(msg); load(); }
     else ElMessage.error(msg);
   }
@@ -478,7 +479,7 @@ async function submitQuote() {
 async function adjustQuote() {
   if (!editId.value) return;
   try { await quoteApi.adjust(editId.value); ElMessage.success('已进入客户调整，修改后可再次发出'); load(); }
-  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '操作失败'); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? '操作失败'); }
 }
 async function toContract() {
   if (!editId.value) return;
@@ -505,7 +506,7 @@ async function toContract() {
         router.push(`/orders/${d.order_id}/edit`);
       } catch { /* 留在本页 */ }
     }
-  } catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '转合同失败'); }
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? '转合同失败'); }
 }
 async function copy() {
   if (!editId.value) return;
@@ -521,7 +522,7 @@ async function copy() {
     withItems = false;
   }
   try { const r: any = await quoteApi.copy(editId.value, withItems); ElMessage.success('已复制'); await router.push({ name: 'QuoteEdit', params: { id: (r.data ?? r).id } }); await load(); }
-  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '复制失败'); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? '复制失败'); }
 }
 function goBack() { router.push({ name: 'Quotes' }); }
 onMounted(async () => { await loadRefs(); await load(); });

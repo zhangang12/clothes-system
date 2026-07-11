@@ -83,6 +83,7 @@
         <el-table-column label="操作" width="230" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
+            <el-button link size="small" @click="goView(row)">查看</el-button>
             <el-button v-if="canEdit && ['DRAFT', 'ADJUSTING'].includes(row.status)" link type="warning" size="small" @click="doSubmit(row)">发出</el-button>
             <el-button v-if="canEdit && row.status === 'QUOTED'" link size="small" @click="doAdjust(row)">客户调整</el-button>
             <el-button link size="small" @click="copyRow(row)">复制</el-button>
@@ -132,6 +133,7 @@
 </template>
 
 <script setup lang="ts">
+import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -209,6 +211,7 @@ function reset() {
 }
 function goCreate() { router.push({ name: 'QuoteCreate' }); }
 function goEdit(row: any) { router.push({ name: 'QuoteEdit', params: { id: row.id } }); }
+function goView(row: any) { router.push({ name: 'QuoteView', params: { id: row.id } }); }
 async function copyRow(row: any) {
   // 复制方式三选：确认=含明细/取消按钮=仅基本信息/右上关闭=不复制
   let withItems: boolean;
@@ -222,23 +225,23 @@ async function copyRow(row: any) {
     withItems = false;
   }
   try { await quoteApi.copy(row.id, withItems); ElMessage.success('已复制为新报价（草稿）'); load(); }
-  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '复制失败'); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? '复制失败'); }
 }
 // 发出报价 / 客户调整（此前 UI 缺状态流转入口，草稿无法走到已报价）
 async function doSubmit(row: any) {
   try { await quoteApi.submit(row.id); ElMessage.success('已发出报价'); load(); }
   catch (e: any) {
-    const msg = e?.response?.data?.message ?? '发出失败';
+    const msg = e?.response?.data?.msg ?? '发出失败';
     if (String(msg).includes('审批')) { ElMessage.warning(msg); load(); } else ElMessage.error(msg);
   }
 }
 async function doAdjust(row: any) {
   try { await quoteApi.adjust(row.id); ElMessage.success('已进入客户调整'); load(); }
-  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '操作失败'); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? '操作失败'); }
 }
 async function doApprove(row: any) {
   try { await quoteApi.approve(row.id); ElMessage.success('已审批，报价可发出'); load(); }
-  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '审批失败'); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? '审批失败'); }
 }
 let cachedCompany: any = null;
 async function printRow(row: any) {
@@ -248,7 +251,7 @@ async function printRow(row: any) {
       try { cachedCompany = (await companyApi.getDefault() as any)?.data ?? null; } catch { cachedCompany = undefined; }
     }
     printQuote(res.data ?? res, cachedCompany || undefined);
-  } catch (e: any) { ElMessage.error(e?.message ?? e?.response?.data?.message ?? '打印失败'); }
+  } catch (e: any) { errToast(e?.message ?? e?.response?.data?.msg ?? '打印失败'); }
 }
 function copyOne() { copyRow(selected.value[0]); }
 // 批量打印：逐个取详情，一个窗口多页（页间分页符），一次打印/导出 PDF
@@ -264,7 +267,7 @@ async function batchPrint() {
       details.push(res.data ?? res);
     }
     printQuoteBatch(details, cachedCompany || undefined);
-  } catch (e: any) { ElMessage.error(e?.message ?? e?.response?.data?.message ?? '批量打印失败'); }
+  } catch (e: any) { errToast(e?.message ?? e?.response?.data?.msg ?? '批量打印失败'); }
 }
 
 // ── 从样衣建报价 ──
@@ -298,7 +301,7 @@ async function createFromSample() {
     fromSampleDialog.value = false;
     router.push(`/quotes/${newId}/edit`);
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message ?? '创建失败');
+    errToast(e?.response?.data?.msg ?? '创建失败');
   } finally { fromSampleLoading.value = false; }
 }
 async function batchRemove() {

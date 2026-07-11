@@ -79,7 +79,7 @@
         <el-table-column prop="maker" label="制单人" width="100" sortable>
           <template #default="{ row }">{{ row.maker || '—' }}</template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="100" sortable>
+        <el-table-column prop="status" label="状态" width="100" sortable fixed="right">
           <template #default="{ row }">
             <span v-if="row.status === 'ORDERED'" class="ordered">{{ statusLabel(row.status) }}</span>
             <el-tag v-else :type="statusTag(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
@@ -119,6 +119,7 @@
 </template>
 
 <script setup lang="ts">
+import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -144,7 +145,7 @@ async function doAbandon(row: any) {
     await sampleApi.abandon(row.id);
     ElMessage.success('已废弃（下游引用保留快照）');
     load();
-  } catch (e: any) { ElMessage.error(e?.response?.data?.msg ?? e?.response?.data?.message ?? '废弃失败'); }
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? e?.response?.data?.msg ?? '废弃失败'); }
 }
 
 const loading = ref(false);
@@ -193,7 +194,7 @@ function goPatternmaker(row: any) { router.push({ name: 'SamplePatternmaker', pa
 
 async function copyOne() {
   try { await sampleApi.copy(selected.value[0].id); ElMessage.success('已复制为新样衣（待派单）'); load(); }
-  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '复制失败'); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? '复制失败'); }
 }
 async function batchRemove() {
   try { await ElMessageBox.confirm(`确认删除选中的 ${selected.value.length} 条记录?此操作不可恢复。`, "批量删除", { type: "warning" }); } catch { return; }
@@ -205,7 +206,7 @@ async function batchRemove() {
 // 打印/PDF(取详情含材料明细;对外脱敏,不含参考价格)
 async function printRow(row: any) {
   try { const res: any = await sampleApi.get(row.id); printSample(res.data ?? res); }
-  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? e?.message ?? '打印失败'); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '打印失败'); }
 }
 
 // ── 历史样衣 CSV 批量导入 ──

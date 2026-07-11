@@ -25,9 +25,11 @@
 
         <el-table :data="prepayList" v-loading="prepayLoading" border stripe>
           <el-table-column prop="id" label="ID" width="70" align="center" />
-          <el-table-column prop="factory_id" label="工厂ID" width="80" align="center" />
-          <el-table-column prop="contract_id" label="合同ID" width="80" align="center">
-            <template #default="{ row }">{{ row.contract_id ?? '--' }}</template>
+          <el-table-column label="工厂" min-width="120" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.factory_name || ('工厂#' + row.factory_id) }}</template>
+          </el-table-column>
+          <el-table-column label="关联合同" width="150" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.contract_no || (row.contract_id ? '合同#' + row.contract_id : '—') }}</template>
           </el-table-column>
           <el-table-column prop="amount" label="预付金额" width="120" align="right">
             <template #default="{ row }">{{ (+row.amount).toFixed(2) }}</template>
@@ -42,7 +44,9 @@
           </el-table-column>
           <el-table-column prop="pay_date" label="付款日期" width="120" />
           <el-table-column prop="remark" label="备注" />
-          <el-table-column prop="created_at" label="创建时间" width="160" />
+          <el-table-column label="创建时间" width="150">
+            <template #default="{ row }">{{ fmtDateTime(row.created_at) }}</template>
+          </el-table-column>
         </el-table>
 
         <div class="pagination">
@@ -116,7 +120,9 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="factory_id" label="工厂ID" width="80" align="center" />
+          <el-table-column label="工厂" min-width="120" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.factory_name || ('工厂#' + row.factory_id) }}</template>
+          </el-table-column>
           <el-table-column prop="amount" label="申请金额" width="110" align="right">
             <template #default="{ row }">{{ (+row.amount).toFixed(2) }}</template>
           </el-table-column>
@@ -353,8 +359,10 @@
 </template>
 
 <script setup lang="ts">
+import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { ElMessage } from 'element-plus';
+import { fmtDateTime } from '@/utils/format';
 import { Search, Refresh, Plus, UploadFilled } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { prepaymentApi, paymentRequestApi } from '@/api/payment';
@@ -531,7 +539,7 @@ async function doAddRecord() {
     ElMessage.success(d.balance <= 0.01 ? '已付清，整单转「已付款」' : `已登记本次付款，剩余未付 ${(+d.balance).toFixed(2)}`);
     markPaidVisible.value = false;
     loadPR();
-  } catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '付款登记失败'); }
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? '付款登记失败'); }
   finally { saving.value = false; }
 }
 function resetSlip() { slipUrl.value = ''; slipUploading.value = false; }

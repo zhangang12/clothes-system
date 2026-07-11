@@ -261,6 +261,14 @@ export class ReconciliationService {
       const byId = new Map(counts.map((c: any) => [+c.rid, +c.cnt]));
       (items as any[]).forEach((r) => { (r as any).shipment_count = byId.get(+r.id) ?? 0; });
     }
+    // 工厂名回显(裸ID→名称,前端体验):附 factory_name
+    const fids = [...new Set((items as any[]).map((r) => +r.factory_id).filter(Boolean))];
+    if (fids.length) {
+      const rows = await this.dataSource.query(
+        'SELECT id, COALESCE(short_name, name) nm FROM factory WHERE id IN (?)', [fids]);
+      const nameById = new Map(rows.map((x: any) => [+x.id, x.nm]));
+      (items as any[]).forEach((r) => { (r as any).factory_name = r.factory_id ? nameById.get(+r.factory_id) ?? null : null; });
+    }
     return { items, total, page, size };
   }
 

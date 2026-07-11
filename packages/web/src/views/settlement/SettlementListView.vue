@@ -88,7 +88,7 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="130">
+        <el-table-column prop="status" label="状态" width="130" fixed="right">
           <template #default="{ row }">
             <el-tag :type="row.status === 'CONFIRMED' ? 'success' : 'info'" size="small">
               {{ row.status === 'CONFIRMED' ? '已结算' : '待收汇' }}
@@ -98,7 +98,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="confirmed_at" label="确认时间" width="160">
-          <template #default="{ row }">{{ row.confirmed_at ?? '--' }}</template>
+          <template #default="{ row }">{{ row.confirmed_at ? fmtDateTime(row.confirmed_at) : '--' }}</template>
         </el-table-column>
         <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
@@ -552,6 +552,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import { fmtDateTime } from '@/utils/format';
 import { Search, Refresh, Plus } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { settlementApi } from '@/api/settlement';

@@ -169,6 +169,7 @@
 </template>
 
 <script setup lang="ts">
+import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -209,11 +210,11 @@ function goView(row: Customer) { router.push({ name: 'CustomerView', params: { i
 
 async function toggleStatus(row: any) {
   try { await customerApi.toggleStatus(row.id); ElMessage.success(row.status === 1 ? '已停用' : '已启用'); load(); }
-  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '操作失败'); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? '操作失败'); }
 }
 async function remove(id: number) {
   try { await customerApi.remove(id); ElMessage.success('删除成功'); load(); }
-  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '删除失败'); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? '删除失败'); }
 }
 async function batchRemove() {
   try { await ElMessageBox.confirm(`确认删除选中的 ${selected.value.length} 条记录?此操作不可恢复。`, "批量删除", { type: "warning" }); } catch { return; }
@@ -264,7 +265,7 @@ async function doGrant() {
     const d = res.data ?? res;
     ElMessage.success(`已授权：${d.customers} 个客户 × ${d.users} 个用户（新增 ${d.created}，更新 ${d.updated}）`);
     grantVisible.value = false;
-  } catch (e: any) { ElMessage.error(e?.response?.status === 403 ? '您没有权限执行此操作！' : (e?.response?.data?.message ?? '授权失败')); }
+  } catch (e: any) { errToast(e?.response?.status === 403 ? '您没有权限执行此操作！' : (e?.response?.data?.msg ?? '授权失败')); }
   finally { grantSaving.value = false; }
 }
 // 单客户授权清单（查看/撤销）

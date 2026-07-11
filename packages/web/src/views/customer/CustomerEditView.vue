@@ -117,6 +117,7 @@
 </template>
 
 <script setup lang="ts">
+import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted, watch, h } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
@@ -279,7 +280,7 @@ async function save() {
     else { await customerApi.create(dto as any); ElMessage.success('创建成功'); }
     router.push({ name: 'Customers' });
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message ?? '保存失败');
+    errToast(e?.response?.data?.msg ?? '保存失败');
   } finally {
     saving.value = false;
   }

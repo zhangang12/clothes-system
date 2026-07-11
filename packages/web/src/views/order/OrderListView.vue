@@ -49,7 +49,7 @@
             <span v-else>—</span>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="130">
+        <el-table-column label="状态" width="130" fixed="right">
           <template #default="{ row }">
             <el-tag :type="statusTag(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
             <el-tag v-if="row.approval_status === 'PENDING'" type="warning" size="small" style="margin-left:4px">待审批</el-tag>
@@ -58,7 +58,7 @@
         <el-table-column prop="salesperson" label="业务员" width="90"><template #default="{ row }">{{ row.salesperson || '-' }}</template></el-table-column>
         <el-table-column label="操作" width="320" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
+            <el-button v-if="row.status === 'DRAFT'" link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
             <el-button link size="small" @click="goView(row)">查看</el-button>
             <el-button v-if="row.approval_status === 'PENDING' && canReview" link type="success" size="small" @click="doApprove(row)">审批</el-button>
             <el-dropdown trigger="click" @command="(cmd: string) => onPrint(cmd, row)">
@@ -116,6 +116,7 @@
 </template>
 
 <script setup lang="ts">
+import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -189,7 +190,7 @@ async function doCopy(row: any) {
     const d = res?.data ?? res;
     ElMessage.success(`已复制为新草稿 ${d.order_no ?? ''}`);
     load();
-  } catch (e: any) { ElMessage.error(e?.response?.data?.msg ?? '复制失败'); }
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? '复制失败'); }
 }
 
 // 生成合同入口（设计稿 合同 A1 主流程:订单侧拆单,而非只能从合同侧反向带入）
@@ -219,13 +220,13 @@ async function onGenContract(cmd: string, row: any) {
     }
     if (d?.created) router.push({ path: '/contracts', query: { order_id: row.id } });
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.msg ?? e?.response?.data?.message ?? '生成失败');
+    errToast(e?.response?.data?.msg ?? e?.response?.data?.msg ?? '生成失败');
   }
 }
 function goView(row: any) { router.push({ name: 'OrderView', params: { id: row.id } }); }
 async function doApprove(row: any) {
   try { await orderApi.approve(row.id); ElMessage.success('已审批，订单可下单'); load(); }
-  catch (e: any) { ElMessage.error(e?.response?.data?.message ?? '审批失败'); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? '审批失败'); }
 }
 async function batchRemove() {
   try { await ElMessageBox.confirm(`确认删除选中的 ${selected.value.length} 条记录?此操作不可恢复。`, "批量删除", { type: "warning" }); } catch { return; }

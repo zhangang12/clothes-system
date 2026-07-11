@@ -123,6 +123,7 @@
 </template>
 
 <script setup lang="ts">
+import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -178,7 +179,7 @@ async function toggleStatus(row: any) {
     ElMessage.success(row.status === 1 ? '已停用' : '已启用');
     load();
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message ?? '操作失败');
+    errToast(e?.response?.data?.msg ?? '操作失败');
   }
 }
 async function remove(id: number) {
@@ -187,7 +188,7 @@ async function remove(id: number) {
     ElMessage.success('删除成功');
     load();
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message ?? '删除失败');
+    errToast(e?.response?.data?.msg ?? '删除失败');
   }
 }
 async function batchRemove() {

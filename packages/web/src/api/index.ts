@@ -1,6 +1,16 @@
 import axios, { AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { ElMessage } from 'element-plus';
 
+// 错误提示去重:全局拦截器与各视图 catch 可能对同一错误各弹一次,800ms 内相同文案只显示一次
+let _lastErr = { m: '', t: 0 };
+export function errToast(msg?: string) {
+  const m = msg || '请求失败';
+  const now = Date.now();
+  if (m === _lastErr.m && now - _lastErr.t < 800) return;
+  _lastErr = { m, t: now };
+  ElMessage.error(m);
+}
+
 export const http = axios.create({
   baseURL: '/api/v1',
   timeout: 15000,
@@ -15,7 +25,7 @@ http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 http.interceptors.response.use(
   (res: AxiosResponse) => {
     if (res.data.code !== 0) {
-      ElMessage.error(res.data.msg ?? '请求失败');
+      errToast(res.data.msg);
       return Promise.reject(new Error(res.data.msg));
     }
     return res.data;
@@ -29,7 +39,7 @@ http.interceptors.response.use(
       window.location.href = '/login';
     } else {
       // 登录页密码错(401)或其它错误:提示而非刷新丢失输入
-      ElMessage.error(err.response?.data?.msg ?? (status === 401 ? '用户名或密码错误' : '网络错误'));
+      errToast(err.response?.data?.msg ?? (status === 401 ? '用户名或密码错误' : '网络错误'));
     }
     return Promise.reject(err);
   },

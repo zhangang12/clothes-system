@@ -56,7 +56,7 @@
         </el-table-column>
         <el-table-column label="工厂/版师" width="110" align="center">
           <template #default="{ row }">
-            {{ row.type === 'LABOR' ? (row.patternmaker_name || '版师#' + row.patternmaker_id) : (row.factory_id ?? '—') }}
+            {{ row.type === 'LABOR' ? (row.patternmaker_name || '版师#' + row.patternmaker_id) : (row.factory_name || (row.factory_id ? '工厂#' + row.factory_id : '—')) }}
           </template>
         </el-table-column>
         <el-table-column prop="total_amount" label="对账金额" width="120" align="right">
@@ -75,12 +75,14 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="90">
+        <el-table-column prop="status" label="状态" width="90" fixed="right">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="created_at" label="创建时间" width="160" />
+        <el-table-column label="创建时间" width="150">
+          <template #default="{ row }">{{ fmtDateTime(row.created_at) }}</template>
+        </el-table-column>
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="viewDetail(row.id)">详情</el-button>
@@ -325,9 +327,11 @@
 </template>
 
 <script setup lang="ts">
+import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import { fmtDateTime } from '@/utils/format';
 import { Search, Refresh, Plus, Coin } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { reconciliationApi } from '@/api/reconciliation';
@@ -413,7 +417,7 @@ async function doConfirm(row: any) {
     ElMessage.success('主管复核已确认');
     load();
   } catch (e: any) {
-    const msg = String(e?.response?.data?.msg ?? e?.response?.data?.message ?? '');
+    const msg = String(e?.response?.data?.msg ?? e?.response?.data?.msg ?? '');
     // 超发闸门(P2#28):累计实发超合同量→业务填写放行原因留痕后确认
     if (msg.startsWith('OVER_SHIP:')) {
       try {
@@ -440,7 +444,7 @@ async function doReject(row: any) {
     ElMessage.success('已整单退回，业务员可修改后重新提交');
     load();
   } catch (e: any) {
-    if (e !== 'cancel') ElMessage.error(e?.response?.data?.message ?? '退回失败');
+    if (e !== 'cancel') errToast(e?.response?.data?.msg ?? '退回失败');
   }
 }
 

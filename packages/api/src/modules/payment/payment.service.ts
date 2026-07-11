@@ -41,6 +41,23 @@ export class PaymentService {
     return this.prepayRepo.save(prepayment);
   }
 
+  // 裸ID→名称:给列表行补 factory_name / contract_no(前端展示体验)
+  private async enrichNames(items: any[]): Promise<void> {
+    if (!items.length) return;
+    const fids = [...new Set(items.map((r) => +r.factory_id).filter(Boolean))];
+    if (fids.length) {
+      const rows = await this.dataSource.query('SELECT id, COALESCE(short_name, name) nm FROM factory WHERE id IN (?)', [fids]);
+      const m = new Map(rows.map((x: any) => [+x.id, x.nm]));
+      items.forEach((r) => { r.factory_name = r.factory_id ? m.get(+r.factory_id) ?? null : null; });
+    }
+    const cids = [...new Set(items.map((r) => +r.contract_id).filter(Boolean))];
+    if (cids.length) {
+      const rows = await this.dataSource.query('SELECT id, contract_no FROM contract WHERE id IN (?)', [cids]);
+      const m = new Map(rows.map((x: any) => [+x.id, x.contract_no]));
+      items.forEach((r) => { r.contract_no = r.contract_id ? m.get(+r.contract_id) ?? null : null; });
+    }
+  }
+
   async findPrepayments(factoryId?: number, page = 1, size = 20) {
     size = Math.min(Math.max(Number(size) || 20, 1), 100); page = Math.max(Number(page) || 1, 1); // 分页钳制,防超大 LIMIT / 负 OFFSET
     const where: any = factoryId ? { factory_id: factoryId } : {};
@@ -50,6 +67,7 @@ export class PaymentService {
       take: size,
       order: { id: 'DESC' },
     });
+    await this.enrichNames(items as any[]);
     return { items, total, page, size };
   }
 
@@ -244,6 +262,7 @@ export class PaymentService {
       take: size,
       order: { id: 'DESC' },
     });
+    await this.enrichNames(items as any[]);
     return { items, total, page, size };
   }
 
