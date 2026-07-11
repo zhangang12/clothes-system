@@ -94,6 +94,17 @@ export class SampleController {
     return this.service.copy(id, req.user.id);
   }
 
+  @Post(':id/materials/:materialId/purchase')
+  @Roles(UserRole.ADMIN, UserRole.BUSINESS)
+  @ApiOperation({ summary: '行级生成采购：为该材料行生成无合同费用对账单（打样材料，样衣稿🟠按钮 B方案）' })
+  purchaseMaterial(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('materialId', ParseIntPipe) materialId: number,
+    @Request() req: any,
+  ) {
+    return this.service.purchaseMaterial(id, materialId, req.user.id);
+  }
+
   @Patch(':id/abandon')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
   @ApiOperation({ summary: '废弃样衣（不删改废弃，下游留快照；已成单不可废弃，P2#25）' })

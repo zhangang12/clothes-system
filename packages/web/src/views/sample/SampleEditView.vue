@@ -118,6 +118,13 @@
                 </div>
               </template>
             </el-table-column>
+            <el-table-column v-if="!patternmaker && editId" label="采购" width="86" align="center">
+              <template #default="{ row }">
+                <el-tooltip content="为该行生成无合同费用对账单(打样材料,金额=数量×参考价)" placement="top">
+                  <el-button link type="warning" size="small" :disabled="!row.id" @click="doPurchase(row)">🟠生成采购</el-button>
+                </el-tooltip>
+              </template>
+            </el-table-column>
             <el-table-column label="备注" min-width="110"><template #default="{ row }"><el-input v-model="row.remark" size="small" :disabled="bizDisabled" /></template></el-table-column>
           </el-table>
         </div>
@@ -232,6 +239,27 @@ function removeMaterials() {
   form.materials = form.materials.filter((m: any) => !selMaterials.value.includes(m));
   if (!form.materials.length) form.materials.push(emptyMaterial());
 }
+// 行级生成采购(样衣稿🟠按钮 B方案):打样材料→无合同对账单,直接进对账付款
+async function doPurchase(row: any) {
+  if (!row.id) { ElMessage.warning('新加的行请先保存样衣后再生成采购'); return; }
+  if (!(Number(row.qty) > 0) || !(Number(row.refPrice) > 0)) {
+    ElMessage.warning('请先填写该行的 数量 与 参考价格'); return;
+  }
+  try {
+    await ElMessageBox.confirm(
+      `将为「${row.itemName}」生成打样材料对账单：${row.qty} × ${row.refPrice} = ${(Number(row.qty) * Number(row.refPrice)).toFixed(2)} 元（供应商：${row.supplierName || '未选'}），进入对账→付款流程。`,
+      '生成采购', { confirmButtonText: '生成', cancelButtonText: '取消', type: 'info' },
+    );
+  } catch { return; }
+  try {
+    const res: any = await sampleApi.purchaseMaterial(Number(editId.value), row.id);
+    const d = res?.data ?? res;
+    ElMessage.success(`已生成对账单 ${d.reconcile_no ?? ''}，可在「对账管理」提交复核`);
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.msg ?? e?.response?.data?.message ?? '生成失败');
+  }
+}
+
 function onSupplier(row: any, id: number) { row.supplierName = factories.value.find((f) => f.id === id)?.name ?? ''; }
 function onPatternmaker(id?: number) {
   const u = pmUsers.value.find((x) => x.id === id);

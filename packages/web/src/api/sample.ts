@@ -26,6 +26,9 @@ export const sampleApi = {
     http.post<unknown, { data: SampleGarment }>(`/samples/${id}/copy`),
   remove: (id: number) =>
     http.delete(`/samples/${id}`),
+  // 行级生成采购(样衣稿🟠按钮 B方案):该材料行→无合同费用对账单(打样材料)
+  purchaseMaterial: (id: number, materialId: number) =>
+    http.post<unknown, any>(`/samples/${id}/materials/${materialId}/purchase`),
   // 废弃(P2#25):不删改废弃,下游留快照;已成单不可废弃
   abandon: (id: number) =>
     http.patch<unknown, any>(`/samples/${id}/abandon`),

@@ -12,6 +12,10 @@ import { Customer } from '../customer/customer.entity';
 import { Quotation } from '../quote/quotation.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { QuoteService } from '../quote/quote.service';
+import { Reconciliation, ReconciliationStatus } from '../reconciliation/reconciliation.entity';
+import { ReconciliationExpenseItem } from '../reconciliation/reconciliation-expense-item.entity';
+import { Factory } from '../factory/factory.entity';
+import { ReconcileType } from '@i9/types';
 import { CustomerService } from '../customer/customer.service';
 import { SampleStatus } from '@i9/types';
 import {
@@ -202,6 +206,51 @@ export class SampleService {
       await this.quoteService.syncFromSample(id);
     }
     return saved;
+  }
+
+  // 行级「生成材料订单」(样衣稿🟠按钮,B方案落地):为该材料行生成一张【无合同费用对账单】(打样材料),
+  // 金额=数量×参考价格,供应商带入,直接进对账→付款链(打样采购小额零星,不走合同/门户全套)
+  async purchaseMaterial(sampleId: number, materialId: number, userId: number) {
+    const sample = await this.repo.findOne({ where: { id: sampleId, deleted: 0 } });
+    if (!sample) throw new NotFoundException(`样衣 #${sampleId} 不存在`);
+    const material = await this.materialRepo.findOne({ where: { id: materialId, sample_id: sampleId } });
+    if (!material) throw new NotFoundException(`材料行 #${materialId} 不属于该样衣`);
+    const qty = +(material.qty ?? 0);
+    const price = +(material.ref_price ?? 0);
+    if (!(qty > 0) || !(price > 0)) throw new BadRequestException('该行需先填写 数量 与 参考价格 再生成采购');
+    // 供应商→工厂库(采购须落库,同订单 B9 口径)
+    let factoryId = material.supplier_id ? +material.supplier_id : null;
+    if (!factoryId && material.supplier_name) {
+      const f = await this.dataSource.getRepository(Factory).findOne({ where: { name: material.supplier_name, deleted: 0 } });
+      factoryId = f ? +f.id : null;
+    }
+    if (!factoryId) throw new BadRequestException('该行供应商未落工厂库,请先在行内从工厂库选择供应商');
+
+    const amount = +(qty * price).toFixed(4);
+    const reconcile_no = await this.numbering.nextWithSegment(NUM_PREFIX.RECONCILIATION, sample.style_no || sample.sample_no || 'YY');
+    const rec = await this.dataSource.transaction(async (manager) => {
+      const saved = await manager.save(Reconciliation, manager.create(Reconciliation, {
+        reconcile_no,
+        type: ReconcileType.NO_CONTRACT,
+        sub_type: 'EXPENSE',
+        style_no: sample.style_no ?? null,
+        factory_id: factoryId,
+        total_amount: amount,
+        status: ReconciliationStatus.DRAFT,
+        description: `打样材料采购 · ${sample.sample_no} · ${material.item_name} × ${qty} @ ${price}`,
+        created_by: userId,
+        deleted: 0,
+      } as any) as any);
+      await manager.save(ReconciliationExpenseItem, manager.create(ReconciliationExpenseItem, {
+        reconcile_id: (saved as any).id,
+        expense_name: `打样材料·${material.item_name ?? ''}`.slice(0, 100),
+        amount,
+        style_no: sample.style_no ?? null,
+      } as any));
+      return saved;
+    });
+    await this.log(sampleId, sample.version, 'PURCHASE', userId, `${material.item_name}×${qty} → ${reconcile_no}`);
+    return rec;
   }
 
   // 废弃(P2#25/qc B4):不删改废弃——下游(报价/订单)引用留快照;已成单不可废弃;废弃后不可编辑(状态守卫天然拦截)
