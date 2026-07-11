@@ -94,4 +94,10 @@ export class CreateSettlementDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  // Q18 分批结算:圈定出货批(每批出货+对应收汇各出一次毛利);空=全量累计
+  @ApiPropertyOptional({ description: '圈定出货批ID列表(分批结算)', type: [Number] })
+  @IsOptional()
+  @IsArray()
+  shipment_ids?: number[];
 }

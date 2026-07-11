@@ -20,6 +20,12 @@ export class SettlementReceipt {
   @Column({ length: 500, nullable: true, comment: '银行水单' })
   slip_url?: string;
 
+  @Column({ length: 10, default: 'MANUAL', comment: 'MANUAL=手录 INVOICE=从出口发票分摊同步(Q12)' })
+  source: string;
+
+  @Column({ length: 50, nullable: true, comment: '来源出口发票号(INVOICE行)' })
+  invoice_no?: string;
+
   @Column({ length: 255, nullable: true })
   remark?: string;
 

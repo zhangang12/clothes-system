@@ -255,6 +255,9 @@
             </el-form-item>
             <el-form-item v-else label="合同ID">
               <el-input-number v-model="createForm.contract_id" :min="1" style="width:100%" />
+              <el-checkbox v-model="createForm.merge_into_parent" style="margin-top:2px">
+                补料对账并入原合同（仅补料合同可勾，货款归母合同名下）
+              </el-checkbox>
             </el-form-item>
           </el-col>
         </el-row>
@@ -455,6 +458,7 @@ const createForm = reactive({
   subType: 'EXPENSE',
   factory_id: undefined as number | undefined,
   contract_id: undefined as number | undefined,
+  merge_into_parent: false,
   tax_rate: undefined as number | undefined,
   invoice_no: '',
   invoice_amount: undefined as number | undefined,
@@ -472,7 +476,7 @@ function openCreate() { createVisible.value = true; }
 function resetCreateForm() {
   Object.assign(createForm, {
     type: 'CONTRACT', subType: 'EXPENSE', factory_id: undefined, contract_id: undefined,
-    tax_rate: undefined, invoice_no: '', invoice_amount: undefined, description: '', shipments: [], expenses: [],
+    tax_rate: undefined, invoice_no: '', invoice_amount: undefined, description: '', shipments: [], expenses: [], merge_into_parent: false,
   });
 }
 function addShipment() {

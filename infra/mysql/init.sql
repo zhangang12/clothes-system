@@ -810,6 +810,7 @@ CREATE TABLE IF NOT EXISTS `settlement` (
   `style_name`           VARCHAR(200)   DEFAULT NULL COMMENT '品名(建单时从订单带出,P2#26)',
   `order_qty`            INT            NOT NULL DEFAULT 0 COMMENT '订单数量(与出货件数对照,P2#26)',
   `shipped_qty`          INT            NOT NULL DEFAULT 0 COMMENT '出货件数(汇总自 order_shipment)',
+  `shipment_ids`         VARCHAR(255)   DEFAULT NULL COMMENT '圈定的出货批ID(逗号分隔;空=全量累计,Q18分批结算)',
   `currency`             VARCHAR(5)     NOT NULL DEFAULT 'CNY',
   `exchange_rate`        DECIMAL(10,4)  DEFAULT NULL COMMENT '结算汇率',
   `status`               ENUM('DRAFT','CONFIRMED') NOT NULL DEFAULT 'DRAFT',
@@ -850,7 +851,7 @@ CREATE TABLE IF NOT EXISTS `settlement` (
   `updated_at`           DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_settlement_no` (`settlement_no`),
-  UNIQUE KEY `uk_order` (`order_id`,`deleted`),
+  KEY `idx_order` (`order_id`),
   KEY `idx_status` (`status`,`deleted`),
   KEY `idx_style_no` (`style_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='结算清单';
@@ -881,11 +882,53 @@ CREATE TABLE IF NOT EXISTS `settlement_receipt` (
   `receipt_date`   DATE          NOT NULL COMMENT '收款日期',
   `exchange_rate`  DECIMAL(10,4) DEFAULT NULL COMMENT '该笔收汇汇率(银行水单带入,逐笔×汇率)',
   `slip_url`       VARCHAR(500)  DEFAULT NULL COMMENT '银行水单',
+  `source`         VARCHAR(10)   NOT NULL DEFAULT 'MANUAL' COMMENT 'MANUAL=手录 INVOICE=从出口发票分摊同步(Q12)',
+  `invoice_no`     VARCHAR(50)   DEFAULT NULL COMMENT '来源出口发票号(INVOICE行)',
   `remark`         VARCHAR(255)  DEFAULT NULL,
   `created_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_settlement` (`settlement_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='结算收汇记录';
+
+CREATE TABLE IF NOT EXISTS `export_invoice` (
+  `id`             BIGINT        NOT NULL AUTO_INCREMENT,
+  `invoice_no`     VARCHAR(50)   NOT NULL COMMENT '出口发票号',
+  `invoice_date`   DATE          DEFAULT NULL,
+  `currency`       VARCHAR(5)    NOT NULL DEFAULT 'USD',
+  `total_amount`   DECIMAL(15,4) NOT NULL DEFAULT 0 COMMENT '发票总额(=Σ款项行,拼柜一票多款)',
+  `customer_name`  VARCHAR(100)  DEFAULT NULL COMMENT '抬头客户',
+  `remark`         VARCHAR(255)  DEFAULT NULL,
+  `created_by`     BIGINT        DEFAULT NULL,
+  `deleted`        TINYINT       NOT NULL DEFAULT 0,
+  `created_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_invoice_no` (`invoice_no`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='出口发票(收入侧留痕,结算Q12)';
+
+CREATE TABLE IF NOT EXISTS `export_invoice_item` (
+  `id`          BIGINT        NOT NULL AUTO_INCREMENT,
+  `invoice_id`  BIGINT        NOT NULL,
+  `order_id`    BIGINT        DEFAULT NULL COMMENT '关联订单(结算按订单拉收汇)',
+  `style_no`    VARCHAR(60)   DEFAULT NULL COMMENT '款号',
+  `amount`      DECIMAL(15,4) NOT NULL COMMENT '该款发票金额(拼柜分摊基数,Q3)',
+  PRIMARY KEY (`id`),
+  KEY `idx_invoice` (`invoice_id`),
+  KEY `idx_order` (`order_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='出口发票款项行(一票多款,Q3按金额占比分摊)';
+
+CREATE TABLE IF NOT EXISTS `invoice_receipt` (
+  `id`             BIGINT        NOT NULL AUTO_INCREMENT,
+  `invoice_id`     BIGINT        NOT NULL,
+  `amount`         DECIMAL(15,4) NOT NULL COMMENT '该笔收汇金额(USD)',
+  `exchange_rate`  DECIMAL(10,4) DEFAULT NULL COMMENT '该笔汇率(水单)',
+  `receipt_date`   DATE          NOT NULL,
+  `slip_url`       VARCHAR(500)  DEFAULT NULL COMMENT '银行水单',
+  `remark`         VARCHAR(255)  DEFAULT NULL,
+  `created_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_invoice` (`invoice_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='出口发票逐笔收汇(多笔多汇率留痕,Q12)';
 
 CREATE TABLE IF NOT EXISTS `change_log` (
   `id`           BIGINT       NOT NULL AUTO_INCREMENT,

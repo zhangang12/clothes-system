@@ -11,9 +11,10 @@ import { Contract } from '../contract/contract.entity';
 import { Factory } from '../factory/factory.entity';
 import { Reconciliation } from '../reconciliation/reconciliation.entity';
 import { ReconciliationExpenseItem } from '../reconciliation/reconciliation-expense-item.entity';
+import { ExportInvoiceModule } from '../invoice/export-invoice.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([
+  imports: [ExportInvoiceModule, TypeOrmModule.forFeature([
     Settlement, SettlementCost, SettlementReceipt, OrderMain, OrderShipment, Contract, Factory, Reconciliation, ReconciliationExpenseItem,
   ])],
   controllers: [SettlementController],

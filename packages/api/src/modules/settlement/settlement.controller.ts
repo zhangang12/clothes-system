@@ -35,6 +35,13 @@ export class SettlementController {
     return maskSettlement(await this.service.findAll(query), req.user.role);
   }
 
+  @Get('aggregate')
+  @Roles(UserRole.ADMIN, UserRole.FINANCE)
+  @ApiOperation({ summary: '款号/订单累计汇总视图（分批结算后看全款累计，Q18）' })
+  aggregate(@Query('style_no') styleNo?: string, @Query('order_id') orderId?: string) {
+    return this.service.aggregate(styleNo || undefined, orderId ? +orderId : undefined);
+  }
+
   @Get('stats')
   @Roles(UserRole.ADMIN, UserRole.FINANCE)
   @ApiOperation({ summary: '列表徽标统计:待收汇/亏损预警/待重算(P2#26)' })
@@ -88,6 +95,13 @@ export class SettlementController {
   @ApiOperation({ summary: '删除收汇记录（草稿限定）' })
   removeReceipt(@Param('id', ParseIntPipe) id: number, @Param('receiptId', ParseIntPipe) receiptId: number) {
     return this.service.removeReceipt(id, receiptId);
+  }
+
+  @Patch(':id/pull-invoice-receipts')
+  @Roles(UserRole.ADMIN, UserRole.FINANCE)
+  @ApiOperation({ summary: '从出口发票同步收汇（按款项占比分摊逐笔收汇，Q12/Q3）' })
+  pullInvoiceReceipts(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.service.pullInvoiceReceipts(id, req.user.id);
   }
 
   @Patch(':id/refresh-cost')

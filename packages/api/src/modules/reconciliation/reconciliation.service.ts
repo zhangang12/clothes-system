@@ -37,6 +37,18 @@ export class ReconciliationService {
       }
     }
 
+    // 补料对账并入原合同(业务勾选):补料(SUPPLEMENT)合同的货款在核算上归母合同名下——
+    // 结算按订单聚合不受影响(母/补料同订单),此处影响对账单的合同归属与门户展示口径
+    let effectiveContractId = dto.contract_id;
+    if (dto.merge_into_parent && dto.contract_id) {
+      const child = await this.dataSource.getRepository(Contract).findOne({ where: { id: dto.contract_id, deleted: 0 } });
+      if (child?.type === ContractType.SUPPLEMENT && child.parent_id) {
+        effectiveContractId = +child.parent_id;
+      } else {
+        throw new BadRequestException('仅补料合同可并入原合同(且须存在母合同)');
+      }
+    }
+
     return this.dataSource.transaction(async (manager) => {
       const shipmentLines = dto.shipments ?? [];
       const expenseLines = dto.expenses ?? [];
@@ -91,7 +103,7 @@ export class ReconciliationService {
           reconcile_no,
           type: dto.type,
           sub_type: dto.type === ReconcileType.NO_CONTRACT ? (dto.subType ?? null) : null,
-          contract_id: dto.contract_id,
+          contract_id: effectiveContractId,
           style_no: styleNo,
           factory_id: dto.factory_id,
           total_amount: +totalAmount.toFixed(4),

@@ -1,4 +1,4 @@
-import { IsEnum, IsNumber, IsOptional, IsString, IsArray, ValidateNested, Min } from 'class-validator';
+import { IsEnum, IsNumber, IsOptional, IsString, IsArray, ValidateNested, Min, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ReconcileType, ReconcileSubType } from '@i9/types';
 
@@ -57,6 +57,11 @@ export class CreateReconciliationDto {
   @IsOptional()
   @IsNumber()
   contract_id?: number;
+
+  // 补料对账并入原合同(P3遗留/补充C2·qc E8):补料合同的对账在核算上归并到母合同名下(业务勾选)
+  @IsOptional()
+  @IsBoolean()
+  merge_into_parent?: boolean;
 
   @IsNumber()
   factory_id: number;

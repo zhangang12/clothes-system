@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ExportInvoiceService } from '../../invoice/export-invoice.service';
 import { ChangeLogService } from '../../../common/changelog/change-log.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
@@ -108,6 +109,7 @@ const mockDataSource = {
 };
 
 const mockChangeLogDep = { record: jest.fn().mockResolvedValue(undefined), list: jest.fn().mockResolvedValue([]) };
+const mockExportInvoiceDep = { allocatedReceiptsForOrder: jest.fn().mockResolvedValue([]) };
 
 describe('SettlementService', () => {
   let service: SettlementService;
@@ -124,6 +126,7 @@ describe('SettlementService', () => {
       providers: [
         SettlementService,
         { provide: ChangeLogService, useValue: mockChangeLogDep },
+        { provide: ExportInvoiceService, useValue: mockExportInvoiceDep },
         { provide: getRepositoryToken(Settlement), useValue: mockRepo },
         { provide: getRepositoryToken(SettlementCost), useValue: mockCostRepo },
         { provide: getRepositoryToken(SettlementReceipt), useValue: mockReceiptRepo },

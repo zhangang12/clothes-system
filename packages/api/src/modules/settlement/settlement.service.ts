@@ -14,6 +14,7 @@ import { ReconciliationExpenseItem } from '../reconciliation/reconciliation-expe
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { SysConfigService } from '../../common/config/sys-config.service';
 import { ChangeLogService } from '../../common/changelog/change-log.service';
+import { ExportInvoiceService } from '../invoice/export-invoice.service';
 import { CreateSettlementDto } from './dto/create-settlement.dto';
 import { AddCostDto } from './dto/add-cost.dto';
 import { AddReceiptDto } from './dto/add-receipt.dto';
@@ -109,6 +110,7 @@ export class SettlementService {
     private readonly numbering: NumberingService,
     private readonly config: SysConfigService,
     private readonly changeLog: ChangeLogService,
+    private readonly exportInvoice: ExportInvoiceService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -290,8 +292,14 @@ export class SettlementService {
     // 结算单编号 JS-款号-序号（结算串流程 rec：按款号，便于按款检索）
     const settlement_no = await this.numbering.nextWithSegment(NUM_PREFIX.SETTLEMENT, order.style_no || 'NA');
 
+    // Q18 分批结算:给出 shipment_ids 时只按圈定批次计件数(每批一张结算单);空=全量累计
+    const scopeIds = (dto.shipment_ids ?? []).map(Number).filter(Boolean);
     const shipments = await this.shipmentRepo.find({ where: { order_id: dto.order_id } });
-    const shippedQty = shipments.reduce((sum, s) => sum + s.qty, 0);
+    const scoped = scopeIds.length ? shipments.filter((x) => scopeIds.includes(+x.id)) : shipments;
+    if (scopeIds.length && scoped.length !== scopeIds.length) {
+      throw new BadRequestException('圈定的出货批中存在不属于该订单的批次');
+    }
+    const shippedQty = scoped.reduce((sum, s) => sum + s.qty, 0);
 
     // 缺省税率/退税率/财务费率取自配置（禁一刀切 1.13 / 7%）
     const vatRate = await this.config.getNumber('vat_rate', 13);
@@ -335,6 +343,7 @@ export class SettlementService {
         order_qty: +(order.qty_total ?? 0),
         customer_name: order.middleman_name ?? null,
         shipped_qty: shippedQty,
+        shipment_ids: scopeIds.length ? scopeIds.join(',') : null,
         currency: order.currency ?? 'CNY',
         exchange_rate: dto.exchange_rate ?? null,
         status: SettlementStatus.DRAFT,
@@ -613,7 +622,9 @@ export class SettlementService {
       }
 
       const shipments = await manager.find(OrderShipment, { where: { order_id: settlement.order_id } });
-      settlement.shipped_qty = shipments.reduce((sum, s) => sum + s.qty, 0);
+      const scopeIds = (settlement.shipment_ids ?? '').split(',').map(Number).filter(Boolean);
+      const scoped = scopeIds.length ? shipments.filter((x) => scopeIds.includes(+x.id)) : shipments;
+      settlement.shipped_qty = scoped.reduce((sum, s) => sum + s.qty, 0);
 
       const order = await manager.findOne(OrderMain, { where: { id: settlement.order_id, deleted: 0 } });
       const agg = order ? await this.aggregateGoods(order, vatRate) : { ...EMPTY_AGG, autoRows: [] };
@@ -690,6 +701,74 @@ export class SettlementService {
       ], userId);
       return saved;
     });
+  }
+
+  // 从出口发票同步收汇(Q12/Q3 推荐项):按本订单在各发票款项行的金额占比,把逐笔收汇分摊成
+  // 本结算单的收汇记录(source=INVOICE,带票号/汇率/水单);重拉时 INVOICE 行整组重建,手录行保留
+  async pullInvoiceReceipts(id: number, userId?: number): Promise<Settlement> {
+    const vatRate = await this.config.getNumber('vat_rate', 13);
+    const financeFeeRate = await this.config.getNumber('finance_fee_rate', 7);
+    return this.dataSource.transaction(async (manager) => {
+      const settlement = await manager.findOne(Settlement, {
+        where: { id, deleted: 0 },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!settlement) throw new NotFoundException(`结算单 #${id} 不存在`);
+      if (settlement.status !== SettlementStatus.DRAFT) {
+        throw new BadRequestException('只有草稿状态才可同步发票收汇');
+      }
+      const allocated = await this.exportInvoice.allocatedReceiptsForOrder(settlement.order_id);
+      await manager.delete(SettlementReceipt, { settlement_id: id, source: 'INVOICE' });
+      if (allocated.length) {
+        await manager.save(SettlementReceipt, allocated.map((a) => manager.create(SettlementReceipt, {
+          settlement_id: id,
+          amount: a.amount,
+          exchange_rate: a.exchange_rate,
+          receipt_date: a.receipt_date as any,
+          slip_url: a.slip_url,
+          source: 'INVOICE',
+          invoice_no: a.invoice_no,
+          remark: `发票 ${a.invoice_no} 按款项占比分摊`,
+        } as any)));
+      }
+      const receipts = await manager.find(SettlementReceipt, { where: { settlement_id: id } });
+      const costs = await manager.find(SettlementCost, { where: { settlement_id: id } });
+      const sums = sumCostRows(costs, vatRate);
+      const goodsTax = sums.rows ? sums.tax : +(settlement.goods_amount_tax ?? 0);
+      const goodsExtax = sums.rows ? sums.extax : +(settlement.goods_amount_extax ?? 0);
+      this.applyDerived(settlement, goodsTax, goodsExtax, receipts, financeFeeRate);
+      const saved = await manager.save(Settlement, settlement);
+      await this.changeLog.record('SETTLEMENT', id, [{
+        field: 'PULL_INVOICE',
+        new: `同步 ${allocated.length} 笔发票分摊收汇,合计$${saved.receipt_usd}`,
+      }], userId);
+      return saved;
+    });
+  }
+
+  // 款号/订单累计汇总视图(Q18 推荐项):分批结算后看全款累计
+  async aggregate(styleNo?: string, orderId?: number) {
+    if (!styleNo && !orderId) throw new BadRequestException('请给出 style_no 或 order_id');
+    const where: FindOptionsWhere<Settlement> = {
+      deleted: 0,
+      ...(styleNo ? { style_no: styleNo } : {}),
+      ...(orderId ? { order_id: orderId } : {}),
+    };
+    const rows = await this.repo.find({ where, order: { id: 'ASC' } });
+    const sum = (f: (r: Settlement) => number) => r4(rows.reduce((s, r) => s + f(r), 0));
+    const ready = rows.filter((r) => +r.profit_ready === 1);
+    return {
+      count: rows.length,
+      shipped_qty: rows.reduce((s, r) => s + +(r.shipped_qty ?? 0), 0),
+      goods_amount_tax: sum((r) => +(r.goods_amount_tax ?? 0)),
+      goods_amount_extax: sum((r) => +(r.goods_amount_extax ?? 0)),
+      receipt_usd: sum((r) => +(r.receipt_usd ?? 0)),
+      settle_amount: sum((r) => +(r.settle_amount ?? 0)),
+      gross_profit: r4(ready.reduce((s, r) => s + +(r.gross_profit ?? 0), 0)),
+      net_profit: r4(ready.reduce((s, r) => s + +(r.net_profit ?? 0), 0)),
+      pending_profit_count: rows.length - ready.length, // 未齐备(不计利润)的单数
+      items: rows,
+    };
   }
 
   async confirm(id: number): Promise<Settlement> {

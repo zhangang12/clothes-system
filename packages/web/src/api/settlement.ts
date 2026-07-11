@@ -21,6 +21,12 @@ export const settlementApi = {
     http.patch<unknown, any>(`/settlements/${id}/refresh-cost`),
   stats: () =>
     http.get<unknown, any>('/settlements/stats'),
+  // 从出口发票同步收汇(Q12/Q3)
+  pullInvoiceReceipts: (id: number) =>
+    http.patch<unknown, any>(`/settlements/${id}/pull-invoice-receipts`),
+  // 款号/订单累计汇总(Q18 分批结算)
+  aggregate: (params: { style_no?: string; order_id?: number }) =>
+    http.get<unknown, any>('/settlements/aggregate', { params }),
   refundReceived: (id: number, amount?: number) =>
     http.patch<unknown, any>(`/settlements/${id}/refund-received`, amount != null ? { amount } : {}),
   reopen: (id: number) =>

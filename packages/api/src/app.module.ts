@@ -14,6 +14,7 @@ import { PortalModule } from './modules/portal/portal.module';
 import { ReconciliationModule } from './modules/reconciliation/reconciliation.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { SettlementModule } from './modules/settlement/settlement.module';
+import { ExportInvoiceModule } from './modules/invoice/export-invoice.module';
 import { ChangeLogModule } from './common/changelog/change-log.module';
 import { StatsModule } from './modules/stats/stats.module';
 import { CompanyModule } from './modules/company/company.module';
@@ -64,6 +65,7 @@ import { UploadModule } from './modules/upload/upload.module';
     ReconciliationModule,
     PaymentModule,
     SettlementModule,
+    ExportInvoiceModule,
     StatsModule,
     CompanyModule,
     UploadModule,

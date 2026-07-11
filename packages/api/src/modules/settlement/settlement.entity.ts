@@ -22,7 +22,10 @@ export class Settlement {
   order_qty: number; // 订单数量（建单时从订单带出，与出货件数对照）
 
   @Column({ type: 'int', default: 0 })
-  shipped_qty: number; // 出货件数（汇总自船务 order_shipment）
+  shipped_qty: number; // 出货件数（汇总自船务 order_shipment；圈定批次时=所选批次合计）
+
+  @Column({ length: 255, nullable: true })
+  shipment_ids?: string; // 圈定的出货批ID(逗号分隔;空=全量累计)——Q18 分批结算
 
   @Column({ length: 5, default: 'CNY' })
   currency: string;

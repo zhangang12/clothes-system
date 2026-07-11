@@ -115,6 +115,14 @@ CALL _i9_run_if_col('sample_garment','status',"UPDATE sample_garment SET status=
 -- 收窄列先截断,防 MODIFY 因超长数据失败(text → varchar(255))
 CALL _i9_run_if_col('settlement_receipt','remark',"UPDATE settlement_receipt SET remark=LEFT(remark,255) WHERE CHAR_LENGTH(remark)>255");
 
+-- ── 结算分批(Q18,2026-07-11):settlement 一单一结算的唯一键 → 普通索引(允许一款/一单多张结算单) ──
+SET @has_uk := (SELECT COUNT(*) FROM information_schema.statistics
+                 WHERE table_schema = DATABASE() AND table_name = 'settlement' AND index_name = 'uk_order');
+SET @sql := IF(@has_uk > 0,
+  'ALTER TABLE `settlement` DROP INDEX `uk_order`, ADD KEY `idx_order` (`order_id`)',
+  'SELECT 1');
+PREPARE _s FROM @sql; EXECUTE _s; DEALLOCATE PREPARE _s;
+
 -- ▼▼ AUTO-GENERATED COLUMN SYNC(gen-column-sync.py 生成,勿手改)▼▼
 -- 目的:任意历史版本存量库 → HEAD 结构。①缺整表补表 ②缺列按 HEAD 定义补列(均幂等)。
 -- 注意:NOT NULL 无默认列由 MySQL DDL 隐式默认值填充存量行(数值0/字符串空),优于缺列 500。
@@ -853,6 +861,7 @@ CREATE TABLE IF NOT EXISTS `settlement` (
   `style_name`           VARCHAR(200)   DEFAULT NULL COMMENT '品名(建单时从订单带出,P2#26)',
   `order_qty`            INT            NOT NULL DEFAULT 0 COMMENT '订单数量(与出货件数对照,P2#26)',
   `shipped_qty`          INT            NOT NULL DEFAULT 0 COMMENT '出货件数(汇总自 order_shipment)',
+  `shipment_ids`         VARCHAR(255)   DEFAULT NULL COMMENT '圈定的出货批ID(逗号分隔;空=全量累计,Q18分批结算)',
   `currency`             VARCHAR(5)     NOT NULL DEFAULT 'CNY',
   `exchange_rate`        DECIMAL(10,4)  DEFAULT NULL COMMENT '结算汇率',
   `status`               ENUM('DRAFT','CONFIRMED') NOT NULL DEFAULT 'DRAFT',
@@ -893,7 +902,7 @@ CREATE TABLE IF NOT EXISTS `settlement` (
   `updated_at`           DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_settlement_no` (`settlement_no`),
-  UNIQUE KEY `uk_order` (`order_id`,`deleted`),
+  KEY `idx_order` (`order_id`),
   KEY `idx_status` (`status`,`deleted`),
   KEY `idx_style_no` (`style_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='结算清单';
@@ -924,11 +933,53 @@ CREATE TABLE IF NOT EXISTS `settlement_receipt` (
   `receipt_date`   DATE          NOT NULL COMMENT '收款日期',
   `exchange_rate`  DECIMAL(10,4) DEFAULT NULL COMMENT '该笔收汇汇率(银行水单带入,逐笔×汇率)',
   `slip_url`       VARCHAR(500)  DEFAULT NULL COMMENT '银行水单',
+  `source`         VARCHAR(10)   NOT NULL DEFAULT 'MANUAL' COMMENT 'MANUAL=手录 INVOICE=从出口发票分摊同步(Q12)',
+  `invoice_no`     VARCHAR(50)   DEFAULT NULL COMMENT '来源出口发票号(INVOICE行)',
   `remark`         VARCHAR(255)  DEFAULT NULL,
   `created_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_settlement` (`settlement_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='结算收汇记录';
+
+CREATE TABLE IF NOT EXISTS `export_invoice` (
+  `id`             BIGINT        NOT NULL AUTO_INCREMENT,
+  `invoice_no`     VARCHAR(50)   NOT NULL COMMENT '出口发票号',
+  `invoice_date`   DATE          DEFAULT NULL,
+  `currency`       VARCHAR(5)    NOT NULL DEFAULT 'USD',
+  `total_amount`   DECIMAL(15,4) NOT NULL DEFAULT 0 COMMENT '发票总额(=Σ款项行,拼柜一票多款)',
+  `customer_name`  VARCHAR(100)  DEFAULT NULL COMMENT '抬头客户',
+  `remark`         VARCHAR(255)  DEFAULT NULL,
+  `created_by`     BIGINT        DEFAULT NULL,
+  `deleted`        TINYINT       NOT NULL DEFAULT 0,
+  `created_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_invoice_no` (`invoice_no`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='出口发票(收入侧留痕,结算Q12)';
+
+CREATE TABLE IF NOT EXISTS `export_invoice_item` (
+  `id`          BIGINT        NOT NULL AUTO_INCREMENT,
+  `invoice_id`  BIGINT        NOT NULL,
+  `order_id`    BIGINT        DEFAULT NULL COMMENT '关联订单(结算按订单拉收汇)',
+  `style_no`    VARCHAR(60)   DEFAULT NULL COMMENT '款号',
+  `amount`      DECIMAL(15,4) NOT NULL COMMENT '该款发票金额(拼柜分摊基数,Q3)',
+  PRIMARY KEY (`id`),
+  KEY `idx_invoice` (`invoice_id`),
+  KEY `idx_order` (`order_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='出口发票款项行(一票多款,Q3按金额占比分摊)';
+
+CREATE TABLE IF NOT EXISTS `invoice_receipt` (
+  `id`             BIGINT        NOT NULL AUTO_INCREMENT,
+  `invoice_id`     BIGINT        NOT NULL,
+  `amount`         DECIMAL(15,4) NOT NULL COMMENT '该笔收汇金额(USD)',
+  `exchange_rate`  DECIMAL(10,4) DEFAULT NULL COMMENT '该笔汇率(水单)',
+  `receipt_date`   DATE          NOT NULL,
+  `slip_url`       VARCHAR(500)  DEFAULT NULL COMMENT '银行水单',
+  `remark`         VARCHAR(255)  DEFAULT NULL,
+  `created_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_invoice` (`invoice_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='出口发票逐笔收汇(多笔多汇率留痕,Q12)';
 
 CREATE TABLE IF NOT EXISTS `change_log` (
   `id`           BIGINT       NOT NULL AUTO_INCREMENT,
@@ -2104,6 +2155,8 @@ CALL _i9_add_col('settlement','order_qty',"INT            NOT NULL DEFAULT 0 COM
 CALL _i9_sync_col('settlement','order_qty',"INT","INT            NOT NULL DEFAULT 0 COMMENT '订单数量(与出货件数对照,P2#26)'");
 CALL _i9_add_col('settlement','shipped_qty',"INT            NOT NULL DEFAULT 0 COMMENT '出货件数(汇总自 order_shipment)'");
 CALL _i9_sync_col('settlement','shipped_qty',"INT","INT            NOT NULL DEFAULT 0 COMMENT '出货件数(汇总自 order_shipment)'");
+CALL _i9_add_col('settlement','shipment_ids',"VARCHAR(255)   DEFAULT NULL COMMENT '圈定的出货批ID(逗号分隔;空=全量累计,Q18分批结算)'");
+CALL _i9_sync_col('settlement','shipment_ids',"VARCHAR(255)","VARCHAR(255)   DEFAULT NULL COMMENT '圈定的出货批ID(逗号分隔;空=全量累计,Q18分批结算)'");
 CALL _i9_add_col('settlement','currency',"VARCHAR(5)     NOT NULL DEFAULT 'CNY'");
 CALL _i9_sync_col('settlement','currency',"VARCHAR(5)","VARCHAR(5)     NOT NULL DEFAULT 'CNY'");
 CALL _i9_add_col('settlement','exchange_rate',"DECIMAL(10,4)  DEFAULT NULL COMMENT '结算汇率'");
@@ -2220,10 +2273,62 @@ CALL _i9_add_col('settlement_receipt','exchange_rate',"DECIMAL(10,4) DEFAULT NUL
 CALL _i9_sync_col('settlement_receipt','exchange_rate',"DECIMAL(10,4)","DECIMAL(10,4) DEFAULT NULL COMMENT '该笔收汇汇率(银行水单带入,逐笔×汇率)'");
 CALL _i9_add_col('settlement_receipt','slip_url',"VARCHAR(500)  DEFAULT NULL COMMENT '银行水单'");
 CALL _i9_sync_col('settlement_receipt','slip_url',"VARCHAR(500)","VARCHAR(500)  DEFAULT NULL COMMENT '银行水单'");
+CALL _i9_add_col('settlement_receipt','source',"VARCHAR(10)   NOT NULL DEFAULT 'MANUAL' COMMENT 'MANUAL=手录 INVOICE=从出口发票分摊同步(Q12)'");
+CALL _i9_sync_col('settlement_receipt','source',"VARCHAR(10)","VARCHAR(10)   NOT NULL DEFAULT 'MANUAL' COMMENT 'MANUAL=手录 INVOICE=从出口发票分摊同步(Q12)'");
+CALL _i9_add_col('settlement_receipt','invoice_no',"VARCHAR(50)   DEFAULT NULL COMMENT '来源出口发票号(INVOICE行)'");
+CALL _i9_sync_col('settlement_receipt','invoice_no',"VARCHAR(50)","VARCHAR(50)   DEFAULT NULL COMMENT '来源出口发票号(INVOICE行)'");
 CALL _i9_add_col('settlement_receipt','remark',"VARCHAR(255)  DEFAULT NULL");
 CALL _i9_sync_col('settlement_receipt','remark',"VARCHAR(255)","VARCHAR(255)  DEFAULT NULL");
 CALL _i9_add_col('settlement_receipt','created_at',"DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP");
 CALL _i9_sync_col('settlement_receipt','created_at',"DATETIME","DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP");
+
+-- export_invoice
+CALL _i9_add_col('export_invoice','invoice_no',"VARCHAR(50)   NOT NULL COMMENT '出口发票号'");
+CALL _i9_sync_col('export_invoice','invoice_no',"VARCHAR(50)","VARCHAR(50)   NOT NULL COMMENT '出口发票号'");
+CALL _i9_add_col('export_invoice','invoice_date',"DATE          DEFAULT NULL");
+CALL _i9_sync_col('export_invoice','invoice_date',"DATE","DATE          DEFAULT NULL");
+CALL _i9_add_col('export_invoice','currency',"VARCHAR(5)    NOT NULL DEFAULT 'USD'");
+CALL _i9_sync_col('export_invoice','currency',"VARCHAR(5)","VARCHAR(5)    NOT NULL DEFAULT 'USD'");
+CALL _i9_add_col('export_invoice','total_amount',"DECIMAL(15,4) NOT NULL DEFAULT 0 COMMENT '发票总额(=Σ款项行,拼柜一票多款)'");
+CALL _i9_sync_col('export_invoice','total_amount',"DECIMAL(15,4)","DECIMAL(15,4) NOT NULL DEFAULT 0 COMMENT '发票总额(=Σ款项行,拼柜一票多款)'");
+CALL _i9_add_col('export_invoice','customer_name',"VARCHAR(100)  DEFAULT NULL COMMENT '抬头客户'");
+CALL _i9_sync_col('export_invoice','customer_name',"VARCHAR(100)","VARCHAR(100)  DEFAULT NULL COMMENT '抬头客户'");
+CALL _i9_add_col('export_invoice','remark',"VARCHAR(255)  DEFAULT NULL");
+CALL _i9_sync_col('export_invoice','remark',"VARCHAR(255)","VARCHAR(255)  DEFAULT NULL");
+CALL _i9_add_col('export_invoice','created_by',"BIGINT        DEFAULT NULL");
+CALL _i9_sync_col('export_invoice','created_by',"BIGINT","BIGINT        DEFAULT NULL");
+CALL _i9_add_col('export_invoice','deleted',"TINYINT       NOT NULL DEFAULT 0");
+CALL _i9_sync_col('export_invoice','deleted',"TINYINT","TINYINT       NOT NULL DEFAULT 0");
+CALL _i9_add_col('export_invoice','created_at',"DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP");
+CALL _i9_sync_col('export_invoice','created_at',"DATETIME","DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP");
+CALL _i9_add_col('export_invoice','updated_at',"DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+CALL _i9_sync_col('export_invoice','updated_at',"DATETIME","DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+
+-- export_invoice_item
+CALL _i9_add_col('export_invoice_item','invoice_id',"BIGINT        NOT NULL");
+CALL _i9_sync_col('export_invoice_item','invoice_id',"BIGINT","BIGINT        NOT NULL");
+CALL _i9_add_col('export_invoice_item','order_id',"BIGINT        DEFAULT NULL COMMENT '关联订单(结算按订单拉收汇)'");
+CALL _i9_sync_col('export_invoice_item','order_id',"BIGINT","BIGINT        DEFAULT NULL COMMENT '关联订单(结算按订单拉收汇)'");
+CALL _i9_add_col('export_invoice_item','style_no',"VARCHAR(60)   DEFAULT NULL COMMENT '款号'");
+CALL _i9_sync_col('export_invoice_item','style_no',"VARCHAR(60)","VARCHAR(60)   DEFAULT NULL COMMENT '款号'");
+CALL _i9_add_col('export_invoice_item','amount',"DECIMAL(15,4) NOT NULL COMMENT '该款发票金额(拼柜分摊基数,Q3)'");
+CALL _i9_sync_col('export_invoice_item','amount',"DECIMAL(15,4)","DECIMAL(15,4) NOT NULL COMMENT '该款发票金额(拼柜分摊基数,Q3)'");
+
+-- invoice_receipt
+CALL _i9_add_col('invoice_receipt','invoice_id',"BIGINT        NOT NULL");
+CALL _i9_sync_col('invoice_receipt','invoice_id',"BIGINT","BIGINT        NOT NULL");
+CALL _i9_add_col('invoice_receipt','amount',"DECIMAL(15,4) NOT NULL COMMENT '该笔收汇金额(USD)'");
+CALL _i9_sync_col('invoice_receipt','amount',"DECIMAL(15,4)","DECIMAL(15,4) NOT NULL COMMENT '该笔收汇金额(USD)'");
+CALL _i9_add_col('invoice_receipt','exchange_rate',"DECIMAL(10,4) DEFAULT NULL COMMENT '该笔汇率(水单)'");
+CALL _i9_sync_col('invoice_receipt','exchange_rate',"DECIMAL(10,4)","DECIMAL(10,4) DEFAULT NULL COMMENT '该笔汇率(水单)'");
+CALL _i9_add_col('invoice_receipt','receipt_date',"DATE          NOT NULL");
+CALL _i9_sync_col('invoice_receipt','receipt_date',"DATE","DATE          NOT NULL");
+CALL _i9_add_col('invoice_receipt','slip_url',"VARCHAR(500)  DEFAULT NULL COMMENT '银行水单'");
+CALL _i9_sync_col('invoice_receipt','slip_url',"VARCHAR(500)","VARCHAR(500)  DEFAULT NULL COMMENT '银行水单'");
+CALL _i9_add_col('invoice_receipt','remark',"VARCHAR(255)  DEFAULT NULL");
+CALL _i9_sync_col('invoice_receipt','remark',"VARCHAR(255)","VARCHAR(255)  DEFAULT NULL");
+CALL _i9_add_col('invoice_receipt','created_at',"DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP");
+CALL _i9_sync_col('invoice_receipt','created_at',"DATETIME","DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP");
 
 -- change_log
 CALL _i9_add_col('change_log','biz_type',"VARCHAR(20)  NOT NULL COMMENT 'QUOTE/ORDER/CONTRACT/SETTLEMENT'");

@@ -34,7 +34,10 @@
       <template #header>
         <div class="card-header">
           <span>结算单列表</span>
-          <el-button v-if="canCreate" type="primary" :icon="Plus" @click="openCreate">新建结算单</el-button>
+          <div>
+            <el-button @click="openAggregate">款号累计视图</el-button>
+            <el-button v-if="canCreate" type="primary" :icon="Plus" @click="openCreate">新建结算单</el-button>
+          </div>
         </div>
       </template>
 
@@ -132,6 +135,7 @@
         <div class="detail-toolbar" v-if="detailData.status === 'DRAFT' && canEdit">
           <el-button size="small" type="primary" @click="openEdit">编辑（补收汇/汇率/费用）</el-button>
           <el-button size="small" :loading="refreshing" @click="doRefreshCost">刷新付款汇总</el-button>
+          <el-button size="small" type="warning" plain @click="doPullInvoice">同步发票收汇</el-button>
           <span class="hint-inline">重取出货件数并按本订单对账付款重建成本快照</span>
         </div>
         <div class="detail-toolbar" v-if="detailData.status === 'CONFIRMED' && isAdmin">
@@ -273,6 +277,12 @@
           <el-table-column prop="amount" label="收汇金额$" width="110" align="right">
             <template #default="{ row }">{{ (+row.amount).toFixed(2) }}</template>
           </el-table-column>
+          <el-table-column label="来源" width="110">
+            <template #default="{ row }">
+              <el-tag v-if="row.source === 'INVOICE'" size="small" type="warning">{{ row.invoice_no || '发票' }}</el-tag>
+              <span v-else class="muted">手录</span>
+            </template>
+          </el-table-column>
           <el-table-column prop="exchange_rate" label="该笔汇率" width="100" align="right">
             <template #default="{ row }">{{ row.exchange_rate != null ? (+row.exchange_rate).toFixed(4) : '—' }}</template>
           </el-table-column>
@@ -377,6 +387,16 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-form-item v-if="orderShipments.length" label="出货批圈定">
+          <div class="batch-scope">
+            <el-checkbox
+              v-for="b in orderShipments" :key="b.id"
+              :model-value="createForm.shipment_ids.includes(b.id)"
+              @change="(v: any) => toggleBatch(b.id, !!v)"
+            >{{ b.shipment_date?.slice(0, 10) }} · {{ +b.qty }} 件</el-checkbox>
+          </div>
+          <div class="hint-inline">分批结算（Q18）：勾选=只按所选批次出一次毛利（每批一张结算单）；不勾=全量累计</div>
+        </el-form-item>
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="发票金额$">
@@ -458,6 +478,49 @@
       </template>
     </el-dialog>
 
+    <!-- 款号累计视图(Q18 分批结算汇总) -->
+    <el-dialog v-model="aggVisible" title="款号累计视图（分批结算汇总）" width="820px">
+      <el-form inline>
+        <el-form-item label="款号">
+          <el-input v-model="aggStyleNo" placeholder="输入款号" style="width:200px" @keyup.enter="loadAggregate" />
+        </el-form-item>
+        <el-form-item><el-button type="primary" @click="loadAggregate">查询</el-button></el-form-item>
+      </el-form>
+      <template v-if="aggData">
+        <el-descriptions :column="4" border size="small" style="margin-bottom:10px">
+          <el-descriptions-item label="结算单数">{{ aggData.count }}</el-descriptions-item>
+          <el-descriptions-item label="累计出货">{{ aggData.shipped_qty }}</el-descriptions-item>
+          <el-descriptions-item label="累计货款(含税)">{{ (+aggData.goods_amount_tax).toFixed(2) }}</el-descriptions-item>
+          <el-descriptions-item label="累计收汇$">{{ (+aggData.receipt_usd).toFixed(2) }}</el-descriptions-item>
+          <el-descriptions-item label="累计结算额¥">{{ (+aggData.settle_amount).toFixed(2) }}</el-descriptions-item>
+          <el-descriptions-item label="累计毛利">{{ (+aggData.gross_profit).toFixed(2) }}</el-descriptions-item>
+          <el-descriptions-item label="累计净利">
+            <span :class="{ 'text-danger': +aggData.net_profit < 0, 'text-success': +aggData.net_profit > 0 }">{{ (+aggData.net_profit).toFixed(2) }}</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="待齐备单数">{{ aggData.pending_profit_count }}</el-descriptions-item>
+        </el-descriptions>
+        <el-table :data="aggData.items" border size="small" max-height="320">
+          <el-table-column prop="settlement_no" label="结算单" width="170" />
+          <el-table-column prop="shipped_qty" label="出货" width="80" align="right" />
+          <el-table-column prop="receipt_usd" label="收汇$" width="100" align="right">
+            <template #default="{ row }">{{ (+row.receipt_usd).toFixed(2) }}</template>
+          </el-table-column>
+          <el-table-column prop="net_profit" label="净利" width="110" align="right">
+            <template #default="{ row }">
+              <span v-if="+(row.profit_ready ?? 0)">{{ (+row.net_profit).toFixed(2) }}</span>
+              <span v-else class="muted">待收汇</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="status" label="状态" width="90">
+            <template #default="{ row }">{{ row.status === 'CONFIRMED' ? '已结算' : '待收汇' }}</template>
+          </el-table-column>
+          <el-table-column prop="shipment_ids" label="圈定批次" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.shipment_ids || '全量' }}</template>
+          </el-table-column>
+        </el-table>
+      </template>
+    </el-dialog>
+
     <!-- 登记收汇弹窗（逐笔汇率+银行水单） -->
     <el-dialog v-model="addReceiptVisible" title="登记收汇" width="460px">
       <el-form ref="addReceiptFormRef" :model="receiptForm" :rules="receiptRules" label-width="90px">
@@ -487,7 +550,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search, Refresh, Plus } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
@@ -688,6 +751,7 @@ const createVisible = ref(false);
 const createFormRef = ref<FormInstance>();
 const createForm = reactive({
   order_id: undefined as number | undefined,
+  shipment_ids: [] as number[],
   exchange_rate: undefined as number | undefined,
   invoice_amount_usd: undefined as number | undefined,
   receipt_usd: undefined as number | undefined,
@@ -702,10 +766,46 @@ const createForm = reactive({
 const createRules: FormRules = {
   order_id: [{ required: true, message: '请输入订单ID', trigger: 'blur' }],
 };
+const orderShipments = ref<any[]>([]);
+function toggleBatch(id: number, on: boolean) {
+  const i = createForm.shipment_ids.indexOf(id);
+  if (on && i < 0) createForm.shipment_ids.push(id);
+  if (!on && i >= 0) createForm.shipment_ids.splice(i, 1);
+}
+watch(() => createForm.order_id, async (oid) => {
+  orderShipments.value = [];
+  createForm.shipment_ids = [];
+  if (!oid) return;
+  try {
+    const res: any = await orderApi.get(oid);
+    orderShipments.value = (res?.data ?? res)?.shipments ?? [];
+  } catch { orderShipments.value = []; }
+});
+
+// 同步发票收汇(Q12/Q3):按订单在各发票款项占比分摊逐笔收汇
+async function doPullInvoice() {
+  const res: any = await settlementApi.pullInvoiceReceipts(detailData.value.id);
+  await reloadDetail();
+  const n = ((res?.data ?? res)?.receipt_usd ?? 0);
+  ElMessage.success(`已同步发票分摊收汇,累计 $${(+n).toFixed(2)}`);
+  load();
+}
+
+// 款号累计视图(Q18)
+const aggVisible = ref(false);
+const aggStyleNo = ref('');
+const aggData = ref<any>(null);
+function openAggregate() { aggVisible.value = true; }
+async function loadAggregate() {
+  if (!aggStyleNo.value.trim()) { ElMessage.warning('请输入款号'); return; }
+  const res: any = await settlementApi.aggregate({ style_no: aggStyleNo.value.trim() });
+  aggData.value = res?.data ?? res;
+}
+
 function openCreate() { createVisible.value = true; }
 function resetCreateForm() {
   Object.assign(createForm, {
-    order_id: undefined, exchange_rate: undefined, invoice_amount_usd: undefined, receipt_usd: undefined,
+    order_id: undefined, shipment_ids: [], exchange_rate: undefined, invoice_amount_usd: undefined, receipt_usd: undefined,
     freight_fee: undefined, express_fee: undefined, sample_fee: undefined, other_fee: undefined,
     tax_refund: undefined, description: '', costs: [],
   });
@@ -799,6 +899,7 @@ async function doAddReceipt() {
 .muted { color: var(--el-text-color-secondary); }
 .badge-bar { display:flex; gap:18px; padding: 0 4px 12px; }
 .unpaid-grey { color: var(--el-text-color-secondary); }
+.batch-scope { display:flex; flex-wrap:wrap; gap:4px 14px; }
 .hint-inline { font-size: 12px; color: var(--el-text-color-secondary); margin-left: 8px; }
 :deep(.row-unpaid) { color: var(--el-text-color-disabled); background: var(--el-fill-color-lighter); }
 .agg-hint { font-size: 12px; color: #3E8E7E; background: var(--el-fill-color-light); border-radius: 4px; padding: 8px 10px; margin-bottom: 12px; }

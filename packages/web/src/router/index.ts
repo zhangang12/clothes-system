@@ -42,6 +42,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'reconciliations', name: 'Reconciliations', component: () => import('../views/reconciliation/ReconciliationListView.vue') },
       { path: 'payments', name: 'Payments', component: () => import('../views/payment/PaymentListView.vue') },
       { path: 'settlements', name: 'Settlements', component: () => import('../views/settlement/SettlementListView.vue') },
+      { path: 'export-invoices', name: 'ExportInvoices', component: () => import('../views/invoice/ExportInvoiceView.vue') },
       { path: 'reports', name: 'Reports', component: () => import('../views/report/ReportView.vue') },
       { path: 'company-profiles', name: 'CompanyProfiles', component: () => import('../views/company/CompanyProfileView.vue') },
       { path: 'dicts', name: 'DictManage', component: () => import('../views/dict/DictManageView.vue') },
