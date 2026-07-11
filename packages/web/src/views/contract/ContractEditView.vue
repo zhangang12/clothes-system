@@ -128,8 +128,15 @@
             </el-tooltip>
           </template>
         </el-table-column>
-        <el-table-column :label="isProcess ? '加工单价(RMB) ✏️' : '单价(元)'" width="120">
-          <template #default="{ row }"><el-input-number v-model="row.unit_price" :min="0" :precision="4" size="small" :controls="false" style="width:100%" :disabled="!editable" /></template>
+        <el-table-column :label="isProcess ? '加工单价(RMB) ✏️' : '单价(元)'" width="150">
+          <template #default="{ row }">
+            <div style="display:flex;align-items:center;gap:2px">
+              <el-input-number v-model="row.unit_price" :min="0" :precision="4" size="small" :controls="false" style="flex:1" :disabled="!editable" />
+              <el-tooltip content="取历史同款价(最近合同,P3#41)" placement="top">
+                <el-button v-if="editable" link size="small" @click="fetchPriceHint(row)">🕘</el-button>
+              </el-tooltip>
+            </div>
+          </template>
         </el-table-column>
         <el-table-column :label="isProcess ? '总价(RMB)' : '小计(元)'" width="110" align="right">
           <template #default="{ row }">{{ lineAmount(row) }}</template>
@@ -225,7 +232,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { contractApi } from '@/api/contract';
 import { factoryApi } from '@/api/factory';
 import { orderApi } from '@/api/order';
@@ -331,6 +338,23 @@ function removeStyleNo(s: string) {
 
 // 货物明细
 const selectedLines = ref<any[]>([]);
+// 历史同款价提示(P3#41/CON C3半):同款号+品名最近合同单价,点击带入
+async function fetchPriceHint(row: any) {
+  const styleNo = row.style_no || styleNoList.value[0] || '';
+  if (!styleNo) { ElMessage.warning('请先填写款号'); return; }
+  try {
+    const res: any = await contractApi.priceHint(styleNo, row.item_name || undefined);
+    const hints = res?.data ?? [];
+    if (!hints.length) { ElMessage.info('无历史同款价格记录'); return; }
+    const h = hints[0];
+    await ElMessageBox.confirm(
+      `历史价:${(+h.unit_price).toFixed(4)}（${h.contract_no} · ${h.item_name}）,带入当前行?`,
+      '历史同款价', { confirmButtonText: '带入', cancelButtonText: '取消', type: 'info' },
+    );
+    row.unit_price = +h.unit_price;
+  } catch { /* 取消 */ }
+}
+
 const lineAmount = (row: any) => (((+row.qty || 0) * (+row.unit_price || 0))).toFixed(2);
 const totalAmount = computed(() => form.materials.reduce((s: number, m: any) => s + (+m.qty || 0) * (+m.unit_price || 0), 0));
 const totalQty = computed(() => form.materials.reduce((s: number, m: any) => s + (+m.qty || 0), 0));

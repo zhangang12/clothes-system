@@ -46,8 +46,8 @@ export class PaymentController {
 
   // ——— Payment Request ———
   @Post('requests')
-  @Roles(UserRole.ADMIN, UserRole.FINANCE)
-  @ApiOperation({ summary: '创建付款申请' })
+  @Roles(UserRole.ADMIN, UserRole.FINANCE, UserRole.BUSINESS)
+  @ApiOperation({ summary: '创建付款申请（业务可发起无合同付款，P3#40/对账E3）' })
   createPaymentRequest(@Body() dto: CreatePaymentRequestDto, @Request() req: any) {
     return this.service.createPaymentRequest(dto, req.user.id);
   }
@@ -63,9 +63,11 @@ export class PaymentController {
     @Query('end_date') endDate?: string,
     @Query('due_start') dueStart?: string,
     @Query('due_end') dueEnd?: string,
+    @Query('paid_start') paidStart?: string,
+    @Query('paid_end') paidEnd?: string,
   ) {
     return this.service.findPaymentRequests(
-      factoryId ? Number(factoryId) : undefined, approvalStatus, page, size, startDate, endDate, dueStart, dueEnd);
+      factoryId ? Number(factoryId) : undefined, approvalStatus, page, size, startDate, endDate, dueStart, dueEnd, paidStart, paidEnd);
   }
 
   @Patch('requests/:id/submit')
@@ -76,14 +78,14 @@ export class PaymentController {
   }
 
   @Patch('requests/:id/approve')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.FINANCE)
   @ApiOperation({ summary: '审批通过（PENDING→APPROVED）+ 冲抵预付款' })
   approvePaymentRequest(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
     return this.service.approvePaymentRequest(id, req.user.id);
   }
 
   @Patch('requests/:id/reject')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.FINANCE)
   @ApiOperation({ summary: '驳回付款申请（PENDING→REJECTED）' })
   rejectPaymentRequest(
     @Param('id', ParseIntPipe) id: number,

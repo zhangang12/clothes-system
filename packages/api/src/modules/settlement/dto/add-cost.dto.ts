@@ -6,9 +6,8 @@ export class AddCostDto {
   @IsString()
   cost_name: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: '金额;负数=退运/索赔冲减行(P3#39/结算Q19)' })
   @IsNumber()
-  @IsPositive()
   amount: number;
 
   @ApiPropertyOptional({ default: 1 })

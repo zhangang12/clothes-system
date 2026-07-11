@@ -34,6 +34,7 @@ export class PaymentService {
       used_amount: 0,
       balance: dto.amount,
       pay_date: dto.pay_date as any,
+      style_no: dto.style_no ?? null,
       remark: dto.remark ?? null,
       created_by: createdBy,
     });
@@ -125,6 +126,9 @@ export class PaymentService {
         approval_status: PaymentApprovalStatus.DRAFT,
         description: dto.description ?? null,
         created_by: createdBy,
+        bank_name: dto.bank_name ?? null,
+        bank_account: dto.bank_account ?? null,
+        related_style_no: dto.related_style_no ?? null,
       });
       return manager.save(pr);
     });
@@ -136,6 +140,8 @@ export class PaymentService {
     dto: { pay_method?: string; pay_date: string; amount: number; slip_url?: string; remark?: string },
     userId: number,
   ) {
+    // 水单必填(P3#40/对账E2):付款动作必须留水单凭证
+    if (!dto?.slip_url) throw new BadRequestException('请上传银行水单后再登记付款');
     if (!(dto.amount > 0)) throw new BadRequestException('本次付款金额须大于 0');
     return this.dataSource.transaction(async (manager) => {
       const pr = await manager.findOne(PaymentRequest, {
@@ -208,6 +214,8 @@ export class PaymentService {
     endDate?: string,
     dueStart?: string,
     dueEnd?: string,
+    paidStart?: string,
+    paidEnd?: string,
   ) {
     const where: any = { deleted: 0 };
     if (factoryId) where.factory_id = factoryId;
@@ -224,6 +232,10 @@ export class PaymentService {
     if (dueStart && dueEnd) where.due_date = Between(dueStart, dueEnd);
     else if (dueStart) where.due_date = MoreThanOrEqual(dueStart);
     else if (dueEnd) where.due_date = LessThanOrEqual(dueEnd);
+    // 付款日范围(P3#40/对账A3:检索维度切换——按实际付款时间 slip_uploaded_at)
+    if (paidStart && paidEnd) where.slip_uploaded_at = Between(`${paidStart} 00:00:00`, `${paidEnd} 23:59:59`);
+    else if (paidStart) where.slip_uploaded_at = MoreThanOrEqual(`${paidStart} 00:00:00`);
+    else if (paidEnd) where.slip_uploaded_at = LessThanOrEqual(`${paidEnd} 23:59:59`);
 
     size = Math.min(Math.max(Number(size) || 20, 1), 100); page = Math.max(Number(page) || 1, 1); // 分页钳制
     const [items, total] = await this.prRepo.findAndCount({
@@ -285,6 +297,7 @@ export class PaymentService {
   }
 
   async markPaid(id: number, slipUrl: string, paidBy: number): Promise<PaymentRequest> {
+    if (!slipUrl) throw new BadRequestException('请上传银行水单后再标记付款');
     const pr = await this.prRepo.findOne({ where: { id, deleted: 0 } });
     if (!pr) throw new NotFoundException(`付款申请 #${id} 不存在`);
     if (pr.approval_status !== PaymentApprovalStatus.APPROVED) {

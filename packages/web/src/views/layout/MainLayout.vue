@@ -12,6 +12,7 @@
           <el-menu-item index="/factories">工厂管理</el-menu-item>
           <el-menu-item index="/customers">客户管理</el-menu-item>
           <el-menu-item v-if="!isProduction" index="/company-profiles">本司主体</el-menu-item>
+          <el-menu-item v-if="isAdmin" index="/dicts">字典维护</el-menu-item>
         </el-sub-menu>
         <el-menu-item index="/samples"><el-icon><Shirt /></el-icon>样衣管理</el-menu-item>
         <el-menu-item v-if="!isProduction" index="/quotes"><el-icon><Document /></el-icon>客户报价</el-menu-item>

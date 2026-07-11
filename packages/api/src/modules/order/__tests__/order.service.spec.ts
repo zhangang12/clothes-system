@@ -53,6 +53,7 @@ const mockQuoteRepo = { findOne: jest.fn() };
 const mockQuoteItemRepo = { find: jest.fn().mockResolvedValue([]) };
 const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn().mockResolvedValue(1), expire: jest.fn() };
 const mockDataSource = {
+  query: jest.fn().mockResolvedValue([]),
   transaction: jest.fn().mockImplementation((cb) => cb({
     create: jest.fn().mockImplementation((_, v) => v),
     save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),

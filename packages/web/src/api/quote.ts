@@ -18,6 +18,9 @@ export const quoteApi = {
     http.patch<unknown, { data: Quotation }>(`/quotes/${id}/approve`),
   adjust: (id: number) =>
     http.patch<unknown, { data: Quotation }>(`/quotes/${id}/adjust`),
+  // 报价历史迁移导入(P3#43)
+  importBatch: (rows: any[]) =>
+    http.post<unknown, any>('/quotes/import', { rows }),
   toContract: (id: number) =>
     http.patch<unknown, { data: Quotation }>(`/quotes/${id}/to-contract`),
   copy: (id: number, withItems = true) =>

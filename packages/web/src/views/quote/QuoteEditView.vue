@@ -123,7 +123,6 @@
         <div class="table-scroll">
           <el-table :data="form.items" size="small" border @selection-change="(v: any[]) => selItems = v">
             <el-table-column type="selection" width="38" />
-            <el-table-column label="部位" width="90"><template #default="{ row }"><el-input v-model="row.part" size="small" /></template></el-table-column>
             <el-table-column label="品名" min-width="150" fixed>
               <template #default="{ row }">
                 <el-input v-model="row.itemName" size="small" />
@@ -131,6 +130,7 @@
                 <el-tag v-else-if="row.usageIsEstimate" type="info" size="small" style="margin-top:2px">单耗为预估</el-tag>
               </template>
             </el-table-column>
+            <el-table-column label="部位" width="90"><template #default="{ row }"><el-input v-model="row.part" size="small" /></template></el-table-column>
             <el-table-column label="门幅" width="80"><template #default="{ row }"><el-input v-model="row.width" size="small" /></template></el-table-column>
             <el-table-column label="颜色" width="80"><template #default="{ row }"><el-input v-model="row.color" size="small" /></template></el-table-column>
             <el-table-column label="供应商" min-width="120"><template #default="{ row }"><el-input v-model="row.supplier" size="small" /></template></el-table-column>

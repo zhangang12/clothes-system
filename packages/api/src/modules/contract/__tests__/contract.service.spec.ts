@@ -55,6 +55,8 @@ const mockMatrixRepo = {
 };
 const mockSupplierRepo = {
   findOne: jest.fn().mockResolvedValue({ id: 1, factory_id: 5, status: 1 }),
+  create: jest.fn().mockImplementation((v: any) => v),
+  save: jest.fn().mockImplementation((v: any) => Promise.resolve({ ...v, id: 9 })),
 };
 const mockOrderRepo = {
   findOne: jest.fn().mockResolvedValue({ id: 10, qty_total: 1000, deleted: 0 }),
@@ -201,10 +203,12 @@ describe('ContractService', () => {
     ]);
     mockFactoryRepo.findOne
       .mockResolvedValueOnce({ id: 7, name: '面料厂A', deleted: 0 })
-      .mockResolvedValueOnce({ id: 8, name: '辅料厂B', deleted: 0 });
+      .mockResolvedValueOnce({ id: 8, name: '辅料厂B', deleted: 0 })
+      // 占位工厂查询(P3#41):库里已有「待定供应商」
+      .mockResolvedValueOnce({ id: 99, name: '待定供应商', deleted: 0 });
     const result = await service.generateFromOrder(10, 1);
-    expect(result.created).toBe(2); // 面料厂A + 辅料厂B
-    expect(result.unmatched).toContain('未指定供应商'); // 空供应商无法匹配工厂
+    expect(result.created).toBe(3); // 面料厂A + 辅料厂B + 待定供应商占位(P3#41)
+    expect(result.unmatched).toContain('未指定供应商'); // 仍回报未匹配清单供改绑
   });
 
   // UT-CON-03: push transitions DRAFT → PUSHED and logs action
@@ -224,12 +228,19 @@ describe('ContractService', () => {
     await expect(service.push(1, 'admin')).rejects.toThrow(BadRequestException);
   });
 
-  // UT-CON-04b: push throws when factory has no bound portal account (A5 死流程防护)
-  it('UT-CON-04b push throws BadRequest when factory has no active portal account', async () => {
+  // UT-CON-04b: 首次推送自动开通门户账号(P3#41/CON B3——原为拦截,现自动建号)
+  it('UT-CON-04b push auto-opens portal account when factory has none', async () => {
     const contract = makeContract({ portal_status: ContractPortalStatus.DRAFT });
     mockRepo.findOne.mockResolvedValue(contract);
-    mockSupplierRepo.findOne.mockResolvedValueOnce(null);
-    await expect(service.push(1, 'admin')).rejects.toThrow(BadRequestException);
+    mockRepo.save.mockImplementation((v: any) => Promise.resolve(v));
+    mockSupplierRepo.findOne.mockResolvedValue(null); // 无账号 + 用户名查重均为空
+    mockFactoryRepo.findOne.mockResolvedValueOnce({ id: 1, factory_no: 'S007', deleted: 0 });
+    mockSupplierRepo.create.mockImplementation((v: any) => v);
+    mockSupplierRepo.save.mockImplementation((v: any) => Promise.resolve({ ...v, id: 9 }));
+    const result: any = await service.push(1, 'admin');
+    expect(result.auto_opened_account).toBe('s007');
+    expect(mockSupplierRepo.save).toHaveBeenCalledWith(expect.objectContaining({ factory_id: contract.factory_id, status: 1 }));
+    mockSupplierRepo.findOne.mockResolvedValue({ id: 1, status: 1 }); // 恢复默认给后续用例
   });
 
   // UT-CON-04c: recall transitions PUSHED → DRAFT, marks revised, logs RECALL

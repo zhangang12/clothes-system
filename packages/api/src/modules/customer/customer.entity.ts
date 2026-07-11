@@ -97,6 +97,9 @@ export class Customer {
   @Column({ type: 'text', nullable: true })
   remark: string;
 
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
+  commission_rate: number; // 中间商默认佣金率%（建单带出，P3#36/ORD B8）
+
   @Column({ type: 'bigint', nullable: true })
   created_by: number;
 

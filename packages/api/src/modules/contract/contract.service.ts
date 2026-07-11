@@ -154,18 +154,36 @@ export class ContractService {
 
     const created: Contract[] = [];
     const unmatched: string[] = [];
+    // 待定供应商占位(P3#41/CON C2):未匹配供应商也生成合同,挂「待定供应商」占位工厂,后续改绑
+    let placeholder: Factory | null = null;
+    const getPlaceholder = async (): Promise<Factory> => {
+      if (placeholder) return placeholder;
+      placeholder = await this.factoryRepo.findOne({ where: { name: '待定供应商', deleted: 0 } });
+      if (!placeholder) {
+        placeholder = await this.factoryRepo.save(this.factoryRepo.create({
+          factory_no: 'S000', name: '待定供应商', type: 'OTHER', status: 1, deleted: 0,
+          contact_name: '-', contact_phone: '-',
+        } as any) as any) as Factory;
+      }
+      return placeholder;
+    };
     for (const [supplier, mats] of groups) {
       // 供应商名匹配工厂库（供应商须落工厂库，设计稿 订单 B9）
-      const factory = supplier === '未指定供应商'
+      let factory = supplier === '未指定供应商'
         ? null
         : await this.factoryRepo.findOne({ where: { name: supplier, deleted: 0 } });
-      if (!factory) { unmatched.push(supplier); continue; }
+      if (!factory) {
+        unmatched.push(supplier);
+        factory = await getPlaceholder();
+      }
+      const isPlaceholder = factory.name === '待定供应商';
       const contract = await this.create(
         {
           type: ContractType.MATERIAL,
           factory_id: factory.id,
           order_id: orderId,
           currency: order.currency ?? 'CNY',
+          remark: isPlaceholder ? `供应商待定（用料填写:${supplier}）——确定后在草稿改绑真实供应商` : undefined,
           materials: mats.flatMap((m) =>
             this.expandMaterialLines(m, matrixRows, order.style_no ?? null, lineDelivery)) as any,
         } as CreateContractDto,
@@ -315,6 +333,18 @@ export class ContractService {
 
       return contract;
     });
+  }
+
+  // 加工价历史同款提示(P3#41/CON C3半):同款号+同品名最近一次合同单价
+  async priceHint(styleNo: string, itemName?: string) {
+    const qb = this.materialRepo.createQueryBuilder('m')
+      .innerJoin(Contract, 'c', 'c.id = m.contract_id AND c.deleted = 0')
+      .select(['m.item_name AS item_name', 'm.unit_price AS unit_price', 'c.contract_no AS contract_no', 'c.type AS type'])
+      .where('(m.style_no = :styleNo OR c.style_nos LIKE :like)', { styleNo, like: `%${styleNo}%` })
+      .orderBy('m.id', 'DESC')
+      .limit(5);
+    if (itemName) qb.andWhere('m.item_name = :itemName', { itemName });
+    return qb.getRawMany();
   }
 
   async findAll(query: QueryContractDto) {
@@ -478,10 +508,26 @@ export class ContractService {
         throw new BadRequestException(`合同金额 ${contract.total_amount} 超过审批阈值 ${threshold}，需主管审批后方可推送`);
       }
     }
-    // 推送前校验工厂已绑定门户账号，避免推送后无人能登录处理（设计稿 A5：静默死流程）
-    const account = await this.supplierRepo.findOne({ where: { factory_id: contract.factory_id, status: 1 } });
+    // 首次推送自动开通门户账号(P3#41/CON B3):无账号时按工厂编号自动建(默认密码 Factory@123,提示改密)
+    let account = await this.supplierRepo.findOne({ where: { factory_id: contract.factory_id, status: 1 } });
+    let autoOpened: string | null = null;
     if (!account) {
-      throw new BadRequestException('该工厂尚未开通供应商门户账号，请先在工厂档案开通后再推送');
+      const factory = await this.factoryRepo.findOne({ where: { id: contract.factory_id, deleted: 0 } });
+      const base = (factory?.factory_no || `f${contract.factory_id}`).toLowerCase();
+      let username = base;
+      for (let i = 0; i < 5; i++) {
+        const exists = await this.supplierRepo.findOne({ where: { account: username } });
+        if (!exists) break;
+        username = `${base}${i + 1}`;
+      }
+      const bcrypt = await import('bcryptjs');
+      account = await this.supplierRepo.save(this.supplierRepo.create({
+        account: username,
+        password: await bcrypt.hash('Factory@123', 10),
+        factory_id: contract.factory_id,
+        status: 1,
+      } as any) as any) as any;
+      autoOpened = username;
     }
     contract.portal_status = ContractPortalStatus.PUSHED;
     contract.pushed_at = new Date();
@@ -492,9 +538,10 @@ export class ContractService {
       action: 'PUSH',
       operator: operatorUsername,
       operator_type: PortalOperatorType.INTERNAL,
+      remark: autoOpened ? `首次推送自动开通门户账号:${autoOpened}(初始密码 Factory@123,请通知供应商修改)` : undefined,
     }));
 
-    return contract;
+    return { ...(contract as any), auto_opened_account: autoOpened } as any;
   }
 
   // 撤销推送（PUSHED → DRAFT）：供应商尚未盖章前可撤回修改，修改后重推门户提示「合同已更新」

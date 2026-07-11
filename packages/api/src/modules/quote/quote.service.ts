@@ -328,14 +328,21 @@ export class QuoteService {
       throw new BadRequestException('只有草稿/客户调整状态可发出报价');
     }
     // 金额阈值审批：报价合计超阈值需主管审批后方可发出（设计稿 审批矩阵，阈值可配）
+    // 利润率下限审批(P3#42/qc D8;系统参数 quote.min_profit_rate,默认0=不启用)
     if (quote.approval_status !== ApprovalStatus.APPROVED) {
       const threshold = await this.config.getNumber(APPROVAL_THRESHOLD_KEYS.QUOTE);
-      if (threshold > 0 && +quote.rmb_total > threshold) {
+      const minProfit = await this.config.getNumber('quote.min_profit_rate', 0);
+      const reasons: string[] = [];
+      if (threshold > 0 && +quote.rmb_total > threshold) reasons.push(`报价金额 ${quote.rmb_total} 超过审批阈值 ${threshold}`);
+      if (minProfit > 0 && +(quote.profit_rate ?? 0) < minProfit) {
+        reasons.push(`利润率 ${quote.profit_rate ?? 0}% 低于下限 ${minProfit}%`);
+      }
+      if (reasons.length) {
         if (quote.approval_status !== ApprovalStatus.PENDING) {
           quote.approval_status = ApprovalStatus.PENDING;
           await this.quoteRepo.save(quote);
         }
-        throw new BadRequestException(`报价金额 ${quote.rmb_total} 超过审批阈值 ${threshold}，需主管审批后方可发出报价`);
+        throw new BadRequestException(`${reasons.join('；')}，需主管审批后方可发出报价`);
       }
     }
     quote.status = QuoteStatus.QUOTED;
@@ -393,6 +400,44 @@ export class QuoteService {
     // 报价明细 → 订单材料明细（快照；importFromQuote 会带出中间商/买家等基础字段）
     await this.orderService.importFromQuote(order.id, id);
     return { ...saved, order_id: order.id, order_no: order.order_no };
+  }
+
+  // 报价历史导入(P3#43/TRI J2):历史报价批量入库(仅主表要点:款号/客户/币种/汇率/合计),
+  // 状态默认 QUOTED;客户按名精确匹配
+  async importBatch(rows: Array<Record<string, any>>, createdBy: number) {
+    const failures: Array<{ row: number; reason: string }> = [];
+    let ok = 0;
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      try {
+        if (!r.customer_name) throw new Error('缺客户名称');
+        const [cust] = await this.dataSource.query(
+          'SELECT id, name FROM customer WHERE name = ? AND deleted = 0 LIMIT 1', [String(r.customer_name).trim()]);
+        if (!cust) throw new Error(`客户「${r.customer_name}」不存在(先在基础资料建档)`);
+        const quote_no = await this.numbering.next(NUM_PREFIX.QUOTATION);
+        await this.quoteRepo.save(this.quoteRepo.create({
+          quote_no,
+          customer_id: +cust.id,
+          middleman_name: cust.name,
+          style_no: r.style_no ? String(r.style_no) : null,
+          inquiry_date: r.inquiry_date || null,
+          currency: r.currency ? String(r.currency).toUpperCase() : 'USD',
+          exchange_rate: r.exchange_rate != null && r.exchange_rate !== '' ? +r.exchange_rate : null,
+          quote_qty: +r.quote_qty || 0,
+          rmb_total: r.rmb_total != null && r.rmb_total !== '' ? +r.rmb_total : null,
+          usd_total: r.usd_total != null && r.usd_total !== '' ? +r.usd_total : null,
+          salesperson: r.salesperson ? String(r.salesperson) : null,
+          total_remark: r.remark ? String(r.remark) : '历史迁移导入',
+          status: QuoteStatus.QUOTED,
+          created_by: createdBy,
+          deleted: 0,
+        } as any) as any);
+        ok++;
+      } catch (e: any) {
+        failures.push({ row: i + 1, reason: e?.message ?? '未知错误' });
+      }
+    }
+    return { ok, fail: failures.length, failures };
   }
 
   // 复制：withItems=true 含明细/费用；false 仅复制基本信息（设计稿：复制可选是否带明细）

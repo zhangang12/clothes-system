@@ -48,6 +48,9 @@ export class OrderMain {
   @Column({ type: 'decimal', precision: 6, scale: 2, default: 0 })
   commission_rate: number; // 佣金%
 
+  @Column({ length: 50, nullable: true })
+  external_no: string; // 外部单号（在产订单迁移导入的原系统单号，P3#43/ORD D10）
+
   @Column({ type: 'bigint', nullable: true })
   factory_id: number; // 生产工厂（可后填，绑定订单）
 

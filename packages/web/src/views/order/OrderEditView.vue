@@ -97,8 +97,8 @@
           <el-table :data="form.matrix.rows" size="small" border show-summary :summary-method="matrixSummary" @selection-change="(v: any[]) => selSizes = v">
             <el-table-column v-if="!readonly" type="selection" width="38" />
             <el-table-column label="款号" min-width="120"><template #default="{ row }"><el-input v-model="row.style_no" size="small" :disabled="readonly" /></template></el-table-column>
-            <el-table-column label="颜色" width="96"><template #default="{ row }"><el-input v-model="row.color" size="small" :disabled="readonly" /></template></el-table-column>
-            <el-table-column label="尺码" width="84"><template #default="{ row }"><el-input v-model="row.size" size="small" :disabled="readonly" /></template></el-table-column>
+            <el-table-column label="颜色" width="110"><template #default="{ row }"><DictSelect v-model="row.color" type="color" size="small" placeholder="字典选" :disabled="readonly" /></template></el-table-column>
+            <el-table-column label="尺码" width="100"><template #default="{ row }"><DictSelect v-model="row.size" type="size" size="small" placeholder="字典选" :disabled="readonly" /></template></el-table-column>
             <el-table-column v-for="(p, pi) in form.matrix.pos" :key="pi" :min-width="130" align="center">
               <template #header>
                 <div class="po-head">

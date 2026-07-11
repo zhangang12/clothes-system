@@ -4,6 +4,7 @@
       <div class="toolbar">
         <div class="tools-left">
           <el-button v-if="canEdit" type="primary" :icon="Plus" @click="goCreate">新建</el-button>
+          <el-button v-if="isAdmin" plain @click="importDialog = true">历史导入</el-button>
           <el-button v-if="canEdit" plain :icon="DocumentAdd" @click="openFromSample">从样衣建报价</el-button>
           <el-button plain :icon="Download" @click="exportCsv">导出</el-button>
           <el-button plain :icon="Printer" :disabled="!selected.length" @click="batchPrint">
@@ -110,6 +111,23 @@
         <el-button type="primary" :disabled="!fromSampleId" :loading="fromSampleLoading" @click="createFromSample">创建</el-button>
       </template>
     </el-dialog>
+
+    <!-- 报价历史迁移导入(P3#43/TRI J2) -->
+    <el-dialog v-model="importDialog" title="报价历史迁移导入" width="640px">
+      <div class="hint" style="margin-bottom:8px">
+        每行一条,列序(Tab/逗号分隔):<b>客户名称,款号,询价日期(YYYY-MM-DD),币种,汇率,数量,人民币合计,美金合计,业务员,备注</b>。客户须先建档,导入后状态=已报价。
+      </div>
+      <el-input v-model="importText" type="textarea" :rows="10" placeholder="从 Excel 复制粘贴到此处" />
+      <div v-if="importResult" style="margin-top:8px">
+        <el-alert :type="importResult.fail ? 'warning' : 'success'" :closable="false"
+          :title="`成功 ${importResult.ok} 条,失败 ${importResult.fail} 条`" />
+        <div v-for="f in importResult.failures" :key="f.row" class="hint">第{{ f.row }}行:{{ f.reason }}</div>
+      </div>
+      <template #footer>
+        <el-button @click="importDialog = false">关闭</el-button>
+        <el-button type="primary" :loading="importing" :disabled="!importText.trim()" @click="doImport">导入</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -126,8 +144,30 @@ import { useAuthStore } from '@/stores/auth';
 import { UserRole, QUOTE_STATUS_LABEL } from '@i9/types';
 
 const router = useRouter();
+
+// 报价历史迁移导入(P3#43)
+const importDialog = ref(false);
+const importText = ref('');
+const importing = ref(false);
+const importResult = ref<any>(null);
+async function doImport() {
+  const rows = importText.value.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
+    const c = l.split(/\t|,/).map((x) => x.trim());
+    return {
+      customer_name: c[0], style_no: c[1], inquiry_date: c[2], currency: c[3], exchange_rate: c[4],
+      quote_qty: c[5], rmb_total: c[6], usd_total: c[7], salesperson: c[8], remark: c[9],
+    };
+  });
+  importing.value = true;
+  try {
+    const res: any = await quoteApi.importBatch(rows);
+    importResult.value = res?.data ?? res;
+    if (importResult.value?.ok) load();
+  } finally { importing.value = false; }
+}
 const authStore = useAuthStore();
 const canEdit = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.BUSINESS));
+const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
 const canReview = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.SUPERVISOR));
 const statuses = Object.entries(QUOTE_STATUS_LABEL).map(([value, label]) => ({ value, label }));
 const statusLabel = (s: string) => (QUOTE_STATUS_LABEL as any)[s] ?? s;

@@ -196,7 +196,15 @@
           </el-descriptions-item>
           <el-descriptions-item label="财务及管理费">{{ money(detailData.finance_fee) }}</el-descriptions-item>
           <el-descriptions-item label="期间费用合计">{{ money(periodFeeTotal(detailData)) }}</el-descriptions-item>
-          <el-descriptions-item label="出口退税">{{ money(detailData.tax_refund) }}<el-tag size="small" :type="detailData.refund_status === 'RECEIVED' ? 'success' : 'info'" style="margin-left:6px">{{ detailData.refund_status === 'RECEIVED' ? '已到账' : '预估' }}</el-tag></el-descriptions-item>
+          <el-descriptions-item label="出口退税">
+            {{ money(detailData.tax_refund) }}
+            <el-tag size="small" :type="detailData.refund_status === 'RECEIVED' ? 'success' : 'info'" style="margin-left:6px">{{ detailData.refund_status === 'RECEIVED' ? '已到账' : '预估' }}</el-tag>
+            <el-button
+              v-if="detailData.refund_status !== 'RECEIVED' && canEdit"
+              link type="primary" size="small" style="margin-left:6px"
+              @click="doRefundReceived"
+            >到账确认</el-button>
+          </el-descriptions-item>
           <el-descriptions-item label="保本汇率(含税/不含税)">
             {{ num4(detailData.breakeven_rate_tax) }} / {{ num4(detailData.breakeven_rate_extax) }}
           </el-descriptions-item>
@@ -434,7 +442,8 @@
           <el-input v-model="costForm.cost_name" />
         </el-form-item>
         <el-form-item label="金额" prop="amount">
-          <el-input-number v-model="costForm.amount" :min="0.01" :precision="2" style="width:100%" />
+          <el-input-number v-model="costForm.amount" :precision="2" style="width:100%" placeholder="负数=退运/索赔冲减" />
+          <div class="hint-inline">填负数登记退运/索赔冲减行（结算Q19）</div>
         </el-form-item>
         <el-form-item label="发票">
           <el-select v-model="costForm.has_invoice" style="width:100%">
@@ -479,7 +488,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search, Refresh, Plus } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { settlementApi } from '@/api/settlement';
@@ -567,6 +576,22 @@ async function reloadDetail() {
   detailData.value = full?.data ?? full;
   loadChangeLogs();
 }
+// 退税到账确认(P3#39/结算Q11):可按实到金额覆盖
+async function doRefundReceived() {
+  let amount: number | undefined;
+  try {
+    const { value } = await ElMessageBox.prompt(
+      `确认出口退税到账。可修改为实到金额（当前预估 ${money(detailData.value.tax_refund)}），留空按预估入账。`,
+      '退税到账确认', { inputPlaceholder: '实到金额(选填)', inputPattern: /^\d*(\.\d+)?$/, inputErrorMessage: '请输入数字' },
+    );
+    amount = value ? Number(value) : undefined;
+  } catch { return; }
+  await settlementApi.refundReceived(detailData.value.id, amount);
+  await reloadDetail();
+  ElMessage.success('退税已确认到账');
+  load();
+}
+
 async function doReopen() {
   await settlementApi.reopen(detailData.value.id);
   await reloadDetail();

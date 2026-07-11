@@ -38,6 +38,13 @@ export class OrderController {
     return maskOrder(await this.service.findOne(id, req.user), req.user.role);
   }
 
+  @Post('import')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: '在产订单迁移导入（CSV 行，external_no 存原单号，P3#43）' })
+  importBatch(@Body('rows') rows: Array<Record<string, any>>, @Request() req: any) {
+    return this.service.importBatch(rows ?? [], req.user.id);
+  }
+
   @Post(':id/copy')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
   @ApiOperation({ summary: '复制订单（主表+用料+矩阵为新草稿，P3#34）' })

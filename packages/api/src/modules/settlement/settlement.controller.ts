@@ -97,6 +97,13 @@ export class SettlementController {
     return this.service.refreshCost(id);
   }
 
+  @Patch(':id/refund-received')
+  @Roles(UserRole.ADMIN, UserRole.FINANCE)
+  @ApiOperation({ summary: '退税到账确认（可按实到金额覆盖，留痕，P3#39）' })
+  refundReceived(@Param('id', ParseIntPipe) id: number, @Body('amount') amount: number | undefined, @Request() req: any) {
+    return this.service.refundReceived(id, amount != null ? +amount : undefined, req.user.id);
+  }
+
   @Patch(':id/confirm')
   @Roles(UserRole.ADMIN, UserRole.FINANCE)
   @ApiOperation({ summary: '确认结算单（DRAFT→CONFIRMED）' })

@@ -109,6 +109,7 @@
           <el-col :span="12"><el-form-item label="侧面唛头"><el-input v-model="form.sideMark" type="textarea" :rows="2" /></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="内盒文字"><el-input v-model="form.innerBoxText" type="textarea" :rows="2" /></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="客户备注"><el-input v-model="form.customerRemark" type="textarea" :rows="2" /></el-form-item></el-col>
+          <el-col :span="12"><el-form-item label="默认佣金率%"><el-input-number v-model="form.commissionRate" :min="0" :max="100" :precision="2" :controls="false" placeholder="建单自动带出(P3#36)" style="width:100%" /></el-form-item></el-col>
         </el-row>
       </section-block>
     </el-form>
@@ -175,7 +176,7 @@ const form = reactive<any>({
   city: '', homepage: '', address: '', priceTerms: '', settlementMethod: '', grade: '',
   cooperationLevel: '', customerSource: '', paymentDays: '', businessScope: '', salesperson: authStore.realName || '',
   developDate: new Date().toISOString().slice(0, 10), currency: 'USD', spare1: '', spare2: '', spare3: '',
-  deliveryAddress: '', frontMark: '', sideMark: '', innerBoxText: '', customerRemark: '',
+  deliveryAddress: '', frontMark: '', sideMark: '', innerBoxText: '', customerRemark: '', commissionRate: undefined as number | undefined,
   contacts: [emptyContact()], banks: [emptyBank()], expresses: [emptyExpress()],
 });
 
@@ -231,7 +232,7 @@ async function load() {
     salesperson: d.salesperson ?? '', developDate: d.develop_date ?? '', currency: d.currency ?? 'USD',
     spare1: d.spare1 ?? '', spare2: d.spare2 ?? '', spare3: d.spare3 ?? '',
     deliveryAddress: d.delivery_address ?? '', frontMark: d.front_mark ?? '', sideMark: d.side_mark ?? '',
-    innerBoxText: d.inner_box_text ?? '', customerRemark: d.customer_remark ?? '',
+    innerBoxText: d.inner_box_text ?? '', customerRemark: d.customer_remark ?? '', commissionRate: d.commission_rate != null ? +d.commission_rate : undefined,
     contacts: d.contacts?.length ? d.contacts : [emptyContact()],
     // 子表回显:接口返回 snake_case(entity 列),表单/DTO 用 camelCase。
     // 多词字段(account_name/bank_name/pay_method…)必须映射,否则回显为空且保存时被 clean() 过滤掉→清空子表。
@@ -261,6 +262,7 @@ function buildDto() {
     deliveryAddress: form.deliveryAddress || undefined, frontMark: form.frontMark || undefined,
     sideMark: form.sideMark || undefined, innerBoxText: form.innerBoxText || undefined,
     customerRemark: form.customerRemark || undefined,
+    commissionRate: form.commissionRate ?? undefined,
     contacts: clean(form.contacts, ['name', 'mobile', 'phone']),
     banks: clean(form.banks, ['bankName', 'bankAccount', 'accountName']),
     expresses: clean(form.expresses, ['company', 'account']),

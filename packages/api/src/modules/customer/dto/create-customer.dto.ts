@@ -1,6 +1,5 @@
 import {
-  IsString, IsEnum, IsOptional, IsArray, IsInt, MaxLength, ValidateNested,
-} from 'class-validator';
+  IsString, IsEnum, IsOptional, IsArray, IsInt, MaxLength, ValidateNested, IsNumber } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CustomerGrade, CustomerType } from '@i9/types';
@@ -70,6 +69,8 @@ export class CreateCustomerDto {
   @ApiPropertyOptional() @IsOptional() @IsString() sideMark?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() innerBoxText?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() customerRemark?: string;
+  // 中间商默认佣金率%(建单带出,P3#36)
+  @IsOptional() @IsNumber() commissionRate?: number;
   @ApiPropertyOptional({ example: 'USD' }) @IsOptional() @IsString() @MaxLength(5) currency?: string;
 
   @ApiPropertyOptional({ type: [CustomerContactDto] })

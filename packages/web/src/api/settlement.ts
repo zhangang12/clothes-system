@@ -21,6 +21,8 @@ export const settlementApi = {
     http.patch<unknown, any>(`/settlements/${id}/refresh-cost`),
   stats: () =>
     http.get<unknown, any>('/settlements/stats'),
+  refundReceived: (id: number, amount?: number) =>
+    http.patch<unknown, any>(`/settlements/${id}/refund-received`, amount != null ? { amount } : {}),
   reopen: (id: number) =>
     http.patch<unknown, any>(`/settlements/${id}/reopen`),
   changeLogs: (id: number) =>

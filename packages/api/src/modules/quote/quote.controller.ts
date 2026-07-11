@@ -19,6 +19,13 @@ import { QueryQuoteDto } from './dto/query-quote.dto';
 export class QuoteController {
   constructor(private readonly service: QuoteService) {}
 
+  @Post('import')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: '报价历史迁移导入（CSV 行，P3#43）' })
+  importBatch(@Body('rows') rows: Array<Record<string, any>>, @Request() req: any) {
+    return this.service.importBatch(rows ?? [], req.user.id);
+  }
+
   @Post()
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
   @ApiOperation({ summary: '创建报价单（费用明细自动带6行）' })

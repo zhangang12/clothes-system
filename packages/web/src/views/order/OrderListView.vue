@@ -5,6 +5,7 @@
         <div class="tools-left">
           <el-button v-if="canEdit" type="primary" :icon="Plus" @click="goCreate">新建</el-button>
           <el-button plain :icon="Download" @click="exportCsv">导出</el-button>
+          <el-button v-if="isAdmin" plain :icon="Upload" @click="importDialog = true">历史导入</el-button>
           <el-button v-if="isAdmin" type="danger" plain :icon="Delete" :disabled="!selected.length" @click="batchRemove">
             删除{{ selected.length ? `(${selected.length})` : '' }}
           </el-button>
@@ -94,6 +95,23 @@
       </div>
       <div class="tip">大货总数量 = 尺码数量搭配表所有格子之和；采购量 = 大货总数 × 单件耗用 × (1+损耗%)。</div>
     </div>
+
+    <!-- 在产订单迁移导入(P3#43/ORD D10):CSV/Excel 粘贴行,外部单号留档 -->
+    <el-dialog v-model="importDialog" title="在产订单迁移导入" width="640px">
+      <div class="hint" style="margin-bottom:8px">
+        每行一条,列序(Tab/逗号分隔):<b>外部单号,客户名称,客户PO,款号,品名,数量,币种,单价,交期(YYYY-MM-DD),状态(CONFIRMED/CONTRACTED/PRODUCING/DONE,缺省PRODUCING)</b>。客户须先在基础资料建档(按名精确匹配)。
+      </div>
+      <el-input v-model="importText" type="textarea" :rows="10" placeholder="从 Excel 复制粘贴到此处" />
+      <div v-if="importResult" style="margin-top:8px">
+        <el-alert :type="importResult.fail ? 'warning' : 'success'" :closable="false"
+          :title="`成功 ${importResult.ok} 条,失败 ${importResult.fail} 条`" />
+        <div v-for="f in importResult.failures" :key="f.row" class="hint">第{{ f.row }}行:{{ f.reason }}</div>
+      </div>
+      <template #footer>
+        <el-button @click="importDialog = false">关闭</el-button>
+        <el-button type="primary" :loading="importing" :disabled="!importText.trim()" @click="doImport">导入</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -101,7 +119,7 @@
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Search, Plus, Download, Delete, ArrowDown } from '@element-plus/icons-vue';
+import { Search, Plus, Download, Delete, ArrowDown, Upload } from '@element-plus/icons-vue';
 import { orderApi } from '@/api/order';
 import { contractApi } from '@/api/contract';
 import { printOrder } from '@/utils/orderPrint';
@@ -136,6 +154,27 @@ async function load() {
 function reset() { query.keyword = ''; query.status = undefined; query.page = 1; load(); }
 function goCreate() { router.push({ name: 'OrderCreate' }); }
 function goEdit(row: any) { router.push({ name: 'OrderEdit', params: { id: row.id } }); }
+
+// 在产订单迁移导入(P3#43)
+const importDialog = ref(false);
+const importText = ref('');
+const importing = ref(false);
+const importResult = ref<any>(null);
+async function doImport() {
+  const rows = importText.value.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
+    const c = l.split(/\t|,/).map((x) => x.trim());
+    return {
+      external_no: c[0], customer_name: c[1], customer_po: c[2], style_no: c[3], style_name: c[4],
+      qty_total: c[5], currency: c[6], unit_price: c[7], delivery_date: c[8], status: c[9],
+    };
+  });
+  importing.value = true;
+  try {
+    const res: any = await orderApi.importBatch(rows);
+    importResult.value = res?.data ?? res;
+    if (importResult.value?.ok) load();
+  } finally { importing.value = false; }
+}
 
 // 三套脱敏打印(P3#32/ORD E2)
 async function onPrint(mode: string, row: any) {

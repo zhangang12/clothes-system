@@ -35,6 +35,12 @@ export class ContractController {
     return this.service.generateFromOrder(orderId, req.user.id);
   }
 
+  @Get('price-hint')
+  @ApiOperation({ summary: '历史同款价格提示（同款号+品名最近合同单价，P3#41）' })
+  priceHint(@Query('style_no') styleNo: string, @Query('item_name') itemName?: string) {
+    return this.service.priceHint(styleNo ?? '', itemName);
+  }
+
   @Get()
   @ApiOperation({ summary: '合同列表（分页；版师/打样脱敏供应商成本）' })
   async findAll(@Query() query: QueryContractDto, @Request() req: any) {

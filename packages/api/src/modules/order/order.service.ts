@@ -73,6 +73,13 @@ export class OrderService {
   async create(dto: CreateOrderDto, createdBy: number): Promise<OrderMain> {
     const order_no = await this.numbering.next(NUM_PREFIX.ORDER);
     const today = new Date().toISOString().slice(0, 10);
+    // 中间商默认佣金率带出(P3#36/ORD B8):未显式给佣金时取客户档案默认值
+    let commissionRate = dto.commission_rate;
+    if (commissionRate == null && dto.customer_id) {
+      const [row] = await this.dataSource.query(
+        'SELECT commission_rate FROM customer WHERE id = ? AND deleted = 0', [dto.customer_id]);
+      if (row?.commission_rate != null) commissionRate = +row.commission_rate;
+    }
 
     return this.dataSource.transaction(async (manager) => {
       const order = await manager.save(OrderMain, manager.create(OrderMain, {
@@ -81,7 +88,7 @@ export class OrderService {
         delivery_date: dto.delivery_date as any, qty_total: dto.qty_total, currency: dto.currency ?? 'USD',
         unit_price: dto.unit_price,
         total_amount: dto.unit_price && dto.qty_total ? +(dto.unit_price * dto.qty_total).toFixed(4) : null,
-        commission_rate: dto.commission_rate ?? 0, factory_id: dto.factory_id, salesperson: dto.salesperson,
+        commission_rate: commissionRate ?? 0, factory_id: dto.factory_id, salesperson: dto.salesperson,
         make_date: today, split_mode: dto.split_mode ?? 'NONE', remark: dto.remark,
         att_artwork: dto.att_artwork, att_sizechart: dto.att_sizechart, att_board: dto.att_board,
         att_packing: dto.att_packing, att_filling: dto.att_filling,
@@ -247,6 +254,50 @@ export class OrderService {
     });
   }
 
+  // 在产订单迁移导入(P3#43/ORD D10):历史系统在产单批量入库,external_no 存原单号;
+  // 客户按名精确匹配(找不到记失败行),状态默认 PRODUCING(在产),可指定 CONFIRMED/CONTRACTED/DONE
+  async importBatch(rows: Array<Record<string, any>>, createdBy: number) {
+    const failures: Array<{ row: number; reason: string }> = [];
+    let ok = 0;
+    const ALLOWED = ['CONFIRMED', 'CONTRACTED', 'PRODUCING', 'DONE'];
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      try {
+        if (!r.customer_name) throw new Error('缺客户名称');
+        const [cust] = await this.dataSource.query(
+          'SELECT id, name FROM customer WHERE name = ? AND deleted = 0 LIMIT 1', [String(r.customer_name).trim()]);
+        if (!cust) throw new Error(`客户「${r.customer_name}」不存在(先在基础资料建档)`);
+        const status = ALLOWED.includes(String(r.status ?? '').toUpperCase()) ? String(r.status).toUpperCase() : 'PRODUCING';
+        const order_no = await this.numbering.next(NUM_PREFIX.ORDER);
+        const qty = +r.qty_total || 0;
+        const price = r.unit_price != null && r.unit_price !== '' ? +r.unit_price : null;
+        await this.orderRepo.save(this.orderRepo.create({
+          order_no,
+          external_no: r.external_no ? String(r.external_no).slice(0, 50) : null,
+          customer_id: +cust.id,
+          middleman_name: cust.name,
+          customer_po: r.customer_po ? String(r.customer_po) : null,
+          style_no: r.style_no ? String(r.style_no) : null,
+          style_name: r.style_name ? String(r.style_name) : null,
+          qty_total: qty,
+          currency: r.currency ? String(r.currency).toUpperCase() : 'CNY',
+          unit_price: price,
+          total_amount: price != null && qty ? +(price * qty).toFixed(4) : null,
+          delivery_date: r.delivery_date || null,
+          salesperson: r.salesperson ? String(r.salesperson) : null,
+          remark: r.remark ? String(r.remark) : '历史迁移导入',
+          status,
+          created_by: createdBy,
+          deleted: 0,
+        } as any) as any);
+        ok++;
+      } catch (e: any) {
+        failures.push({ row: i + 1, reason: e?.message ?? '未知错误' });
+      }
+    }
+    return { ok, fail: failures.length, failures };
+  }
+
   // 订单复制(P3#34/qc I5):同客户复购/同款改单——复制主表+用料+尺码矩阵为新草稿
   async copy(id: number, createdBy: number): Promise<OrderMain> {
     const src = await this.orderRepo.findOne({ where: { id, deleted: 0 } });
@@ -289,12 +340,21 @@ export class OrderService {
     // 金额阈值审批：下单（草稿→已下单）时订单金额超阈值需主管审批（设计稿 审批矩阵，阈值可配）
     if (order.status === OrderStatus.DRAFT && order.approval_status !== ApprovalStatus.APPROVED) {
       const threshold = await this.config.getNumber(APPROVAL_THRESHOLD_KEYS.ORDER);
-      if (threshold > 0 && +order.total_amount > threshold) {
+      // 佣金>阈值 或 币种=USD 触发审批(P3#36/ORD D7;系统参数,默认0=不启用)
+      const commissionThreshold = await this.config.getNumber('approval.order.commission_threshold', 0);
+      const usdRequired = await this.config.getNumber('approval.order.usd_required', 0);
+      const reasons: string[] = [];
+      if (threshold > 0 && +order.total_amount > threshold) reasons.push(`订单金额 ${order.total_amount} 超过审批阈值 ${threshold}`);
+      if (commissionThreshold > 0 && +(order.commission_rate ?? 0) > commissionThreshold) {
+        reasons.push(`佣金率 ${order.commission_rate}% 超过阈值 ${commissionThreshold}%`);
+      }
+      if (usdRequired > 0 && order.currency === 'USD') reasons.push('美金订单须审批');
+      if (reasons.length) {
         if (order.approval_status !== ApprovalStatus.PENDING) {
           order.approval_status = ApprovalStatus.PENDING;
           await this.orderRepo.save(order);
         }
-        throw new BadRequestException(`订单金额 ${order.total_amount} 超过审批阈值 ${threshold}，需主管审批后方可下单`);
+        throw new BadRequestException(`${reasons.join('；')}，需主管审批后方可下单`);
       }
     }
     order.status = next;

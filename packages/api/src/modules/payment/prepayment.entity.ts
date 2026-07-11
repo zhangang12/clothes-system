@@ -26,6 +26,9 @@ export class Prepayment {
   @Column({ type: 'text', nullable: true })
   remark: string;
 
+  @Column({ length: 60, nullable: true })
+  style_no: string; // 相关款号（预付登记归集，P3#40/补充C2）
+
   @Column({ type: 'bigint' })
   created_by: number;
 

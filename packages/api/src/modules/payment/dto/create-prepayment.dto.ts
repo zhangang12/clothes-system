@@ -1,4 +1,4 @@
-import { IsNumber, IsOptional, IsString, IsDateString, Min } from 'class-validator';
+import { IsNumber, IsOptional, IsString, IsDateString, Min, MaxLength } from 'class-validator';
 
 export class CreatePrepaymentDto {
   @IsNumber()
@@ -18,4 +18,7 @@ export class CreatePrepaymentDto {
   @IsOptional()
   @IsString()
   remark?: string;
+
+  // 相关款号(预付登记归集,P3#40/补充C2)
+  @IsOptional() @IsString() @MaxLength(60) style_no?: string;
 }

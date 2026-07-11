@@ -10,6 +10,9 @@ export const contractApi = {
     http.get<unknown, { data: any[] }>(`/contracts/${id}/logs`),
   create: (dto: Record<string, unknown>) =>
     http.post<unknown, { data: Contract }>('/contracts', dto),
+  // 历史同款价提示(P3#41)
+  priceHint: (styleNo: string, itemName?: string) =>
+    http.get<unknown, { data: any[] }>('/contracts/price-hint', { params: { style_no: styleNo, ...(itemName ? { item_name: itemName } : {}) } }),
   // 按订单材料供应商拆单批量生成材料合同（设计稿 合同 A1 主流程入口）
   generateFromOrder: (orderId: number) =>
     http.post<unknown, { data: { created: number; contracts: any[]; unmatched: string[] } }>(`/contracts/generate-from-order/${orderId}`),

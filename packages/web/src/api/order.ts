@@ -21,6 +21,9 @@ export const orderApi = {
     http.patch<unknown, { data: any }>(`/orders/${id}/matrix`, { matrix_data }),
   remove: (id: number) =>
     http.delete(`/orders/${id}`),
+  // 在产订单迁移导入(P3#43)
+  importBatch: (rows: any[]) =>
+    http.post<unknown, any>('/orders/import', { rows }),
   // 复制订单(P3#34):主表+用料+矩阵为新草稿
   copy: (id: number) =>
     http.post<unknown, any>(`/orders/${id}/copy`),

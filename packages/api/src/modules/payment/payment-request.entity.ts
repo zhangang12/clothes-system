@@ -41,6 +41,15 @@ export class PaymentRequest {
   @Column({ length: 500, nullable: true })
   slip_url: string;
 
+  @Column({ length: 100, nullable: true })
+  bank_name: string; // 收款银行（无合同付款补字段，P3#40/对账E3）
+
+  @Column({ length: 50, nullable: true })
+  bank_account: string; // 收款账号
+
+  @Column({ length: 60, nullable: true })
+  related_style_no: string; // 相关款号（无合同付款归集用）
+
   @Column({ type: 'bigint', nullable: true })
   paid_by: number;
 

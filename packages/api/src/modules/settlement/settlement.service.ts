@@ -177,30 +177,55 @@ export class SettlementService {
   }
 
   // 期间费用按款号从无合同费用对账归集（结算串流程 rec：账实一致，从对账付款带入）；
+  // 四项分列(P3#39/结算Q5):按费用名关键词归 运杂/快邮/打样/其它 四桶;
   // 同款多订单按出货份额分摊（无出货则均分），防期间费用重复背（结算Q1 同源）。
-  private async aggregatePeriodExpense(order: OrderMain): Promise<number> {
+  private async aggregatePeriodExpense(order: OrderMain): Promise<{ freight: number; express: number; sample: number; other: number }> {
+    const empty = { freight: 0, express: 0, sample: 0, other: 0 };
     const styleNo = order.style_no;
-    if (!styleNo) return 0;
+    if (!styleNo) return empty;
     const recons = await this.reconcileRepo.find({
       where: [
         { style_no: styleNo, type: ReconcileType.NO_CONTRACT, status: ReconciliationStatus.CONFIRMED, deleted: 0 },
         { style_no: styleNo, type: ReconcileType.NO_CONTRACT, status: ReconciliationStatus.PAID, deleted: 0 },
       ],
     });
-    const headerSum = r4(recons.reduce((s, rc) => s + +rc.total_amount, 0));
-    // 另计费用明细中单独标注该款号的行（跨款空白对账单场景）
+    const classify = (name: string | undefined | null): keyof typeof empty => {
+      const n = String(name ?? '');
+      if (/运|货代|物流|拖车|报关/.test(n)) return 'freight';
+      if (/快递|快邮|邮寄|邮费/.test(n)) return 'express';
+      if (/打样|样品|样衣/.test(n)) return 'sample';
+      return 'other';
+    };
+    const buckets = { ...empty };
+    // 费用明细行(带款号)优先按行名分类;仅有整单头的对账按单据描述分类
     const items = await this.expenseItemRepo.find({ where: { style_no: styleNo } });
-    const itemSum = r4(items.reduce((s, it) => s + +it.amount, 0));
-    const total = r4(Math.max(headerSum, itemSum));
-    if (!total) return 0;
+    let itemSum = 0;
+    for (const it of items) {
+      buckets[classify((it as any).item_name ?? (it as any).fee_name)] += +it.amount;
+      itemSum += +it.amount;
+    }
+    const headerSum = recons.reduce((s, rc) => s + +rc.total_amount, 0);
+    if (headerSum > itemSum + 0.005) {
+      // 头合计超出行合计的部分(无行明细的整单)按首单描述关键词归类,兜底其它
+      buckets[classify(recons[0]?.description)] += headerSum - itemSum;
+    }
+    const total = headerSum > itemSum ? headerSum : itemSum;
+    if (!total) return empty;
 
+    let share = 1;
     const siblings = await this.orderRepo.find({ where: { style_no: styleNo, deleted: 0 } });
-    if (siblings.length <= 1) return total;
-    const ships = await this.shipmentRepo.find({ where: { order_id: In(siblings.map((o) => o.id)) } });
-    const totalQty = ships.reduce((s, x) => s + x.qty, 0);
-    const myQty = ships.filter((x) => +x.order_id === +order.id).reduce((s, x) => s + x.qty, 0);
-    const share = totalQty > 0 ? myQty / totalQty : 1 / siblings.length;
-    return r4(total * share);
+    if (siblings.length > 1) {
+      const ships = await this.shipmentRepo.find({ where: { order_id: In(siblings.map((o) => o.id)) } });
+      const totalQty = ships.reduce((s, x) => s + x.qty, 0);
+      const myQty = ships.filter((x) => +x.order_id === +order.id).reduce((s, x) => s + x.qty, 0);
+      share = totalQty > 0 ? myQty / totalQty : 1 / siblings.length;
+    }
+    return {
+      freight: r4(buckets.freight * share),
+      express: r4(buckets.express * share),
+      sample: r4(buckets.sample * share),
+      other: r4(buckets.other * share),
+    };
   }
 
   // 用 settlement 现存财务录入 + 货款重算所有派生量并写回实体（不落库）。
@@ -278,7 +303,7 @@ export class SettlementService {
     const agg = auto ? await this.aggregateGoods(order, vatRate) : null;
     // 期间费用未填时，从无合同费用对账按款号归集（账实一致）
     const noPeriodInput = dto.freight_fee == null && dto.express_fee == null && dto.sample_fee == null && dto.other_fee == null;
-    const aggPeriod = noPeriodInput ? await this.aggregatePeriodExpense(order) : 0;
+    const aggPeriod = noPeriodInput ? await this.aggregatePeriodExpense(order) : null;
 
     return this.dataSource.transaction(async (manager) => {
       const manualCosts = dto.costs ?? [];
@@ -315,10 +340,11 @@ export class SettlementService {
         status: SettlementStatus.DRAFT,
         invoice_amount_usd: r4(dto.invoice_amount_usd ?? 0),
         receipt_usd: r4(dto.receipt_usd ?? 0),
-        freight_fee: r4(dto.freight_fee ?? 0),
-        express_fee: r4(dto.express_fee ?? 0),
-        sample_fee: r4(dto.sample_fee ?? 0),
-        other_fee: r4(dto.other_fee ?? aggPeriod), // 期间费用归集值落 other_fee
+        // 期间费用四项分列(P3#39):归集值按关键词入各自列,不再整笔落其它
+        freight_fee: r4(dto.freight_fee ?? aggPeriod?.freight ?? 0),
+        express_fee: r4(dto.express_fee ?? aggPeriod?.express ?? 0),
+        sample_fee: r4(dto.sample_fee ?? aggPeriod?.sample ?? 0),
+        other_fee: r4(dto.other_fee ?? aggPeriod?.other ?? 0),
         tax_refund: r4(taxRefund),
         refund_status: 'ESTIMATED',
         unpaid_goods_tax: agg?.unpaidTax ?? 0,
@@ -639,6 +665,30 @@ export class SettlementService {
       settlement.confirmed_at = null as any;
       settlement.needs_recalc = 0;
       return manager.save(Settlement, settlement);
+    });
+  }
+
+  // 退税「到账确认」(P3#39/结算Q11):预估→到账,可按实到金额覆盖并留痕;确认后也可操作(仅改退税项)
+  async refundReceived(id: number, amount: number | undefined, userId?: number): Promise<Settlement> {
+    const financeFeeRate = await this.config.getNumber('finance_fee_rate', 7);
+    return this.dataSource.transaction(async (manager) => {
+      const settlement = await manager.findOne(Settlement, {
+        where: { id, deleted: 0 },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!settlement) throw new NotFoundException(`结算单 #${id} 不存在`);
+      if (settlement.refund_status === 'RECEIVED') throw new BadRequestException('退税已确认到账');
+      const before = +settlement.tax_refund;
+      if (amount != null) settlement.tax_refund = r4(amount);
+      settlement.refund_status = 'RECEIVED';
+      const receipts = await manager.find(SettlementReceipt, { where: { settlement_id: id } });
+      this.applyDerived(settlement, +settlement.goods_amount_tax, +settlement.goods_amount_extax, receipts, financeFeeRate);
+      const saved = await manager.save(Settlement, settlement);
+      await this.changeLog.record('SETTLEMENT', id, [
+        { field: 'refund_status', old: 'ESTIMATED', new: 'RECEIVED' },
+        { field: 'tax_refund', old: before, new: saved.tax_refund },
+      ], userId);
+      return saved;
     });
   }
 

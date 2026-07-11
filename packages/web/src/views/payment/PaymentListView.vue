@@ -90,6 +90,11 @@
             <span style="margin:0 4px">—</span>
             <el-date-picker v-model="prQuery.due_end" type="date" value-format="YYYY-MM-DD" placeholder="止" style="width:130px" @change="loadPR" />
           </el-form-item>
+          <el-form-item label="付款日">
+            <el-date-picker v-model="prQuery.paid_start" type="date" value-format="YYYY-MM-DD" placeholder="起" style="width:130px" @change="loadPR" />
+            <span style="margin:0 4px">—</span>
+            <el-date-picker v-model="prQuery.paid_end" type="date" value-format="YYYY-MM-DD" placeholder="止" style="width:130px" @change="loadPR" />
+          </el-form-item>
             <el-form-item>
               <el-button type="primary" :icon="Search" @click="loadPR">搜索</el-button>
               <el-button :icon="Refresh" @click="resetPR">重置</el-button>
@@ -206,6 +211,9 @@
         <el-form-item label="付款日期" prop="pay_date">
           <el-date-picker v-model="prepayForm.pay_date" type="date" value-format="YYYY-MM-DD" style="width:100%" />
         </el-form-item>
+        <el-form-item label="相关款号">
+          <el-input v-model="prepayForm.style_no" placeholder="预付归集用(选填,P3#40)" />
+        </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="prepayForm.remark" type="textarea" :rows="2" />
         </el-form-item>
@@ -249,6 +257,17 @@
         <el-form-item label="冲抵预付款">
           <el-input-number v-model="prForm.prepay_offset" :min="0" :precision="2" style="width:100%" />
         </el-form-item>
+        <template v-if="prForm.type === 'NO_CONTRACT'">
+          <el-form-item label="收款银行">
+            <el-input v-model="prForm.bank_name" placeholder="无合同付款须留收款信息" />
+          </el-form-item>
+          <el-form-item label="收款账号">
+            <el-input v-model="prForm.bank_account" />
+          </el-form-item>
+          <el-form-item label="相关款号">
+            <el-input v-model="prForm.related_style_no" placeholder="归集用(选填)" />
+          </el-form-item>
+        </template>
         <el-form-item label="备注">
           <el-input v-model="prForm.description" type="textarea" :rows="2" />
         </el-form-item>
@@ -396,6 +415,7 @@ const prepayForm = reactive({
   contract_id: undefined as number | undefined,
   amount: undefined as number | undefined,
   pay_date: '',
+  style_no: '',
   remark: '',
 });
 const prepayRules: FormRules = {
@@ -426,7 +446,7 @@ const prTotal = ref(0);
 const prQuery = reactive({
   page: 1, size: 20,
   factory_id: undefined as number | undefined,
-  approval_status: undefined as string | undefined, due_start: '', due_end: '' });
+  approval_status: undefined as string | undefined, due_start: '', due_end: '', paid_start: '', paid_end: '' });
 // 申请日期范围（工厂+日期组合检索，付款申请设计稿 检索区）
 const prDateRange = ref<[string, string] | null>(null);
 
@@ -560,6 +580,7 @@ const prForm = reactive({
   amount: undefined as number | undefined,
   prepay_offset: 0,
   description: '',
+  bank_name: '', bank_account: '', related_style_no: '',
 });
 const prRules: FormRules = {
   type: [{ required: true, message: '请选择类型', trigger: 'change' }],
@@ -568,7 +589,7 @@ const prRules: FormRules = {
 };
 function openCreatePR() { createPRVisible.value = true; }
 function resetPRForm() {
-  Object.assign(prForm, { type: 'CONTRACT', factory_id: undefined, reconcile_id: undefined, amount: undefined, prepay_offset: 0, description: '' });
+  Object.assign(prForm, { type: 'CONTRACT', factory_id: undefined, reconcile_id: undefined, amount: undefined, prepay_offset: 0, description: '', bank_name: '', bank_account: '', related_style_no: '' });
   prPrepayBalance.value = 0;
 }
 // 选择工厂后自动提示是否存在可用预付款余额（付款申请设计稿：存在预付时提示冲抵）
@@ -590,7 +611,9 @@ async function doCreatePR() {
   await prFormRef.value?.validate();
   saving.value = true;
   try {
-    await paymentRequestApi.create(prForm as any);
+    const dto: any = { ...prForm };
+    for (const k of ['bank_name', 'bank_account', 'related_style_no']) if (!dto[k]) delete dto[k];
+    await paymentRequestApi.create(dto);
     ElMessage.success('创建成功');
     createPRVisible.value = false;
     loadPR();

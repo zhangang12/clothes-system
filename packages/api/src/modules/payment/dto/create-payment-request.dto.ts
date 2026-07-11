@@ -1,4 +1,4 @@
-import { IsEnum, IsNumber, IsOptional, IsString, IsInt, IsDateString, Min } from 'class-validator';
+import { IsEnum, IsNumber, IsOptional, IsString, IsInt, IsDateString, Min, MaxLength } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ReconcileType } from '@i9/types';
@@ -26,6 +26,22 @@ export class CreatePaymentRequestDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  // 无合同付款补字段(P3#40/对账E3)
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  bank_name?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  bank_account?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  related_style_no?: string;
 
   @ApiPropertyOptional({ description: '结算账期(天),缺省从合同带入' })
   @IsOptional()

@@ -118,7 +118,7 @@ export class CustomerService {
     s('salesperson', 'salesperson'); s('developDate', 'develop_date'); s('spare1', 'spare1');
     s('spare2', 'spare2'); s('spare3', 'spare3'); s('deliveryAddress', 'delivery_address');
     s('frontMark', 'front_mark'); s('sideMark', 'side_mark'); s('innerBoxText', 'inner_box_text');
-    s('customerRemark', 'customer_remark'); s('currency', 'currency');
+    s('customerRemark', 'customer_remark'); s('commissionRate', 'commission_rate'); s('currency', 'currency');
     return e;
   }
 

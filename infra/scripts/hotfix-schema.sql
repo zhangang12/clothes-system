@@ -256,6 +256,7 @@ CREATE TABLE IF NOT EXISTS `customer` (
   `customer_remark` TEXT          DEFAULT NULL COMMENT '客户备注',
   `currency`        VARCHAR(5)    NOT NULL DEFAULT 'USD' COMMENT '主结算币种',
   `status`          TINYINT       NOT NULL DEFAULT 1,
+  `commission_rate` DECIMAL(5,2) DEFAULT NULL COMMENT '中间商默认佣金率%(建单带出,P3#36)',
   `remark`          TEXT          DEFAULT NULL,
   `created_by`      BIGINT        DEFAULT NULL,
   `created_at`      DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -499,6 +500,7 @@ CREATE TABLE IF NOT EXISTS `order_main` (
   `unit_price`     DECIMAL(15,4) DEFAULT NULL COMMENT '单品单价',
   `total_amount`   DECIMAL(15,4) DEFAULT NULL COMMENT '总金额',
   `commission_rate` DECIMAL(6,2) NOT NULL DEFAULT 0 COMMENT '佣金%',
+  `external_no`  VARCHAR(50) DEFAULT NULL COMMENT '外部单号(在产订单迁移,P3#43)',
   `factory_id`     BIGINT        DEFAULT NULL COMMENT '生产工厂(绑定订单)',
   `salesperson`    VARCHAR(50)   DEFAULT NULL COMMENT '外销员',
   `make_date`      DATE          DEFAULT NULL COMMENT '制单日期',
@@ -786,6 +788,7 @@ CREATE TABLE IF NOT EXISTS `prepayment` (
   `pay_date`       DATE          NOT NULL,
   `remark`         TEXT          DEFAULT NULL,
   `created_by`     BIGINT        NOT NULL,
+  `style_no`  VARCHAR(60) DEFAULT NULL COMMENT '相关款号(预付登记归集,P3#40)',
   `created_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -805,6 +808,9 @@ CREATE TABLE IF NOT EXISTS `payment_request` (
   `due_date`           DATE           DEFAULT NULL COMMENT '到期日=出货日+账期(逾期高亮)',
   `paid_total`         DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '已付总额(分批付款累计)',
   `slip_url`          VARCHAR(500)   DEFAULT NULL COMMENT '水单文件路径',
+  `bank_name`       VARCHAR(100)  DEFAULT NULL COMMENT '收款银行(无合同付款,P3#40)',
+  `bank_account`    VARCHAR(50)   DEFAULT NULL COMMENT '收款账号',
+  `related_style_no` VARCHAR(60)  DEFAULT NULL COMMENT '相关款号(无合同付款归集)',
   `paid_by`           BIGINT         DEFAULT NULL COMMENT '标记付款操作人',
   `slip_uploaded_at`  DATETIME       DEFAULT NULL,
   `approval_status`   ENUM('DRAFT','PENDING','APPROVED','REJECTED','PAID') NOT NULL DEFAULT 'DRAFT',
@@ -1222,6 +1228,8 @@ CALL _i9_add_col('customer','currency',"VARCHAR(5)    NOT NULL DEFAULT 'USD' COM
 CALL _i9_sync_col('customer','currency',"VARCHAR(5)","VARCHAR(5)    NOT NULL DEFAULT 'USD' COMMENT '主结算币种'");
 CALL _i9_add_col('customer','status',"TINYINT       NOT NULL DEFAULT 1");
 CALL _i9_sync_col('customer','status',"TINYINT","TINYINT       NOT NULL DEFAULT 1");
+CALL _i9_add_col('customer','commission_rate',"DECIMAL(5,2) DEFAULT NULL COMMENT '中间商默认佣金率%(建单带出,P3#36)'");
+CALL _i9_sync_col('customer','commission_rate',"DECIMAL(5,2)","DECIMAL(5,2) DEFAULT NULL COMMENT '中间商默认佣金率%(建单带出,P3#36)'");
 CALL _i9_add_col('customer','remark',"TEXT          DEFAULT NULL");
 CALL _i9_sync_col('customer','remark',"TEXT","TEXT          DEFAULT NULL");
 CALL _i9_add_col('customer','created_by',"BIGINT        DEFAULT NULL");
@@ -1580,6 +1588,8 @@ CALL _i9_add_col('order_main','total_amount',"DECIMAL(15,4) DEFAULT NULL COMMENT
 CALL _i9_sync_col('order_main','total_amount',"DECIMAL(15,4)","DECIMAL(15,4) DEFAULT NULL COMMENT '总金额'");
 CALL _i9_add_col('order_main','commission_rate',"DECIMAL(6,2) NOT NULL DEFAULT 0 COMMENT '佣金%'");
 CALL _i9_sync_col('order_main','commission_rate',"DECIMAL(6,2)","DECIMAL(6,2) NOT NULL DEFAULT 0 COMMENT '佣金%'");
+CALL _i9_add_col('order_main','external_no',"VARCHAR(50) DEFAULT NULL COMMENT '外部单号(在产订单迁移,P3#43)'");
+CALL _i9_sync_col('order_main','external_no',"VARCHAR(50)","VARCHAR(50) DEFAULT NULL COMMENT '外部单号(在产订单迁移,P3#43)'");
 CALL _i9_add_col('order_main','factory_id',"BIGINT        DEFAULT NULL COMMENT '生产工厂(绑定订单)'");
 CALL _i9_sync_col('order_main','factory_id',"BIGINT","BIGINT        DEFAULT NULL COMMENT '生产工厂(绑定订单)'");
 CALL _i9_add_col('order_main','salesperson',"VARCHAR(50)   DEFAULT NULL COMMENT '外销员'");
@@ -2000,6 +2010,8 @@ CALL _i9_add_col('prepayment','remark',"TEXT          DEFAULT NULL");
 CALL _i9_sync_col('prepayment','remark',"TEXT","TEXT          DEFAULT NULL");
 CALL _i9_add_col('prepayment','created_by',"BIGINT        NOT NULL");
 CALL _i9_sync_col('prepayment','created_by',"BIGINT","BIGINT        NOT NULL");
+CALL _i9_add_col('prepayment','style_no',"VARCHAR(60) DEFAULT NULL COMMENT '相关款号(预付登记归集,P3#40)'");
+CALL _i9_sync_col('prepayment','style_no',"VARCHAR(60)","VARCHAR(60) DEFAULT NULL COMMENT '相关款号(预付登记归集,P3#40)'");
 CALL _i9_add_col('prepayment','created_at',"DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP");
 CALL _i9_sync_col('prepayment','created_at',"DATETIME","DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP");
 CALL _i9_add_col('prepayment','updated_at',"DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
@@ -2028,6 +2040,12 @@ CALL _i9_add_col('payment_request','paid_total',"DECIMAL(15,4)  NOT NULL DEFAULT
 CALL _i9_sync_col('payment_request','paid_total',"DECIMAL(15,4)","DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '已付总额(分批付款累计)'");
 CALL _i9_add_col('payment_request','slip_url',"VARCHAR(500)   DEFAULT NULL COMMENT '水单文件路径'");
 CALL _i9_sync_col('payment_request','slip_url',"VARCHAR(500)","VARCHAR(500)   DEFAULT NULL COMMENT '水单文件路径'");
+CALL _i9_add_col('payment_request','bank_name',"VARCHAR(100)  DEFAULT NULL COMMENT '收款银行(无合同付款,P3#40)'");
+CALL _i9_sync_col('payment_request','bank_name',"VARCHAR(100)","VARCHAR(100)  DEFAULT NULL COMMENT '收款银行(无合同付款,P3#40)'");
+CALL _i9_add_col('payment_request','bank_account',"VARCHAR(50)   DEFAULT NULL COMMENT '收款账号'");
+CALL _i9_sync_col('payment_request','bank_account',"VARCHAR(50)","VARCHAR(50)   DEFAULT NULL COMMENT '收款账号'");
+CALL _i9_add_col('payment_request','related_style_no',"VARCHAR(60)  DEFAULT NULL COMMENT '相关款号(无合同付款归集)'");
+CALL _i9_sync_col('payment_request','related_style_no',"VARCHAR(60)","VARCHAR(60)  DEFAULT NULL COMMENT '相关款号(无合同付款归集)'");
 CALL _i9_add_col('payment_request','paid_by',"BIGINT         DEFAULT NULL COMMENT '标记付款操作人'");
 CALL _i9_sync_col('payment_request','paid_by',"BIGINT","BIGINT         DEFAULT NULL COMMENT '标记付款操作人'");
 CALL _i9_add_col('payment_request','slip_uploaded_at',"DATETIME       DEFAULT NULL");

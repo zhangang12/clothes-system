@@ -289,7 +289,7 @@ describe('PaymentService', () => {
     const pr = makePR({ approval_status: PaymentApprovalStatus.APPROVED, actual_pay: 5000, paid_total: 0 });
     const manager = makeRecordManager(pr);
     mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
-    const res: any = await service.addPaymentRecord(1, { pay_date: '2026-07-09', amount: 2000, pay_method: 'BANK' }, 3);
+    const res: any = await service.addPaymentRecord(1, { slip_url: '/uploads/slip.jpg', pay_date: '2026-07-09', amount: 2000, pay_method: 'BANK' }, 3);
     expect(res.paid_total).toBe(2000);
     expect(res.balance).toBe(3000);
     expect(res.request.approval_status).toBe(PaymentApprovalStatus.APPROVED); // 未付清
@@ -311,7 +311,7 @@ describe('PaymentService', () => {
     const pr = makePR({ approval_status: PaymentApprovalStatus.APPROVED, actual_pay: 5000, paid_total: 4500 });
     const manager = makeRecordManager(pr);
     mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
-    await expect(service.addPaymentRecord(1, { pay_date: '2026-07-09', amount: 1000 }, 3))
+    await expect(service.addPaymentRecord(1, { slip_url: '/uploads/slip.jpg', pay_date: '2026-07-09', amount: 1000 }, 3))
       .rejects.toThrow(/超过应付总额/);
   });
 
@@ -319,11 +319,11 @@ describe('PaymentService', () => {
   it('UT-PAY-REC-04 rejects when not APPROVED or already PAID', async () => {
     const manager1 = makeRecordManager(makePR({ approval_status: PaymentApprovalStatus.PENDING }));
     mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager1));
-    await expect(service.addPaymentRecord(1, { pay_date: '2026-07-09', amount: 100 }, 3))
+    await expect(service.addPaymentRecord(1, { slip_url: '/uploads/slip.jpg', pay_date: '2026-07-09', amount: 100 }, 3))
       .rejects.toThrow(/只有已审批/);
     const manager2 = makeRecordManager(makePR({ approval_status: PaymentApprovalStatus.PAID }));
     mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager2));
-    await expect(service.addPaymentRecord(1, { pay_date: '2026-07-09', amount: 100 }, 3))
+    await expect(service.addPaymentRecord(1, { slip_url: '/uploads/slip.jpg', pay_date: '2026-07-09', amount: 100 }, 3))
       .rejects.toThrow(/已付清/);
   });
 });
