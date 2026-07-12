@@ -56,7 +56,8 @@ fi
 
 # ── 最近备份（时间 / 大小 / 份数）──
 BK_FULL="—"; BK_HHMM="--:--"; BK_SIZE="—"; BK_KEEP="0"
-BK_LINE=$(grep "备份完成" "$BK_LOG" 2>/dev/null | tail -1 || true)
+# 只取数据库 dump 完成行（排除「上传文件备份完成」的附件行，否则大小会取成附件包大小）
+BK_LINE=$(grep "备份完成" "$BK_LOG" 2>/dev/null | grep -v "上传文件" | tail -1 || true)
 if [[ -n "$BK_LINE" ]]; then
   T=$(echo "$BK_LINE" | grep -oE "$dt_re" | head -1); [[ -n "$T" ]] && BK_FULL="$T" && BK_HHMM="${T:11:5}"
   S=$(echo "$BK_LINE" | grep -oE '大小=[0-9.]+[KMGT]?' | head -1 | cut -d= -f2); [[ -n "$S" ]] && BK_SIZE="$S"
