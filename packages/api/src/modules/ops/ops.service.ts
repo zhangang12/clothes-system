@@ -5,6 +5,8 @@ import * as fs from 'fs';
 const BK_LOG = '/var/log/i9-backup.log';
 const OW_LOG = '/var/log/i9-ops-watch.log';
 const BK_DIR = '/data/backups';
+const LOOP_FILE = '/data/ops-loop.json';
+const LOOP_ALIVE_SEC = 95 * 60; // 心跳约每小时一次，超 95 分钟无心跳判定为会话已断开
 const DT = /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/;
 
 /**
@@ -25,7 +27,21 @@ export class OpsService {
       feedback: await this.count("SELECT COUNT(*) c FROM feedback WHERE status='PENDING' AND deleted=0"),
       backup: this.backup(),
       watch: this.watch(),
+      loop: this.loop(),
     };
+  }
+
+  /** 读会话自愈循环心跳；beatEpoch 在 95 分钟内视为会话在线。 */
+  private loop() {
+    try {
+      const j = JSON.parse(fs.readFileSync(LOOP_FILE, 'utf8'));
+      const alive =
+        Number.isFinite(j.beatEpoch) &&
+        Date.now() / 1000 - Number(j.beatEpoch) < LOOP_ALIVE_SEC;
+      return { beat: j.beat || null, next: j.next || null, lastRun: j.lastRun || null, alive };
+    } catch {
+      return { beat: null, next: null, lastRun: null, alive: false };
+    }
   }
 
   private cst(d: Date): string {

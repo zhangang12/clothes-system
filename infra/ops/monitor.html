@@ -66,7 +66,7 @@
   .job .file{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--teal);background:var(--sunk);border:1px solid var(--line);padding:1px 8px;border-radius:6px}
   .pill{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;padding:4px 11px;border-radius:999px;white-space:nowrap}
   .pill i{width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block}
-  .pill.ok{color:var(--ok);background:var(--ok-soft)}.pill.idle{color:var(--idle);background:var(--idle-soft)}
+  .pill.ok{color:var(--ok);background:var(--ok-soft)}.pill.idle{color:var(--idle);background:var(--idle-soft)}.pill.off{color:var(--warn);background:var(--warn-soft)}
   .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 26px;padding:6px 20px 18px 24px}
   .field .fk{font-size:11px;color:var(--ink-3);letter-spacing:.04em;text-transform:uppercase;margin-bottom:3px}
   .field .fv{font-size:13.5px;color:var(--ink);word-break:break-word}
@@ -199,14 +199,22 @@ function render(s,meta){
     ['日志','<span class="mono">/var/log/i9-ops-watch.log</span>']
   ],'var(--ok)',null,true);
 
-  html+=job('03','智能巡检 + 自愈','ops-fetch-reports.cjs','idle',[
+  var lp=s.loop||{};
+  var beatHHMM=lp.beat?String(lp.beat).slice(11,16):'';
+  var sessionFV=lp.alive
+     ? '<span style="color:var(--ok)">● 会话在线</span> · 心跳 <span class="mono">'+esc(beatHHMM)+'</span>'
+     : '<span style="color:var(--warn)">○ 会话已断开</span>'+(lp.beat?(' · 上次心跳 <span class="mono">'+esc(lp.beat)+'</span>'):' · 无心跳记录');
+  var nextFV=lp.alive
+     ? '<span class="cd mono" data-next="daily:12,15,18">…</span>'
+     : '<span style="color:var(--ink-3)">会话断开，暂不会执行</span>';
+  html+=job('03','智能巡检 + 自愈','ops-fetch-reports.cjs',lp.alive?'idle':'off',[
     ['时段（系统时间）','<span class="mono">12:00 · 15:00 · 18:00</span>'],
-    ['距下次执行','<span class="cd mono" data-next="daily:12,15,18">…</span>'],
-    ['动作','浏览器下载报错/反馈报告 → 判定是否 BUG'],
-    ['是 BUG','最小化修复 → 全测试绿 → 自动发版 → 核验 → 标记已处理（红则自动回滚）'],
-    ['非 BUG','不动代码，进当晚报告交人工确认'],
-    ['每晚 18:00 后','汇总当日为一份 HTML 巡检报告']
-  ],'var(--idle)',{type:'info',html:'此作业随运维会话存活运行；服务器 cron 的 01/02 独立、持续运行不受影响。'});
+    ['会话状态',sessionFV],
+    ['距下次执行',nextFV],
+    ['上次巡检结果',esc(lp.lastRun||'—')],
+    ['是 BUG','最小化修复 → 全测试绿 → 自动发版 → 核验 → 标记已处理（红则回滚）'],
+    ['非 BUG / 每晚','非 BUG 进当晚报告待确认；18:00 后汇总 HTML 巡检报告']
+  ],lp.alive?'var(--idle)':'var(--warn)',{type:'info',html:'此作业随运维会话存活运行（靠心跳判定）；服务器 cron 的 01/02 独立、持续运行不受影响。'});
 
   html+='</div>';
   document.getElementById('app').innerHTML=html;
@@ -221,7 +229,7 @@ function render(s,meta){
 
 function stat(k,v,u){return '<div class="stat"><div class="k">'+k+'</div><div class="v">'+v+'</div><div class="u">'+u+'</div></div>'}
 function job(idx,name,file,st,fields,stripe,note,timeline){
-  var pill=st==='idle'?'<span class="pill idle"><i></i>已武装</span>':'<span class="pill ok"><i></i>正常</span>';
+  var pill=st==='off'?'<span class="pill off"><i></i>会话已断开</span>':st==='idle'?'<span class="pill idle"><i></i>已武装</span>':'<span class="pill ok"><i></i>正常</span>';
   var h='<div class="job" style="--stripe:'+stripe+'"><div class="head"><span class="idx">'+idx+'</span><span class="name">'+name+'</span><span class="file">'+file+'</span>'+pill+'</div><div class="grid">';
   for(var i=0;i<fields.length;i++){h+='<div class="field"><div class="fk">'+fields[i][0]+'</div><div class="fv">'+fields[i][1]+'</div></div>'}
   h+='</div>';
