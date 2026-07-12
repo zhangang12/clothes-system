@@ -51,6 +51,8 @@
 
 ## 最近变更（新→旧，保留最近若干条）
 
+- （本次·动态封面）登录页左侧品牌区升级为**服装制造主题动态封面**:Canvas 绘制会起伏的织物经纬网格 + 沿对角缝道 dash 位移的动态针脚(模拟缝纫走针,带走针高亮点)+ 缓缓上浮的线头微粒;叠加 logo 入场+浮动动效、6阶段流程(样衣→报价→订单→合同→对账→结算)药丸节点带脉冲墨绿点、标语「从一片布,到一张单,全程可控」;含 prefers-reduced-motion 降级(静态一帧)、resize 自适应、onBeforeUnmount 清理 RAF。web 构建绿 vitest 登录7/7
+
 - （本次·DATEX 品牌化）客户提供真实品牌 DATEX(服装公司)——重新设计登录封面与全站标题:①从品牌图裁出全彩 logo(datex-logo.png)+方形标记(datex-mark.png)放两端 public;②登录页重设计:墨绿(#2E8B78)→炭黑(#23343A)渐变品牌区+织物经纬纹理+白卡承载真实logo+墨绿渐变登录按钮+DATEX字标,输入聚焦墨绿;③浏览器标题 web「DATEX 服装智造管理系统」/门户「DATEX 供应商门户」+favicon 换 datex-mark;④侧栏品牌 I9→DATEX标记+字标;⑤门户登录页加DATEX品牌头;⑥仪表盘/打印兜底公司名/登录测试文案同步。web/portal 双构建绿 vitest 登录7/7
 
 - （本次·清库脚本）新增 `infra/scripts/clean-db.sh`——交付前清空业务/测试数据:保留 sys_user/sys_config/sys_dict/company_profile,清空其余39张业务+主数据表(客户/工厂/样衣/报价/订单/合同/对账/付款/结算/发票…),重置 sys_sequence(单据号重头);安全三重:①执行前强制整库备份到 /opt/i9/backups ②须输入 CLEAN 或 --yes 确认 ③动态"全表减保留表"防漏。用法 `bash infra/scripts/clean-db.sh [--yes] [--clear-dicts]`。已部署生产(未执行,待用户交付前自行运行)
