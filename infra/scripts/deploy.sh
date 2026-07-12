@@ -130,6 +130,8 @@ chown -R i9app:i9app "$APP_DIR/packages/api/dist" 2>/dev/null || true
 log "更新静态文件..."
 rsync -a --delete packages/web/dist/    "$WEB_ROOT/"
 rsync -a --delete packages/portal/dist/ "$PORTAL_ROOT/"
+# 发版后立即重生成「定时作业监控」静态页（rsync --delete 会清掉它，须重建避免短暂 404）
+bash "$APP_DIR/infra/scripts/gen-ops-page.sh" 2>/dev/null || warn "监控静态页重生成失败（不影响发版）"
 
 # ── ⑤ 保证 Redis 就绪（单号生成依赖，停机会导致新建单据失败）────
 if command -v docker &>/dev/null && docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "^${REDIS_CONTAINER}$"; then
