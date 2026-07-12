@@ -2,7 +2,7 @@
 // 设计稿 G2/G3：公司抬头 + 客户 + 报价明细/费用 + 人民币/美金合计 + 业务员 + 有效期；对客隐藏供应商/成本（脱敏）
 
 // 抬头默认公司名（当未传入本司主体时兜底）
-const DEFAULT_COMPANY = 'I9 服装制造有限公司';
+const DEFAULT_COMPANY = 'DATEX 服装智造';
 
 // 打印内容勾选(P3#32/rev G1-G3):对外口径默认去客户信息与利润率;可选含款图/费用明细
 export interface QuotePrintOpts {

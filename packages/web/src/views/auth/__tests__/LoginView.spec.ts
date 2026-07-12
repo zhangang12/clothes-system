@@ -58,7 +58,7 @@ describe('LoginView', () => {
 
   it('shows the system title', () => {
     const wrapper = mountLoginView();
-    expect(wrapper.text()).toContain('服装制造管理系统');
+    expect(wrapper.text()).toContain('服装智造管理系统');
   });
 
   // ─────────────────────────────────────────────── successful login

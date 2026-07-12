@@ -1,6 +1,10 @@
 <template>
   <div class="portal-login">
-    <h2>供应商登录</h2>
+    <div class="portal-brand">
+      <img src="/datex-mark.png" alt="DATEX" class="portal-mark" />
+      <div class="portal-name">DATEX</div>
+      <div class="portal-desc">供应商协同门户</div>
+    </div>
     <van-form @submit="handleLogin">
       <van-field v-model="form.username" label="账号" placeholder="请输入账号" required />
       <van-field v-model="form.password" label="密码" type="password" placeholder="请输入密码" required />
@@ -31,3 +35,10 @@ async function handleLogin() {
   }
 }
 </script>
+
+<style scoped>
+.portal-brand { text-align: center; padding: 40px 0 24px; }
+.portal-mark { width: 72px; height: 72px; }
+.portal-name { font-size: 30px; font-weight: 800; font-style: italic; letter-spacing: 3px; color: #23343A; margin-top: 10px; }
+.portal-desc { font-size: 13px; color: #2E8B78; letter-spacing: 2px; margin-top: 4px; }
+</style>

@@ -51,6 +51,8 @@
 
 ## 最近变更（新→旧，保留最近若干条）
 
+- （本次·DATEX 品牌化）客户提供真实品牌 DATEX(服装公司)——重新设计登录封面与全站标题:①从品牌图裁出全彩 logo(datex-logo.png)+方形标记(datex-mark.png)放两端 public;②登录页重设计:墨绿(#2E8B78)→炭黑(#23343A)渐变品牌区+织物经纬纹理+白卡承载真实logo+墨绿渐变登录按钮+DATEX字标,输入聚焦墨绿;③浏览器标题 web「DATEX 服装智造管理系统」/门户「DATEX 供应商门户」+favicon 换 datex-mark;④侧栏品牌 I9→DATEX标记+字标;⑤门户登录页加DATEX品牌头;⑥仪表盘/打印兜底公司名/登录测试文案同步。web/portal 双构建绿 vitest 登录7/7
+
 - （本次·清库脚本）新增 `infra/scripts/clean-db.sh`——交付前清空业务/测试数据:保留 sys_user/sys_config/sys_dict/company_profile,清空其余39张业务+主数据表(客户/工厂/样衣/报价/订单/合同/对账/付款/结算/发票…),重置 sys_sequence(单据号重头);安全三重:①执行前强制整库备份到 /opt/i9/backups ②须输入 CLEAN 或 --yes 确认 ③动态"全表减保留表"防漏。用法 `bash infra/scripts/clean-db.sh [--yes] [--clear-dicts]`。已部署生产(未执行,待用户交付前自行运行)
 
 - （本次·前端深度测试后修复7项,已上线 fb8a049）真 Chromium 打生产全按钮/全流程/全逻辑测试(A按钮事件31/32+B黄金主流程真点按钮走通报价转合同→订单下单→生成材料合同+待定占位→推送门户+自动开门户账号s000+C业务逻辑守卫5/6,零JS报错),修复7问题:①本司主体名称乱码(生产DB双编码→utf8mb4+hex 修为「I9 服装制造有限公司」;init.sql seed 本正确);②错误提示双弹+误导(新增全局 errToast 800ms同文案去重,14视图 .response.data.message→.msg 并统一走 errToast);③时间未格式化(新增 utils/format.ts fmtDateTime/fmtDate,付款/对账/结算 创建时间 UTC→本地);④裸ID换名称(对账/付款列表后端补 factory_name/contract_no);⑤状态列被横滚埋没(订单/样衣/结算/对账 状态列 fixed=right);⑥非草稿订单只读(编辑页强制readonly+列表隐藏编辑);⑦报价列表加查看按钮。jest 221/221 vitest 86/86 双构建绿;真栈验证:公司名/工厂名/时间格式 UI 生效。生产测试数据(客户103/报价33/订单110/合同67/门户s000)+全库种子数据待清库

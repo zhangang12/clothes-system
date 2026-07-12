@@ -3,7 +3,7 @@
     <div class="hero">
       <div>
         <div class="hello">你好，{{ auth.realName || '用户' }} 👋</div>
-        <div class="sub">I9 服装制造管理系统 · 样衣 → 报价 → 订单 → 合同 → 对账 → 结算 全流程协同</div>
+        <div class="sub">DATEX 服装智造管理系统 · 样衣 → 报价 → 订单 → 合同 → 对账 → 结算 全流程协同</div>
       </div>
       <div class="quick">
         <el-button v-if="canEdit" type="primary" :icon="Plus" @click="go('SampleCreate')">新建样衣</el-button>

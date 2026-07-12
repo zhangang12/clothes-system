@@ -1,6 +1,6 @@
 <template>
   <div class="portal-layout">
-    <van-nav-bar title="I9 供应商门户" right-text="退出" @click-right="logout" />
+    <van-nav-bar title="DATEX 供应商门户" right-text="退出" @click-right="logout" />
     <router-view />
     <van-tabbar v-model="active" route>
       <van-tabbar-item icon="orders-o" to="/portal/contracts">合同</van-tabbar-item>

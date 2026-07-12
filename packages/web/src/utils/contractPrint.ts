@@ -2,7 +2,7 @@
 // 设计稿 04-合同 v1.3：材料/加工各套模板；甲乙方按类型（材料:甲方=供方/乙方=本司；加工:受托方=工厂/委托方=本司）；
 // 条款取 terms_json（模板填空）；加工含「以上价格包含…」段；填担保人自动插丙方担保条款（D7）；落款自动贴电子章位。
 
-const DEFAULT_COMPANY = 'I9 服装制造有限公司';
+const DEFAULT_COMPANY = 'DATEX 服装智造';
 
 const esc = (v: unknown): string =>
   String(v ?? '')

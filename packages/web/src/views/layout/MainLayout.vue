@@ -2,8 +2,8 @@
   <el-container class="layout">
     <el-aside width="220px" class="side">
       <div class="logo">
-        <span class="logo-mark">I9</span>
-        <span class="logo-text">服装制造管理</span>
+        <img src="/datex-mark.png" alt="" class="logo-mark-img" />
+        <span class="logo-text">DATEX<small>服装智造</small></span>
       </div>
       <el-menu :router="true" :default-active="$route.path" class="side-menu">
         <el-menu-item index="/dashboard"><el-icon><Odometer /></el-icon>工作台</el-menu-item>
@@ -94,12 +94,15 @@ function logout() { auth.clearAuth(); router.push('/login'); }
   height: 60px; display: flex; align-items: center; gap: 10px;
   padding: 0 20px; background: var(--indigo-d); color: #fff;
 }
-.logo-mark {
-  width: 32px; height: 32px; border: 1.5px solid var(--rust); border-radius: var(--r);
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 700; color: var(--rust); font-size: 15px;
+.logo-mark-img {
+  width: 34px; height: 34px; border-radius: 8px; background: #fff; padding: 3px;
+  box-sizing: border-box; object-fit: contain;
 }
-.logo-text { font-size: 15px; font-weight: 600; letter-spacing: 1px; }
+.logo-text {
+  display: flex; flex-direction: column; line-height: 1.15;
+  font-size: 18px; font-weight: 800; letter-spacing: 2px; font-style: italic;
+}
+.logo-text small { font-size: 10px; font-weight: 400; letter-spacing: 3px; font-style: normal; color: #8FB8AE; }
 .side-menu { flex: 1; border-right: none; }
 
 /* 顶栏：白底米边 */
