@@ -41,6 +41,7 @@
       </template>
     </el-dialog>
 
+    <RuleHint>可从样衣一键导入材料明细(品名在前);报价合计<b>超审批阈值需主管审批后才能发出</b>;发出后可被订单引用,<b>已成单不可再改</b>;转销售合同会自动建订单(数量留空待补矩阵)。</RuleHint>
     <el-form ref="formRef" :model="form" :rules="rules" label-width="104px" :disabled="readonly" class="form-body">
       <!-- 主要信息 -->
       <section-block title="▣ 主要信息" badge="18 字段">

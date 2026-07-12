@@ -1,5 +1,6 @@
 <template>
   <div class="page-container">
+    <RuleHint>一张对账单<b>只能含同一类型合同</b>(材料或加工),不可混;补料合同对账可勾「并入原合同」;含票时<b>发票金额须=对账金额</b>(±0.01);累计实发超合同量时,复核确认须由业务填超发原因放行。</RuleHint>
     <el-card class="search-card">
       <el-form :model="query" inline>
         <el-form-item label="关键词">

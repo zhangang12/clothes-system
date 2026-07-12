@@ -1,5 +1,6 @@
 <template>
   <div class="list-page">
+    <RuleHint>合同金额超阈值需主管审批后才可推送;<b>首次推送自动开通供应商门户账号</b>(初始密码 Factory@123,请提醒供应商改密);未匹配供应商的材料会生成「待定供应商」占位合同,确定后改绑。</RuleHint>
     <div class="toolbar-card">
       <div class="toolbar">
         <div class="tools-left">

@@ -47,6 +47,7 @@
       title="单耗为预估——关联样衣未填实测耗用，用料核算基于预估值，请在实测后复核"
     />
 
+    <RuleHint><b>报价数量不导入订单</b>,请在「尺码数量搭配」矩阵补录,矩阵合计自动回填大货总数;材料供应商只能<b>从工厂库选(限面/辅料)</b>;最终采购量偏离系统值超±10%需二次确认;只有草稿状态可保存。</RuleHint>
     <el-form ref="formRef" :model="form" :rules="rules" label-width="104px" :disabled="readonly" class="form-body">
       <!-- 基础信息 -->
       <section-block title="▣ 基础信息" badge="15 字段">

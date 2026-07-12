@@ -1,5 +1,6 @@
 <template>
   <div class="page-container">
+    <RuleHint>总货款<b>仅汇总【已付款】对账</b>(已确认未付灰显、不计入);<b>收汇与结算汇率齐备后才生成毛利/净利</b>(缺值不出误导性负毛利);同一订单可圈定不同出货批分批结算;已确认结算单可「红冲重开」。</RuleHint>
     <el-card class="search-card">
       <el-form :model="query" inline>
         <el-form-item label="关键词">

@@ -1,5 +1,6 @@
 <template>
   <div class="list-page">
+    <RuleHint>样衣是全流程第一环;<b>已被客户报价引用的样衣不可删除</b>,可改为「废弃」(下游保留快照);行内「生成采购」为该材料行生成打样对账单;填材料寄出单号即自动推送版师。</RuleHint>
     <div class="toolbar-card">
       <div class="toolbar">
         <div class="tools-left">

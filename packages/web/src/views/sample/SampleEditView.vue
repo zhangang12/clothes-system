@@ -24,6 +24,7 @@
       </div>
     </div>
 
+    <RuleHint>品名<b>文本录入、不从库导入</b>;颜色可点「加颜色列」动态扩列;<b>参考价格对版师脱敏</b>;实际耗用/拉链长度/工时由版师在工作台填写;填「材料寄出单号」即自动推送版师转打样中。</RuleHint>
     <el-form ref="formRef" :model="form" :rules="rules" label-width="104px" class="form-body">
       <!-- 基本信息 -->
       <section-block title="▣ 基本信息" badge="14 字段">

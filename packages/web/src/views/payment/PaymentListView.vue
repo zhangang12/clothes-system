@@ -1,5 +1,6 @@
 <template>
   <div class="page-container">
+    <RuleHint>付款<b>支持分批</b>,多次付款自动累计已付/未付,余额=0 整单转已付清;<b>付款须上传银行水单(必填)</b>;无合同付款须填收款银行/账号/相关款号;预付款可在付款申请时冲抵。</RuleHint>
     <el-tabs v-model="activeTab" type="border-card">
       <!-- ====== 预付款 Tab ====== -->
       <el-tab-pane label="预付款管理" name="prepayment">

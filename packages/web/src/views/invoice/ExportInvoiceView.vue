@@ -1,5 +1,6 @@
 <template>
   <div class="page-container">
+    <RuleHint>拼柜<b>一票多款</b>:每款一行、金额为该款发票金额;逐笔收汇<b>按各款发票金额占比分摊</b>;在结算单点「同步发票收汇」即按订单份额拉取收汇。</RuleHint>
     <el-card class="search-card">
       <el-form inline>
         <el-form-item label="关键词">

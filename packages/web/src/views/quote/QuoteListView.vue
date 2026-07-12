@@ -1,5 +1,6 @@
 <template>
   <div class="list-page">
+    <RuleHint>报价可从样衣一键建单并导入材料;金额<b>超审批阈值需主管审批</b>后才能发出;报价发出后可被订单引用,<b>已成单不可再改</b>;非授权用户看不到机密客户的报价。</RuleHint>
     <div class="toolbar-card">
       <div class="toolbar">
         <div class="tools-left">

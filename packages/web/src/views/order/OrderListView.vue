@@ -1,5 +1,6 @@
 <template>
   <div class="list-page">
+    <RuleHint>订单由报价「转销售合同」自动生成;<b>只有草稿状态可编辑</b>,下单后状态由下游(生成合同/发货/对账)<b>自动推进,不可手改</b>;可用行内「生成合同」按供应商拆单生成材料/加工合同。</RuleHint>
     <div class="toolbar-card">
       <div class="toolbar">
         <div class="tools-left">

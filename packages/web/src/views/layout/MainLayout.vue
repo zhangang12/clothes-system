@@ -43,7 +43,13 @@
           </template>
         </el-dropdown>
       </el-header>
-      <el-main class="main"><router-view /></el-main>
+      <el-main class="main">
+        <router-view v-slot="{ Component }">
+          <transition name="page" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
+      </el-main>
     </el-container>
   </el-container>
   <!-- 右下角问题反馈悬浮入口(所有登录用户可用) -->
@@ -123,4 +129,13 @@ function logout() { auth.clearAuth(); router.push('/login'); }
 
 /* 内容区：米白 */
 .main { background: var(--canvas); padding: 20px 24px; }
+
+/* 页面切换淡入过渡 */
+.page-enter-active, .page-leave-active { transition: opacity 0.18s ease, transform 0.18s ease; }
+.page-enter-from { opacity: 0; transform: translateY(6px); }
+.page-leave-to { opacity: 0; transform: translateY(-4px); }
+@media (prefers-reduced-motion: reduce) {
+  .page-enter-active, .page-leave-active { transition: none; }
+  .page-enter-from, .page-leave-to { transform: none; }
+}
 </style>
