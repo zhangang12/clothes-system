@@ -9,7 +9,6 @@
           <img src="/datex-logo.png" alt="DATEX" class="brand-logo-img" />
         </div>
         <h1>服装智造管理系统</h1>
-        <p class="brand-sub">从一片布，到一张单，全程可控</p>
         <ul class="brand-flow">
           <li v-for="(s, i) in flow" :key="s" :style="{ '--i': i }">
             <i class="dot"></i>{{ s }}
@@ -252,12 +251,8 @@ onMounted(() => {
 .brand-logo-img { width: 132px; height: auto; display: block; }
 
 .login-brand h1 {
-  font-size: 34px; font-weight: 700; margin: 0 0 14px; letter-spacing: 3px;
+  font-size: 34px; font-weight: 700; margin: 0 0 26px; letter-spacing: 3px;
   opacity: 0; animation: up 0.7s ease 0.35s forwards;
-}
-.brand-sub {
-  font-size: 16px; letter-spacing: 1px; color: rgba(255, 255, 255, 0.82); margin: 0 0 26px;
-  opacity: 0; animation: up 0.7s ease 0.5s forwards;
 }
 .brand-flow {
   list-style: none; margin: 0; padding: 0;
