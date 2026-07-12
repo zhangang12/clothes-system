@@ -21,6 +21,7 @@ import { CompanyModule } from './modules/company/company.module';
 import { DictModule } from './modules/dict/dict.module';
 import { FeedbackModule } from './modules/feedback/feedback.module';
 import { ErrorLogModule } from './modules/error-log/error-log.module';
+import { OpsModule } from './modules/ops/ops.module';
 import { NumberingModule } from './common/services/numbering.module';
 import { SysConfigModule } from './common/config/sys-config.module';
 import { FileModule } from './common/services/file.module';
@@ -72,6 +73,7 @@ import { UploadModule } from './modules/upload/upload.module';
     DictModule,
     FeedbackModule,
     ErrorLogModule,
+    OpsModule,
   ],
 })
 export class AppModule {}

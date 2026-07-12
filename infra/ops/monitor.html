@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232E8B78'/><path d='M12 9l9 7-9 7z' fill='white'/><circle cx='24' cy='16' r='3' fill='%2323343A'/></svg>">
+<title>DATEX 定时作业监控</title>
+<style>
+  :root{
+    --teal:#2E8B78;--teal-2:#1E6B5C;
+    --ok:#2FA872;--ok-soft:rgba(47,168,114,.14);
+    --warn:#D69A2E;--warn-soft:rgba(214,154,46,.15);
+    --crit:#D8574B;--crit-soft:rgba(216,87,75,.15);
+    --idle:#4E8FC4;--idle-soft:rgba(78,143,196,.15);
+    --bg:#EAEFEC;--panel:#FFFFFF;--panel-2:#F4F8F5;--sunk:#EDF2EF;
+    --ink:#182A2C;--ink-2:#48595B;--ink-3:#7E8F8E;--line:#DBE5E0;
+    --shadow:0 1px 2px rgba(20,40,45,.05),0 6px 20px rgba(20,40,45,.06);
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#0E171C;--panel:#152128;--panel-2:#19272E;--sunk:#111C22;
+    --ink:#E9EFEC;--ink-2:#A6B5B4;--ink-3:#6C7E7E;--line:#25373E;
+    --ok-soft:rgba(47,168,114,.16);--warn-soft:rgba(214,154,46,.16);
+    --crit-soft:rgba(216,87,75,.16);--idle-soft:rgba(78,143,196,.16);
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 26px rgba(0,0,0,.32);
+  }}
+  *{box-sizing:border-box}html,body{margin:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",system-ui,"Segoe UI",Roboto,sans-serif;
+    background:radial-gradient(1100px 480px at 88% -8%,rgba(46,139,120,.10),transparent 60%),var(--bg);
+    color:var(--ink);min-height:100vh;-webkit-font-smoothing:antialiased;line-height:1.5}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;font-variant-numeric:tabular-nums}
+  .wrap{max-width:1000px;margin:0 auto;padding:28px 20px 56px}
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:22px}
+  .brand{display:flex;align-items:center;gap:12px}
+  .mark{width:30px;height:30px;flex:none;position:relative}
+  .mark::before{content:"";position:absolute;left:1px;top:3px;border-left:16px solid var(--teal);border-top:12px solid transparent;border-bottom:12px solid transparent}
+  .mark::after{content:"";position:absolute;right:0;top:9px;width:11px;height:11px;border-radius:50%;background:var(--ink);opacity:.82}
+  .brand h1{margin:0;font-size:19px;font-weight:800;letter-spacing:.14em}
+  .brand .sub{font-size:12px;color:var(--ink-3);letter-spacing:.04em;margin-top:1px}
+  .clock{text-align:right}
+  .clock .t{font-size:20px;font-weight:700;letter-spacing:.02em}
+  .clock .l{font-size:11px;color:var(--ink-3);letter-spacing:.06em;text-transform:uppercase}
+  .banner{display:flex;align-items:center;gap:16px;background:var(--panel);border:1px solid var(--line);border-left:5px solid var(--ok);border-radius:16px;padding:18px 22px;box-shadow:var(--shadow);margin-bottom:14px}
+  .banner.warn{border-left-color:var(--warn)}.banner.stale{border-left-color:var(--ink-3)}
+  .dot{width:12px;height:12px;border-radius:50%;background:var(--ok);flex:none;position:relative}
+  .dot::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:2px solid var(--ok);opacity:.5;animation:ping 2.4s ease-out infinite}
+  .banner.warn .dot{background:var(--warn)}.banner.warn .dot::after{border-color:var(--warn)}
+  .banner.stale .dot{background:var(--ink-3)}.banner.stale .dot::after{animation:none;border-color:var(--ink-3)}
+  @keyframes ping{0%{transform:scale(.6);opacity:.55}80%,100%{transform:scale(1.5);opacity:0}}
+  .banner .big{font-size:19px;font-weight:750}
+  .banner .meta{font-size:13px;color:var(--ink-2);margin-top:2px}
+  .banner .right{margin-left:auto;text-align:right;font-size:12px;color:var(--ink-3)}
+  .staleBar{display:none;align-items:center;gap:8px;background:var(--warn-soft);color:var(--warn);border-radius:10px;padding:8px 14px;font-size:12.5px;margin-bottom:16px}
+  .staleBar.show{display:flex}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px}
+  .stat{background:var(--panel-2);border:1px solid var(--line);border-radius:13px;padding:13px 15px}
+  .stat .k{font-size:11.5px;color:var(--ink-3);letter-spacing:.04em;text-transform:uppercase;margin-bottom:5px}
+  .stat .v{font-size:20px;font-weight:750}
+  .stat .u{font-size:12px;color:var(--ink-2);margin-top:2px}
+  .sect{font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 2px 12px}
+  .jobs{display:flex;flex-direction:column;gap:14px}
+  .job{background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden;position:relative}
+  .job::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--stripe,var(--ok))}
+  .job .head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:16px 20px 12px 24px}
+  .job .idx{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--ink-3);font-weight:700}
+  .job .name{font-size:16px;font-weight:750}
+  .job .file{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--teal);background:var(--sunk);border:1px solid var(--line);padding:1px 8px;border-radius:6px}
+  .pill{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;padding:4px 11px;border-radius:999px;white-space:nowrap}
+  .pill i{width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block}
+  .pill.ok{color:var(--ok);background:var(--ok-soft)}.pill.idle{color:var(--idle);background:var(--idle-soft)}
+  .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 26px;padding:6px 20px 18px 24px}
+  .field .fk{font-size:11px;color:var(--ink-3);letter-spacing:.04em;text-transform:uppercase;margin-bottom:3px}
+  .field .fv{font-size:13.5px;color:var(--ink);word-break:break-word}
+  .cd{color:var(--teal);font-weight:700}
+  .note{display:flex;align-items:flex-start;gap:8px;margin:0 20px 16px 24px;padding:9px 12px;border-radius:10px;font-size:12.5px}
+  .note.warn{background:var(--warn-soft);color:var(--warn)}
+  .note.info{background:var(--sunk);color:var(--ink-2);border:1px solid var(--line)}
+  .note svg{flex:none;margin-top:1px}
+  .tlwrap{padding:0 20px 18px 24px}
+  .tl{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:4px}
+  .tl b{width:10px;height:10px;border-radius:3px;background:var(--ok);opacity:.9}
+  .tl b.mut{background:var(--line);opacity:.7}
+  footer{margin-top:26px;text-align:center;font-size:12px;color:var(--ink-3);line-height:1.8}
+  .loading{text-align:center;color:var(--ink-3);padding:60px 0;font-size:14px}
+  @media (max-width:720px){.stats{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.clock{text-align:left}}
+  @media (prefers-reduced-motion:reduce){.dot::after{animation:none}}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="brand">
+        <div class="mark" aria-hidden="true"></div>
+        <div><h1>DATEX</h1><div class="sub">定时作业监控 · SCHEDULED&nbsp;JOBS&nbsp;MONITOR</div></div>
+      </div>
+      <div class="clock">
+        <div class="t mono" id="clock">--:--:--</div>
+        <div class="l">本地时间 · 北京 (UTC+8)</div>
+      </div>
+    </div>
+    <div id="app"><div class="loading">正在拉取监控数据…</div></div>
+    <footer id="foot"></footer>
+  </div>
+
+<script>
+/* ============================================================
+   DATEX 定时作业监控 —— 单文件离线页，运行时自行拉取数据。
+   数据源：后端只读接口 /api/v1/ops/status（无需生成器）。
+   在线→拉最新并缓存；断网/失败→回退 localStorage 上次数据。
+   未来多项目：把 PROJECT 扩成数组、每项各自 api 即可聚合成 APP。
+   ============================================================ */
+var PROJECT = {
+  brand:'DATEX', name:'样衣管理系统', host:'123.57.87.30',
+  api:'http://123.57.87.30/api/v1/ops/status?k=ops_7yQ2k9Xz'
+};
+var CACHE_KEY='datex-ops-cache';
+var pad=function(n){return String(n).padStart(2,'0')};
+var esc=function(s){return String(s==null?'':s).replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})};
+
+/* ---- 拉数据 ---- */
+async function load(){
+  try{
+    var r=await fetch(PROJECT.api,{cache:'no-store',mode:'cors'});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    var j=await r.json();
+    var s=(j&&j.data)?j.data:j;
+    localStorage.setItem(CACHE_KEY,JSON.stringify({s:s,at:Date.now()}));
+    render(s,{stale:false});
+  }catch(e){
+    var c=null; try{c=JSON.parse(localStorage.getItem(CACHE_KEY)||'null')}catch(_){}
+    if(c&&c.s){ render(c.s,{stale:true,at:c.at,err:e.message}); }
+    else{ document.getElementById('app').innerHTML=
+      '<div class="loading">无法连接监控接口，且本机无缓存。<br><span class="mono">'+esc(PROJECT.api)+'</span><br>'+esc(e.message)+'</div>'; }
+  }
+}
+
+/* ---- 渲染 ---- */
+function render(s,meta){
+  var err=s.errors, fb=s.feedback;
+  var known=(typeof err==='number'&&typeof fb==='number');
+  var todo=known?(err+fb):null;
+  var bk=s.backup||{}, ow=s.watch||{};
+  var bkHHMM=bk.time?bk.time.slice(11,16):'--:--';
+  var healthClass=meta.stale?'stale':(todo>0?'warn':'');
+  var healthTitle=meta.stale?'离线 · 显示缓存数据':(todo>0?('有 '+todo+' 项待处理'):(known?'全部正常运行':'运行中（计数暂不可用）'));
+  var healthMeta=meta.stale
+      ? ('无法连接服务器，以下为上次成功获取的数据')
+      : (todo>0
+          ? ('待处理：系统报错 '+err+' 条 / 用户反馈 '+fb+' 条 · 智能巡检将在下个时段自动处理')
+          : ('3 项定时作业在册 · 今日 '+(known?err:'—')+' 报错 / '+(known?fb:'—')+' 反馈 · 均按计划执行'));
+
+  var html='';
+  html+='<div class="banner '+healthClass+'"><span class="dot"></span><div>'+
+        '<div class="big">'+esc(healthTitle)+'</div><div class="meta">'+esc(healthMeta)+'</div></div>'+
+        '<div class="right">数据快照<br><span class="mono">'+esc(s.systemTime||'—')+' '+esc(s.tz||'')+'</span></div></div>';
+
+  if(meta.stale){
+    html+='<div class="staleBar show"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>'+
+      '连接失败（'+esc(meta.err||'')+'），显示 '+esc(fmtWhen(meta.at))+' 的缓存；恢复联网后自动刷新。</div>';
+  }
+
+  // 统计条
+  html+='<div class="stats">'+
+    stat('在册作业','3<span style="font-size:13px;font-weight:600;color:var(--ink-3)"> 项</span>','2 服务器 cron · 1 智能循环')+
+    stat('今日待处理','<span style="color:'+(todo>0?'var(--warn)':(known?'var(--ok)':'var(--ink-3)'))+'">'+(known?todo:'—')+'</span>','报错 '+(known?err:'—')+' · 反馈 '+(known?fb:'—'))+
+    stat('最近备份','<span class="mono">'+esc(bkHHMM)+'</span>',(bk.size?esc(bk.size):'—')+' · 保留 '+(bk.count||0)+' 份')+
+    stat('巡检频率','<span class="mono">30<span style="font-size:13px;font-weight:600;color:var(--ink-3)"> 分</span></span>','轻量巡检 · 每 :00/:30')+
+  '</div>';
+
+  // 作业卡
+  html+='<div class="sect">作业清单 · Jobs</div><div class="jobs">';
+
+  html+=job('01','每日全库备份','backup.sh','ok',[
+    ['计划 (cron)','<span class="mono">0 3 * * *</span> · 每天 03:00'],
+    ['距下次执行','<span class="cd mono" data-next="daily:3">…</span>'],
+    ['上次结果','<span class="mono">'+esc(bk.time||'—')+'</span>'+(bk.size?(' 成功 · 库 '+esc(bk.size)):'')],
+    ['存放 / 保留','<span class="mono">/data/backups</span> · 保留 '+(bk.count||0)+' 份'],
+    ['内容','整库 mysqldump + uploads 附件打包'],
+    ['日志','<span class="mono">/var/log/i9-backup.log</span>']
+  ],'var(--ok)',{type:'warn',html:'<b>仅本机备份</b> —— 异地推送 (OSS/rclone) 尚未配置，属运维 P0 待办。'});
+
+  html+=job('02','系统巡检（轻量）','ops-watch.sh','ok',[
+    ['计划 (cron)','<span class="mono">*/30 * * * *</span> · 每 30 分钟'],
+    ['距下次执行','<span class="cd mono" data-next="halfhour">…</span>'],
+    ['上次结果','<span class="mono">'+esc(ow.time||'—')+'</span> · '+esc(ow.result||'暂无记录')],
+    ['检查项','未处理系统报错 + 未处理用户反馈'],
+    ['数据源','直连本地 MySQL 统计，无需凭据'],
+    ['日志','<span class="mono">/var/log/i9-ops-watch.log</span>']
+  ],'var(--ok)',null,true);
+
+  html+=job('03','智能巡检 + 自愈','ops-fetch-reports.cjs','idle',[
+    ['时段（系统时间）','<span class="mono">12:00 · 15:00 · 18:00</span>'],
+    ['距下次执行','<span class="cd mono" data-next="daily:12,15,18">…</span>'],
+    ['动作','浏览器下载报错/反馈报告 → 判定是否 BUG'],
+    ['是 BUG','最小化修复 → 全测试绿 → 自动发版 → 核验 → 标记已处理（红则自动回滚）'],
+    ['非 BUG','不动代码，进当晚报告交人工确认'],
+    ['每晚 18:00 后','汇总当日为一份 HTML 巡检报告']
+  ],'var(--idle)',{type:'info',html:'此作业随运维会话存活运行；服务器 cron 的 01/02 独立、持续运行不受影响。'});
+
+  html+='</div>';
+  document.getElementById('app').innerHTML=html;
+
+  document.getElementById('foot').innerHTML=
+    (meta.stale?'离线缓存':'实时数据')+' · 数据快照 <span class="mono">'+esc(s.systemTime||'—')+'</span> · 本页每 60 秒自动拉取刷新，倒计时按本地时钟推算<br>'+
+    esc(PROJECT.brand)+' '+esc(PROJECT.name)+' · 单机 ECS <span class="mono">'+esc(PROJECT.host)+'</span>';
+
+  buildTimeline();
+  tickNext();
+}
+
+function stat(k,v,u){return '<div class="stat"><div class="k">'+k+'</div><div class="v">'+v+'</div><div class="u">'+u+'</div></div>'}
+function job(idx,name,file,st,fields,stripe,note,timeline){
+  var pill=st==='idle'?'<span class="pill idle"><i></i>已武装</span>':'<span class="pill ok"><i></i>正常</span>';
+  var h='<div class="job" style="--stripe:'+stripe+'"><div class="head"><span class="idx">'+idx+'</span><span class="name">'+name+'</span><span class="file">'+file+'</span>'+pill+'</div><div class="grid">';
+  for(var i=0;i<fields.length;i++){h+='<div class="field"><div class="fk">'+fields[i][0]+'</div><div class="fv">'+fields[i][1]+'</div></div>'}
+  h+='</div>';
+  if(timeline){h+='<div class="tlwrap"><div class="fk" style="font-size:11px;color:var(--ink-3);letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px">今日巡检时间线（每格一次 · 绿=已执行）</div><div class="tl" id="tl"></div></div>'}
+  if(note){h+='<div class="note '+note.type+'">'+(note.type==='warn'
+      ?'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>'
+      :'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>')+
+      '<span>'+note.html+'</span></div>'}
+  h+='</div>';return h;
+}
+
+/* ---- 时钟 / 倒计时 / 时间线（客户端本地时钟）---- */
+function fmtWhen(ts){var d=new Date(ts);return pad(d.getHours())+':'+pad(d.getMinutes())}
+function nextDaily(hours){var now=new Date();for(var i=0;i<hours.length;i++){var t=new Date(now);t.setHours(hours[i],0,0,0);if(t.getTime()>now.getTime())return t}var t2=new Date(now);t2.setDate(t2.getDate()+1);t2.setHours(hours[0],0,0,0);return t2}
+function nextHalfHour(){var now=new Date(),t=new Date(now);if(now.getMinutes()<30){t.setMinutes(30,0,0)}else{t.setHours(t.getHours()+1);t.setMinutes(0,0,0)}return t}
+function fmtDur(ms){if(ms<0)ms=0;var s=Math.floor(ms/1000);var h=Math.floor(s/3600);s-=h*3600;var m=Math.floor(s/60);s-=m*60;return h+' 小时 '+pad(m)+' 分 '+pad(s)+' 秒'}
+function tickClock(){var d=new Date();var el=document.getElementById('clock');if(el)el.textContent=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds())}
+function tickNext(){var now=Date.now();var ns=document.querySelectorAll('[data-next]');for(var i=0;i<ns.length;i++){var el=ns[i],spec=el.getAttribute('data-next'),t;if(spec==='halfhour')t=nextHalfHour();else if(spec.indexOf('daily:')===0)t=nextDaily(spec.slice(6).split(',').map(Number));if(t)el.textContent=fmtDur(t.getTime()-now)}}
+function buildTimeline(){var tl=document.getElementById('tl');if(!tl)return;tl.innerHTML='';var now=new Date();var slots=Math.floor((now.getHours()*60+now.getMinutes())/30)+1;for(var i=0;i<48;i++){var b=document.createElement('b');if(i>=slots)b.className='mut';var hh=Math.floor(i/2),mm=(i%2)?'30':'00';b.title=pad(hh)+':'+mm;tl.appendChild(b)}}
+
+tickClock();setInterval(tickClock,1000);setInterval(tickNext,1000);
+load();setInterval(load,60000);
+</script>
+</body>
+</html>
