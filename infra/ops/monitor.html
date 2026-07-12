@@ -110,8 +110,20 @@
    ============================================================ */
 var PROJECT = {
   brand:'DATEX', name:'样衣管理系统', host:'123.57.87.30',
-  api:'http://123.57.87.30/api/v1/ops/status?k=ops_7yQ2k9Xz'
+  api:'http://123.57.87.30/api/v1/ops/status'
 };
+// 内置 ECDSA P-256 私钥：每次请求对时间戳签名，服务器用公钥验签 + 查时效（防重放）。
+// 注意：静态文件无法真正保密——此私钥等同本页对【只读】监控接口的访问凭据；
+// 泄露仅影响读取聚合运维指标，换钥换这对 + 服务器 OPS_STATUS_PUBKEY 即可。
+var PRIV_JWK={"kty":"EC","x":"P3xELKhOkLLkhyU_stzIsSCAbkzzJExxL_RfTY-0e7E","y":"UWpPftNnPoRU0DGEC0kqkWuNDWPQ1siNIy1GmVX4U4M","crv":"P-256","d":"p5lte4N-NTE2VsckIQOdsv5eebR8Id_yQdZoPlixWAE"};
+var _signKey=null;
+async function getSignKey(){ if(!_signKey) _signKey=await crypto.subtle.importKey('jwk',PRIV_JWK,{name:'ECDSA',namedCurve:'P-256'},false,['sign']); return _signKey; }
+function b64url(bytes){var s='';for(var i=0;i<bytes.length;i++)s+=String.fromCharCode(bytes[i]);return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
+async function signedApi(){
+  var ts=Math.floor(Date.now()/1000);
+  var sig=await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'}, await getSignKey(), new TextEncoder().encode('ops-status|'+ts));
+  return PROJECT.api+'?ts='+ts+'&sig='+b64url(new Uint8Array(sig));
+}
 var CACHE_KEY='datex-ops-cache';
 var pad=function(n){return String(n).padStart(2,'0')};
 var esc=function(s){return String(s==null?'':s).replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})};
@@ -119,7 +131,7 @@ var esc=function(s){return String(s==null?'':s).replace(/[&<>]/g,function(c){ret
 /* ---- 拉数据 ---- */
 async function load(){
   try{
-    var r=await fetch(PROJECT.api,{cache:'no-store',mode:'cors'});
+    var r=await fetch(await signedApi(),{cache:'no-store',mode:'cors'});
     if(!r.ok) throw new Error('HTTP '+r.status);
     var j=await r.json();
     var s=(j&&j.data)?j.data:j;
