@@ -35,7 +35,7 @@ def q(sql):
     r = subprocess.run(
         ['docker', 'exec', '-i', CONTAINER, 'mysql', '-uroot', '-p' + PW,
          '--default-character-set=utf8mb4', '-N', '-B', DB, '-e', sql],
-        capture_output=True, text=True)
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
     if r.returncode != 0:
         sys.stderr.write('SQL 失败: ' + r.stderr[:200] + '\n')
     return r.stdout
