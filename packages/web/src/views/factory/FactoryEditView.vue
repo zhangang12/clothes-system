@@ -16,7 +16,7 @@
 
     <el-form ref="formRef" :model="form" :rules="rules" label-width="96px" :disabled="readonly" class="form-body">
       <!-- 1. 主要信息 -->
-      <section-block title="1. 主要信息" badge="11 字段">
+      <section-block title="1. 主要信息" badge="10 字段">
         <el-row :gutter="16">
           <el-col :span="8">
             <el-form-item label="厂商编号">
@@ -35,11 +35,6 @@
               <el-select v-model="form.extraTypes" multiple collapse-tags placeholder="双身份(选填)" style="width:100%">
                 <el-option v-for="t in factoryTypes" :key="t.value" :label="t.label" :value="t.value" :disabled="t.value === form.type" />
               </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="电子章">
-              <FileUpload v-model="form.sealUrl" :limit="1" accept="image/*" list-type="picture-card" tip="盖章后 PDF 落款自动贴章" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -96,30 +91,17 @@
       </section-block>
 
       <!-- 联系人明细表 -->
-      <section-block title="▸ 明细表：联系人" badge="7 列">
+      <section-block title="▸ 明细表：联系人" badge="4 列">
         <div v-if="!readonly" class="subtable-ops">
           <el-button size="small" :icon="Plus" @click="addContact">新增行</el-button>
           <el-button size="small" :icon="Minus" :disabled="!selectedContacts.length" @click="removeContacts">删除</el-button>
-          <span class="hint">保存时自动取首行姓名/电话回填主表联系人</span>
+          <span class="hint">保存时自动取首行姓名/手机回填主表联系人</span>
         </div>
         <el-table :data="form.contacts" size="small" border @selection-change="(v: any[]) => selectedContacts = v">
           <el-table-column type="selection" width="40" />
           <el-table-column type="index" label="#" width="44" />
           <el-table-column label="姓名" min-width="110">
             <template #default="{ row }"><el-input v-model="row.name" size="small" /></template>
-          </el-table-column>
-          <el-table-column label="部门" width="120">
-            <template #default="{ row }">
-              <DictField v-model="row.department" type="department" size="small" />
-            </template>
-          </el-table-column>
-          <el-table-column label="职务" width="120">
-            <template #default="{ row }">
-              <DictField v-model="row.title" type="title" size="small" />
-            </template>
-          </el-table-column>
-          <el-table-column label="电话号码" width="140">
-            <template #default="{ row }"><el-input v-model="row.phone" size="small" /></template>
           </el-table-column>
           <el-table-column label="手机号码" width="140">
             <template #default="{ row }"><el-input v-model="row.mobile" size="small" /></template>
@@ -179,16 +161,14 @@
 </template>
 
 <script setup lang="ts">
-import FileUpload from '@/components/FileUpload.vue';
 import { ref, reactive, computed, onMounted, h } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
 import { Back, Check, Plus, Minus, CopyDocument } from '@element-plus/icons-vue';
 import { factoryApi } from '@/api/factory';
-import DictField from '@/components/DictSelect.vue';
 import { FACTORY_TYPE_LABEL } from '@i9/types';
-import { PROVINCES, PROVINCE_CITIES, DICT_DEPARTMENT, DICT_TITLE } from '@/constants/regions';
+import { PROVINCES, PROVINCE_CITIES } from '@/constants/regions';
 
 // 轻量分区容器组件
 const SectionBlock = (props: { title: string; badge?: string }, { slots }: any) =>
@@ -207,8 +187,6 @@ const editId = computed(() => (route.params.id ? Number(route.params.id) : null)
 const modeLabel = computed(() => (readonly.value ? '查看' : editId.value ? '编辑' : '新建'));
 
 const provinces = PROVINCES;
-const departments = DICT_DEPARTMENT;
-const titles = DICT_TITLE;
 const factoryTypes = Object.entries(FACTORY_TYPE_LABEL).map(([value, label]) => ({ value, label }));
 
 const emptyContact = () => ({ name: '', department: '', title: '', phone: '', mobile: '', email: '', remark: '' });
