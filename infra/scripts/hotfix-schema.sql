@@ -112,6 +112,16 @@ CALL _i9_run_if_col('sample_garment','status',"UPDATE sample_garment SET status=
 CALL _i9_run_if_col('sample_garment','status',"UPDATE sample_garment SET status='DONE' WHERE status='CONFIRMED'");
 CALL _i9_run_if_col('sample_garment','status',"UPDATE sample_garment SET status='RETURNED' WHERE status='REJECTED'");
 
+-- ── 反向漂移孤儿列放宽(2026-07-14 生产事故根治:建样衣 POST /samples 必 500)────────────────
+-- 根因:重构(e5f6e21)把 sample_garment 旧列 style_name(款式名)换成 style_no,init.sql/实体均不再含该列;
+--       但「重构前」装机的生产库上仍残留 style_name VARCHAR(100) NOT NULL 无默认值。现行代码 INSERT 只给
+--       style_no、不给 style_name → 严格模式「Field 'style_name' doesn't have a default value」→ 建样衣必 500。
+-- 为何漏网:gen-column-sync 只按 HEAD init.sql 补列/同步类型,看不见「生产有、HEAD 无」的反向漂移孤儿列,故从未触及。
+-- 修复:仅当该孤儿列存在时放宽为可空(全新装机无此列 → no-op;可幂等重放)。列即废弃、恒 NULL,不影响任何代码路径。
+-- 已核对(git diff 重构前基线↔HEAD):sample_garment 其余被删列 season/category/process_req/reject_reason/confirmed_at
+--       均为「可空+有默认」,不阻断 INSERT;子表 sample_material 系重构后新建、无孤儿列。故放宽本列即彻底解锁建样衣。
+CALL _i9_modify_col('sample_garment','style_name',"VARCHAR(100) NULL DEFAULT NULL COMMENT '(废弃)旧款式名,已由 style_no 取代;保留为可空,避免旧库建样衣 500'");
+
 -- 收窄列先截断,防 MODIFY 因超长数据失败(text → varchar(255))
 CALL _i9_run_if_col('settlement_receipt','remark',"UPDATE settlement_receipt SET remark=LEFT(remark,255) WHERE CHAR_LENGTH(remark)>255");
 
@@ -343,6 +353,8 @@ CREATE TABLE IF NOT EXISTS `sample_garment` (
   `customer_id`      BIGINT        NOT NULL COMMENT '中间商客户ID',
   `middleman_name`   VARCHAR(100)  DEFAULT NULL COMMENT '中间商名称(自动)',
   `style_no`         VARCHAR(100)  NOT NULL COMMENT '客户款号(必填)',
+  `sample_size`      VARCHAR(100)  DEFAULT NULL COMMENT '样衣尺码(如 38码 / S/M/L)',
+  `sample_qty`       INT           DEFAULT NULL COMMENT '样衣数量(件)',
   `buyer_id`         BIGINT        DEFAULT NULL COMMENT '关联最终买家',
   `buyer_name`       VARCHAR(100)  DEFAULT NULL,
   `buyer_no`         VARCHAR(30)   DEFAULT NULL COMMENT '买家编号(自动)',
@@ -357,6 +369,7 @@ CREATE TABLE IF NOT EXISTS `sample_garment` (
   `image1`           VARCHAR(255)  DEFAULT NULL,
   `image2`           VARCHAR(255)  DEFAULT NULL,
   `image3`           VARCHAR(255)  DEFAULT NULL,
+  `attachments`      VARCHAR(1000) DEFAULT NULL COMMENT '资料附件(图片/PDF/Excel,多文件逗号分隔)',
   `material_ship_no`   VARCHAR(50)  DEFAULT NULL COMMENT '材料寄出单号(触发推送版师)',
   `material_ship_date` DATE         DEFAULT NULL COMMENT '材料寄出日期(自动)',
   `return_no`        VARCHAR(50)   DEFAULT NULL COMMENT '寄回快递单号(版师)',
@@ -1379,6 +1392,10 @@ CALL _i9_add_col('sample_garment','middleman_name',"VARCHAR(100)  DEFAULT NULL C
 CALL _i9_sync_col('sample_garment','middleman_name',"VARCHAR(100)","VARCHAR(100)  DEFAULT NULL COMMENT '中间商名称(自动)'");
 CALL _i9_add_col('sample_garment','style_no',"VARCHAR(100)  NOT NULL COMMENT '客户款号(必填)'");
 CALL _i9_sync_col('sample_garment','style_no',"VARCHAR(100)","VARCHAR(100)  NOT NULL COMMENT '客户款号(必填)'");
+CALL _i9_add_col('sample_garment','sample_size',"VARCHAR(100)  DEFAULT NULL COMMENT '样衣尺码(如 38码 / S/M/L)'");
+CALL _i9_sync_col('sample_garment','sample_size',"VARCHAR(100)","VARCHAR(100)  DEFAULT NULL COMMENT '样衣尺码(如 38码 / S/M/L)'");
+CALL _i9_add_col('sample_garment','sample_qty',"INT           DEFAULT NULL COMMENT '样衣数量(件)'");
+CALL _i9_sync_col('sample_garment','sample_qty',"INT","INT           DEFAULT NULL COMMENT '样衣数量(件)'");
 CALL _i9_add_col('sample_garment','buyer_id',"BIGINT        DEFAULT NULL COMMENT '关联最终买家'");
 CALL _i9_sync_col('sample_garment','buyer_id',"BIGINT","BIGINT        DEFAULT NULL COMMENT '关联最终买家'");
 CALL _i9_add_col('sample_garment','buyer_name',"VARCHAR(100)  DEFAULT NULL");
@@ -1407,6 +1424,8 @@ CALL _i9_add_col('sample_garment','image2',"VARCHAR(255)  DEFAULT NULL");
 CALL _i9_sync_col('sample_garment','image2',"VARCHAR(255)","VARCHAR(255)  DEFAULT NULL");
 CALL _i9_add_col('sample_garment','image3',"VARCHAR(255)  DEFAULT NULL");
 CALL _i9_sync_col('sample_garment','image3',"VARCHAR(255)","VARCHAR(255)  DEFAULT NULL");
+CALL _i9_add_col('sample_garment','attachments',"VARCHAR(1000) DEFAULT NULL COMMENT '资料附件(图片/PDF/Excel,多文件逗号分隔)'");
+CALL _i9_sync_col('sample_garment','attachments',"VARCHAR(1000)","VARCHAR(1000) DEFAULT NULL COMMENT '资料附件(图片/PDF/Excel,多文件逗号分隔)'");
 CALL _i9_add_col('sample_garment','material_ship_no',"VARCHAR(50)  DEFAULT NULL COMMENT '材料寄出单号(触发推送版师)'");
 CALL _i9_sync_col('sample_garment','material_ship_no',"VARCHAR(50)","VARCHAR(50)  DEFAULT NULL COMMENT '材料寄出单号(触发推送版师)'");
 CALL _i9_add_col('sample_garment','material_ship_date',"DATE         DEFAULT NULL COMMENT '材料寄出日期(自动)'");

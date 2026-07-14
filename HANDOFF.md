@@ -29,6 +29,10 @@
 
 ## 立即待办（按优先级）
 
+0. **🔴 待发版·两处生产修复**（同一次 `push main → deploy.sh` 一起上）：
+   - **建样衣 500**：生产 `sample_garment` 残留重构前孤儿列 `style_name NOT NULL 无默认值` → 建样衣(POST /samples)必 500（线上已 16 次）。修复已进 `hotfix-schema.sql`（放宽为可空，守卫幂等）。验收=新建一张样衣成功。（本机无 MySQL 未本地真跑，经 deploy.sh 备份+应用+校验落地验证。）
+   - **反馈 Ctrl+V 粘贴**：`FileUpload` 加 `globalPaste` 兜底监听 + `FeedbackWidget` 启用。web `vue-tsc`+vitest 86/86 过；deploy.sh 会重建 web 静态包生效。验收=反馈弹窗里 Ctrl+V 粘截图能上传。
+   - **样衣附件/下载/尺码数量**：`sample_garment` +3 列（走 hotfix，红线一）+ 前端。验收=样衣新建页「资料附件」能传 PDF/Excel 多个、点文件能下载、基本信息有尺码/数量。（多轮寄样子表下一批）
 1. **🟠 用户操作·上线验收**：服务器 `bash infra/scripts/deploy.sh`（会自动补齐生产缺列并上线全部新功能）→ `health.sh` 全绿 → 网站验收 → 系统报错页把 8 条历史报错标「已处理」。
 2. 🟡 用户操作·启用合并即发版：把 `infra/ci/deploy.yml` 复制为 `.github/workflows/deploy.yml`（网页端建，当前 PAT 无 workflow scope）+ 配 `DEPLOY_SSH_HOST/USER/KEY` secrets。
 3. 🟡 剩余基建：正式 migration 体系（`gen-column-sync.py` 已等效缓解）；`deep-test.sh` CI 门禁；异地备份推送（OSS/rclone）+ HTTPS + 告警（需服务器侧凭据）。
@@ -50,6 +54,12 @@
 - **改 schema**：delta 同时进 `init.sql` + `hotfix-schema.sql`，并用真库验证（红线一）。
 
 ## 最近变更（新→旧，保留最近若干条）
+
+- （本次·样衣反馈第一步:附件/下载/尺码数量）`feat(sample)` 用户反馈两条(样衣管理),按用户「分两步」先做小改:①「图片信息」新增「资料附件」多文件字段(保留图1/2/3——下游报价/订单继承依赖;accept 图片/PDF/Excel、可多个;上传端点已放行 png/jpg/webp/pdf/xls/xlsx,**不含 Word**);②文件可下载:`FileUpload` 非图片点击直接下载、图片预览框加「下载」按钮(按文件名判类型,`<a download>` 同源强制下载);③样衣加「尺码/数量」字段(如 38 码 2 件)。schema:`sample_garment` +3 列(`sample_size`/`sample_qty`/`attachments`),`init.sql` + `gen-column-sync` 重生成(44 表/650 列,红线一);**本机无真库未实跑,经 `deploy.sh` 落地验证**。验证:types+api 构建✓ jest 221/221 web vue-tsc✓ vitest 86/86。反馈②的「多轮寄样追踪子表」(较大、且改「版师填件数+工价→自动生成对账单」计费逻辑)下一批做。
+
+- （本次·生产反馈修复:问题反馈 Ctrl+V 粘不了截图）`fix(web)` 反馈悬浮件里 Ctrl+V 粘贴截图无效。根因:`FileUpload` 的 paste 绑在需先聚焦的 `.fu-wrap`(tabindex=0),而反馈弹窗焦点天然在「问题描述」文本框,粘贴事件到不了上传框。修复:`FileUpload` 加可选 `globalPaste` 模式(挂载时在 `document` 兜底监听 paste、不依赖焦点;事件标记去重防 wrap/document 双触发;加限额守卫);`FeedbackWidget` 启用 `global-paste` + 弹窗 `destroy-on-close`(监听随弹窗开关自动挂/卸,关掉后不再全局抢粘贴)。未启用该 prop 的其它上传处零回归。验证:web `vue-tsc --noEmit` 0 报错 + vitest 86/86;真实浏览器粘贴动作未自动化(图片剪贴板难自动化),建议部署后手工点一下或本地 dev 验。
+
+- （本次·生产事故修复:建样衣 500）`fix(db)` 生产库 `sample_garment` 残留重构前(`e5f6e21`)孤儿列 `style_name VARCHAR(100) NOT NULL 无默认值`,现行代码 INSERT 只给 `style_no` → 建样衣(POST /samples)必 500(系统报错记录已抓到 16 次)。根因:`gen-column-sync.py` 只按 HEAD `init.sql` 补列、看不见「生产有、HEAD 无」的反向漂移孤儿列,故从未触及。修复:`hotfix-schema.sql` 手工迁移块加 `_i9_modify_col('sample_garment','style_name', 放宽为可空)`(仅列存在时执行/全新装机 no-op/幂等可重放);`init.sql` 不动(HEAD 本无此列)。git diff 重构前基线↔HEAD 核实:`style_name` 是 `sample_garment` 唯一 NOT-NULL 孤儿列(其余被删列均可空+有默认)、子表 `sample_material` 无孤儿列 → 放宽本列即彻底解锁建样衣。**本机无 MySQL/docker,真库未本地实跑;经 `deploy.sh`(升级前备份+应用 hotfix+关键列校验)落地验证**。系统性缺口:gen-column-sync 对反向漂移是盲的,待补(deep-test 回归用例 + 全表孤儿 NOT-NULL 列扫描)。
 
 - （本次·业务规则灰提示 + 交互优化）①新增全局组件 RuleHint(浅灰信息条,关键短语加粗)+全局注册+components.d.ts 类型声明,把隐性业务规则显式呈现在界面:订单(数量不导入/供应商限库内/草稿才可改)、报价(样衣导入/超阈值审批/成单不可改)、样衣(品名不导入/参考价脱敏/寄出单号推版师)、合同(推送后锁定/三金=100%/敏感附件限授权/首次推送自动开门户+待定占位)、对账(同类型合同/补料并入/发票=对账额/超发复核填因)、付款(分批/水单必填/无合同银行款号)、结算(仅计已付/收汇汇率齐才出毛利/分批结算/红冲)、出口发票(一票多款/占比分摊)共12处;②MainLayout 内容区加路由淡入过渡(reduce-motion 降级)。web 构建绿 vitest 全通
 

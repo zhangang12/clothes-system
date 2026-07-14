@@ -22,6 +22,12 @@ export class SampleGarment {
   @Column({ length: 100 })
   style_no: string; // 客户款号（必填）
 
+  @Column({ length: 100, nullable: true })
+  sample_size: string; // 样衣尺码（如 38码 / S/M/L）
+
+  @Column({ type: 'int', nullable: true })
+  sample_qty: number; // 样衣数量（件）
+
   @Column({ type: 'bigint', nullable: true })
   buyer_id: number;
 
@@ -63,6 +69,9 @@ export class SampleGarment {
 
   @Column({ length: 255, nullable: true })
   image3: string;
+
+  @Column({ length: 1000, nullable: true })
+  attachments: string; // 资料附件（图片/PDF/Excel，多文件逗号分隔）
 
   // 寄样跟踪
   @Column({ length: 50, nullable: true })

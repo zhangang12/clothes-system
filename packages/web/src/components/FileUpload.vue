@@ -21,16 +21,20 @@
     <template v-if="tip" #tip><div class="up-tip">{{ tip }}</div></template>
   </el-upload>
 
-  <div v-if="!disabled" class="fu-hint">支持拖入文件 / 聚焦后 Ctrl+V 粘贴截图</div>
+  <div v-if="!disabled" class="fu-hint">支持拖入文件 / {{ globalPaste ? 'Ctrl+V 粘贴截图' : '聚焦后 Ctrl+V 粘贴截图' }}</div>
   </div>
 
   <el-dialog v-model="previewVisible" width="640px" append-to-body>
     <img :src="previewUrl" style="width:100%" alt="预览" />
+    <template #footer>
+      <el-button v-if="previewFile" @click="download(previewFile)">下载</el-button>
+      <el-button type="primary" @click="previewVisible = false">关闭</el-button>
+    </template>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Plus, Upload } from '@element-plus/icons-vue';
 import { http } from '@/api';
@@ -45,8 +49,10 @@ const props = withDefaults(defineProps<{
   disabled?: boolean;
   tip?: string;
   sensitive?: boolean; // 敏感附件(身份证/水单/发票):存 private/ 子目录,读取须签名令牌
+  globalPaste?: boolean; // 全局粘贴:在 document 上监听 Ctrl+V,不必先聚焦上传框(用于弹窗内焦点常在别处的场景,如问题反馈)。
+                         // 注意:仅适合"仅在可见时挂载"的场景(如 el-dialog destroy-on-close),否则会全局抢占图片粘贴。
 }>(), {
-  modelValue: '', multiple: false, accept: 'image/*', limit: 6, listType: 'picture-card', disabled: false, tip: '', sensitive: false,
+  modelValue: '', multiple: false, accept: 'image/*', limit: 6, listType: 'picture-card', disabled: false, tip: '', sensitive: false, globalPaste: false,
 });
 const emit = defineEmits<{ (e: 'update:modelValue', v: string): void }>();
 
@@ -64,19 +70,31 @@ watch(() => props.modelValue, rebuildList, { immediate: true });
 
 const previewVisible = ref(false);
 const previewUrl = ref('');
+const previewFile = ref<any>(null);
 
 // 粘贴截图 / 拖拽文件 → 复用同一上传通道(设计稿:①点选 ②Ctrl+V 粘贴 ③拖文件)
 function onPaste(e: ClipboardEvent) {
   if (props.disabled) return;
+  // globalPaste 时 wrap 的 @paste 与 document 监听会对同一事件各触发一次(冒泡),用标记去重防重复上传
+  if ((e as any)._fuHandled) return;
   const items = e.clipboardData?.items;
   if (!items) return;
-  for (const it of items) {
-    if (it.kind === 'file') {
-      const f = it.getAsFile();
-      if (f) { e.preventDefault(); doUpload({ file: f }); }
-    }
+  let room = effectiveLimit.value - urls().length;
+  for (const it of Array.from(items)) {
+    if (it.kind !== 'file') continue;
+    const f = it.getAsFile();
+    if (!f) continue;
+    if (room <= 0) { ElMessage.warning(`最多上传 ${effectiveLimit.value} 个文件`); break; }
+    (e as any)._fuHandled = true;
+    e.preventDefault();
+    room -= 1;
+    doUpload({ file: f });
   }
 }
+// 全局粘贴:焦点常不在上传框(如反馈弹窗焦点在文本框)时,在 document 上兜底监听。
+// 监听随组件挂载/卸载增删;配合 el-dialog destroy-on-close,即"弹窗开着才监听"。
+onMounted(() => { if (props.globalPaste) document.addEventListener('paste', onPaste); });
+onBeforeUnmount(() => { document.removeEventListener('paste', onPaste); });
 function onDrop(e: DragEvent) {
   if (props.disabled) return;
   const files = e.dataTransfer?.files;
@@ -106,10 +124,22 @@ function onRemove(file: any) {
   const orig = origUrlOf(file);
   emit('update:modelValue', urls().filter((u) => u !== orig).join(','));
 }
+const isImageName = (name?: string) => /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(name || '');
+// 下载文件:同源 /uploads,<a download> 可强制下载;敏感附件走签名链接
+async function download(file: any) {
+  const a = document.createElement('a');
+  a.href = await signedUrl(origUrlOf(file));
+  a.download = file?.name || '';
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
 async function onPreview(file: any) {
-  const url = await signedUrl(origUrlOf(file)); // 敏感附件换新令牌,防列表停留过久令牌过期
-  if (/\.(pdf|docx?|xlsx?)$/i.test(url) || url.includes('.pdf')) { window.open(url, '_blank'); return; }
-  previewUrl.value = url;
+  // 非图片(PDF/Excel 等)→ 直接下载;图片 → 弹窗预览(框内可再下载)。按文件名判类型(URL 带查询串,靠扩展名不准)
+  if (!isImageName(file.name)) { await download(file); return; }
+  previewUrl.value = await signedUrl(origUrlOf(file)); // 敏感附件换新令牌,防列表停留过久令牌过期
+  previewFile.value = file;
   previewVisible.value = true;
 }
 function onExceed() { ElMessage.warning(`最多上传 ${effectiveLimit.value} 个文件`); }
