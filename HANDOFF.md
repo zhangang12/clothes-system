@@ -29,7 +29,9 @@
 
 ## 立即待办（按优先级）
 
-0. **🔴 待发版·建样衣 500 修复**：生产 `sample_garment` 残留重构前孤儿列 `style_name NOT NULL 无默认值` → 建样衣(POST /samples)必 500（线上已 16 次）。修复已进 `hotfix-schema.sql`（放宽为可空，守卫幂等）。落地：push origin/main → 服务器 `bash infra/scripts/deploy.sh`；验收=新建一张样衣成功。（本机无 MySQL 未本地真跑，经 deploy.sh 备份+应用+校验落地验证。）
+0. **🔴 待发版·两处生产修复**（同一次 `push main → deploy.sh` 一起上）：
+   - **建样衣 500**：生产 `sample_garment` 残留重构前孤儿列 `style_name NOT NULL 无默认值` → 建样衣(POST /samples)必 500（线上已 16 次）。修复已进 `hotfix-schema.sql`（放宽为可空，守卫幂等）。验收=新建一张样衣成功。（本机无 MySQL 未本地真跑，经 deploy.sh 备份+应用+校验落地验证。）
+   - **反馈 Ctrl+V 粘贴**：`FileUpload` 加 `globalPaste` 兜底监听 + `FeedbackWidget` 启用。web `vue-tsc`+vitest 86/86 过；deploy.sh 会重建 web 静态包生效。验收=反馈弹窗里 Ctrl+V 粘截图能上传。
 1. **🟠 用户操作·上线验收**：服务器 `bash infra/scripts/deploy.sh`（会自动补齐生产缺列并上线全部新功能）→ `health.sh` 全绿 → 网站验收 → 系统报错页把 8 条历史报错标「已处理」。
 2. 🟡 用户操作·启用合并即发版：把 `infra/ci/deploy.yml` 复制为 `.github/workflows/deploy.yml`（网页端建，当前 PAT 无 workflow scope）+ 配 `DEPLOY_SSH_HOST/USER/KEY` secrets。
 3. 🟡 剩余基建：正式 migration 体系（`gen-column-sync.py` 已等效缓解）；`deep-test.sh` CI 门禁；异地备份推送（OSS/rclone）+ HTTPS + 告警（需服务器侧凭据）。
@@ -51,6 +53,8 @@
 - **改 schema**：delta 同时进 `init.sql` + `hotfix-schema.sql`，并用真库验证（红线一）。
 
 ## 最近变更（新→旧，保留最近若干条）
+
+- （本次·生产反馈修复:问题反馈 Ctrl+V 粘不了截图）`fix(web)` 反馈悬浮件里 Ctrl+V 粘贴截图无效。根因:`FileUpload` 的 paste 绑在需先聚焦的 `.fu-wrap`(tabindex=0),而反馈弹窗焦点天然在「问题描述」文本框,粘贴事件到不了上传框。修复:`FileUpload` 加可选 `globalPaste` 模式(挂载时在 `document` 兜底监听 paste、不依赖焦点;事件标记去重防 wrap/document 双触发;加限额守卫);`FeedbackWidget` 启用 `global-paste` + 弹窗 `destroy-on-close`(监听随弹窗开关自动挂/卸,关掉后不再全局抢粘贴)。未启用该 prop 的其它上传处零回归。验证:web `vue-tsc --noEmit` 0 报错 + vitest 86/86;真实浏览器粘贴动作未自动化(图片剪贴板难自动化),建议部署后手工点一下或本地 dev 验。
 
 - （本次·生产事故修复:建样衣 500）`fix(db)` 生产库 `sample_garment` 残留重构前(`e5f6e21`)孤儿列 `style_name VARCHAR(100) NOT NULL 无默认值`,现行代码 INSERT 只给 `style_no` → 建样衣(POST /samples)必 500(系统报错记录已抓到 16 次)。根因:`gen-column-sync.py` 只按 HEAD `init.sql` 补列、看不见「生产有、HEAD 无」的反向漂移孤儿列,故从未触及。修复:`hotfix-schema.sql` 手工迁移块加 `_i9_modify_col('sample_garment','style_name', 放宽为可空)`(仅列存在时执行/全新装机 no-op/幂等可重放);`init.sql` 不动(HEAD 本无此列)。git diff 重构前基线↔HEAD 核实:`style_name` 是 `sample_garment` 唯一 NOT-NULL 孤儿列(其余被删列均可空+有默认)、子表 `sample_material` 无孤儿列 → 放宽本列即彻底解锁建样衣。**本机无 MySQL/docker,真库未本地实跑;经 `deploy.sh`(升级前备份+应用 hotfix+关键列校验)落地验证**。系统性缺口:gen-column-sync 对反向漂移是盲的,待补(deep-test 回归用例 + 全表孤儿 NOT-NULL 列扫描)。
 

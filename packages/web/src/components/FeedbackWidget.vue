@@ -5,7 +5,7 @@
     <span class="fb-fab-txt">反馈</span>
   </div>
 
-  <el-dialog v-model="open" title="问题反馈" width="480px" append-to-body @closed="reset">
+  <el-dialog v-model="open" title="问题反馈" width="480px" append-to-body destroy-on-close @closed="reset">
     <el-form label-position="top">
       <el-form-item label="问题描述" required>
         <el-input
@@ -18,7 +18,7 @@
         />
       </el-form-item>
       <el-form-item label="截图 / 图片（可选，最多 6 张）">
-        <FileUpload v-model="images" multiple :limit="6" accept="image/*" />
+        <FileUpload v-model="images" multiple :limit="6" accept="image/*" global-paste />
       </el-form-item>
       <p class="fb-ctx">提交页面：<span class="mono">{{ pageUrl }}</span></p>
     </el-form>
