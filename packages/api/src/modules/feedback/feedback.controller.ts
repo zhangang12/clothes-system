@@ -36,6 +36,28 @@ export class FeedbackController {
     return this.service.findAll(query);
   }
 
+  // ↓ 提交人自助:我的反馈 + 未读回复数 + 标记已读(全体内部用户,须在 :id 路由之前声明)
+  @Get('mine')
+  @Roles(...INTERNAL_ROLES)
+  @ApiOperation({ summary: '我的反馈(含管理员回复)' })
+  mine(@Query() query: { page?: number; size?: number }, @Request() req: any) {
+    return this.service.mine(req.user.id, query);
+  }
+
+  @Get('mine/unread')
+  @Roles(...INTERNAL_ROLES)
+  @ApiOperation({ summary: '我的未读回复数(右下角红点)' })
+  unread(@Request() req: any) {
+    return this.service.unreadCount(req.user.id);
+  }
+
+  @Patch(':id/read')
+  @Roles(...INTERNAL_ROLES)
+  @ApiOperation({ summary: '标记某条回复已读(消红点,仅本人)' })
+  markRead(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.service.markRead(id, req.user.id);
+  }
+
   @Get('export')
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: '导出 HTML(仅未处理)' })

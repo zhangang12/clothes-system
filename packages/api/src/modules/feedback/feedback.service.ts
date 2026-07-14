@@ -34,11 +34,40 @@ export class FeedbackService {
   }
 
   async markHandled(id: number, handled = true, reply?: string) {
-    await this.repo.update(
-      { id },
-      { status: handled ? FeedbackStatus.HANDLED : FeedbackStatus.PENDING, reply: reply ?? null },
-    );
+    const patch: any = { status: handled ? FeedbackStatus.HANDLED : FeedbackStatus.PENDING };
+    // 有回复内容 → 记回复时间 + 置未读(提交人登录后右下角红点提醒)
+    if (reply !== undefined) {
+      patch.reply = reply || null;
+      if (reply) { patch.reply_at = new Date(); patch.reply_read = 0; }
+    }
+    await this.repo.update({ id }, patch);
     return this.repo.findOne({ where: { id } });
+  }
+
+  /** 提交人:我的反馈(含管理员回复),按时间倒序 */
+  async mine(userId: number, query: { page?: number; size?: number }) {
+    const size = Math.min(Math.max(Number(query.size) || 20, 1), 100);
+    const page = Math.max(Number(query.page) || 1, 1);
+    const [items, total] = await this.repo.findAndCount({
+      where: { user_id: userId, deleted: 0 }, order: { id: 'DESC' }, skip: (page - 1) * size, take: size,
+    });
+    return { items, total, page, size };
+  }
+
+  /** 提交人:未读回复数(右下角红点角标) */
+  async unreadCount(userId: number) {
+    const count = await this.repo
+      .createQueryBuilder('f')
+      .where('f.user_id = :userId AND f.deleted = 0 AND f.reply IS NOT NULL AND f.reply <> :empty AND f.reply_read = 0',
+        { userId, empty: '' })
+      .getCount();
+    return { count };
+  }
+
+  /** 提交人:标记某条回复已读(消红点);仅本人可标记 */
+  async markRead(id: number, userId: number) {
+    await this.repo.update({ id, user_id: userId }, { reply_read: 1 });
+    return { ok: true };
   }
 
   /** HTML 导出:仅未处理(PENDING);已处理不导出 */

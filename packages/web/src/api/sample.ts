@@ -16,7 +16,7 @@ export const sampleApi = {
   push: (id: number, dto: { patternmakerId?: number; patternmakerName?: string; materialShipNo?: string }) =>
     http.patch<unknown, { data: SampleGarment }>(`/samples/${id}/push`, dto),
   // 版师视图保存：实际耗用/拉链长度/寄回单号/件数/工时单价
-  patternmakerSave: (id: number, dto: { materials?: any[]; returnNo?: string; pieceCount?: number; laborUnitPrice?: number; feedbackAttachments?: string }) =>
+  patternmakerSave: (id: number, dto: { materials?: any[]; returnNo?: string; pieceCount?: number; laborUnitPrice?: number; shipRounds?: any[]; feedbackAttachments?: string }) =>
     http.patch<unknown, { data: SampleGarment }>(`/samples/${id}/patternmaker`, dto),
   ship: (id: number, dto: { shipSampleDate?: string } = {}) =>
     http.patch<unknown, { data: SampleGarment }>(`/samples/${id}/ship`, dto),

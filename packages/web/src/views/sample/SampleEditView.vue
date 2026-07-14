@@ -151,23 +151,38 @@
         </div>
       </section-block>
 
-      <!-- 寄样跟踪 -->
-      <section-block title="▣ 寄样跟踪" badge="8 字段">
+      <!-- 寄样跟踪(多轮) -->
+      <section-block title="▣ 寄样跟踪" badge="多轮">
         <el-row :gutter="16">
           <el-col :span="8"><el-form-item label="材料寄出单号"><el-input v-model="form.materialShipNo" :disabled="bizDisabled" placeholder="填入触发推送版师" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="材料寄出日期"><el-input v-model="form.materialShipDate" readonly placeholder="自动" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="寄回快递单号"><el-input v-model="form.returnNo" :disabled="!pmEnabled" placeholder="版师填" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="寄回日期"><el-input v-model="form.returnDate" readonly placeholder="自动" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="件数"><el-input v-model="form.pieceCount" type="number" :disabled="!pmEnabled" placeholder="版师填" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="工时单价(CNY)"><el-input v-model="form.laborUnitPrice" type="number" :disabled="!pmEnabled" placeholder="版师填" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="工时金额(CNY)"><el-input :model-value="laborAmount" readonly placeholder="= 件数 × 单价" /></el-form-item></el-col>
+        </el-row>
+        <RuleHint tone="teal">样衣一轮打不完可分<b>多轮寄样</b>:每轮填 尺码/数量/寄样日期/单号;<b>寄回日期、工价单价由版师填</b>;各轮金额=数量×单价,<b>工价合计=各轮之和</b>自动进对账。</RuleHint>
+        <div v-if="!readonly" class="subtable-ops">
+          <el-button size="small" :icon="Plus" @click="addRound">加一轮</el-button>
+          <el-button size="small" :icon="Minus" :disabled="!selectedRounds.length" @click="removeRounds">删除</el-button>
+          <span class="hint">工价合计 ¥{{ shipRoundsTotal }}（{{ form.shipRounds.length }} 轮 · 共 {{ shipRoundsQty }} 件）</span>
+        </div>
+        <el-table :data="form.shipRounds" size="small" border @selection-change="(v: any[]) => selectedRounds = v">
+          <el-table-column type="selection" width="40" />
+          <el-table-column label="轮次" width="60"><template #default="{ $index }">{{ $index + 1 }}</template></el-table-column>
+          <el-table-column label="尺码" min-width="90"><template #default="{ row }"><el-input v-model="row.size" size="small" :disabled="bizDisabled" placeholder="如 38码" /></template></el-table-column>
+          <el-table-column label="数量(件)" width="96"><template #default="{ row }"><el-input v-model="row.qty" type="number" :min="0" size="small" :disabled="bizDisabled" @input="onRoundCalc(row)" /></template></el-table-column>
+          <el-table-column label="寄样日期" width="150"><template #default="{ row }"><el-date-picker v-model="row.shipDate" type="date" value-format="YYYY-MM-DD" size="small" style="width:100%" :disabled="bizDisabled" /></template></el-table-column>
+          <el-table-column label="寄样单号" min-width="110"><template #default="{ row }"><el-input v-model="row.shipNo" size="small" :disabled="bizDisabled" /></template></el-table-column>
+          <el-table-column label="寄回日期" width="150"><template #default="{ row }"><el-date-picker v-model="row.returnDate" type="date" value-format="YYYY-MM-DD" size="small" style="width:100%" :disabled="!pmEnabled" placeholder="版师填" /></template></el-table-column>
+          <el-table-column label="工价单价" width="100"><template #default="{ row }"><el-input v-model="row.laborUnitPrice" type="number" :min="0" size="small" :disabled="!pmEnabled" placeholder="版师填" @input="onRoundCalc(row)" /></template></el-table-column>
+          <el-table-column label="工价金额" width="100"><template #default="{ row }"><el-input :model-value="roundAmount(row)" size="small" readonly /></template></el-table-column>
+          <el-table-column label="备注" min-width="90"><template #default="{ row }"><el-input v-model="row.remark" size="small" /></template></el-table-column>
+        </el-table>
+        <el-row :gutter="16" style="margin-top:12px">
           <el-col :span="24">
             <el-form-item label="样衣意见附件">
               <file-upload v-model="form.feedbackAttachments" multiple accept="image/*,.pdf" :disabled="readonly" tip="客户反馈图/PDF,可多文件(业务/版师均可上传)" />
             </el-form-item>
           </el-col>
         </el-row>
-        <div class="hint">💡 版师填「件数 + 工时单价」保存后自动生成对账单 → 联动付款申请。</div>
+        <div class="hint">💡 版师填各轮「数量 + 工价单价」保存后,工价合计自动生成对账单 → 联动付款申请。</div>
       </section-block>
 
       <!-- 变更记录 -->
@@ -235,7 +250,10 @@ const form = reactive<any>({
   image1: '', image2: '', image3: '', materialShipNo: '', materialShipDate: '',
   returnNo: '', returnDate: '', pieceCount: '', laborUnitPrice: '', status: '',
   materials: [emptyMaterial()],
+  shipRounds: [] as any[],
 });
+
+const emptyRound = () => ({ size: '', qty: '', shipDate: '', shipNo: '', returnDate: '', laborUnitPrice: '', laborAmount: '', remark: '' });
 
 const categoryList = computed({
   get: () => (form.categories ? String(form.categories).split(',').filter(Boolean) : []),
@@ -247,9 +265,23 @@ const laborAmount = computed(() => {
 });
 const statusLabel = computed(() => (SAMPLE_STATUS_LABEL as any)[form.status] ?? '');
 
+// 寄样多轮:每轮金额=数量×单价;合计供顶层展示(后端亦 Σ 回填对账)
+const roundAmount = (row: any) => {
+  const q = Number(row.qty), u = Number(row.laborUnitPrice);
+  return q && u ? (q * u).toFixed(2) : '';
+};
+const onRoundCalc = (row: any) => { row.laborAmount = roundAmount(row); };
+const shipRoundsTotal = computed(() => form.shipRounds.reduce((s: number, r: any) => s + (Number(roundAmount(r)) || 0), 0).toFixed(2));
+const shipRoundsQty = computed(() => form.shipRounds.reduce((s: number, r: any) => s + (Number(r.qty) || 0), 0));
+
 const formRef = ref<FormInstance>();
 const saving = ref(false);
 const selMaterials = ref<any[]>([]);
+const selectedRounds = ref<any[]>([]);
+function addRound() { form.shipRounds.push(emptyRound()); }
+function removeRounds() {
+  form.shipRounds = form.shipRounds.filter((r: any) => !selectedRounds.value.includes(r));
+}
 const rules: FormRules = {
   styleNo: [{ required: true, message: '请输入客户款号', trigger: 'blur' }],
   middlemanId: [{ required: true, message: '请选择中间商', trigger: 'change' }],
@@ -327,6 +359,12 @@ async function load() {
       qty: m.qty, size: m.size, refPrice: m.ref_price, actualUsage: m.actual_usage,
       supplierId: m.supplier_id ?? undefined, supplierName: m.supplier_name, remark: m.remark,
     })) : [emptyMaterial()],
+    // 寄样多轮(后端已把存量单值合成第一轮)
+    shipRounds: (d.shipRounds ?? []).map((r: any) => ({
+      size: r.size ?? '', qty: r.qty ?? '', shipDate: r.ship_date ?? '', shipNo: r.ship_no ?? '',
+      returnDate: r.return_date ?? '', laborUnitPrice: r.labor_unit_price ?? '',
+      laborAmount: r.labor_amount ?? '', remark: r.remark ?? '',
+    })),
   });
   const vs: any = await sampleApi.getVersionHistory(editId.value);
   versions.value = (vs.data ?? vs) ?? [];
@@ -344,7 +382,22 @@ function buildDto() {
     feedbackAttachments: form.feedbackAttachments ?? '', attachments: form.attachments ?? '',
     image1: form.image1 || undefined, image2: form.image2 || undefined, image3: form.image3 || undefined,
     materials: form.materials.filter((m: any) => m.itemName).map((m: any, i: number) => ({ ...m, sortOrder: i })),
+    shipRounds: buildRounds(),
   };
+}
+
+// 寄样多轮序列化(空行剔除;数字规整;金额=数量×单价)
+function buildRounds() {
+  return form.shipRounds
+    .filter((r: any) => r.size || r.qty !== '' || r.shipDate || r.shipNo || r.laborUnitPrice !== '')
+    .map((r: any, i: number) => ({
+      sortOrder: i, roundNo: i + 1, size: r.size || undefined,
+      qty: r.qty === '' || r.qty == null ? undefined : Number(r.qty),
+      shipDate: r.shipDate || undefined, shipNo: r.shipNo || undefined,
+      returnDate: r.returnDate || undefined,
+      laborUnitPrice: r.laborUnitPrice === '' || r.laborUnitPrice == null ? undefined : Number(r.laborUnitPrice),
+      laborAmount: Number(roundAmount(r)) || undefined, remark: r.remark || undefined,
+    }));
 }
 
 async function save() {
@@ -413,8 +466,8 @@ async function savePatternmaker() {
     await sampleApi.patternmakerSave(editId.value, {
       materials: form.materials.filter((m: any) => m.id).map((m: any) => ({ id: m.id, actualUsage: m.actualUsage === '' ? undefined : Number(m.actualUsage), zipperLength: m.zipperLength })),
       returnNo: form.returnNo || undefined,
-      pieceCount: form.pieceCount === '' ? undefined : Number(form.pieceCount),
-      laborUnitPrice: form.laborUnitPrice === '' ? undefined : Number(form.laborUnitPrice),
+      // 版师按轮填工价(#5):提交多轮,后端 Σ 回填顶层工价 → 生成对账单
+      shipRounds: buildRounds(),
       feedbackAttachments: form.feedbackAttachments ?? '',
     });
     ElMessage.success('版师保存成功');

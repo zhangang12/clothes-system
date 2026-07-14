@@ -7,6 +7,7 @@ import { DataSource } from 'typeorm';
 import { SampleGarment } from '../sample-garment.entity';
 import { SampleMaterial } from '../sample-material.entity';
 import { SampleVersion } from '../sample-version.entity';
+import { SampleShipRound } from '../sample-ship-round.entity';
 import { Customer } from '../../customer/customer.entity';
 import { Quotation } from '../../quote/quotation.entity';
 import { SampleService } from '../sample.service';
@@ -26,6 +27,7 @@ const mockMaterialRepo = {
   update: jest.fn().mockResolvedValue({}),
 };
 const mockVersionRepo = { create: jest.fn().mockImplementation((v) => v), save: jest.fn().mockResolvedValue({}), find: jest.fn().mockResolvedValue([]) };
+const mockShipRoundRepo = { create: jest.fn().mockImplementation((v) => v), save: jest.fn().mockResolvedValue({}), find: jest.fn().mockResolvedValue([]) };
 const mockCustomerRepo = { findOne: jest.fn() };
 const mockQuoteRepo = { count: jest.fn(), find: jest.fn().mockResolvedValue([]) };
 const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn(), expire: jest.fn() };
@@ -58,6 +60,7 @@ describe('SampleService', () => {
         { provide: getRepositoryToken(SampleGarment), useValue: mockRepo },
         { provide: getRepositoryToken(SampleMaterial), useValue: mockMaterialRepo },
         { provide: getRepositoryToken(SampleVersion), useValue: mockVersionRepo },
+        { provide: getRepositoryToken(SampleShipRound), useValue: mockShipRoundRepo },
         { provide: getRepositoryToken(Customer), useValue: mockCustomerRepo },
         { provide: getRepositoryToken(Quotation), useValue: mockQuoteRepo },
         { provide: DataSource, useValue: mockDataSource },

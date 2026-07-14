@@ -8,6 +8,7 @@ import {
 import { SampleGarment } from './sample-garment.entity';
 import { SampleMaterial } from './sample-material.entity';
 import { SampleVersion } from './sample-version.entity';
+import { SampleShipRound } from './sample-ship-round.entity';
 import { Customer } from '../customer/customer.entity';
 import { Quotation } from '../quote/quotation.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
@@ -31,6 +32,7 @@ export class SampleService {
     @InjectRepository(SampleGarment) private readonly repo: Repository<SampleGarment>,
     @InjectRepository(SampleMaterial) private readonly materialRepo: Repository<SampleMaterial>,
     @InjectRepository(SampleVersion) private readonly versionRepo: Repository<SampleVersion>,
+    @InjectRepository(SampleShipRound) private readonly shipRoundRepo: Repository<SampleShipRound>,
     @InjectRepository(Customer) private readonly customerRepo: Repository<Customer>,
     @InjectRepository(Quotation) private readonly quoteRepo: Repository<Quotation>,
     private readonly numbering: NumberingService,
@@ -47,6 +49,36 @@ export class SampleService {
       puller: m.puller, qty: m.qty, size: m.size, ref_price: m.refPrice, actual_usage: m.actualUsage,
       supplier_id: m.supplierId, supplier_name: m.supplierName, image: m.image, remark: m.remark,
     }));
+  }
+
+  private buildShipRounds(sampleId: number, rounds: CreateSampleDto['shipRounds']): SampleShipRound[] {
+    return (rounds ?? [])
+      .filter((r) => r.size || r.qty != null || r.shipDate || r.shipNo || r.laborUnitPrice != null || r.laborAmount != null)
+      .map((r, idx) => {
+        const qty = r.qty != null ? Number(r.qty) : null;
+        const unit = r.laborUnitPrice != null ? Number(r.laborUnitPrice) : null;
+        // 金额优先取传入值,否则由数量×单价派生
+        const amount = r.laborAmount != null ? Number(r.laborAmount)
+          : (qty != null && unit != null ? +(qty * unit).toFixed(2) : null);
+        return this.shipRoundRepo.create({
+          sample_id: sampleId, sort_order: r.sortOrder ?? idx, round_no: r.roundNo ?? idx + 1,
+          size: r.size, qty, ship_date: r.shipDate || null, ship_no: r.shipNo,
+          return_date: r.returnDate || null, labor_unit_price: unit, labor_amount: amount, remark: r.remark,
+        });
+      });
+  }
+
+  /** 多轮工价汇总 → 回填 sample 顶层 labor_amount/piece_count(供对账/结算按现有字段读取,不破下游)。 */
+  private summarizeRounds(rounds: SampleShipRound[]) {
+    const pieceCount = rounds.reduce((s, r) => s + (Number(r.qty) || 0), 0);
+    const laborAmount = +rounds.reduce((s, r) => s + (Number(r.labor_amount) || 0), 0).toFixed(2);
+    // 单价取加权均价(金额/件数),仅作展示回填;件数为 0 时留空
+    const unit = pieceCount > 0 ? +(laborAmount / pieceCount).toFixed(2) : null;
+    return {
+      piece_count: pieceCount || null,
+      labor_amount: laborAmount || null,
+      labor_unit_price: unit,
+    };
   }
 
   private async log(sampleId: number, version: number, action: string, operatorId: number, remark?: string) {
@@ -72,6 +104,9 @@ export class SampleService {
     }
     const sample_no = await this.numbering.next(NUM_PREFIX.SAMPLE);
 
+    // 寄样多轮:先构造(sample_id 待创建后回填)以便派生顶层工价
+    const rounds0 = this.buildShipRounds(0, dto.shipRounds);
+    const sum = this.summarizeRounds(rounds0);
     const saved = await this.dataSource.transaction(async (manager) => {
       const created = await manager.save(SampleGarment, manager.create(SampleGarment, {
         sample_no, categories: dto.categories, customer_id: middlemanId, middleman_name: middleman.name,
@@ -82,9 +117,14 @@ export class SampleService {
         ship_sample_date: dto.shipSampleDate, recipient: dto.recipient, file_location: dto.fileLocation,
         garment_remark: dto.garmentRemark, image1: dto.image1, image2: dto.image2, image3: dto.image3,
         attachments: dto.attachments, feedback_attachments: dto.feedbackAttachments,
+        // 多轮工价汇总回填(有多轮数据时覆盖单值,供对账/结算读取)
+        ...(rounds0.length ? sum : {}),
         status: SampleStatus.PENDING, version: 1, created_by: createdBy, deleted: 0,
       }));
       await manager.save(SampleMaterial, this.buildMaterials(created.id, materials));
+      if (rounds0.length) {
+        await manager.save(SampleShipRound, rounds0.map((r) => ({ ...r, sample_id: created.id })));
+      }
       return created;
     });
     await this.log(saved.id, saved.version ?? 1, 'CREATE', createdBy, saved.sample_no);
@@ -153,8 +193,19 @@ export class SampleService {
     const entity = await this.repo.findOne({ where: { id, deleted: 0 } });
     if (!entity) throw new NotFoundException(`样衣 #${id} 不存在`);
     const materials = await this.materialRepo.find({ where: { sample_id: id }, order: { sort_order: 'ASC' } });
+    let shipRounds = await this.shipRoundRepo.find({ where: { sample_id: id }, order: { sort_order: 'ASC' } });
+    // 存量兼容:无多轮记录但有旧单值寄样/工价字段 → 合成「第一轮」供前端显示(不落库,首存时前端会回传)
+    if (shipRounds.length === 0 && (entity.material_ship_no || entity.piece_count != null || entity.labor_amount != null || entity.return_no)) {
+      shipRounds = [this.shipRoundRepo.create({
+        sample_id: id, sort_order: 0, round_no: 1,
+        size: entity.sample_size, qty: entity.piece_count,
+        ship_date: entity.ship_sample_date, ship_no: entity.material_ship_no,
+        return_date: entity.return_date, labor_unit_price: entity.labor_unit_price,
+        labor_amount: entity.labor_amount, remark: null as any,
+      })];
+    }
     await this.maskConfidentialNames([entity], user);
-    return { ...entity, materials };
+    return { ...entity, materials, shipRounds };
   }
 
   async update(id: number, dto: Partial<CreateSampleDto>, operatorId?: number): Promise<SampleGarment> {
@@ -197,10 +248,22 @@ export class SampleService {
       if (dto.patternmakerId !== undefined) entity.patternmaker_id = dto.patternmakerId;
       if (dto.patternmakerName !== undefined) entity.patternmaker_name = dto.patternmakerName;
       if (dto.maker !== undefined) entity.maker = dto.maker;
+      // 寄样多轮:重存子表并把工价汇总回填顶层(供对账/结算),不破下游
+      if (dto.shipRounds !== undefined) {
+        const rounds = this.buildShipRounds(id, dto.shipRounds);
+        const sum = this.summarizeRounds(rounds);
+        entity.piece_count = sum.piece_count as any;
+        entity.labor_amount = sum.labor_amount as any;
+        entity.labor_unit_price = sum.labor_unit_price as any;
+      }
       const updated = await manager.save(SampleGarment, entity);
       if (dto.materials !== undefined) {
         await manager.delete(SampleMaterial, { sample_id: id });
         await manager.save(SampleMaterial, this.buildMaterials(id, dto.materials));
+      }
+      if (dto.shipRounds !== undefined) {
+        await manager.delete(SampleShipRound, { sample_id: id });
+        await manager.save(SampleShipRound, this.buildShipRounds(id, dto.shipRounds));
       }
       return updated;
     });
@@ -314,8 +377,20 @@ export class SampleService {
       entity.status = SampleStatus.RETURNED;
     }
     if (dto.feedbackAttachments !== undefined) entity.feedback_attachments = dto.feedbackAttachments;
-    // 版师填件数+单价 → 工时金额公式生效 + 状态已对账（自动生成对账单的触发点）
-    if (dto.pieceCount !== undefined || dto.laborUnitPrice !== undefined) {
+    // 版师按轮填工价(#5 多轮):重存子表 + 汇总回填顶层 + 进对账态(自动生成对账单触发点)
+    if (dto.shipRounds !== undefined) {
+      const rounds = this.buildShipRounds(id, dto.shipRounds);
+      const sum = this.summarizeRounds(rounds);
+      await this.dataSource.transaction(async (manager) => {
+        await manager.delete(SampleShipRound, { sample_id: id });
+        if (rounds.length) await manager.save(SampleShipRound, this.buildShipRounds(id, dto.shipRounds));
+      });
+      entity.piece_count = sum.piece_count as any;
+      entity.labor_unit_price = sum.labor_unit_price as any;
+      entity.labor_amount = sum.labor_amount as any;
+      if (sum.labor_amount) entity.status = SampleStatus.RECONCILED;
+    } else if (dto.pieceCount !== undefined || dto.laborUnitPrice !== undefined) {
+      // 兼容旧单值路径:版师填件数+单价 → 工时金额公式生效 + 状态已对账
       if (dto.pieceCount === undefined || dto.laborUnitPrice === undefined) {
         throw new BadRequestException('版师保存：件数与工时单价必须同时填写');
       }

@@ -32,6 +32,12 @@
       <el-table-column label="提交页面" width="150">
         <template #default="{ row }"><span class="mono">{{ row.page_url || '—' }}</span></template>
       </el-table-column>
+      <el-table-column label="回复" min-width="180">
+        <template #default="{ row }">
+          <span v-if="row.reply" class="reply-txt">{{ row.reply }}</span>
+          <span v-else class="muted">—</span>
+        </template>
+      </el-table-column>
       <el-table-column label="状态" width="90">
         <template #default="{ row }">
           <el-tag :type="row.status === 'HANDLED' ? 'success' : 'warning'" size="small">
@@ -39,13 +45,32 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="120" fixed="right">
+      <el-table-column label="操作" width="170" fixed="right">
         <template #default="{ row }">
-          <el-button v-if="row.status !== 'HANDLED'" link type="primary" @click="setHandled(row, true)">标记已处理</el-button>
+          <el-button link type="primary" @click="openReply(row)">{{ row.reply ? '改回复' : '回复' }}</el-button>
+          <el-button v-if="row.status !== 'HANDLED'" link type="success" @click="setHandled(row, true)">标记已处理</el-button>
           <el-button v-else link type="info" @click="setHandled(row, false)">重开</el-button>
         </template>
       </el-table-column>
     </el-table>
+
+    <!-- 回复弹窗:把改动的业务逻辑回复给提交人(提交人登录后右下角红点提醒) -->
+    <el-dialog v-model="replyOpen" title="回复提交人" width="520px" append-to-body>
+      <el-form label-position="top">
+        <el-form-item label="原始反馈">
+          <div class="orig">{{ replyRow?.content }}</div>
+        </el-form-item>
+        <el-form-item label="回复内容（改动的业务逻辑 / 处理说明）" required>
+          <el-input v-model="replyText" type="textarea" :rows="4" maxlength="500" show-word-limit
+            placeholder="例如：您反馈的联系人部门/职务已按需求移除，电子章收集已下线…" />
+        </el-form-item>
+        <p class="muted">提交回复后自动标记为「已处理」，提交人登录后右下角会看到未读提醒。</p>
+      </el-form>
+      <template #footer>
+        <el-button @click="replyOpen = false">取消</el-button>
+        <el-button type="primary" :loading="replySaving" :disabled="!replyText.trim()" @click="submitReply">发送回复</el-button>
+      </template>
+    </el-dialog>
 
     <div class="footer">
       <span class="muted">共 {{ total }} 条</span>
@@ -91,6 +116,28 @@ async function setHandled(row: any, handled: boolean) {
   ElMessage.success(handled ? '已标记处理' : '已重开');
   load();
 }
+
+// 回复提交人
+const replyOpen = ref(false);
+const replyRow = ref<any>(null);
+const replyText = ref('');
+const replySaving = ref(false);
+function openReply(row: any) {
+  replyRow.value = row;
+  replyText.value = row.reply || '';
+  replyOpen.value = true;
+}
+async function submitReply() {
+  if (!replyText.value.trim()) return;
+  replySaving.value = true;
+  try {
+    // 带回复标记已处理:后端记回复时间并置未读 → 提交人右下角红点
+    await feedbackApi.markHandled(replyRow.value.id, true, replyText.value.trim());
+    ElMessage.success('回复已发送，提交人将收到提醒');
+    replyOpen.value = false;
+    load();
+  } catch { /* 拦截器已提示 */ } finally { replySaving.value = false; }
+}
 async function exportHtml() {
   try { await downloadHtml('/feedbacks/export', `用户反馈-${Date.now()}.html`); }
   catch (e: any) { ElMessage.error(e.message || '导出失败'); }
@@ -106,4 +153,6 @@ onMounted(load);
 .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
 .thumbs { display: flex; gap: 4px; flex-wrap: wrap; }
 .thumb { width: 34px; height: 34px; border-radius: 4px; }
+.reply-txt { font-size: 13px; color: var(--teal-d, #1E6B5C); white-space: pre-wrap; }
+.orig { background: var(--gray-1, #f4f6f8); border-radius: 6px; padding: 8px 10px; font-size: 13px; color: #333; white-space: pre-wrap; }
 </style>

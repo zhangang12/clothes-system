@@ -332,6 +332,24 @@ CREATE TABLE IF NOT EXISTS `sample_material` (
   KEY `idx_sample` (`sample_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='样衣材料明细';
 
+-- 样衣·寄样多轮跟踪（一轮打不完:多轮寄样,每轮工价合计Σ回填 sample.labor_amount 供对账）
+CREATE TABLE IF NOT EXISTS `sample_ship_round` (
+  `id`               BIGINT        NOT NULL AUTO_INCREMENT,
+  `sample_id`        BIGINT        NOT NULL,
+  `sort_order`       INT           NOT NULL DEFAULT 0,
+  `round_no`         INT           DEFAULT NULL COMMENT '轮次',
+  `size`             VARCHAR(50)   DEFAULT NULL COMMENT '样衣尺码',
+  `qty`              INT           DEFAULT NULL COMMENT '数量(件)',
+  `ship_date`        DATE          DEFAULT NULL COMMENT '寄样日期(业务)',
+  `ship_no`          VARCHAR(50)   DEFAULT NULL COMMENT '寄样单号(业务)',
+  `return_date`      DATE          DEFAULT NULL COMMENT '寄回日期(版师)',
+  `labor_unit_price` DECIMAL(12,2) DEFAULT NULL COMMENT '工价单价(版师)',
+  `labor_amount`     DECIMAL(14,2) DEFAULT NULL COMMENT '工价金额=数量×单价',
+  `remark`           VARCHAR(200)  DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_sample` (`sample_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='样衣寄样多轮跟踪';
+
 CREATE TABLE IF NOT EXISTS `sample_version` (
   `id`           BIGINT       NOT NULL AUTO_INCREMENT,
   `sample_id`    BIGINT       NOT NULL,
@@ -1011,10 +1029,13 @@ CREATE TABLE IF NOT EXISTS `feedback` (
   `page_url`   VARCHAR(255) DEFAULT NULL COMMENT '提交页面',
   `status`     ENUM('PENDING','HANDLED') NOT NULL DEFAULT 'PENDING',
   `reply`      VARCHAR(500) DEFAULT NULL COMMENT '处理回复',
+  `reply_at`   DATETIME     DEFAULT NULL COMMENT '回复时间',
+  `reply_read` TINYINT      NOT NULL DEFAULT 0 COMMENT '提交人是否已读回复(0未读=右下角红点)',
   `deleted`    TINYINT      NOT NULL DEFAULT 0,
   `created_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `idx_status` (`status`,`deleted`)
+  KEY `idx_status` (`status`,`deleted`),
+  KEY `idx_user` (`user_id`,`deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户反馈';
 
 CREATE TABLE IF NOT EXISTS `error_log` (

@@ -26,6 +26,19 @@ export class SampleMaterialDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) remark?: string;
 }
 
+export class SampleShipRoundDto {
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() sortOrder?: number;
+  @ApiPropertyOptional({ description: '轮次' }) @IsOptional() @Type(() => Number) @IsInt() roundNo?: number;
+  @ApiPropertyOptional({ description: '样衣尺码' }) @IsOptional() @IsString() @MaxLength(50) size?: string;
+  @ApiPropertyOptional({ description: '数量(件)' }) @IsOptional() @Type(() => Number) @IsInt() qty?: number;
+  @ApiPropertyOptional({ description: '寄样日期' }) @IsOptional() @IsString() shipDate?: string;
+  @ApiPropertyOptional({ description: '寄样单号' }) @IsOptional() @IsString() @MaxLength(50) shipNo?: string;
+  @ApiPropertyOptional({ description: '寄回日期' }) @IsOptional() @IsString() returnDate?: string;
+  @ApiPropertyOptional({ description: '工价单价(版师)' }) @IsOptional() @Type(() => Number) @IsNumber() laborUnitPrice?: number;
+  @ApiPropertyOptional({ description: '工价金额=数量×单价' }) @IsOptional() @Type(() => Number) @IsNumber() laborAmount?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) remark?: string;
+}
+
 export class CreateSampleDto {
   @ApiProperty({ description: '样衣类别（7 类多选，逗号分隔，必填）' })
   @IsString() @IsNotEmpty() @MaxLength(100) categories: string;
@@ -65,6 +78,10 @@ export class CreateSampleDto {
   @ApiPropertyOptional({ type: [SampleMaterialDto] })
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => SampleMaterialDto)
   materials?: SampleMaterialDto[];
+
+  @ApiPropertyOptional({ type: [SampleShipRoundDto], description: '寄样多轮跟踪(工价合计Σ回填供对账)' })
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => SampleShipRoundDto)
+  shipRounds?: SampleShipRoundDto[];
 }
 
 // 推送版师（业务：指派制版师 / 填材料寄出单号 → 打样中）
@@ -83,6 +100,10 @@ export class PatternmakerSaveDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) returnNo?: string;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() pieceCount?: number;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() laborUnitPrice?: number;
+
+  @ApiPropertyOptional({ type: [SampleShipRoundDto], description: '版师按轮填工价' })
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => SampleShipRoundDto)
+  shipRounds?: SampleShipRoundDto[];
 
   @ApiPropertyOptional({ description: '样衣意见附件（客户反馈图/PDF，多文件逗号分隔）' })
   @IsOptional() @IsString() @MaxLength(500) feedbackAttachments?: string;

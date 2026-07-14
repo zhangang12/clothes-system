@@ -8,11 +8,12 @@ import { CustomerModule } from '../customer/customer.module';
 import { SampleGarment } from './sample-garment.entity';
 import { SampleMaterial } from './sample-material.entity';
 import { SampleVersion } from './sample-version.entity';
+import { SampleShipRound } from './sample-ship-round.entity';
 import { Customer } from '../customer/customer.entity';
 import { Quotation } from '../quote/quotation.entity';
 
 @Module({
-  imports: [QuoteModule, CustomerModule, TypeOrmModule.forFeature([SampleGarment, SampleMaterial, SampleVersion, Customer, Quotation])],
+  imports: [QuoteModule, CustomerModule, TypeOrmModule.forFeature([SampleGarment, SampleMaterial, SampleVersion, SampleShipRound, Customer, Quotation])],
   controllers: [SampleController],
   providers: [SampleService],
   exports: [SampleService],

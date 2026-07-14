@@ -34,6 +34,12 @@ export class Feedback {
   @Column({ length: 500, nullable: true, comment: '处理回复' })
   reply: string;
 
+  @Column({ type: 'datetime', nullable: true, comment: '回复时间' })
+  reply_at: Date;
+
+  @Column({ type: 'tinyint', default: 0, comment: '提交人是否已读回复(0未读,右下角红点)' })
+  reply_read: number;
+
   @Column({ type: 'tinyint', default: 0 })
   deleted: number;
 
