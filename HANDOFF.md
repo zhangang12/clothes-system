@@ -32,6 +32,7 @@
 0. **🔴 待发版·两处生产修复**（同一次 `push main → deploy.sh` 一起上）：
    - **建样衣 500**：生产 `sample_garment` 残留重构前孤儿列 `style_name NOT NULL 无默认值` → 建样衣(POST /samples)必 500（线上已 16 次）。修复已进 `hotfix-schema.sql`（放宽为可空，守卫幂等）。验收=新建一张样衣成功。（本机无 MySQL 未本地真跑，经 deploy.sh 备份+应用+校验落地验证。）
    - **反馈 Ctrl+V 粘贴**：`FileUpload` 加 `globalPaste` 兜底监听 + `FeedbackWidget` 启用。web `vue-tsc`+vitest 86/86 过；deploy.sh 会重建 web 静态包生效。验收=反馈弹窗里 Ctrl+V 粘截图能上传。
+   - **样衣附件/下载/尺码数量**：`sample_garment` +3 列（走 hotfix，红线一）+ 前端。验收=样衣新建页「资料附件」能传 PDF/Excel 多个、点文件能下载、基本信息有尺码/数量。（多轮寄样子表下一批）
 1. **🟠 用户操作·上线验收**：服务器 `bash infra/scripts/deploy.sh`（会自动补齐生产缺列并上线全部新功能）→ `health.sh` 全绿 → 网站验收 → 系统报错页把 8 条历史报错标「已处理」。
 2. 🟡 用户操作·启用合并即发版：把 `infra/ci/deploy.yml` 复制为 `.github/workflows/deploy.yml`（网页端建，当前 PAT 无 workflow scope）+ 配 `DEPLOY_SSH_HOST/USER/KEY` secrets。
 3. 🟡 剩余基建：正式 migration 体系（`gen-column-sync.py` 已等效缓解）；`deep-test.sh` CI 门禁；异地备份推送（OSS/rclone）+ HTTPS + 告警（需服务器侧凭据）。
@@ -53,6 +54,8 @@
 - **改 schema**：delta 同时进 `init.sql` + `hotfix-schema.sql`，并用真库验证（红线一）。
 
 ## 最近变更（新→旧，保留最近若干条）
+
+- （本次·样衣反馈第一步:附件/下载/尺码数量）`feat(sample)` 用户反馈两条(样衣管理),按用户「分两步」先做小改:①「图片信息」新增「资料附件」多文件字段(保留图1/2/3——下游报价/订单继承依赖;accept 图片/PDF/Excel、可多个;上传端点已放行 png/jpg/webp/pdf/xls/xlsx,**不含 Word**);②文件可下载:`FileUpload` 非图片点击直接下载、图片预览框加「下载」按钮(按文件名判类型,`<a download>` 同源强制下载);③样衣加「尺码/数量」字段(如 38 码 2 件)。schema:`sample_garment` +3 列(`sample_size`/`sample_qty`/`attachments`),`init.sql` + `gen-column-sync` 重生成(44 表/650 列,红线一);**本机无真库未实跑,经 `deploy.sh` 落地验证**。验证:types+api 构建✓ jest 221/221 web vue-tsc✓ vitest 86/86。反馈②的「多轮寄样追踪子表」(较大、且改「版师填件数+工价→自动生成对账单」计费逻辑)下一批做。
 
 - （本次·生产反馈修复:问题反馈 Ctrl+V 粘不了截图）`fix(web)` 反馈悬浮件里 Ctrl+V 粘贴截图无效。根因:`FileUpload` 的 paste 绑在需先聚焦的 `.fu-wrap`(tabindex=0),而反馈弹窗焦点天然在「问题描述」文本框,粘贴事件到不了上传框。修复:`FileUpload` 加可选 `globalPaste` 模式(挂载时在 `document` 兜底监听 paste、不依赖焦点;事件标记去重防 wrap/document 双触发;加限额守卫);`FeedbackWidget` 启用 `global-paste` + 弹窗 `destroy-on-close`(监听随弹窗开关自动挂/卸,关掉后不再全局抢粘贴)。未启用该 prop 的其它上传处零回归。验证:web `vue-tsc --noEmit` 0 报错 + vitest 86/86;真实浏览器粘贴动作未自动化(图片剪贴板难自动化),建议部署后手工点一下或本地 dev 验。
 

@@ -26,6 +26,10 @@
 
   <el-dialog v-model="previewVisible" width="640px" append-to-body>
     <img :src="previewUrl" style="width:100%" alt="预览" />
+    <template #footer>
+      <el-button v-if="previewFile" @click="download(previewFile)">下载</el-button>
+      <el-button type="primary" @click="previewVisible = false">关闭</el-button>
+    </template>
   </el-dialog>
 </template>
 
@@ -66,6 +70,7 @@ watch(() => props.modelValue, rebuildList, { immediate: true });
 
 const previewVisible = ref(false);
 const previewUrl = ref('');
+const previewFile = ref<any>(null);
 
 // 粘贴截图 / 拖拽文件 → 复用同一上传通道(设计稿:①点选 ②Ctrl+V 粘贴 ③拖文件)
 function onPaste(e: ClipboardEvent) {
@@ -119,10 +124,22 @@ function onRemove(file: any) {
   const orig = origUrlOf(file);
   emit('update:modelValue', urls().filter((u) => u !== orig).join(','));
 }
+const isImageName = (name?: string) => /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(name || '');
+// 下载文件:同源 /uploads,<a download> 可强制下载;敏感附件走签名链接
+async function download(file: any) {
+  const a = document.createElement('a');
+  a.href = await signedUrl(origUrlOf(file));
+  a.download = file?.name || '';
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
 async function onPreview(file: any) {
-  const url = await signedUrl(origUrlOf(file)); // 敏感附件换新令牌,防列表停留过久令牌过期
-  if (/\.(pdf|docx?|xlsx?)$/i.test(url) || url.includes('.pdf')) { window.open(url, '_blank'); return; }
-  previewUrl.value = url;
+  // 非图片(PDF/Excel 等)→ 直接下载;图片 → 弹窗预览(框内可再下载)。按文件名判类型(URL 带查询串,靠扩展名不准)
+  if (!isImageName(file.name)) { await download(file); return; }
+  previewUrl.value = await signedUrl(origUrlOf(file)); // 敏感附件换新令牌,防列表停留过久令牌过期
+  previewFile.value = file;
   previewVisible.value = true;
 }
 function onExceed() { ElMessage.warning(`最多上传 ${effectiveLimit.value} 个文件`); }

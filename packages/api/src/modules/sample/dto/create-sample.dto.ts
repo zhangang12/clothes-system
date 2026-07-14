@@ -38,6 +38,12 @@ export class CreateSampleDto {
   @ApiProperty({ example: 'H-2026-S001', description: '客户款号（必填）' })
   @IsString() @MaxLength(100) styleNo: string;
 
+  @ApiPropertyOptional({ description: '样衣尺码（如 38码 / S/M/L）' })
+  @IsOptional() @IsString() @MaxLength(100) sampleSize?: string;
+
+  @ApiPropertyOptional({ description: '样衣数量（件）' })
+  @IsOptional() @Type(() => Number) @IsInt() sampleQty?: number;
+
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() buyerId?: number;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() patternmakerId?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) patternmakerName?: string;
@@ -49,6 +55,9 @@ export class CreateSampleDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(255) image1?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(255) image2?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(255) image3?: string;
+
+  @ApiPropertyOptional({ description: '资料附件（图片/PDF/Excel，多文件逗号分隔）' })
+  @IsOptional() @IsString() @MaxLength(1000) attachments?: string;
 
   @ApiPropertyOptional({ description: '样衣意见附件（客户反馈图/PDF，多文件逗号分隔）' })
   @IsOptional() @IsString() @MaxLength(500) feedbackAttachments?: string;

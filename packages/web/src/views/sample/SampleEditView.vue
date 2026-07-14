@@ -27,7 +27,7 @@
     <RuleHint>品名<b>文本录入、不从库导入</b>;颜色可点「加颜色列」动态扩列;<b>参考价格对版师脱敏</b>;实际耗用/拉链长度/工时由版师在工作台填写;填「材料寄出单号」即自动推送版师转打样中。</RuleHint>
     <el-form ref="formRef" :model="form" :rules="rules" label-width="104px" class="form-body">
       <!-- 基本信息 -->
-      <section-block title="▣ 基本信息" badge="14 字段">
+      <section-block title="▣ 基本信息" badge="16 字段">
         <el-row :gutter="16">
           <el-col :span="8"><el-form-item label="样衣编号"><el-input v-model="form.sampleNo" readonly placeholder="保存后自动 S-YYYYMMDD-序号" /></el-form-item></el-col>
           <el-col :span="16">
@@ -45,6 +45,8 @@
             </el-form-item>
           </el-col>
           <el-col :span="8"><el-form-item label="客户款号" prop="styleNo" required><el-input v-model="form.styleNo" :disabled="bizDisabled" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="样衣尺码"><el-input v-model="form.sampleSize" :disabled="bizDisabled" placeholder="如 38码 / S/M/L" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="样衣数量"><el-input v-model="form.sampleQty" type="number" :min="0" :disabled="bizDisabled" placeholder="件" /></el-form-item></el-col>
           <el-col :span="8">
             <el-form-item label="关联最终买家">
               <el-select v-model="form.buyerId" filterable clearable placeholder="选择最终买家" style="width:100%" :disabled="bizDisabled">
@@ -70,11 +72,20 @@
       </section-block>
 
       <!-- 图片信息 -->
-      <section-block title="▣ 图片信息" badge="3 字段">
+      <section-block title="▣ 图片信息 / 资料附件" badge="3 图 + 附件">
         <el-row :gutter="16">
           <el-col :span="8"><el-form-item label="图片1"><file-upload v-model="form.image1" :disabled="bizDisabled" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="图片2"><file-upload v-model="form.image2" :disabled="bizDisabled" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="图片3"><file-upload v-model="form.image3" :disabled="bizDisabled" /></el-form-item></el-col>
+          <el-col :span="24">
+            <el-form-item label="资料附件">
+              <file-upload
+                v-model="form.attachments" multiple :limit="10" list-type="text"
+                accept="image/*,.pdf,.xls,.xlsx" :disabled="bizDisabled"
+                tip="图片 / PDF / Excel,可多个（点击文件即可下载）"
+              />
+            </el-form-item>
+          </el-col>
         </el-row>
       </section-block>
 
@@ -209,9 +220,9 @@ const pmLoadFailed = ref(false);      // 加载失败降级为文本输入
 
 const emptyMaterial = () => ({ itemName: '', arrangeDate: '', width: '', colors: '', part: '', composition: '', codeBand: '', zipperLength: '', puller: '', qty: '', size: '', refPrice: '', actualUsage: '', supplierId: undefined, supplierName: '', image: '', remark: '' });
 const form = reactive<any>({
-  sampleNo: '', categories: '', middlemanId: undefined, styleNo: '', buyerId: undefined,
+  sampleNo: '', categories: '', middlemanId: undefined, styleNo: '', sampleSize: '', sampleQty: '', buyerId: undefined,
   patternmakerId: undefined, patternmakerName: '', maker: authStore.realName || '', makeDate: new Date().toISOString().slice(0, 10),
-  shipSampleDate: '', recipient: '', fileLocation: '', garmentRemark: '', feedbackAttachments: '',
+  shipSampleDate: '', recipient: '', fileLocation: '', garmentRemark: '', feedbackAttachments: '', attachments: '',
   image1: '', image2: '', image3: '', materialShipNo: '', materialShipDate: '',
   returnNo: '', returnDate: '', pieceCount: '', laborUnitPrice: '', status: '',
   materials: [emptyMaterial()],
@@ -292,10 +303,11 @@ async function load() {
   const d = res.data ?? res;
   Object.assign(form, {
     sampleNo: d.sample_no, categories: d.categories ?? '', middlemanId: d.customer_id, styleNo: d.style_no,
+    sampleSize: d.sample_size ?? '', sampleQty: d.sample_qty ?? '',
     buyerId: d.buyer_id ?? undefined, patternmakerId: d.patternmaker_id != null ? Number(d.patternmaker_id) : undefined,
     patternmakerName: d.patternmaker_name ?? '', maker: d.maker ?? '',
     makeDate: d.make_date ?? '', shipSampleDate: d.ship_sample_date ?? '', recipient: d.recipient ?? '',
-    fileLocation: d.file_location ?? '', garmentRemark: d.garment_remark ?? '', feedbackAttachments: d.feedback_attachments ?? '',
+    fileLocation: d.file_location ?? '', garmentRemark: d.garment_remark ?? '', feedbackAttachments: d.feedback_attachments ?? '', attachments: d.attachments ?? '',
     image1: d.image1 ?? '', image2: d.image2 ?? '', image3: d.image3 ?? '',
     materialShipNo: d.material_ship_no ?? '', materialShipDate: d.material_ship_date ?? '',
     returnNo: d.return_no ?? '', returnDate: d.return_date ?? '', pieceCount: d.piece_count ?? '',
@@ -314,11 +326,13 @@ async function load() {
 function buildDto() {
   return {
     categories: form.categories, middlemanId: form.middlemanId, styleNo: form.styleNo,
+    sampleSize: form.sampleSize || undefined,
+    sampleQty: form.sampleQty === '' || form.sampleQty === null ? undefined : Number(form.sampleQty),
     buyerId: form.buyerId, patternmakerId: form.patternmakerId || undefined,
     patternmakerName: form.patternmakerName || undefined, maker: form.maker || undefined,
     shipSampleDate: form.shipSampleDate || undefined, recipient: form.recipient || undefined,
     fileLocation: form.fileLocation || undefined, garmentRemark: form.garmentRemark || undefined,
-    feedbackAttachments: form.feedbackAttachments ?? '',
+    feedbackAttachments: form.feedbackAttachments ?? '', attachments: form.attachments ?? '',
     image1: form.image1 || undefined, image2: form.image2 || undefined, image3: form.image3 || undefined,
     materials: form.materials.filter((m: any) => m.itemName).map((m: any, i: number) => ({ ...m, sortOrder: i })),
   };
