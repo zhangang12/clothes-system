@@ -52,9 +52,9 @@ export class CreateSampleDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) recipient?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) fileLocation?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() garmentRemark?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(255) image1?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(255) image2?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(255) image3?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1000) image1?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1000) image2?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1000) image3?: string;
 
   @ApiPropertyOptional({ description: '资料附件（图片/PDF/Excel，多文件逗号分隔）' })
   @IsOptional() @IsString() @MaxLength(1000) attachments?: string;

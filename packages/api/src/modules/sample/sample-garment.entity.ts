@@ -61,14 +61,14 @@ export class SampleGarment {
   @Column({ type: 'text', nullable: true })
   garment_remark: string;
 
-  @Column({ length: 255, nullable: true })
-  image1: string;
+  @Column({ length: 1000, nullable: true })
+  image1: string; // 图片槽1:多图片/PDF/Excel 逗号分隔;下游取首图继承
 
-  @Column({ length: 255, nullable: true })
-  image2: string;
+  @Column({ length: 1000, nullable: true })
+  image2: string; // 图片槽2:多图片/PDF/Excel 逗号分隔;下游取首图继承
 
-  @Column({ length: 255, nullable: true })
-  image3: string;
+  @Column({ length: 1000, nullable: true })
+  image3: string; // 图片槽3:多图片/PDF/Excel 逗号分隔
 
   @Column({ length: 1000, nullable: true })
   attachments: string; // 资料附件（图片/PDF/Excel，多文件逗号分隔）

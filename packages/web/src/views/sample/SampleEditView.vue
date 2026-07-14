@@ -72,15 +72,27 @@
       </section-block>
 
       <!-- 图片信息 -->
-      <section-block title="▣ 图片信息 / 资料附件" badge="多图+附件·一个槽">
+      <section-block title="▣ 图片信息 / 资料附件" badge="3 槽·每槽多图+附件">
         <el-row :gutter="16">
-          <el-col :span="24">
-            <el-form-item label="图片 / 附件">
-              <file-upload
-                v-model="form.attachments" multiple :limit="10" list-type="text"
+          <el-col :span="8">
+            <el-form-item label="图片1">
+              <file-upload v-model="form.image1" multiple :limit="6" list-type="text"
                 accept="image/*,.pdf,.xls,.xlsx" :disabled="bizDisabled"
-                tip="一个槽位可放多张图片 + PDF / Excel（点文件即可下载）；前 3 张图片自动带入报价/订单"
-              />
+                tip="多张图片 / PDF / Excel（首张图片带入报价/订单）" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="图片2">
+              <file-upload v-model="form.image2" multiple :limit="6" list-type="text"
+                accept="image/*,.pdf,.xls,.xlsx" :disabled="bizDisabled"
+                tip="多张图片 / PDF / Excel（首张图片带入报价）" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="图片3">
+              <file-upload v-model="form.image3" multiple :limit="6" list-type="text"
+                accept="image/*,.pdf,.xls,.xlsx" :disabled="bizDisabled"
+                tip="多张图片 / PDF / Excel（点文件即可下载）" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -304,9 +316,8 @@ async function load() {
     buyerId: d.buyer_id ?? undefined, patternmakerId: d.patternmaker_id != null ? Number(d.patternmaker_id) : undefined,
     patternmakerName: d.patternmaker_name ?? '', maker: d.maker ?? '',
     makeDate: d.make_date ?? '', shipSampleDate: d.ship_sample_date ?? '', recipient: d.recipient ?? '',
-    fileLocation: d.file_location ?? '', garmentRemark: d.garment_remark ?? '', feedbackAttachments: d.feedback_attachments ?? '',
-    // 统一「图片/附件」槽:优先用 attachments;历史数据仅有 image1/2/3 时合并进来
-    attachments: d.attachments || [d.image1, d.image2, d.image3].filter(Boolean).join(','),
+    fileLocation: d.file_location ?? '', garmentRemark: d.garment_remark ?? '', feedbackAttachments: d.feedback_attachments ?? '', attachments: d.attachments ?? '',
+    image1: d.image1 ?? '', image2: d.image2 ?? '', image3: d.image3 ?? '',
     materialShipNo: d.material_ship_no ?? '', materialShipDate: d.material_ship_date ?? '',
     returnNo: d.return_no ?? '', returnDate: d.return_date ?? '', pieceCount: d.piece_count ?? '',
     laborUnitPrice: d.labor_unit_price ?? '', laborAmount: d.labor_amount ?? '', status: d.status,
@@ -321,13 +332,6 @@ async function load() {
   versions.value = (vs.data ?? vs) ?? [];
 }
 
-// 统一「图片/附件」槽 → 取前 3 张【图片】回填 image1/2/3,保住下游(报价/订单)对样衣款图的继承。
-function deriveImageSlots(attachments: string) {
-  const isImg = (u: string) => /\.(png|jpe?g|webp|gif)$/i.test(u);
-  const imgs = (attachments || '').split(',').filter(Boolean).filter(isImg);
-  return { image1: imgs[0] || undefined, image2: imgs[1] || undefined, image3: imgs[2] || undefined };
-}
-
 function buildDto() {
   return {
     categories: form.categories, middlemanId: form.middlemanId, styleNo: form.styleNo,
@@ -338,7 +342,7 @@ function buildDto() {
     shipSampleDate: form.shipSampleDate || undefined, recipient: form.recipient || undefined,
     fileLocation: form.fileLocation || undefined, garmentRemark: form.garmentRemark || undefined,
     feedbackAttachments: form.feedbackAttachments ?? '', attachments: form.attachments ?? '',
-    ...deriveImageSlots(form.attachments), // image1/2/3 由统一槽前3张图自动回填(供报价/订单继承)
+    image1: form.image1 || undefined, image2: form.image2 || undefined, image3: form.image3 || undefined,
     materials: form.materials.filter((m: any) => m.itemName).map((m: any, i: number) => ({ ...m, sortOrder: i })),
   };
 }
