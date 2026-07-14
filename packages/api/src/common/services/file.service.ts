@@ -67,12 +67,13 @@ export class FileService implements OnModuleInit {
           'application/pdf',
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
           'application/vnd.ms-excel',
+          // 部分系统/浏览器把 xlsx/xls(乃至 pdf)报成通用容器 MIME(Windows 尤其常见);
+          // 放行后由 finalizeUpload 的 magic-byte 内容校验兜底把关——HTML/SVG/JS 等无合法魔数者
+          // 仍会被删除并返回 400,既修「合法 Excel 被误拒并 500」又不削弱防存储型 XSS。
+          'application/octet-stream', 'application/zip', 'application/x-zip-compressed',
         ];
-        if (!allowed.includes(file.mimetype)) {
-          cb(new Error(`不支持的文件类型: ${file.mimetype}`));
-        } else {
-          cb(null, true);
-        }
+        // 不在名单者静默丢弃(controller 以 400「未接收到文件」兜底),避免 cb(Error) 造成 500。
+        cb(null, allowed.includes(file.mimetype));
       },
     };
   }
