@@ -21,8 +21,8 @@
             <el-option label="已付款" value="PAID" />
           </el-select>
         </el-form-item>
-        <el-form-item label="工厂ID">
-          <el-input-number v-model="query.factory_id" :min="1" :controls="false" placeholder="工厂ID" style="width:100px" @change="load" />
+        <el-form-item label="工厂">
+          <div style="width:200px"><factory-select v-model="query.factory_id" placeholder="按名称筛选工厂" @update:model-value="load" /></div>
         </el-form-item>
         <el-form-item>
           <el-button type="primary" :icon="Search" @click="load">搜索</el-button>
@@ -243,25 +243,48 @@
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :span="8">
-            <el-form-item label="工厂ID" prop="factory_id">
-              <el-input-number v-model="createForm.factory_id" :min="1" style="width:100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item v-if="createForm.type === 'NO_CONTRACT'" label="费用类型">
-              <el-select v-model="createForm.subType" style="width:100%">
-                <el-option label="费用" value="EXPENSE" />
-                <el-option label="现金无票" value="CASH_NO_INVOICE" />
-                <el-option label="预付款" value="PREPAY" />
-              </el-select>
-            </el-form-item>
-            <el-form-item v-else label="合同ID">
-              <el-input-number v-model="createForm.contract_id" :min="1" style="width:100%" />
-              <el-checkbox v-model="createForm.merge_into_parent" style="margin-top:2px">
-                补料对账并入原合同（仅补料合同可勾，货款归母合同名下）
-              </el-checkbox>
-            </el-form-item>
+          <!-- 无合同:直接按名称选工厂;合同对账:搜款号→选合同,自动带出工厂(免填数字ID) -->
+          <template v-if="createForm.type === 'NO_CONTRACT'">
+            <el-col :span="8">
+              <el-form-item label="工厂" prop="factory_id">
+                <factory-select v-model="createForm.factory_id" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="费用类型">
+                <el-select v-model="createForm.subType" style="width:100%">
+                  <el-option label="费用" value="EXPENSE" />
+                  <el-option label="现金无票" value="CASH_NO_INVOICE" />
+                  <el-option label="预付款" value="PREPAY" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+          </template>
+          <template v-else>
+            <el-col :span="8">
+              <el-form-item label="款号">
+                <el-input v-model="styleSearch" placeholder="输入款号回车搜合同" clearable @keyup.enter="searchContracts" @clear="onClearStyle">
+                  <template #append><el-button :loading="contractLoading" @click="searchContracts">搜合同</el-button></template>
+                </el-input>
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="选合同" prop="contract_id">
+                <el-select v-model="createForm.contract_id" filterable clearable placeholder="先搜款号,再选合同" style="width:100%" @change="onPickContract">
+                  <el-option v-for="c in styleContracts" :key="c.id" :label="contractLabel(c)" :value="c.id" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+          </template>
+        </el-row>
+        <!-- 合同对账:选中合同后展示带出的工厂 + 补料并入原合同 -->
+        <el-row v-if="createForm.type !== 'NO_CONTRACT'" :gutter="16">
+          <el-col :span="24">
+            <div class="picked-bar">
+              <span v-if="createForm.contract_id">选中合同带出工厂：<b>{{ pickedFactoryName || ('工厂#' + createForm.factory_id) }}</b></span>
+              <span v-else class="muted">尚未选择合同（先在上方搜款号）</span>
+              <el-checkbox v-model="createForm.merge_into_parent" style="margin-left:16px">补料对账并入原合同（仅补料合同可勾，货款归母合同名下）</el-checkbox>
+            </div>
           </el-col>
         </el-row>
         <el-row :gutter="16">
@@ -291,7 +314,11 @@
           <div v-for="(s, idx) in createForm.shipments" :key="idx" class="item-row">
             <el-row :gutter="8" align="middle">
               <el-col :span="3"><el-input-number v-model="s.shipment_id" :min="1" :controls="false" placeholder="出货单ID" style="width:100%" /></el-col>
-              <el-col :span="3"><el-input-number v-model="s.contract_id" :min="1" :controls="false" placeholder="合同ID" style="width:100%" /></el-col>
+              <el-col :span="3">
+                <el-select v-model="s.contract_id" filterable clearable placeholder="合同" style="width:100%">
+                  <el-option v-for="c in styleContracts" :key="c.id" :label="c.contract_no" :value="c.id" />
+                </el-select>
+              </el-col>
               <el-col :span="3"><el-input v-model="s.style_no" placeholder="款号" /></el-col>
               <el-col :span="4"><el-input v-model="s.item_name" placeholder="品名" /></el-col>
               <el-col :span="4"><el-input-number v-model="s.snapshot_unit_price" :min="0" :precision="4" :controls="false" placeholder="单价" style="width:100%" /></el-col>
@@ -337,6 +364,8 @@ import { Search, Refresh, Plus, Coin } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { reconciliationApi } from '@/api/reconciliation';
 import { sampleApi } from '@/api/sample';
+import { contractApi } from '@/api/contract';
+import FactorySelect from '@/components/FactorySelect.vue';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole } from '@i9/types';
 
@@ -474,8 +503,34 @@ const createForm = reactive({
 const expenseTotal = computed(() => createForm.expenses.reduce((s: number, e: any) => s + (+e.amount || 0), 0));
 const createRules: FormRules = {
   type: [{ required: true, message: '请选择类型', trigger: 'change' }],
-  factory_id: [{ required: true, message: '请输入工厂ID', trigger: 'blur' }],
 };
+
+// 款号→合同(合同对账):搜款号列出该款所有合同,选中即带出工厂/合同ID(免手填数字ID)
+const styleSearch = ref('');
+const styleContracts = ref<any[]>([]);
+const contractLoading = ref(false);
+const pickedFactoryName = ref('');
+const contractLabel = (c: any) =>
+  `${c.contract_no} · ${c.factory_name || ('工厂#' + c.factory_id)} · ${typeLabel(c.type)}`
+  + (c.total_amount != null ? ` · ¥${Number(c.total_amount).toFixed(2)}` : '');
+async function searchContracts() {
+  const s = styleSearch.value.trim();
+  if (!s) { ElMessage.warning('请输入款号'); return; }
+  contractLoading.value = true;
+  try {
+    const res: any = await contractApi.byStyle(s);
+    styleContracts.value = (res.data ?? res) ?? [];
+    if (!styleContracts.value.length) ElMessage.info('该款号下未找到合同');
+  } catch (e: any) {
+    errToast(e?.response?.data?.msg ?? '查询合同失败');
+  } finally { contractLoading.value = false; }
+}
+function onPickContract(id?: number) {
+  const c = styleContracts.value.find((x) => x.id === id);
+  createForm.factory_id = c ? Number(c.factory_id) : undefined;
+  pickedFactoryName.value = c?.factory_name ?? '';
+}
+function onClearStyle() { styleContracts.value = []; }
 
 function openCreate() { createVisible.value = true; }
 function resetCreateForm() {
@@ -483,9 +538,13 @@ function resetCreateForm() {
     type: 'CONTRACT', subType: 'EXPENSE', factory_id: undefined, contract_id: undefined,
     tax_rate: undefined, invoice_no: '', invoice_amount: undefined, description: '', shipments: [], expenses: [], merge_into_parent: false,
   });
+  styleSearch.value = '';
+  styleContracts.value = [];
+  pickedFactoryName.value = '';
 }
 function addShipment() {
-  createForm.shipments.push({ shipment_id: undefined, contract_id: undefined, style_no: '', item_name: '', snapshot_unit_price: undefined, qty: undefined });
+  // 默认带上已选合同 + 搜索款号,便于「一单多合同」逐行填
+  createForm.shipments.push({ shipment_id: undefined, contract_id: createForm.contract_id, style_no: styleSearch.value.trim(), item_name: '', snapshot_unit_price: undefined, qty: undefined });
 }
 function removeShipment(idx: number) { createForm.shipments.splice(idx, 1); }
 function addExpense() {
@@ -497,9 +556,11 @@ async function doCreate() {
   await createFormRef.value?.validate();
   const isNoContract = createForm.type === 'NO_CONTRACT';
   if (isNoContract) {
+    if (!createForm.factory_id) { ElMessage.warning('请选择工厂'); return; }
     if (!createForm.expenses.length) { ElMessage.warning('请至少添加一条费用明细'); return; }
-  } else if (!createForm.shipments.length) {
-    ElMessage.warning('请至少添加一条出货明细'); return;
+  } else {
+    if (!createForm.contract_id) { ElMessage.warning('请先搜款号并选择合同'); return; }
+    if (!createForm.shipments.length) { ElMessage.warning('请至少添加一条出货明细'); return; }
   }
   saving.value = true;
   try {
@@ -558,4 +619,6 @@ async function doGenerateLabor() {
 .item-row { margin-bottom: 8px; }
 .amount { font-size: 12px; color: #909399; }
 .labor-sum { margin-top: 10px; text-align: right; font-weight: 600; color: var(--el-color-primary); }
+.picked-bar { display: flex; align-items: center; margin-bottom: 12px; font-size: 13px; color: var(--el-text-color-regular); }
+.picked-bar .muted { color: var(--el-text-color-placeholder); }
 </style>

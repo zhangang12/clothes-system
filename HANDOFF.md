@@ -55,6 +55,8 @@
 
 ## 最近变更（新→旧，保留最近若干条）
 
+- （本次·对账单款号→选合同 + 对账/付款工厂改名称选择器）`feat(reconciliation/payment)` 用户反馈:对账/付款「工厂ID」是裸数字(用户不知道 ID→搜不到、建不了单)。①新增可复用组件 `FactorySelect`(按名称/编号搜工厂、存 ID);对账/付款列表筛选、对账「非合同」建单工厂均改用它。②对账「合同对账」建单改**款号驱动**(用户要求):输入款号→`GET /contracts/by-style`(新端点,复用 priceHint 的款号匹配:`style_nos LIKE` 或材料 `style_no`)列出该款所有合同→选中自动带出工厂+合同ID;出货明细行合同也从该款合同下拉选。验证:types+api 构建✓ jest 221/221 web vue-tsc✓ vitest 86/86。**`by-style` 查询本机无真库未实跑,经 deploy 落地验证**。**下一批**:付款新建「两者都要」(有合同走款号→合同/无合同走工厂选择器) + 样衣导出 Excel。
+
 - （本次·样衣反馈第一步:附件/下载/尺码数量）`feat(sample)` 用户反馈两条(样衣管理),按用户「分两步」先做小改:①「图片信息」新增「资料附件」多文件字段(保留图1/2/3——下游报价/订单继承依赖;accept 图片/PDF/Excel、可多个;上传端点已放行 png/jpg/webp/pdf/xls/xlsx,**不含 Word**);②文件可下载:`FileUpload` 非图片点击直接下载、图片预览框加「下载」按钮(按文件名判类型,`<a download>` 同源强制下载);③样衣加「尺码/数量」字段(如 38 码 2 件)。schema:`sample_garment` +3 列(`sample_size`/`sample_qty`/`attachments`),`init.sql` + `gen-column-sync` 重生成(44 表/650 列,红线一);**本机无真库未实跑,经 `deploy.sh` 落地验证**。验证:types+api 构建✓ jest 221/221 web vue-tsc✓ vitest 86/86。反馈②的「多轮寄样追踪子表」(较大、且改「版师填件数+工价→自动生成对账单」计费逻辑)下一批做。
 
 - （本次·生产反馈修复:问题反馈 Ctrl+V 粘不了截图）`fix(web)` 反馈悬浮件里 Ctrl+V 粘贴截图无效。根因:`FileUpload` 的 paste 绑在需先聚焦的 `.fu-wrap`(tabindex=0),而反馈弹窗焦点天然在「问题描述」文本框,粘贴事件到不了上传框。修复:`FileUpload` 加可选 `globalPaste` 模式(挂载时在 `document` 兜底监听 paste、不依赖焦点;事件标记去重防 wrap/document 双触发;加限额守卫);`FeedbackWidget` 启用 `global-paste` + 弹窗 `destroy-on-close`(监听随弹窗开关自动挂/卸,关掉后不再全局抢粘贴)。未启用该 prop 的其它上传处零回归。验证:web `vue-tsc --noEmit` 0 报错 + vitest 86/86;真实浏览器粘贴动作未自动化(图片剪贴板难自动化),建议部署后手工点一下或本地 dev 验。

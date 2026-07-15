@@ -6,8 +6,8 @@
       <el-tab-pane label="预付款管理" name="prepayment">
         <el-card class="search-card" shadow="never">
           <el-form :model="prepayQuery" inline>
-            <el-form-item label="工厂ID">
-              <el-input-number v-model="prepayQuery.factory_id" :min="1" :controls="false" placeholder="工厂ID" style="width:100px" @change="loadPrepay" />
+            <el-form-item label="工厂">
+              <div style="width:200px"><factory-select v-model="prepayQuery.factory_id" placeholder="按名称筛选工厂" @update:model-value="loadPrepay" /></div>
             </el-form-item>
             <el-form-item>
               <el-button type="primary" :icon="Search" @click="loadPrepay">搜索</el-button>
@@ -66,8 +66,8 @@
       <el-tab-pane label="付款申请" name="request">
         <el-card class="search-card" shadow="never">
           <el-form :model="prQuery" inline>
-            <el-form-item label="工厂ID">
-              <el-input-number v-model="prQuery.factory_id" :min="1" :controls="false" placeholder="工厂ID" style="width:100px" @change="loadPR" />
+            <el-form-item label="工厂">
+              <div style="width:200px"><factory-select v-model="prQuery.factory_id" placeholder="按名称筛选工厂" @update:model-value="loadPR" /></div>
             </el-form-item>
             <el-form-item label="状态">
               <el-select v-model="prQuery.approval_status" clearable placeholder="全部" style="width:110px" @change="loadPR">
@@ -367,6 +367,7 @@ import { fmtDateTime } from '@/utils/format';
 import { Search, Refresh, Plus, UploadFilled } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { prepaymentApi, paymentRequestApi } from '@/api/payment';
+import FactorySelect from '@/components/FactorySelect.vue';
 import { uploadApi } from '@/api/upload';
 import { openFile } from '@/utils/secureFile';
 import { useAuthStore } from '@/stores/auth';

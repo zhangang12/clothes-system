@@ -13,6 +13,9 @@ export const contractApi = {
   // 历史同款价提示(P3#41)
   priceHint: (styleNo: string, itemName?: string) =>
     http.get<unknown, { data: any[] }>('/contracts/price-hint', { params: { style_no: styleNo, ...(itemName ? { item_name: itemName } : {}) } }),
+  // 按款号列出合同（对账/付款「搜款号→选合同」，带出工厂）
+  byStyle: (styleNo: string) =>
+    http.get<unknown, { data: any[] }>('/contracts/by-style', { params: { style_no: styleNo } }),
   // 按订单材料供应商拆单批量生成材料合同（设计稿 合同 A1 主流程入口）
   generateFromOrder: (orderId: number) =>
     http.post<unknown, { data: { created: number; contracts: any[]; unmatched: string[] } }>(`/contracts/generate-from-order/${orderId}`),

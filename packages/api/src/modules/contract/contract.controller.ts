@@ -41,6 +41,12 @@ export class ContractController {
     return this.service.priceHint(styleNo ?? '', itemName);
   }
 
+  @Get('by-style')
+  @ApiOperation({ summary: '按款号列出合同（对账/付款「搜款号→选合同」，带出工厂）' })
+  byStyle(@Query('style_no') styleNo: string) {
+    return this.service.contractsByStyle(styleNo ?? '');
+  }
+
   @Get()
   @ApiOperation({ summary: '合同列表（分页；版师/打样脱敏供应商成本）' })
   async findAll(@Query() query: QueryContractDto, @Request() req: any) {

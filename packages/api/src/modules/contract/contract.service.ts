@@ -347,6 +347,27 @@ export class ContractService {
     return qb.getRawMany();
   }
 
+  // 按款号列出合同(对账/付款「搜款号→选合同」:选中后前端据此带出工厂/合同ID,免手填数字ID)。
+  // 匹配口径同 priceHint:合同 style_nos 命中 或 任一材料行 style_no 命中(补料/加工皆可)。
+  async contractsByStyle(styleNo: string) {
+    const s = (styleNo ?? '').trim();
+    if (!s) return [];
+    return this.repo.createQueryBuilder('c')
+      .leftJoin(Factory, 'f', 'f.id = c.factory_id')
+      .leftJoin(ContractMaterial, 'm', 'm.contract_id = c.id')
+      .select([
+        'c.id AS id', 'c.contract_no AS contract_no', 'c.type AS type',
+        'c.factory_id AS factory_id', 'f.name AS factory_name',
+        'c.total_amount AS total_amount', 'c.style_nos AS style_nos',
+      ])
+      .distinct(true)
+      .where('c.deleted = 0')
+      .andWhere('(c.style_nos LIKE :like OR m.style_no = :s)', { like: `%${s}%`, s })
+      .orderBy('c.id', 'DESC')
+      .limit(50)
+      .getRawMany();
+  }
+
   async findAll(query: QueryContractDto) {
     const { page = 1, size = 20, keyword, type, portal_status, factory_id, order_id } = query;
     const base: FindOptionsWhere<Contract> = {
