@@ -293,8 +293,8 @@ function onMore(cmd: string) {
 .tools-left, .tools-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .advanced { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--el-border-color); }
 .footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
-.sel-info { font-size: 13px; color: var(--el-text-color-secondary); }
-.tip { margin-top: 8px; font-size: 12px; color: var(--el-text-color-secondary); }
+.sel-info { font-size: 14px; color: var(--el-text-color-secondary); }
+.tip { margin-top: 8px; font-size: 13px; color: var(--el-text-color-secondary); }
 .overdue { color: #C04042; font-weight: 600; }
 :deep(.overdue-row) { background: #FDF0EF !important; }
 </style>

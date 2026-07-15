@@ -51,7 +51,14 @@
   --el-border-radius-base: 4px;
   --el-border-radius-small: 4px;
   --el-font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
-  --el-font-size-base: 13px;
+  /* 字号整体上调一档（用户反馈原先偏小）。原本 base=13px 压在 Element Plus 默认 14px
+     之下，长时间看单据很吃力。整套跟着抬，避免只改一处导致各控件字号打架。 */
+  --el-font-size-base: 14px;
+  --el-font-size-small: 13px;
+  --el-font-size-extra-small: 12px;
+  --el-font-size-medium: 16px;
+  --el-font-size-large: 18px;
+  --el-font-size-extra-large: 20px;
 
   --el-text-color-primary: #1F1F22;
   --el-text-color-regular: #37383C;
@@ -136,7 +143,7 @@ html, body, #app {
   --el-table-header-bg-color: var(--gray-0);
   --el-table-header-text-color: var(--gray-7);
   --el-table-row-hover-bg-color: #FBF8F2;
-  font-size: 13px;
+  font-size: 14px;
 }
 .el-table th.el-table__cell { font-weight: 600; }
 

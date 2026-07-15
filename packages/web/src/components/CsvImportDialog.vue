@@ -153,8 +153,8 @@ function downloadFailures() {
 <style scoped>
 .steps { margin-bottom: 18px; }
 .pane { min-height: 180px; }
-.muted { font-size: 13px; color: var(--el-text-color-secondary); }
-.headers { background: #F5EDDC; border-radius: 4px; padding: 8px 12px; margin: 8px 0 14px; font-size: 13px; color: #1E3A5F; }
+.muted { font-size: 14px; color: var(--el-text-color-secondary); }
+.headers { background: #F5EDDC; border-radius: 4px; padding: 8px 12px; margin: 8px 0 14px; font-size: 14px; color: #1E3A5F; }
 .summary { margin-bottom: 10px; font-size: 14px; }
 .summary .ok { color: #3E8E7E; font-weight: 600; }
 .summary .bad { color: #C04042; font-weight: 600; }

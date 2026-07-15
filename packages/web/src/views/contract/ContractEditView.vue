@@ -595,19 +595,19 @@ onMounted(async () => {
 .page-title { font-size: 16px; font-weight: 600; color: #1E3A5F; }
 .portal-steps { margin-top: 10px; }
 .sec-title { margin: 0 0 12px; font-size: 14px; color: #1E3A5F; }
-.sec-sub { font-size: 12px; color: var(--el-text-color-secondary); font-weight: 400; margin-left: 8px; }
-.ratio-hint { font-size: 12px; color: #3E8E7E; margin: 2px 0 0 130px; }
+.sec-sub { font-size: 13px; color: var(--el-text-color-secondary); font-weight: 400; margin-left: 8px; }
+.ratio-hint { font-size: 13px; color: #3E8E7E; margin: 2px 0 0 130px; }
 .ratio-hint.bad { color: #C04042; font-weight: 600; }
 .style-tags { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.style-tag { font-size: 13px; }
+.style-tag { font-size: 14px; }
 .line-btns { margin-bottom: 8px; display: flex; gap: 8px; }
-.totals-row { margin-top: 10px; text-align: right; font-size: 13px; color: var(--el-text-color-regular); }
+.totals-row { margin-top: 10px; text-align: right; font-size: 14px; color: var(--el-text-color-regular); }
 .totals-row .grand { color: #C04042; font-size: 16px; }
-.price-extra { margin-top: 10px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font-size: 13px; }
+.price-extra { margin-top: 10px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font-size: 14px; }
 .price-extra .excl { color: #C04042; }
 .term-row { margin-bottom: 12px; }
-.term-label { font-size: 13px; font-weight: 600; color: var(--el-text-color-primary); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
-.term-auto { font-size: 13px; color: #B8860B; background: var(--el-fill-color-light); border-radius: 4px; padding: 8px 10px; }
+.term-label { font-size: 14px; font-weight: 600; color: var(--el-text-color-primary); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+.term-auto { font-size: 14px; color: #B8860B; background: var(--el-fill-color-light); border-radius: 4px; padding: 8px 10px; }
 .photo-cell { display: flex; align-items: center; gap: 6px; }
 .thumb { width: 56px; height: 40px; border-radius: 4px; border: 1px solid var(--el-border-color); }
 .thumb-sm { width: 36px; height: 28px; border-radius: 3px; border: 1px solid var(--el-border-color); }

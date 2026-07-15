@@ -5,7 +5,7 @@
       v-for="t in tabs.tabs"
       :key="t.path"
       class="tab"
-      :class="{ active: t.path === route.fullPath }"
+      :class="{ active: t.path === route.fullPath, home: t.path === HOME }"
       @click="go(t.path)"
       @contextmenu.prevent="openMenu($event, t.path)"
     >
@@ -62,33 +62,54 @@ onBeforeUnmount(() => document.removeEventListener('click', closeMenu));
 </script>
 
 <style scoped>
+/* 页签栏：贴着顶栏，米白底把白色的页签「托」起来，形成层次 */
 .tabs-bar {
-  display: flex; align-items: center; gap: 4px;
-  height: 38px; padding: 0 16px;
-  background: #fff; border-bottom: 1px solid var(--gray-1);
-  overflow-x: auto; overflow-y: hidden; scrollbar-width: thin;
+  display: flex; align-items: center; gap: 6px;
+  height: 42px; padding: 0 16px;
+  background: var(--gray-0); border-bottom: 1px solid var(--gray-1);
+  overflow-x: auto; overflow-y: hidden;
+  scrollbar-width: none;              /* 页签栏自身的滚动条是噪音 */
 }
+.tabs-bar::-webkit-scrollbar { display: none; }
+
 .tab {
-  display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto;
-  height: 26px; padding: 0 10px; border-radius: var(--r);
-  border: 1px solid var(--gray-1); background: var(--gray-0);
-  font-size: 12px; color: var(--gray-7); cursor: pointer; user-select: none;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto;
+  height: 30px; padding: 0 12px;
+  border-radius: 15px;                 /* 胶囊形，和 .el-tag 的语言一致 */
+  border: 1px solid transparent;
+  background: #fff;
+  font-size: 14px; color: var(--gray-5); cursor: pointer; user-select: none;
+  transition: color .14s ease, background .14s ease, box-shadow .14s ease;
 }
-.tab:hover { border-color: var(--indigo-l); color: var(--indigo); }
+.tab:hover { color: var(--indigo); box-shadow: var(--shadow-sm); }
+
+/* 当前页签：靛蓝实心 + 一点投影，让「我在哪」一眼可见 */
 .tab.active {
-  background: var(--indigo); border-color: var(--indigo); color: #fff; font-weight: 500;
+  background: var(--indigo); color: #fff; font-weight: 500;
+  box-shadow: 0 2px 8px rgba(30, 58, 95, .25);
 }
-.tab-x { font-size: 12px; border-radius: 50%; padding: 1px; }
-.tab-x:hover { background: rgba(0, 0, 0, 0.18); }
-.tab.active .tab-x:hover { background: rgba(255, 255, 255, 0.28); }
+/* 工作台是固定页签，给个铁锈橙小点暗示它关不掉 */
+.tab.home::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--rust); flex: 0 0 auto;
+}
+.tab.home.active::before { background: #fff; }
+
+.tab-x {
+  font-size: 12px; border-radius: 50%; padding: 2px;
+  opacity: .45; transition: opacity .14s ease, background .14s ease;
+}
+.tab:hover .tab-x { opacity: 1; }
+.tab-x:hover { background: rgba(30, 58, 95, .12); opacity: 1; }
+.tab.active .tab-x { opacity: .7; }
+.tab.active .tab-x:hover { background: rgba(255, 255, 255, .3); opacity: 1; }
 
 .tab-menu {
   position: fixed; z-index: 3000; min-width: 108px; padding: 4px 0;
   background: #fff; border: 1px solid var(--gray-1); border-radius: var(--r);
-  box-shadow: var(--shadow); font-size: 13px;
+  box-shadow: var(--shadow); font-size: 14px;
 }
-.tab-menu-item { padding: 6px 14px; cursor: pointer; color: var(--gray-7); }
+.tab-menu-item { padding: 7px 14px; cursor: pointer; color: var(--gray-7); }
 .tab-menu-item:hover { background: var(--gray-0); color: var(--indigo); }
 
 @media (prefers-reduced-motion: reduce) { .tab { transition: none; } }

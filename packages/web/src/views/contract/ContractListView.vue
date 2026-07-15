@@ -320,12 +320,12 @@ function factoryName(id: number): string {
 .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 .tools-left, .tools-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
-.sel-info { font-size: 13px; color: var(--el-text-color-secondary); }
-.tip { margin-top: 8px; font-size: 12px; color: var(--el-text-color-secondary); }
+.sel-info { font-size: 14px; color: var(--el-text-color-secondary); }
+.tip { margin-top: 8px; font-size: 13px; color: var(--el-text-color-secondary); }
 .item-row { margin-bottom: 8px; }
-.ratio-hint { font-size: 12px; color: #3E8E7E; margin: 4px 0 10px; }
+.ratio-hint { font-size: 13px; color: #3E8E7E; margin: 4px 0 10px; }
 .ratio-hint.bad { color: #C04042; font-weight: 600; }
-.muted { font-size: 12px; color: var(--el-text-color-secondary); font-weight: 400; }
+.muted { font-size: 13px; color: var(--el-text-color-secondary); font-weight: 400; }
 .sec { margin: 16px 0 8px; color: #1E3A5F; }
-.log-remark { margin-top: 4px; font-size: 12px; color: var(--el-text-color-secondary); }
+.log-remark { margin-top: 4px; font-size: 13px; color: var(--el-text-color-secondary); }
 </style>

@@ -153,7 +153,7 @@
         <el-row :gutter="16">
           <el-col :span="8"><el-form-item label="门户账号"><el-input v-model="form.portalAccount" placeholder="开通后供应商可登录 H5 处理合同" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="初始密码"><el-input v-model="form.portalPassword" placeholder="供应商首次登录密码" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label=" "><span style="color:#999;font-size:12px">未开通账号的工厂，合同无法推送门户</span></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label=" "><span style="color:#999;font-size:13px">未开通账号的工厂，合同无法推送门户</span></el-form-item></el-col>
         </el-row>
       </section-block>
     </el-form>
@@ -311,8 +311,8 @@ function copyAsNew() {
 :deep(.section-head) { display: flex; align-items: center; gap: 8px; padding: 8px 14px;
   background: #F5EDDC; border-bottom: 1px solid var(--el-border-color-light); }
 :deep(.section-title) { font-weight: 600; color: #1E3A5F; }
-:deep(.section-badge) { font-size: 12px; color: #C8901E; background: #fff; padding: 1px 8px; border-radius: 10px; }
+:deep(.section-badge) { font-size: 13px; color: #C8901E; background: #fff; padding: 1px 8px; border-radius: 10px; }
 :deep(.section-body) { padding: 14px; }
 .subtable-ops { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.subtable-ops .hint { font-size: 12px; color: var(--el-text-color-secondary); margin-left: auto; }
+.subtable-ops .hint { font-size: 13px; color: var(--el-text-color-secondary); margin-left: auto; }
 </style>

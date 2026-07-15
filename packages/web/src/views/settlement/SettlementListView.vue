@@ -63,7 +63,7 @@
         <el-table-column prop="goods_amount_tax" label="总货款(含税)" width="112" align="right">
           <template #default="{ row }">
             {{ (+(row.goods_amount_tax ?? row.total_cost ?? 0)).toFixed(2) }}
-            <div v-if="+(row.unpaid_count ?? 0)" class="muted" style="font-size:11px">尚有{{ row.unpaid_count }}笔未付</div>
+            <div v-if="+(row.unpaid_count ?? 0)" class="muted" style="font-size:12px">尚有{{ row.unpaid_count }}笔未付</div>
           </template>
         </el-table-column>
         <el-table-column prop="goods_amount_extax" label="不含税货款" width="106" align="right">
@@ -902,7 +902,7 @@ async function doAddReceipt() {
 .badge-bar { display:flex; gap:18px; padding: 0 4px 12px; }
 .unpaid-grey { color: var(--el-text-color-secondary); }
 .batch-scope { display:flex; flex-wrap:wrap; gap:4px 14px; }
-.hint-inline { font-size: 12px; color: var(--el-text-color-secondary); margin-left: 8px; }
+.hint-inline { font-size: 13px; color: var(--el-text-color-secondary); margin-left: 8px; }
 :deep(.row-unpaid) { color: var(--el-text-color-disabled); background: var(--el-fill-color-lighter); }
-.agg-hint { font-size: 12px; color: #3E8E7E; background: var(--el-fill-color-light); border-radius: 4px; padding: 8px 10px; margin-bottom: 12px; }
+.agg-hint { font-size: 13px; color: #3E8E7E; background: var(--el-fill-color-light); border-radius: 4px; padding: 8px 10px; margin-bottom: 12px; }
 </style>

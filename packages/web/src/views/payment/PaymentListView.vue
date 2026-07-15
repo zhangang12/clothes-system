@@ -653,7 +653,7 @@ onMounted(() => { loadPrepay(); loadPR(); });
 .slip-uploader { width: 100%; outline: none; }
 .slip-uploader :deep(.el-upload-dragger) { padding: 12px; }
 .slip-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; color: #909399; padding: 8px 0; }
-.slip-tip { font-size: 12px; line-height: 1.5; }
+.slip-tip { font-size: 13px; line-height: 1.5; }
 .slip-preview img { max-width: 100%; max-height: 200px; object-fit: contain; }
-.slip-loading { margin-top: 6px; font-size: 12px; color: #409eff; text-align: center; }
+.slip-loading { margin-top: 6px; font-size: 13px; color: #409eff; text-align: center; }
 </style>

@@ -114,13 +114,13 @@ function logout() {
 .crumb { font-size: 14px; color: var(--gray-9); font-weight: 500; }
 .crumb-home { color: var(--gray-5); font-weight: 400; }
 .crumb-sep { margin: 0 8px; color: var(--gray-3); }
-.user-chip { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: var(--gray-7); outline: none; }
+.user-chip { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; color: var(--gray-7); outline: none; }
 .avatar {
   width: 30px; height: 30px; border-radius: 50%;
   background: var(--indigo); color: #fff;
-  display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600;
 }
-.caret { color: var(--gray-3); font-size: 12px; }
+.caret { color: var(--gray-3); font-size: 13px; }
 
 /* 内容区：米白 */
 .main { background: var(--canvas); padding: 20px 24px; }

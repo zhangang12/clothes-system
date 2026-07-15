@@ -37,7 +37,11 @@ function onChange(v: any) {
 onMounted(async () => {
   try {
     const res: any = await factoryApi.select(props.type);
-    factories.value = (res.data ?? res) ?? [];
+    // id 必须规范成数字：主键是 bigint，mysql2 出来是字符串（JSON 里就是 "1"），
+    // 而回传给父组件的是 Number(v)。两边类型不一致 → el-select 拿数字 1 找不到
+    // 值为 "1" 的选项 → 匹配不上就把原始值当文字显示，用户看到的是工厂 ID 而不是名称；
+    // 连带 onChange 的 find 也永远落空（带出工厂对象拿到 undefined）。
+    factories.value = ((res.data ?? res) ?? []).map((f: any) => ({ ...f, id: Number(f.id) }));
   } catch {
     factories.value = [];
   }

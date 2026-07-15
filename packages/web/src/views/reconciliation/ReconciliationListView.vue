@@ -617,8 +617,8 @@ async function doGenerateLabor() {
 .card-header { display: flex; justify-content: space-between; align-items: center; }
 .pagination { margin-top: 16px; display: flex; justify-content: flex-end; }
 .item-row { margin-bottom: 8px; }
-.amount { font-size: 12px; color: #909399; }
+.amount { font-size: 13px; color: #909399; }
 .labor-sum { margin-top: 10px; text-align: right; font-weight: 600; color: var(--el-color-primary); }
-.picked-bar { display: flex; align-items: center; margin-bottom: 12px; font-size: 13px; color: var(--el-text-color-regular); }
+.picked-bar { display: flex; align-items: center; margin-bottom: 12px; font-size: 14px; color: var(--el-text-color-regular); }
 .picked-bar .muted { color: var(--el-text-color-placeholder); }
 </style>

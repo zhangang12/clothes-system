@@ -659,19 +659,19 @@ onMounted(async () => { await loadRefs(); await load(); });
 :deep(.section-block) { border: 1px solid var(--el-border-color-light); border-radius: 6px; overflow: hidden; }
 :deep(.section-head) { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: #F5EDDC; border-bottom: 1px solid var(--el-border-color-light); }
 :deep(.section-title) { font-weight: 600; color: #1E3A5F; }
-:deep(.section-badge) { font-size: 12px; color: #C8901E; background: #fff; padding: 1px 8px; border-radius: 10px; }
+:deep(.section-badge) { font-size: 13px; color: #C8901E; background: #fff; padding: 1px 8px; border-radius: 10px; }
 :deep(.section-body) { padding: 14px; }
 .subtable-ops { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .po-head { display: flex; flex-direction: column; gap: 3px; padding: 4px 0; }
 .matrix-summary { margin-top: 12px; }
-.summary-title { font-size: 13px; font-weight: 600; color: #1E3A5F; margin-bottom: 6px; }
+.summary-title { font-size: 14px; font-weight: 600; color: #1E3A5F; margin-bottom: 6px; }
 .split-preview { padding: 8px 12px; }
-.split-title { font-size: 12px; color: var(--el-text-color-secondary); margin-bottom: 6px; }
-.excel-steps p { font-size: 13px; color: var(--el-text-color-regular); margin: 4px 0; }
+.split-title { font-size: 13px; color: var(--el-text-color-secondary); margin-bottom: 6px; }
+.excel-steps p { font-size: 14px; color: var(--el-text-color-regular); margin: 4px 0; }
 .excel-ops { display: flex; gap: 8px; margin: 10px 0; }
-.excel-check { font-size: 13px; color: #3E8E7E; font-weight: 600; margin-bottom: 6px; }
+.excel-check { font-size: 14px; color: #3E8E7E; font-weight: 600; margin-bottom: 6px; }
 .excel-check.bad { color: #C04042; }
-.excel-errors { margin: 0 0 8px; padding-left: 18px; font-size: 12px; color: #C04042; }
-.subtable-ops .hint, .hint { font-size: 12px; color: var(--el-text-color-secondary); }
+.excel-errors { margin: 0 0 8px; padding-left: 18px; font-size: 13px; color: #C04042; }
+.subtable-ops .hint, .hint { font-size: 13px; color: var(--el-text-color-secondary); }
 .subtable-ops .hint { margin-left: auto; }
 </style>

@@ -312,5 +312,5 @@ async function doRemoveReceipt(rid: number) {
 .item-row { margin-bottom: 8px; }
 .detail-toolbar { margin-bottom: 8px; }
 .text-danger { color: #f56c6c; }
-.hint { font-size: 12px; color: var(--el-text-color-secondary); }
+.hint { font-size: 13px; color: var(--el-text-color-secondary); }
 </style>

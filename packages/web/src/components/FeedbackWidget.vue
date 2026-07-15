@@ -137,8 +137,8 @@ async function submit() {
   transition: transform 0.15s, box-shadow 0.15s;
 }
 .fb-fab:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(209, 122, 64, 0.5); }
-.fb-fab-txt { font-size: 11px; line-height: 1; }
-.fb-ctx { margin: 4px 0 0; font-size: 12px; color: var(--gray-5, #8a94a0); }
+.fb-fab-txt { font-size: 12px; line-height: 1; }
+.fb-ctx { margin: 4px 0 0; font-size: 13px; color: var(--gray-5, #8a94a0); }
 .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
 @media (prefers-reduced-motion: reduce) { .fb-fab { transition: none; } }
 
@@ -150,11 +150,11 @@ async function submit() {
 .fb-card { border: 1px solid var(--gray-2, #e6e9ed); border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
 .fb-card.unread { border-color: var(--rust, #D17A40); box-shadow: 0 0 0 2px rgba(209, 122, 64, 0.12); }
 .fb-card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-.fb-time { font-size: 12px; color: var(--gray-5, #8a94a0); }
-.fb-content { font-size: 13px; color: #23343A; white-space: pre-wrap; }
+.fb-time { font-size: 13px; color: var(--gray-5, #8a94a0); }
+.fb-content { font-size: 14px; color: #23343A; white-space: pre-wrap; }
 .fb-reply { margin-top: 10px; padding: 8px 10px; background: rgba(46, 139, 120, 0.08); border-radius: 6px; }
-.fb-reply-label { display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--teal-d, #1E6B5C); margin-bottom: 4px; }
-.fb-dot { margin-left: 6px; font-size: 11px; color: #fff; background: var(--rust, #D17A40); border-radius: 8px; padding: 0 6px; font-weight: 400; }
-.fb-reply-txt { font-size: 13px; color: #23343A; white-space: pre-wrap; }
-.fb-reply-time { font-size: 11px; color: var(--gray-5, #8a94a0); margin-top: 4px; }
+.fb-reply-label { display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; color: var(--teal-d, #1E6B5C); margin-bottom: 4px; }
+.fb-dot { margin-left: 6px; font-size: 12px; color: #fff; background: var(--rust, #D17A40); border-radius: 8px; padding: 0 6px; font-weight: 400; }
+.fb-reply-txt { font-size: 14px; color: #23343A; white-space: pre-wrap; }
+.fb-reply-time { font-size: 12px; color: var(--gray-5, #8a94a0); margin-top: 4px; }
 </style>

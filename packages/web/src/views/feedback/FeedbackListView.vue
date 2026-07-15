@@ -149,10 +149,10 @@ onMounted(load);
 <style scoped>
 .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
-.muted { color: var(--gray-5, #8a94a0); font-size: 13px; }
-.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+.muted { color: var(--gray-5, #8a94a0); font-size: 14px; }
+.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
 .thumbs { display: flex; gap: 4px; flex-wrap: wrap; }
 .thumb { width: 34px; height: 34px; border-radius: 4px; }
-.reply-txt { font-size: 13px; color: var(--teal-d, #1E6B5C); white-space: pre-wrap; }
-.orig { background: var(--gray-1, #f4f6f8); border-radius: 6px; padding: 8px 10px; font-size: 13px; color: #333; white-space: pre-wrap; }
+.reply-txt { font-size: 14px; color: var(--teal-d, #1E6B5C); white-space: pre-wrap; }
+.orig { background: var(--gray-1, #f4f6f8); border-radius: 6px; padding: 8px 10px; font-size: 14px; color: #333; white-space: pre-wrap; }
 </style>

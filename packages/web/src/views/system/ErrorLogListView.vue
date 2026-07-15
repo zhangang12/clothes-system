@@ -140,13 +140,13 @@ onMounted(load);
 .footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
 .muted { color: var(--gray-5, #8a94a0); font-size: 12.5px; }
 .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
-.path { margin-left: 6px; font-size: 12px; }
-.ip { font-size: 11px; color: var(--gray-5, #8a94a0); }
+.path { margin-left: 6px; font-size: 13px; }
+.ip { font-size: 12px; color: var(--gray-5, #8a94a0); }
 .cnt { color: var(--rust, #D17A40); }
 .etype { color: #A93226; font-weight: 600; margin-right: 6px; }
 .emsg { color: var(--gray-7, #55606c); font-size: 12.5px; }
-h4 { margin: 16px 0 6px; font-size: 13px; color: var(--indigo, #1E3A5F); }
-.box { background: #F5F3EC; border: 1px solid #E6E2D7; border-radius: 6px; padding: 10px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; max-height: 260px; overflow: auto; margin: 0; }
+h4 { margin: 16px 0 6px; font-size: 14px; color: var(--indigo, #1E3A5F); }
+.box { background: #F5F3EC; border: 1px solid #E6E2D7; border-radius: 6px; padding: 10px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; white-space: pre-wrap; word-break: break-all; max-height: 260px; overflow: auto; margin: 0; }
 .box.err { color: #A93226; }
 .box.stack { max-height: 320px; }
 </style>

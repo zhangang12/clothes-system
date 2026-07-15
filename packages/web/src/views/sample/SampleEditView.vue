@@ -520,10 +520,10 @@ onMounted(async () => { await loadRefs(); await load(); });
 :deep(.section-block) { border: 1px solid var(--el-border-color-light); border-radius: 6px; overflow: hidden; }
 :deep(.section-head) { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: #F5EDDC; border-bottom: 1px solid var(--el-border-color-light); }
 :deep(.section-title) { font-weight: 600; color: #1E3A5F; }
-:deep(.section-badge) { font-size: 12px; color: #C8901E; background: #fff; padding: 1px 8px; border-radius: 10px; }
+:deep(.section-badge) { font-size: 13px; color: #C8901E; background: #fff; padding: 1px 8px; border-radius: 10px; }
 :deep(.section-body) { padding: 14px; }
 .subtable-ops { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.subtable-ops .hint, .hint { font-size: 12px; color: var(--el-text-color-secondary); }
+.subtable-ops .hint, .hint { font-size: 13px; color: var(--el-text-color-secondary); }
 .subtable-ops .hint { margin-left: auto; }
 .mat-photo { display: flex; align-items: center; gap: 4px; }
 .mat-thumb { width: 32px; height: 26px; border-radius: 3px; border: 1px solid var(--el-border-color); }

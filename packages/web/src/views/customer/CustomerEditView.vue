@@ -311,9 +311,9 @@ function copyAsNew() {
 :deep(.section-head) { display: flex; align-items: center; gap: 8px; padding: 8px 14px;
   background: #F5EDDC; border-bottom: 1px solid var(--el-border-color-light); }
 :deep(.section-title) { font-weight: 600; color: #1E3A5F; }
-:deep(.section-badge) { font-size: 12px; color: #C8901E; background: #fff; padding: 1px 8px; border-radius: 10px; }
+:deep(.section-badge) { font-size: 13px; color: #C8901E; background: #fff; padding: 1px 8px; border-radius: 10px; }
 :deep(.section-body) { padding: 14px; }
 :deep(.subtable-ops) { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-:deep(.subtable-ops .hint) { font-size: 12px; color: var(--el-text-color-secondary); margin-left: auto; }
+:deep(.subtable-ops .hint) { font-size: 13px; color: var(--el-text-color-secondary); margin-left: auto; }
 :deep(.highlight-field .el-select__wrapper) { box-shadow: 0 0 0 1px #D17A40 inset; }
 </style>

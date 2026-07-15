@@ -238,9 +238,9 @@ onMounted(() => {
   padding: 0 12px; color: #fff; transition: width .4s ease; min-width: 60px;
 }
 .funnel-num { font-weight: 700; font-size: 15px; }
-.funnel-label { position: absolute; top: 8px; right: 12px; color: #fff; font-size: 13px; opacity: .9; }
-.funnel-rate { font-size: 12px; color: #909399; margin-top: 4px; padding-left: 4px; }
-.funnel-summary { margin-top: 10px; font-size: 13px; color: #606266; }
+.funnel-label { position: absolute; top: 8px; right: 12px; color: #fff; font-size: 14px; opacity: .9; }
+.funnel-rate { font-size: 13px; color: #909399; margin-top: 4px; padding-left: 4px; }
+.funnel-summary { margin-top: 10px; font-size: 14px; color: #606266; }
 .funnel-summary b { color: var(--indigo, #1E3A5F); }
 .loss { color: #C04042; font-weight: 700; }
 :deep(.loss-row) { background: #fef0f0; }

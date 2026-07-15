@@ -95,7 +95,7 @@ onMounted(async () => {
 .hero { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
   background: linear-gradient(120deg, #1E3A5F, #2c527d); color: #fff; padding: 22px 26px; border-radius: 10px; }
 .hello { font-size: 22px; font-weight: 700; }
-.sub { margin-top: 6px; font-size: 13px; opacity: .85; }
+.sub { margin-top: 6px; font-size: 14px; opacity: .85; }
 .quick { display: flex; gap: 8px; flex-wrap: wrap; }
 .section-title { margin: 18px 4px 4px; font-size: 15px; font-weight: 600; color: #1E3A5F; }
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
@@ -105,7 +105,7 @@ onMounted(async () => {
 .stat-icon { width: 44px; height: 44px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
   color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .stat-num { font-size: 26px; font-weight: 700; color: #1E3A5F; line-height: 1; }
-.stat-label { margin-top: 4px; font-size: 13px; color: var(--el-text-color-secondary); }
+.stat-label { margin-top: 4px; font-size: 14px; color: var(--el-text-color-secondary); }
 .todo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
 .todo-card { display: flex; align-items: center; gap: 12px; padding: 16px 18px; background: var(--el-bg-color);
   border: 1px solid var(--el-border-color-light); border-radius: 8px; cursor: pointer; transition: .15s; }

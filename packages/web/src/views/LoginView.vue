@@ -260,7 +260,7 @@ onMounted(() => {
 }
 .brand-flow li {
   display: inline-flex; align-items: center; gap: 7px;
-  font-size: 13px; letter-spacing: 1px; color: #fff;
+  font-size: 14px; letter-spacing: 1px; color: #fff;
   background: rgba(255, 255, 255, 0.10);
   border: 1px solid rgba(255, 255, 255, 0.18);
   padding: 7px 14px; border-radius: 999px;
@@ -294,14 +294,14 @@ onMounted(() => {
 .card-mark { width: 38px; height: 38px; }
 .card-name { font-size: 22px; font-weight: 800; letter-spacing: 2px; color: var(--charcoal); font-style: italic; }
 .login-card h2 { font-size: 22px; color: var(--charcoal); margin: 0 0 6px; font-weight: 600; }
-.form-sub { font-size: 13px; color: #9aa4a9; margin: 0 0 26px; }
+.form-sub { font-size: 14px; color: #9aa4a9; margin: 0 0 26px; }
 .login-btn {
   width: 100%; margin-top: 10px; font-size: 15px; letter-spacing: 6px;
   background: linear-gradient(135deg, var(--teal) 0%, var(--teal-d) 100%);
   border: none; color: #fff; height: 44px;
 }
 .login-btn:hover { background: linear-gradient(135deg, #35a08a 0%, #237a68 100%); }
-.copyright { text-align: center; font-size: 12px; color: #b7c0c4; margin: 24px 0 0; }
+.copyright { text-align: center; font-size: 13px; color: #b7c0c4; margin: 24px 0 0; }
 .login-card :deep(.el-input__wrapper.is-focus) { box-shadow: 0 0 0 1px var(--teal) inset; }
 .login-card :deep(.el-input__prefix) { color: var(--teal); }
 
