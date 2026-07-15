@@ -43,6 +43,7 @@
           </template>
         </el-dropdown>
       </el-header>
+      <TabsBar />
       <el-main class="main">
         <router-view v-slot="{ Component }">
           <transition name="page" mode="out-in">
@@ -61,7 +62,9 @@ import { computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { UserRole } from '@i9/types';
 import { useAuthStore } from '../../stores/auth';
+import { useTabsStore } from '../../stores/tabs';
 import FeedbackWidget from '../../components/FeedbackWidget.vue';
+import TabsBar from '../../components/TabsBar.vue';
 
 const auth = useAuthStore();
 const router = useRouter();
@@ -70,25 +73,17 @@ const isAdmin = computed(() => auth.hasRole(UserRole.ADMIN));
 // 版师/打样:仅样衣相关,隐藏其无权访问(会 403)的客户报价/报表/本司主体
 const isProduction = computed(() => auth.hasRole(UserRole.PATTERNMAKER, UserRole.SAMPLE_MAKER));
 
-const titleMap: Record<string, string> = {
-  '/dashboard': '工作台',
-  '/factories': '工厂管理',
-  '/customers': '客户管理',
-  '/samples': '样衣管理',
-  '/quotes': '客户报价',
-  '/orders': '订单管理',
-  '/contracts': '合同管理',
-  '/reconciliations': '对账管理',
-  '/payments': '付款管理',
-  '/settlements': '结算清单',
-  '/reports': '报表统计',
-  '/company-profiles': '本司主体',
-  '/feedbacks': '反馈管理',
-  '/error-logs': '系统报错记录',
-};
-const pageTitle = computed(() => titleMap[route.path] || '');
+// 标题统一取路由 meta.title（页签栏同源），工作台本身不再重复显示在面包屑右侧
+const pageTitle = computed(() => {
+  const t = (route.meta?.title as string) || '';
+  return t === '工作台' ? '' : t;
+});
 
-function logout() { auth.clearAuth(); router.push('/login'); }
+function logout() {
+  useTabsStore().reset(); // 换账号后不该看到上一个人开的页签
+  auth.clearAuth();
+  router.push('/login');
+}
 </script>
 
 <style scoped>

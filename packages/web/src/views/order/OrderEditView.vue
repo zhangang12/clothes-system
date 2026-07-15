@@ -99,6 +99,10 @@
             <el-table-column v-if="!readonly" type="selection" width="38" />
             <el-table-column label="款号" min-width="120"><template #default="{ row }"><el-input v-model="row.style_no" size="small" :disabled="readonly" /></template></el-table-column>
             <el-table-column label="颜色" width="110"><template #default="{ row }"><DictSelect v-model="row.color" type="color" size="small" placeholder="字典选" :disabled="readonly" /></template></el-table-column>
+            <!-- 洗标号/Article：工厂据此区分标类（用户反馈①）。跟着颜色走，同色通常同一洗标号 -->
+            <el-table-column label="洗标号/Article" width="130">
+              <template #default="{ row }"><el-input v-model="row.article" size="small" placeholder="洗标号" :disabled="readonly" /></template>
+            </el-table-column>
             <el-table-column label="尺码" width="100"><template #default="{ row }"><DictSelect v-model="row.size" type="size" size="small" placeholder="字典选" :disabled="readonly" /></template></el-table-column>
             <el-table-column v-for="(p, pi) in form.matrix.pos" :key="pi" :min-width="130" align="center">
               <template #header>
@@ -207,7 +211,7 @@
     <!-- Excel 导入尺码数量搭配（设计稿 03：4 步 · 含 PO 维度） -->
     <el-dialog v-model="excelDialog" title="Excel 导入尺码数量搭配" width="680px">
       <div class="excel-steps">
-        <p>① 下载固定模板（列：款号/颜色/尺码 + 各「PO号|目的地|收货人」列），用 Excel 打开按客户排期填好；</p>
+        <p>① 下载固定模板（列：款号/颜色/洗标号/尺码 + 各「PO号|目的地|收货人」列），用 Excel 打开按客户排期填好；旧版无洗标号的模板仍可导入；</p>
         <p>② 保存为 CSV（Excel 另存为 → CSV UTF-8）后上传；③ 系统校验（款号/尺码/数值，异常行红色标出）；④ 确认入库生成搭配表。</p>
       </div>
       <div class="excel-ops">
@@ -223,6 +227,7 @@
         <el-table v-else :data="excelPreview.rows.slice(0, 6)" size="small" border>
           <el-table-column prop="style_no" label="款号" min-width="110" />
           <el-table-column prop="color" label="颜色" width="90" />
+          <el-table-column prop="article" label="洗标号" width="110" />
           <el-table-column prop="size" label="尺码" width="80" />
           <el-table-column v-for="(p, pi) in excelPreview.pos" :key="pi" :label="p.po_no" width="100" align="right">
             <template #default="{ row }">{{ row.qtys[pi] || 0 }}</template>
@@ -325,7 +330,7 @@ const INT_UNITS = ['个', '条', '只', '件', '粒', '套', '对', 'pcs', 'PCS'
 
 // 尺码数量搭配矩阵（设计稿 03：行=款·色·尺码，列=各 PO（PO号/目的地/收货人），格=数量）
 const emptyPo = () => ({ po_no: '', destination: '', consignee: '' });
-const emptyMatrixRow = (poCount: number) => ({ style_no: '', color: '', size: '', qtys: Array(poCount).fill('') });
+const emptyMatrixRow = (poCount: number) => ({ style_no: '', color: '', article: '', size: '', qtys: Array(poCount).fill('') });
 const emptyMat = () => ({ itemName: '', part: '', width: '', color: '', composition: '', supplier: '', unit: '', unitPrice: '', netUsage: '', lossRate: 3, splitMode: 'NONE', finalPurchase: '', roundUp: null, remark: '' });
 const form = reactive<any>({
   orderNo: '', quoteId: undefined, customerPo: '', styleNo: '', unitPrice: '', currency: 'USD',
@@ -454,7 +459,7 @@ async function load() {
     matrix = {
       pos: md.pos.length ? md.pos : [emptyPo()],
       rows: md.rows.length
-        ? md.rows.map((r: any) => ({ style_no: r.style_no ?? '', color: r.color ?? '', size: r.size ?? '', qtys: [...(r.qtys ?? [])].concat(Array(Math.max(0, (md.pos.length || 1) - (r.qtys?.length ?? 0))).fill('')) }))
+        ? md.rows.map((r: any) => ({ style_no: r.style_no ?? '', color: r.color ?? '', article: r.article ?? '', size: r.size ?? '', qtys: [...(r.qtys ?? [])].concat(Array(Math.max(0, (md.pos.length || 1) - (r.qtys?.length ?? 0))).fill('')) }))
         : [emptyMatrixRow(md.pos.length || 1)],
     };
   } else if (Array.isArray(md?.rows) && md.rows.length) {
@@ -466,7 +471,7 @@ async function load() {
         const qtys = Array(Math.max(pos.length, 1)).fill('');
         const pi = Math.max(0, poNames.indexOf(String(r.po || '').trim()));
         qtys[pi] = r.qty ?? '';
-        return { style_no: r.style ?? r.style_no ?? '', color: r.color ?? '', size: r.size ?? '', qtys };
+        return { style_no: r.style ?? r.style_no ?? '', color: r.color ?? '', article: r.article ?? '', size: r.size ?? '', qtys };
       }),
     };
   }
@@ -499,8 +504,8 @@ function buildDto() {
     matrix_data: {
       pos: form.matrix.pos.map((p: any) => ({ po_no: p.po_no, destination: p.destination, consignee: p.consignee })),
       rows: form.matrix.rows
-        .filter((r: any) => rowTotal(r) > 0 || r.style_no || r.color || r.size)
-        .map((r: any) => ({ style_no: r.style_no, color: r.color, size: r.size, qtys: r.qtys.map((q: any) => Number(q) || 0) })),
+        .filter((r: any) => rowTotal(r) > 0 || r.style_no || r.color || r.size || r.article)
+        .map((r: any) => ({ style_no: r.style_no, color: r.color, article: r.article, size: r.size, qtys: r.qtys.map((q: any) => Number(q) || 0) })),
     },
     materials: form.materials.filter((m: any) => m.itemName).map((m: any, i: number) => ({
       item_name: m.itemName, part: m.part, width: m.width, color: m.color, composition: m.composition,
@@ -538,10 +543,10 @@ const csvCell = (v: any) => {
 };
 function downloadTemplate() {
   const pos = form.matrix.pos.filter((p: any) => p.po_no) .length ? form.matrix.pos : [{ po_no: 'PO-0001', destination: '目的地', consignee: '收货人' }];
-  const head = ['款号', '颜色', '尺码', ...pos.map((p: any) => `${p.po_no || 'PO'}|${p.destination || ''}|${p.consignee || ''}`)];
+  const head = ['款号', '颜色', '洗标号', '尺码', ...pos.map((p: any) => `${p.po_no || 'PO'}|${p.destination || ''}|${p.consignee || ''}`)];
   const dataRows = form.matrix.rows.filter((r: any) => r.style_no || rowTotal(r) > 0);
-  const body = (dataRows.length ? dataRows : [{ style_no: form.styleNo || 'KH-0001', color: '黑色', size: 'S', qtys: [] }])
-    .map((r: any) => [r.style_no, r.color, r.size, ...pos.map((_: any, pi: number) => r.qtys?.[pi] ?? '')]);
+  const body = (dataRows.length ? dataRows : [{ style_no: form.styleNo || 'KH-0001', color: '黑色', article: '', size: 'S', qtys: [] }])
+    .map((r: any) => [r.style_no, r.color, r.article ?? '', r.size, ...pos.map((_: any, pi: number) => r.qtys?.[pi] ?? '')]);
   const csv = '﻿' + [head, ...body].map((row) => row.map(csvCell).join(',')).join('\r\n');
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
   const a = document.createElement('a'); a.href = url; a.download = `尺码数量搭配-${form.styleNo || '模板'}.csv`; a.click();
@@ -578,21 +583,28 @@ function onCsvPicked(e: Event) {
     const grid = parseCsv(String(reader.result ?? ''));
     if (grid.length < 2) { excelErrors.value = ['文件为空或只有表头']; return; }
     const head = grid[0].map((h) => h.trim());
-    if (head[0] !== '款号' || head[1] !== '颜色' || head[2] !== '尺码') {
-      excelErrors.value = [`表头前三列须为 款号/颜色/尺码（当前:${head.slice(0, 3).join('/')}），请用「下载模板」的格式`]; return;
+    // 洗标号是后加的列：新模板为 款号/颜色/洗标号/尺码+PO…，老模板(无洗标号)仍须能导入，
+    // 否则客户手里已有的模板文件一夜作废。据表头自适应固定列数。
+    const hasArticle = head[2] === '洗标号' || head[2] === '洗标号/Article';
+    const FIXED = hasArticle ? 4 : 3;
+    const sizeIdx = hasArticle ? 3 : 2;
+    if (head[0] !== '款号' || head[1] !== '颜色' || head[sizeIdx] !== '尺码') {
+      excelErrors.value = [`表头须为 款号/颜色/洗标号/尺码（或旧版 款号/颜色/尺码），当前:${head.slice(0, FIXED).join('/')}，请用「下载模板」的格式`]; return;
     }
-    const pos = head.slice(3).map((h, i) => {
+    const pos = head.slice(FIXED).map((h, i) => {
       const [po_no, destination = '', consignee = ''] = h.split('|').map((x) => x.trim());
-      if (!po_no) excelErrors.value.push(`第 ${i + 4} 列 PO 表头为空（格式:PO号|目的地|收货人）`);
+      if (!po_no) excelErrors.value.push(`第 ${i + FIXED + 1} 列 PO 表头为空（格式:PO号|目的地|收货人）`);
       return { po_no, destination, consignee };
     });
     if (!pos.length) { excelErrors.value.push('至少需要 1 个 PO 列'); return; }
     const rows = grid.slice(1).map((cells, ri) => {
-      const style_no = (cells[0] ?? '').trim(); const color = (cells[1] ?? '').trim(); const size = (cells[2] ?? '').trim();
+      const style_no = (cells[0] ?? '').trim(); const color = (cells[1] ?? '').trim();
+      const article = hasArticle ? (cells[2] ?? '').trim() : '';
+      const size = (cells[sizeIdx] ?? '').trim();
       if (!style_no) excelErrors.value.push(`第 ${ri + 2} 行：款号为空`);
       if (!size) excelErrors.value.push(`第 ${ri + 2} 行：尺码为空`);
       const qtys = pos.map((_, pi) => {
-        const raw = (cells[pi + 3] ?? '').trim();
+        const raw = (cells[pi + FIXED] ?? '').trim();
         if (raw === '') return 0;
         const n = Number(raw);
         if (!Number.isFinite(n) || n < 0 || !Number.isInteger(n)) {
@@ -601,7 +613,7 @@ function onCsvPicked(e: Event) {
         }
         return n;
       });
-      return { style_no, color, size, qtys };
+      return { style_no, color, article, size, qtys };
     });
     if (!rows.some((r) => rowTotal(r) > 0)) excelErrors.value.push('至少 1 个数量格需大于 0');
     excelPreview.value = { pos, rows };

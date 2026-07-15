@@ -38,11 +38,13 @@ function matrixTable(matrix: any): string {
   const pos: any[] = matrix?.pos ?? [];
   const rows: any[] = matrix?.rows ?? [];
   if (!rows.length) return '<div class="tip">（未填写数量搭配）</div>';
-  const head = `<tr><th>款号</th><th>颜色</th><th>尺码</th>${pos.map((p, i) => `<th>${esc(p.po_no || `PO${i + 1}`)}<br><small>${esc(p.destination || '')}</small></th>`).join('')}<th>合计</th></tr>`;
+  // 洗标号/Article：工厂据此区分标类（用户反馈①）。老订单没填过，整列为空时不占版面。
+  const withArticle = rows.some((r) => String(r.article ?? '').trim());
+  const head = `<tr><th>款号</th><th>颜色</th>${withArticle ? '<th>洗标号</th>' : ''}<th>尺码</th>${pos.map((p, i) => `<th>${esc(p.po_no || `PO${i + 1}`)}<br><small>${esc(p.destination || '')}</small></th>`).join('')}<th>合计</th></tr>`;
   const body = rows.map((r) => {
     const qtys: any[] = r.qtys ?? [];
     const sum = qtys.reduce((s, q) => s + (Number(q) || 0), 0);
-    return `<tr><td>${esc(r.style_no)}</td><td>${esc(r.color)}</td><td>${esc(r.size)}</td>${pos.map((_, i) => `<td>${Number(qtys[i]) || 0}</td>`).join('')}<td><b>${sum}</b></td></tr>`;
+    return `<tr><td>${esc(r.style_no)}</td><td>${esc(r.color)}</td>${withArticle ? `<td>${esc(r.article) || '—'}</td>` : ''}<td>${esc(r.size)}</td>${pos.map((_, i) => `<td>${Number(qtys[i]) || 0}</td>`).join('')}<td><b>${sum}</b></td></tr>`;
   }).join('');
   return `<table><thead>${head}</thead><tbody>${body}</tbody></table>`;
 }

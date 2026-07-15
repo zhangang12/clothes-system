@@ -125,6 +125,7 @@ function onRemove(file: any) {
   emit('update:modelValue', urls().filter((u) => u !== orig).join(','));
 }
 const isImageName = (name?: string) => /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(name || '');
+const isPdfName = (name?: string) => /\.pdf$/i.test(name || '');
 // 下载文件:同源 /uploads,<a download> 可强制下载;敏感附件走签名链接
 async function download(file: any) {
   const a = document.createElement('a');
@@ -136,11 +137,22 @@ async function download(file: any) {
   a.remove();
 }
 async function onPreview(file: any) {
-  // 非图片(PDF/Excel 等)→ 直接下载;图片 → 弹窗预览(框内可再下载)。按文件名判类型(URL 带查询串,靠扩展名不准)
-  if (!isImageName(file.name)) { await download(file); return; }
-  previewUrl.value = await signedUrl(origUrlOf(file)); // 敏感附件换新令牌,防列表停留过久令牌过期
-  previewFile.value = file;
-  previewVisible.value = true;
+  // 用户反馈「上传的资料不能线上看，必须存到桌面才能打开」：原先只有图片能预览，
+  // PDF 也被当成附件强制下载。后端对 image/* 与 pdf 本就发 Content-Disposition: inline，
+  // 这里让 PDF 直接在浏览器里打开；Excel/Word 浏览器渲染不了，仍旧下载。
+  // 按文件名判类型（URL 带查询串，靠 URL 尾巴认扩展名不准）。
+  const url = await signedUrl(origUrlOf(file)); // 敏感附件换新令牌，防列表停留过久令牌过期
+  if (isImageName(file.name)) {
+    previewUrl.value = url;
+    previewFile.value = file;
+    previewVisible.value = true;
+    return;
+  }
+  if (isPdfName(file.name)) {
+    window.open(url, '_blank', 'noopener');
+    return;
+  }
+  await download(file);
 }
 function onExceed() { ElMessage.warning(`最多上传 ${effectiveLimit.value} 个文件`); }
 </script>
