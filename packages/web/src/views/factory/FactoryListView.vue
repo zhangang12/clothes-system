@@ -93,12 +93,15 @@
           </template>
         </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
+          <!-- 日常操作统一主色，色彩只留给语义：删除=危险红。排布交给 .table-ops -->
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
-            <el-button link size="small" @click="goView(row)">查看</el-button>
-            <el-popconfirm v-if="isAdmin" title="确认删除？被引用将被拦截" @confirm="remove(row.id)">
-              <template #reference><el-button link type="danger" size="small">删除</el-button></template>
-            </el-popconfirm>
+            <div class="table-ops">
+              <el-button link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
+              <el-button link type="primary" size="small" @click="goView(row)">查看</el-button>
+              <el-popconfirm v-if="isAdmin" title="确认删除？被引用将被拦截" @confirm="remove(row.id)">
+                <template #reference><el-button link type="danger" size="small">删除</el-button></template>
+              </el-popconfirm>
+            </div>
           </template>
         </el-table-column>
       </el-table>

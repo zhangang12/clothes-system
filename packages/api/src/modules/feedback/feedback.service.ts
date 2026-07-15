@@ -1,13 +1,24 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import * as fs from 'fs';
+import * as path from 'path';
 import { Feedback, FeedbackStatus } from './feedback.entity';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
+import { FileService } from '../../common/services/file.service';
+
+const IMG_MIME: Record<string, string> = {
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp', '.gif': 'image/gif',
+};
 
 @Injectable()
 export class FeedbackService {
+  private readonly logger = new Logger(FeedbackService.name);
+
   constructor(
     @InjectRepository(Feedback) private readonly repo: Repository<Feedback>,
+    private readonly fileService: FileService,
   ) {}
 
   create(dto: CreateFeedbackDto, userId: number, username?: string) {
@@ -71,13 +82,41 @@ export class FeedbackService {
   }
 
   /** HTML 导出:仅未处理(PENDING);已处理不导出 */
+  /**
+   * 把上传图片内联成 base64 data URI —— 导出的 HTML 存的是
+   * `/api/v1/uploads/file?p=<相对路径>`：相对地址 + 要 JWT 的接口，
+   * 文件下载到本地用 file:// 打开必然裂图。内联后导出件自包含、离线可看。
+   * 单图上限 2MB，超限/读不到则退回可点链接，不让导出整个失败。
+   */
+  private embedImage(url: string): string {
+    const esc = (v: string) => v.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' } as any)[c]);
+    const fallback = `<a href="${esc(url)}">图（未内联）</a>`;
+    try {
+      const p = /[?&]p=([^&]+)/.exec(url)?.[1];
+      if (!p) return fallback;
+      const rel = decodeURIComponent(p);
+      const ext = path.extname(rel).toLowerCase();
+      const mime = IMG_MIME[ext];
+      if (!mime) return fallback; // 非图片(pdf/xlsx 等)保持链接
+      const full = this.fileService.resolvePath(rel);
+      if (!full) return fallback;
+      const stat = fs.statSync(full);
+      if (stat.size > 2 * 1024 * 1024) return fallback; // 大图不内联，免得导出件爆掉
+      const b64 = fs.readFileSync(full).toString('base64');
+      return `<a href="data:${mime};base64,${b64}" target="_blank"><img class="shot" src="data:${mime};base64,${b64}" alt="反馈截图"></a>`;
+    } catch (e: any) {
+      this.logger.warn(`反馈导出内联图片失败(${url}): ${e?.message}`);
+      return fallback;
+    }
+  }
+
   async exportHtml(): Promise<string> {
     const rows = await this.repo.find({
       where: { status: FeedbackStatus.PENDING, deleted: 0 }, order: { id: 'DESC' }, take: 1000,
     });
     const esc = (v: unknown) => String(v ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' } as any)[c]);
     const imgs = (s: string) => {
-      try { return (JSON.parse(s) as string[]).map((u) => `<a href="${esc(u)}">图</a>`).join(' '); } catch { return ''; }
+      try { return (JSON.parse(s) as string[]).map((u) => this.embedImage(u)).join(' '); } catch { return ''; }
     };
     const trs = rows.map((r) => `<tr>
       <td class="mono">${esc(r.created_at)}</td>
@@ -100,6 +139,7 @@ th,td{border:1px solid #DBD9D2;padding:8px 10px;text-align:left;vertical-align:t
 th{background:#1E3A5F;color:#fff;white-space:nowrap}
 .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
 tr:nth-child(even) td{background:#FAF8F2}
+.shot{max-width:180px;max-height:120px;border:1px solid #DBD9D2;border-radius:4px;object-fit:cover;vertical-align:top;margin:2px 2px 0 0}
 </style></head><body><h1>${title}</h1><p class="sub">${sub}</p>${body}</body></html>`;
   }
 }

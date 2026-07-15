@@ -99,6 +99,29 @@ html, body, #app {
 }
 .el-button { border-radius: var(--r); font-weight: 500; }
 
+/* —— 表格操作列 ——
+   Element Plus 靠 `.el-button + .el-button` 给相邻按钮加左边距，一旦中间夹了
+   el-dropdown / el-popconfirm 这类包装元素，选择器就断了：间距忽有忽无、
+   inline-block 与文字按钮基线还错位。这里改用 flex 接管排布。 */
+.table-ops {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+}
+.table-ops .el-button,
+.table-ops .el-button + .el-button {
+  margin-left: 0;
+}
+.table-ops .el-button.is-link {
+  height: 22px;
+  padding: 0;
+  font-weight: 400;
+}
+/* 下拉触发器与纯文字按钮对齐，箭头与文字留一点缝 */
+.table-ops .el-dropdown { display: inline-flex; align-items: center; line-height: 1; }
+.table-ops .el-button.is-link .el-icon { margin-left: 2px; }
+
 /* —— 卡片：米边 + 柔和阴影 —— */
 .el-card {
   --el-card-border-color: var(--gray-1);

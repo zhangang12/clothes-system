@@ -58,33 +58,36 @@
         </el-table-column>
         <el-table-column prop="salesperson" label="业务员" width="90"><template #default="{ row }">{{ row.salesperson || '-' }}</template></el-table-column>
         <el-table-column label="操作" width="320" fixed="right">
+          <!-- 日常操作统一主色，色彩只留给语义：审批=成功绿。排布交给 .table-ops -->
           <template #default="{ row }">
-            <el-button v-if="row.status === 'DRAFT'" link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
-            <el-button link size="small" @click="goView(row)">查看</el-button>
-            <el-button v-if="row.approval_status === 'PENDING' && canReview" link type="success" size="small" @click="doApprove(row)">审批</el-button>
-            <el-dropdown trigger="click" @command="(cmd: string) => onPrint(cmd, row)">
-              <el-button link size="small">打印<el-icon><ArrowDown /></el-icon></el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="customer">对客确认单（无成本）</el-dropdown-item>
-                  <el-dropdown-item command="factory">生产通知单（无客户/价格）</el-dropdown-item>
-                  <el-dropdown-item command="internal">内部单据（全量）</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-            <el-button v-if="canEdit" link type="info" size="small" @click="doCopy(row)">复制</el-button>
-            <el-dropdown
-              v-if="canEdit && ['CONFIRMED', 'CONTRACTED', 'PRODUCING'].includes(row.status)"
-              trigger="click" @command="(cmd: string) => onGenContract(cmd, row)"
-            >
-              <el-button link type="warning" size="small">生成合同<el-icon><ArrowDown /></el-icon></el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="material">材料合同（按供应商拆单）</el-dropdown-item>
-                  <el-dropdown-item command="process">加工合同（带入订单明细）</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
+            <div class="table-ops">
+              <el-button v-if="row.status === 'DRAFT'" link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
+              <el-button link type="primary" size="small" @click="goView(row)">查看</el-button>
+              <el-button v-if="row.approval_status === 'PENDING' && canReview" link type="success" size="small" @click="doApprove(row)">审批</el-button>
+              <el-dropdown trigger="click" @command="(cmd: string) => onPrint(cmd, row)">
+                <el-button link type="primary" size="small">打印<el-icon><ArrowDown /></el-icon></el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="customer">对客确认单（无成本）</el-dropdown-item>
+                    <el-dropdown-item command="factory">生产通知单（无客户/价格）</el-dropdown-item>
+                    <el-dropdown-item command="internal">内部单据（全量）</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+              <el-button v-if="canEdit" link type="primary" size="small" @click="doCopy(row)">复制</el-button>
+              <el-dropdown
+                v-if="canEdit && ['CONFIRMED', 'CONTRACTED', 'PRODUCING'].includes(row.status)"
+                trigger="click" @command="(cmd: string) => onGenContract(cmd, row)"
+              >
+                <el-button link type="primary" size="small">生成合同<el-icon><ArrowDown /></el-icon></el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="material">材料合同（按供应商拆单）</el-dropdown-item>
+                    <el-dropdown-item command="process">加工合同（带入订单明细）</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
           </template>
         </el-table-column>
       </el-table>
