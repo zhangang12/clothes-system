@@ -20,6 +20,7 @@
           <el-button v-if="editId" :icon="CopyDocument" @click="copy">复制</el-button>
         </template>
         <el-button v-if="editId" :icon="Printer" @click="print">打印/PDF</el-button>
+        <el-button v-if="editId" :icon="Download" @click="exportExcel">导出Excel</el-button>
         <el-button v-if="editId && isAdmin" type="danger" plain :icon="Delete" @click="removeSample">删除</el-button>
       </div>
     </div>
@@ -204,7 +205,7 @@ import { ref, reactive, computed, onMounted, h } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
-import { Back, Check, Plus, Minus, Promotion, CopyDocument, Printer, Delete } from '@element-plus/icons-vue';
+import { Back, Check, Plus, Minus, Promotion, CopyDocument, Printer, Delete, Download } from '@element-plus/icons-vue';
 import { sampleApi } from '@/api/sample';
 import { uploadApi } from '@/api/upload';
 import { useAuthStore } from '@/stores/auth';
@@ -212,6 +213,7 @@ import { customerApi } from '@/api/customer';
 import { factoryApi } from '@/api/factory';
 import FileUpload from '@/components/FileUpload.vue';
 import { printSample } from '@/utils/samplePrint';
+import { exportSampleExcel } from '@/utils/sampleExcel';
 import { SAMPLE_CATEGORIES, SAMPLE_STATUS_LABEL, UserRole } from '@i9/types';
 
 const SectionBlock = (props: { title: string; badge?: string }, { slots }: any) =>
@@ -494,6 +496,12 @@ async function print() {
   if (!editId.value) return;
   try { const res: any = await sampleApi.get(editId.value); printSample(res.data ?? res); }
   catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '打印失败'); }
+}
+// 导出 Excel(基本信息+材料明细,.xls)
+async function exportExcel() {
+  if (!editId.value) return;
+  try { const res: any = await sampleApi.get(editId.value); exportSampleExcel(res.data ?? res); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
 }
 function goBack() { router.push({ name: 'Samples' }); }
 

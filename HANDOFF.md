@@ -55,6 +55,8 @@
 
 ## 最近变更（新→旧，保留最近若干条）
 
+- （本次·付款新建两者都要 + 样衣导出 Excel）`feat(payment/sample)` ①**付款「两者都要」**(用户拍板):预付款/付款申请新建的「工厂」改 `FactorySelect`(无合同/通用路径)+ 新增可复用 `ContractPicker`(搜款号→选合同、带出工厂,有合同路径),两条路都能建单;两弹窗加 `destroy-on-close` 使选择器每次打开都刷新。②**样衣导出 Excel**(用户反馈):无第三方依赖生成 Excel 可打开的 HTML 表格(`.xls`;UTF-8 BOM 防乱码、`mso-number-format` 文本格式防款号被当数字截断),含基本信息+材料明细;样衣**列表每行** + **编辑/查看页**均加「导出Excel」。纯前端。验证:web vue-tsc✓ vitest 86/86。**至此对账/付款「工厂ID 搜不到」+ 样衣「Excel/文件下载」两组反馈全部落地**。
+
 - （本次·对账单款号→选合同 + 对账/付款工厂改名称选择器）`feat(reconciliation/payment)` 用户反馈:对账/付款「工厂ID」是裸数字(用户不知道 ID→搜不到、建不了单)。①新增可复用组件 `FactorySelect`(按名称/编号搜工厂、存 ID);对账/付款列表筛选、对账「非合同」建单工厂均改用它。②对账「合同对账」建单改**款号驱动**(用户要求):输入款号→`GET /contracts/by-style`(新端点,复用 priceHint 的款号匹配:`style_nos LIKE` 或材料 `style_no`)列出该款所有合同→选中自动带出工厂+合同ID;出货明细行合同也从该款合同下拉选。验证:types+api 构建✓ jest 221/221 web vue-tsc✓ vitest 86/86。**`by-style` 查询本机无真库未实跑,经 deploy 落地验证**。**下一批**:付款新建「两者都要」(有合同走款号→合同/无合同走工厂选择器) + 样衣导出 Excel。
 
 - （本次·样衣反馈第一步:附件/下载/尺码数量）`feat(sample)` 用户反馈两条(样衣管理),按用户「分两步」先做小改:①「图片信息」新增「资料附件」多文件字段(保留图1/2/3——下游报价/订单继承依赖;accept 图片/PDF/Excel、可多个;上传端点已放行 png/jpg/webp/pdf/xls/xlsx,**不含 Word**);②文件可下载:`FileUpload` 非图片点击直接下载、图片预览框加「下载」按钮(按文件名判类型,`<a download>` 同源强制下载);③样衣加「尺码/数量」字段(如 38 码 2 件)。schema:`sample_garment` +3 列(`sample_size`/`sample_qty`/`attachments`),`init.sql` + `gen-column-sync` 重生成(44 表/650 列,红线一);**本机无真库未实跑,经 `deploy.sh` 落地验证**。验证:types+api 构建✓ jest 221/221 web vue-tsc✓ vitest 86/86。反馈②的「多轮寄样追踪子表」(较大、且改「版师填件数+工价→自动生成对账单」计费逻辑)下一批做。

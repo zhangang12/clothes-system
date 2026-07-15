@@ -204,13 +204,13 @@
     </el-tabs>
 
     <!-- 创建预付款弹窗 -->
-    <el-dialog v-model="createPrepayVisible" title="创建预付款" width="480px" @closed="resetPrepayForm">
+    <el-dialog v-model="createPrepayVisible" title="创建预付款" width="480px" destroy-on-close @closed="resetPrepayForm">
       <el-form ref="prepayFormRef" :model="prepayForm" :rules="prepayRules" label-width="90px">
-        <el-form-item label="工厂ID" prop="factory_id">
-          <el-input-number v-model="prepayForm.factory_id" :min="1" style="width:100%" />
+        <el-form-item label="工厂" prop="factory_id">
+          <factory-select v-model="prepayForm.factory_id" />
         </el-form-item>
-        <el-form-item label="合同ID">
-          <el-input-number v-model="prepayForm.contract_id" :min="1" style="width:100%" />
+        <el-form-item label="按款号选合同">
+          <contract-picker v-model="prepayForm.contract_id" @pick="onPrepayPickContract" />
         </el-form-item>
         <el-form-item label="预付金额" prop="amount">
           <el-input-number v-model="prepayForm.amount" :min="0.01" :precision="2" style="width:100%" />
@@ -232,7 +232,7 @@
     </el-dialog>
 
     <!-- 创建付款申请弹窗 -->
-    <el-dialog v-model="createPRVisible" title="新建付款申请" width="560px" @closed="resetPRForm">
+    <el-dialog v-model="createPRVisible" title="新建付款申请" width="560px" destroy-on-close @closed="resetPRForm">
       <el-form ref="prFormRef" :model="prForm" :rules="prRules" label-width="100px">
         <el-form-item label="类型" prop="type">
           <el-select v-model="prForm.type" style="width:100%">
@@ -240,8 +240,11 @@
             <el-option label="非合同付款" value="NO_CONTRACT" />
           </el-select>
         </el-form-item>
-        <el-form-item label="工厂ID" prop="factory_id">
-          <el-input-number v-model="prForm.factory_id" :min="1" style="width:100%" />
+        <el-form-item label="工厂" prop="factory_id">
+          <factory-select v-model="prForm.factory_id" />
+        </el-form-item>
+        <el-form-item v-if="prForm.type === 'CONTRACT'" label="按款号选合同">
+          <contract-picker @pick="onPrPickContract" />
         </el-form-item>
         <el-alert
           v-if="prPrepayBalance > 0"
@@ -368,6 +371,7 @@ import { Search, Refresh, Plus, UploadFilled } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { prepaymentApi, paymentRequestApi } from '@/api/payment';
 import FactorySelect from '@/components/FactorySelect.vue';
+import ContractPicker from '@/components/ContractPicker.vue';
 import { uploadApi } from '@/api/upload';
 import { openFile } from '@/utils/secureFile';
 import { useAuthStore } from '@/stores/auth';
@@ -429,10 +433,12 @@ const prepayForm = reactive({
   remark: '',
 });
 const prepayRules: FormRules = {
-  factory_id: [{ required: true, message: '请输入工厂ID', trigger: 'blur' }],
+  factory_id: [{ required: true, message: '请选择工厂', trigger: 'change' }],
   amount: [{ required: true, message: '请输入预付金额', trigger: 'blur' }],
   pay_date: [{ required: true, message: '请选择付款日期', trigger: 'change' }],
 };
+// 「按款号选合同」选中后带出工厂(有合同路径);无合同路径直接用上方工厂选择器
+function onPrepayPickContract(c: any) { if (c?.factory_id) prepayForm.factory_id = Number(c.factory_id); }
 function openCreatePrepay() { createPrepayVisible.value = true; }
 function resetPrepayForm() {
   Object.assign(prepayForm, { factory_id: undefined, contract_id: undefined, amount: undefined, pay_date: '', remark: '' });
@@ -594,9 +600,11 @@ const prForm = reactive({
 });
 const prRules: FormRules = {
   type: [{ required: true, message: '请选择类型', trigger: 'change' }],
-  factory_id: [{ required: true, message: '请输入工厂ID', trigger: 'blur' }],
+  factory_id: [{ required: true, message: '请选择工厂', trigger: 'change' }],
   amount: [{ required: true, message: '请输入申请金额', trigger: 'blur' }],
 };
+// 有合同付款:按款号选合同带出工厂;无合同付款:直接用上方工厂选择器(两者都要)
+function onPrPickContract(c: any) { if (c?.factory_id) prForm.factory_id = Number(c.factory_id); }
 function openCreatePR() { createPRVisible.value = true; }
 function resetPRForm() {
   Object.assign(prForm, { type: 'CONTRACT', factory_id: undefined, reconcile_id: undefined, amount: undefined, prepay_offset: 0, description: '', bank_name: '', bank_account: '', related_style_no: '' });

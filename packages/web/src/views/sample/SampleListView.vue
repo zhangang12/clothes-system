@@ -89,11 +89,12 @@
         <el-table-column prop="make_date" label="制单日期" width="110" sortable><template #default="{ row }">{{ row.make_date || '-' }}</template></el-table-column>
         <el-table-column prop="ship_sample_date" label="寄出日期" width="110" sortable><template #default="{ row }">{{ row.ship_sample_date || '—' }}</template></el-table-column>
         <el-table-column prop="return_date" label="寄回日期" width="110" sortable><template #default="{ row }">{{ row.return_date || '—' }}</template></el-table-column>
-        <el-table-column label="操作" width="210" fixed="right">
+        <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
             <el-button link size="small" @click="goView(row)">查看</el-button>
             <el-button link size="small" @click="printRow(row)">打印</el-button>
+            <el-button link size="small" @click="exportRow(row)">导出Excel</el-button>
             <el-button v-if="isPatternmaker" link type="warning" size="small" @click="goPatternmaker(row)">版师</el-button>
             <el-popconfirm
               v-if="canEdit && !['ORDERED', 'ABANDONED'].includes(row.status)"
@@ -128,6 +129,7 @@ import { Search, Plus, Upload, Download, Delete, CopyDocument, ArrowDown } from 
 import { sampleApi } from '@/api/sample';
 import { useAuthStore } from '@/stores/auth';
 import { printSample } from '@/utils/samplePrint';
+import { exportSampleExcel } from '@/utils/sampleExcel';
 import CsvImportDialog from '@/components/CsvImportDialog.vue';
 import { UserRole, SAMPLE_STATUS_LABEL, SAMPLE_CATEGORIES } from '@i9/types';
 
@@ -208,6 +210,11 @@ async function batchRemove() {
 async function printRow(row: any) {
   try { const res: any = await sampleApi.get(row.id); printSample(res.data ?? res); }
   catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '打印失败'); }
+}
+// 导出 Excel(取详情含材料明细;.xls)
+async function exportRow(row: any) {
+  try { const res: any = await sampleApi.get(row.id); exportSampleExcel(res.data ?? res); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
 }
 
 // ── 历史样衣 CSV 批量导入 ──
