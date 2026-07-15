@@ -21,12 +21,13 @@ REDIS_CONTAINER=${REDIS_CONTAINER:-i9_redis}
 HOTFIX_SQL="$APP_DIR/infra/scripts/hotfix-schema.sql"
 LOG_FILE=/var/log/i9/deploy.log
 
-SKIP_PULL=false; SKIP_BACKUP=false
+SKIP_PULL=false; SKIP_BACKUP=false; SKIP_BUILD=false
 for a in "$@"; do
   case "$a" in
     --skip-pull)   SKIP_PULL=true ;;
     --skip-backup) SKIP_BACKUP=true ;;
-    *) echo "未知参数：$a（可用 --skip-pull / --skip-backup）"; exit 2 ;;
+    --skip-build)  SKIP_BUILD=true ;;
+    *) echo "未知参数：$a（可用 --skip-pull / --skip-backup / --skip-build）"; exit 2 ;;
   esac
 done
 
@@ -61,12 +62,28 @@ if ! $SKIP_PULL; then
 fi
 
 # ── ② 安装依赖 + 构建（types 必须先于 api）────────────────────
+# 【2026-07-16 事故教训】本机只有 ~1.8G 内存且无 swap，四个包连续构建会耗尽内存，
+# 内核 OOM killer 挑中 RSS 最大的进程——把生产 mysqld 杀了（数据靠容器重启+崩溃恢复
+# 保住，但线上险些出事）。故默认改为「本地构建、产物 rsync 上来」：
+#   开发机跑 bash infra/scripts/deploy-local.sh —— 它会带 --skip-build 调用本脚本。
+# 仍想在服务器上构建（如临时救急），去掉 --skip-build 即可，但请先确认有 swap。
 log "安装依赖（frozen）..."
 pnpm install --frozen-lockfile --prefer-offline 2>&1 | tail -5
-log "构建类型包..."; pnpm --filter @i9/types build
-log "构建 API...";   pnpm --filter @i9/api build
-log "构建管理后台..."; pnpm --filter @i9/web build
-log "构建供应商门户..."; NODE_ENV=production pnpm --filter @i9/portal build
+if $SKIP_BUILD; then
+  log "跳过构建（--skip-build：产物由开发机 rsync 上传）"
+  for d in packages/types/dist packages/api/dist packages/web/dist packages/portal/dist; do
+    [[ -d "$APP_DIR/$d" ]] || die "缺少构建产物 $d —— 请在开发机执行 bash infra/scripts/deploy-local.sh"
+  done
+  # 产物比源码旧 = 开发机没重新构建就推了，属于典型翻车
+  if [[ "$APP_DIR/packages/web/src" -nt "$APP_DIR/packages/web/dist" ]]; then
+    warn "web 源码比产物新——开发机可能忘了重新构建，请核对"
+  fi
+else
+  log "构建类型包..."; pnpm --filter @i9/types build
+  log "构建 API...";   pnpm --filter @i9/api build
+  log "构建管理后台..."; pnpm --filter @i9/web build
+  log "构建供应商门户..."; NODE_ENV=production pnpm --filter @i9/portal build
+fi
 
 # ── ③ 数据库结构：自动备份 + 幂等升级（在 API 重启之前！）──────
 # hotfix-schema.sql 幂等：已存在的表/列自动跳过，没动 schema 时是无害 no-op。
