@@ -11,6 +11,13 @@ const val = (v: unknown): string => (v === null || v === undefined ? '' : esc(v)
 export function exportSampleExcel(detail: any): void {
   const cats = String(detail.categories ?? '').split(',').filter(Boolean).join(' / ');
   const mats: any[] = detail.materials ?? [];
+  const rounds: any[] = detail.shipRounds ?? [];
+
+  // 寄样改多轮子表后，单号/日期落在轮次上，旧单值列不再回填：为空时取首轮，
+  // 使单轮样衣的基本信息与改版前一致；多轮的完整明细见下方「寄样跟踪」表。
+  const r1: any = rounds[0] ?? {};
+  const shipDate = detail.ship_sample_date ?? r1.ship_date;
+  const shipNo = detail.material_ship_no ?? r1.ship_no;
 
   const infoRows = [
     ['样衣编号', detail.sample_no, '客户款号', detail.style_no],
@@ -18,10 +25,25 @@ export function exportSampleExcel(detail: any): void {
     ['样衣数量', detail.sample_qty, '中间商', detail.middleman_name],
     ['最终买家', detail.buyer_name, '制版师', detail.patternmaker_name],
     ['制单人', detail.maker, '制单日期', d10(detail.make_date)],
-    ['寄样日期', d10(detail.ship_sample_date), '收件人', detail.recipient],
-    ['材料寄出单号', detail.material_ship_no, '寄回单号', detail.return_no],
+    ['寄样日期', d10(shipDate), '收件人', detail.recipient],
+    ['材料寄出单号', shipNo, '寄回单号', detail.return_no],
     ['件数', detail.piece_count, '成衣备注', detail.garment_remark],
   ].map((r) => `<tr><td class="k">${val(r[0])}</td><td>${val(r[1])}</td><td class="k">${val(r[2])}</td><td>${val(r[3])}</td></tr>`).join('');
+
+  const roundHead = `<tr>${['轮次', '尺码', '件数', '寄出日期', '寄出单号', '寄回日期', '工价单价', '工价金额', '备注']
+    .map((h) => `<th>${h}</th>`).join('')}</tr>`;
+  const qtySum = rounds.reduce((s, r) => s + (Number(r.qty) || 0), 0);
+  const amtSum = +rounds.reduce((s, r) => s + (Number(r.labor_amount) || 0), 0).toFixed(2);
+  const roundTable = rounds.length
+    ? `<br/><table>
+    <tr><td colspan="9" class="title">寄样跟踪</td></tr>
+    ${roundHead}
+    ${rounds.map((r, i) => `<tr><td>${val(r.round_no ?? i + 1)}</td><td>${val(r.size)}</td><td>${val(r.qty)}</td>`
+      + `<td>${d10(r.ship_date)}</td><td>${val(r.ship_no)}</td><td>${d10(r.return_date)}</td>`
+      + `<td>${val(r.labor_unit_price)}</td><td>${val(r.labor_amount)}</td><td>${val(r.remark)}</td></tr>`).join('')}
+    <tr><td class="k" colspan="2">合计</td><td class="k">${qtySum}</td><td colspan="4"></td><td class="k">${amtSum}</td><td></td></tr>
+  </table>`
+    : '';
 
   const matHead = `<tr>${['#', '品名', '门幅', '颜色', '部位', '成份', '码带', '拉链长度', '数量', '尺寸', '实际耗用', '供应商', '备注']
     .map((h) => `<th>${h}</th>`).join('')}</tr>`;
@@ -49,6 +71,7 @@ export function exportSampleExcel(detail: any): void {
     <tr><td colspan="4" class="title">样衣制作单 · ${esc(detail.sample_no || '')}</td></tr>
     ${infoRows}
   </table>
+  ${roundTable}
   <br/>
   <table>${matHead}${matRows}</table>
 </body></html>`;
