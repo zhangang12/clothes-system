@@ -24,8 +24,26 @@
   <div v-if="!disabled" class="fu-hint">支持拖入文件 / {{ globalPaste ? 'Ctrl+V 粘贴截图' : '聚焦后 Ctrl+V 粘贴截图' }}</div>
   </div>
 
-  <el-dialog v-model="previewVisible" width="640px" append-to-body>
-    <img :src="previewUrl" style="width:100%" alt="预览" />
+  <el-dialog v-model="previewVisible" :width="previewKind === 'sheet' ? '90%' : '640px'" append-to-body :title="previewKind === 'sheet' ? previewFile?.name : ''">
+    <img v-if="previewKind === 'image'" :src="previewUrl" style="width:100%" alt="预览" />
+
+    <!-- Excel 预览：多工作表分页签，超大表截断 -->
+    <div v-else-if="previewKind === 'sheet'" v-loading="sheetLoading" class="sheet-wrap">
+      <el-tabs v-if="sheets.length > 1" v-model="activeSheet">
+        <el-tab-pane v-for="(s, i) in sheets" :key="i" :label="s.name" :name="String(i)" />
+      </el-tabs>
+      <div v-if="curSheet" class="sheet-scroll">
+        <table class="sheet">
+          <tbody>
+            <tr v-for="(row, ri) in curSheet.rows" :key="ri">
+              <td v-for="(cell, ci) in row" :key="ci" :class="{ head: ri === 0 }">{{ cell }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p v-if="curSheet?.truncated" class="sheet-tip">表格较大，仅预览前 200 行；完整内容请下载。</p>
+    </div>
+
     <template #footer>
       <el-button v-if="previewFile" @click="download(previewFile)">下载</el-button>
       <el-button type="primary" @click="previewVisible = false">关闭</el-button>
@@ -39,6 +57,7 @@ import { ElMessage } from 'element-plus';
 import { Plus, Upload } from '@element-plus/icons-vue';
 import { http } from '@/api';
 import { signedUrl } from '@/utils/secureFile';
+import { parseXlsx, isXlsxName, isLegacyXlsName, type SheetData } from '@/utils/sheetPreview';
 
 const props = withDefaults(defineProps<{
   modelValue?: string;
@@ -71,6 +90,12 @@ watch(() => props.modelValue, rebuildList, { immediate: true });
 const previewVisible = ref(false);
 const previewUrl = ref('');
 const previewFile = ref<any>(null);
+// Excel 预览
+const previewKind = ref<'image' | 'sheet'>('image');
+const sheets = ref<SheetData[]>([]);
+const activeSheet = ref('0');
+const sheetLoading = ref(false);
+const curSheet = computed(() => sheets.value[Number(activeSheet.value)] ?? null);
 
 // 粘贴截图 / 拖拽文件 → 复用同一上传通道(设计稿:①点选 ②Ctrl+V 粘贴 ③拖文件)
 function onPaste(e: ClipboardEvent) {
@@ -138,13 +163,15 @@ async function download(file: any) {
 }
 async function onPreview(file: any) {
   // 用户反馈「上传的资料不能线上看，必须存到桌面才能打开」：原先只有图片能预览，
-  // PDF 也被当成附件强制下载。后端对 image/* 与 pdf 本就发 Content-Disposition: inline，
-  // 这里让 PDF 直接在浏览器里打开；Excel/Word 浏览器渲染不了，仍旧下载。
-  // 按文件名判类型（URL 带查询串，靠 URL 尾巴认扩展名不准）。
+  // PDF、Excel 都被当附件强制下载。按文件名判类型（URL 带查询串，靠 URL 尾巴认扩展名不准）：
+  //   图片  → 弹窗；PDF → 浏览器直接开（后端本就发 inline）；
+  //   .xlsx → 取回解析成表格弹窗；.xls(BIFF 老格式) / Word 等 → 只能下载。
   const url = await signedUrl(origUrlOf(file)); // 敏感附件换新令牌，防列表停留过久令牌过期
+  previewFile.value = file;
+
   if (isImageName(file.name)) {
+    previewKind.value = 'image';
     previewUrl.value = url;
-    previewFile.value = file;
     previewVisible.value = true;
     return;
   }
@@ -152,12 +179,43 @@ async function onPreview(file: any) {
     window.open(url, '_blank', 'noopener');
     return;
   }
+  if (isXlsxName(file.name)) {
+    previewKind.value = 'sheet';
+    sheets.value = [];
+    activeSheet.value = '0';
+    previewVisible.value = true;
+    sheetLoading.value = true;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`读取失败（HTTP ${res.status}）`);
+      sheets.value = await parseXlsx(await res.arrayBuffer());
+    } catch (e: any) {
+      previewVisible.value = false;
+      ElMessage.warning(`${e?.message || '预览失败'}，已改为下载`);
+      await download(file);
+    } finally {
+      sheetLoading.value = false;
+    }
+    return;
+  }
+  if (isLegacyXlsName(file.name)) ElMessage.info('.xls 老格式不支持在线预览，已下载');
   await download(file);
 }
 function onExceed() { ElMessage.warning(`最多上传 ${effectiveLimit.value} 个文件`); }
 </script>
 
 <style scoped>
+/* Excel 预览表格：贴近 Excel 观感，宽表横向滚动不撑破弹窗 */
+.sheet-wrap { min-height: 120px; }
+.sheet-scroll { max-height: 62vh; overflow: auto; border: 1px solid var(--gray-1, #E5E2DA); border-radius: 4px; }
+.sheet { border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+.sheet td {
+  border: 1px solid var(--gray-1, #E5E2DA); padding: 4px 8px;
+  max-width: 280px; overflow: hidden; text-overflow: ellipsis;
+}
+.sheet td.head { background: var(--gray-0, #F4F1EA); font-weight: 600; position: sticky; top: 0; }
+.sheet-tip { margin: 8px 0 0; font-size: 12px; color: var(--gray-5, #6F7178); }
+
 .file-upload :deep(.el-upload--picture-card),
 .file-upload :deep(.el-upload-list--picture-card .el-upload-list__item) { width: 88px; height: 88px; }
 .up-tip { font-size: 12px; color: var(--el-text-color-secondary); }
