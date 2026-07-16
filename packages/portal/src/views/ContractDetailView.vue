@@ -653,7 +653,12 @@ onMounted(load);
 </script>
 
 <style scoped>
-.contract-detail { background: #FBF8F2; min-height: 100vh; padding-bottom: 120px; }
+/* 让位给 .action-area（传了盖章照片时最高约 195px）+ 底部 tabbar，否则末尾内容被压住 */
+.contract-detail {
+  background: #FBF8F2;
+  min-height: 100vh;
+  padding-bottom: calc(210px + var(--van-tabbar-height, 50px) + env(safe-area-inset-bottom, 0px));
+}
 .status-banner { background: #1E3A5F; color: #fff; padding: 10px 16px; font-size: 14px; }
 .status-banner b { color: #F5EDDC; }
 .steps-bar { background: #fff; margin-bottom: 12px; padding: 16px 0; }
@@ -662,11 +667,15 @@ onMounted(load);
 .material-amount { font-weight: 600; color: #323233; }
 .batch-value { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
 .rec-hint { padding: 8px 16px; font-size: 12px; color: #969799; }
+/* 吸底操作栏必须让开并盖过 PortalLayout 的 van-tabbar：tabbar 是 fixed/bottom:0、
+   z-index:1、不透明白底，且 placeholder=false 不占位。本栏若停在 bottom:0 且不设
+   z-index，「确认盖章/确认出货/我要对账/上传发票」会被 tabbar 压住点不到。 */
 .action-area {
   position: fixed;
-  bottom: 0;
+  bottom: calc(var(--van-tabbar-height, 50px) + env(safe-area-inset-bottom, 0px));
   left: 0;
   right: 0;
+  z-index: 2;
   background: #fff;
   padding: 12px 16px;
   box-shadow: 0 -2px 8px rgba(0,0,0,0.08);
