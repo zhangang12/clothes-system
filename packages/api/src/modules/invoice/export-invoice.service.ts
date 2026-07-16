@@ -53,9 +53,17 @@ export class ExportInvoiceService {
     });
   }
 
-  async findAll(page = 1, size = 20, keyword?: string) {
+  async findAll(page = 1, size = 20, keyword?: string, orderId?: number) {
     size = Math.min(Math.max(+size || 20, 1), 100); page = Math.max(+page || 1, 1);
     const base = { deleted: 0 } as any;
+    // 订单→出口发票反查（关联单据 chip）：order_id 挂在款项行(export_invoice_item)上而非发票主表
+    // （一票多款），故先取命中该订单的发票 id 再过滤；无命中直接空页，避免 In([]) 全表扫。
+    if (orderId !== undefined) {
+      const lines = await this.itemRepo.find({ where: { order_id: orderId }, select: ['invoice_id'] });
+      const invIds = [...new Set(lines.map((l) => +l.invoice_id))];
+      if (!invIds.length) return { items: [], total: 0, page, size };
+      base.id = In(invIds);
+    }
     const where = keyword
       ? [{ ...base, invoice_no: Like(`%${keyword}%`) }, { ...base, customer_name: Like(`%${keyword}%`) }]
       : base;

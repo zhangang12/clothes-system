@@ -17,6 +17,7 @@
             📤 {{ isProcess ? '推送工厂' : '推送供应商' }}
           </el-button>
           <el-button v-if="contractId" @click="doPrint">📄 生成 PDF</el-button>
+          <el-button v-if="contractId" @click="exportExcel">📊 导出Excel</el-button>
           <el-button v-if="contractId && form.type === 'MATERIAL'" plain @click="goSupplement">🧩 补料</el-button>
           <el-button v-if="contractId" plain @click="goCopy">复制</el-button>
         </div>
@@ -28,6 +29,10 @@
       <el-alert v-if="!editable && contractId" type="warning" :closable="false" show-icon
         title="合同已推送/盖章，关键字段已锁定（仅备注可改）；如需修改请先在列表「撤销推送」回草稿。" />
     </div>
+
+    <!-- 关联单据快速跳转:上游 订单/报价单/母合同、下游 对账单。各 chip 随反查数据到达陆续出现(不用 loading:
+         有 loading 时组件会把已拿到的 chip 一并藏起来),报价单须经订单中转故最晚到。 -->
+    <DocLinks :links="docLinks" />
 
     <RuleHint>合同分材料/加工两类,甲乙丙方按类型区分;<b>推送或盖章后关键字段锁定、仅备注可改</b>(需改先撤销推送回草稿);定金+中期+尾款须=100%;发货地址默认带加工厂地址、可改;<b>担保人身份证等敏感附件加密存储、限授权可见</b>。</RuleHint>
     <!-- ▣ 合同基础信息 -->
@@ -238,10 +243,13 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { contractApi } from '@/api/contract';
 import { factoryApi } from '@/api/factory';
 import { orderApi } from '@/api/order';
+import { reconciliationApi } from '@/api/reconciliation';
+import type { DocLink } from '@/components/DocLinks.vue';
 import { companyApi } from '@/api/company';
 import { uploadApi } from '@/api/upload';
 import { signedUrl } from '@/utils/secureFile';
 import { printContract } from '@/utils/contractPrint';
+import { exportContractExcel } from '@/utils/contractExcel';
 import { useAuthStore } from '@/stores/auth';
 
 const route = useRoute();
@@ -321,6 +329,57 @@ const factoryContact = computed(() => {
   return f ? [f.contact_name, f.contact_phone].filter(Boolean).join(' / ') || '—' : '—';
 });
 const ratioSum = computed(() => (+form.deposit_ratio || 0) + (+form.mid_ratio || 0) + (+form.final_ratio || 0));
+
+// —— 关联单据（单据间快速跳转）——
+const relatedOrderNo = ref('');
+const relatedParentNo = ref('');
+const relatedQuote = ref<{ id: number; no: string } | null>(null);
+const relatedRecons = ref<Array<{ id: number; no: string }>>([]);
+// 合同没有 /view 路由,编辑页兼作查看页,故上游母合同也跳 ContractEdit
+const docLinks = computed<DocLink[]>(() => {
+  if (!contractId.value) return []; // 新建页没有关联单据可列
+  const links: DocLink[] = [];
+  // order_id 是非空字段:后端没回 order_no 也要用「#id」兜底给出入口,不能整条不显示
+  if (form.order_id) links.push({
+    key: `order-${form.order_id}`, type: 'primary',
+    text: `订单 ${relatedOrderNo.value || '#' + form.order_id}`,
+    to: { name: 'OrderEdit', params: { id: form.order_id } },
+  });
+  if (relatedQuote.value) links.push({
+    key: `quote-${relatedQuote.value.id}`, type: 'success',
+    text: `报价单 ${relatedQuote.value.no}`,
+    to: { name: 'QuoteEdit', params: { id: relatedQuote.value.id } },
+  });
+  if (form.parent_id) links.push({
+    key: `parent-${form.parent_id}`, type: 'warning',
+    text: `母合同 ${relatedParentNo.value || '#' + form.parent_id}`,
+    to: { name: 'ContractEdit', params: { id: form.parent_id } },
+  });
+  for (const r of relatedRecons.value) links.push({
+    key: `rec-${r.id}`, type: 'info',
+    text: `对账单 ${r.no}`,
+    to: { name: 'ReconciliationView', params: { id: r.id } },
+  });
+  return links;
+});
+// 反查关联单据:两路并行、各自 catch,任一挂掉只少一组 chip,不能崩页面;调用方不要 await(勿挡主表单)
+async function loadDocLinks(id: number) {
+  await Promise.all([
+    // 合同实体上没有 quote_id,报价单只能经订单中转:订单详情已同时回 quote_id + quote_no,一个请求够,不必再查报价
+    form.order_id
+      ? orderApi.get(form.order_id).then((res: any) => {
+          const od = res.data ?? res;
+          if (od?.quote_id) relatedQuote.value = { id: od.quote_id, no: od.quote_no || '#' + od.quote_id };
+        }).catch(() => { /* 订单详情取不到就不显示报价单 chip */ })
+      : Promise.resolve(),
+    reconciliationApi.list({ contract_id: id, page: 1, size: 100 }).then((res: any) => {
+      // 列表响应被 ResponseInterceptor 展开:数组在 res.data。后端若尚未支持 contract_id 过滤会回全量,前端再筛一道防串单
+      relatedRecons.value = ((res?.data ?? []) as any[])
+        .filter((r: any) => r?.contract_id === id)
+        .map((r: any) => ({ id: r.id, no: r.reconcile_no || '#' + r.id }));
+    }).catch(() => { relatedRecons.value = []; }),
+  ]);
+}
 
 // 关联款号（逗号分隔字符串 ↔ 标签数组）
 const styleNoList = computed(() => String(form.style_nos || '').split(',').map((s: string) => s.trim()).filter(Boolean));
@@ -487,6 +546,7 @@ async function save() {
       contractId.value = created.id;
       router.replace(`/contracts/${created.id}/edit`);
       await loadDetail(created.id);
+      void loadDocLinks(created.id);
     }
   } catch (e: any) { errToast(e?.response?.data?.msg ?? '保存失败'); }
   finally { saving.value = false; }
@@ -520,6 +580,17 @@ async function doPrint() {
       ?? companies.value.find((c: any) => c.is_default) ?? null;
     printContract(detail, selectedFactory.value ?? factories.value.find((f: any) => f.id === detail.factory_id), company ?? undefined);
   } catch (e: any) { ElMessage.error(e?.message ?? '生成失败'); }
+}
+// 导出 Excel(取详情含材料明细/发货批次;.xls)
+async function exportExcel() {
+  if (!contractId.value) return;
+  try {
+    const res: any = await contractApi.get(contractId.value);
+    const detail = res.data ?? res;
+    // 详情接口只回 factory_id 不回名字，不补的话导出件里是「工厂#12」
+    const f = factories.value.find((x: any) => x.id === detail.factory_id);
+    exportContractExcel({ ...detail, factory_name: f?.name });
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
 }
 function goSupplement() { router.push(`/contracts/new?type=SUPPLEMENT&parent_id=${contractId.value}&copy_from=${contractId.value}`); }
 function goCopy() { router.push(`/contracts/new?type=${form.type}&copy_from=${contractId.value}`); }
@@ -565,7 +636,11 @@ function applyDetail(d: any, opts: { asCopy?: boolean; zeroQty?: boolean } = {})
 }
 async function loadDetail(id: number) {
   const res: any = await contractApi.get(id);
-  applyDetail(res.data ?? res);
+  const d = res.data ?? res;
+  applyDetail(d);
+  // 后端未回这两个单号时 docLinks 自动降级成「#id」
+  relatedOrderNo.value = d.order_no ?? '';
+  relatedParentNo.value = d.parent_contract_no ?? '';
 }
 onMounted(async () => {
   loading.value = true;
@@ -575,6 +650,7 @@ onMounted(async () => {
     for (const t of termDefs.value) if (terms[t.key] == null) terms[t.key] = t.def;
     if (contractId.value) {
       await loadDetail(contractId.value);
+      void loadDocLinks(contractId.value); // 不 await:关联单据反查慢/失败都不该拖住主表单
     } else if (route.query.copy_from) {
       // 复制 / 补料（设计稿：补料=复制合同，编号补料-原合同号，数量默认0可改）
       const res: any = await contractApi.get(Number(route.query.copy_from));

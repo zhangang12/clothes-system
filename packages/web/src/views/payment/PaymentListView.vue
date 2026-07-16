@@ -48,6 +48,11 @@
           <el-table-column label="创建时间" width="150">
             <template #default="{ row }">{{ fmtDateTime(row.created_at) }}</template>
           </el-table-column>
+          <el-table-column label="操作" width="110" fixed="right">
+            <template #default="{ row }">
+              <el-button link size="small" @click="exportPrepayRow(row)">导出Excel</el-button>
+            </template>
+          </el-table-column>
         </el-table>
 
         <div class="pagination">
@@ -64,6 +69,14 @@
 
       <!-- ====== 付款申请 Tab ====== -->
       <el-tab-pane label="付款申请" name="request">
+        <!-- 从对账单跳来时的过滤条：必须显式可见可清，否则用户在本页再检索会被这个
+             看不见的条件夹着、以为是系统查不到数据 -->
+        <el-alert v-if="filteredByReconcile" type="info" :closable="false" show-icon style="margin-bottom:8px">
+          <template #title>
+            仅显示对账单 #{{ filteredByReconcile }} 关联的付款申请
+            <el-link type="primary" style="margin-left:8px" @click="clearReconcileFilter">显示全部</el-link>
+          </template>
+        </el-alert>
         <el-card class="search-card" shadow="never">
           <el-form :model="prQuery" inline>
             <el-form-item label="工厂">
@@ -154,8 +167,9 @@
               <el-tag :type="prTagType(row.approval_status)" size="small">{{ prStatusLabel(row.approval_status) }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="260" fixed="right">
+          <el-table-column label="操作" width="330" fixed="right">
             <template #default="{ row }">
+              <el-button link size="small" @click="exportPRRow(row)">导出Excel</el-button>
               <el-button
                 v-if="row.approval_status === 'DRAFT' && canEdit"
                 link type="primary" size="small"
@@ -365,6 +379,7 @@
 <script setup lang="ts">
 import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { fmtDateTime } from '@/utils/format';
 import { Search, Refresh, Plus, UploadFilled } from '@element-plus/icons-vue';
@@ -374,6 +389,7 @@ import FactorySelect from '@/components/FactorySelect.vue';
 import ContractPicker from '@/components/ContractPicker.vue';
 import { uploadApi } from '@/api/upload';
 import { openFile } from '@/utils/secureFile';
+import { exportPaymentRequestExcel, exportPrepaymentExcel } from '@/utils/paymentExcel';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole } from '@i9/types';
 
@@ -381,6 +397,8 @@ const authStore = useAuthStore();
 const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
 const canEdit = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.FINANCE));
 
+const route = useRoute();
+const router = useRouter();
 const activeTab = ref('prepayment');
 
 function prStatusLabel(s: string) {
@@ -455,6 +473,12 @@ async function doCreatePrepay() {
   } finally { saving.value = false; }
 }
 
+// 导出 Excel(付款模块无详情接口,直接用列表行;.xls)
+function exportPrepayRow(row: any) {
+  try { exportPrepaymentExcel(row); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
+}
+
 // ====== Payment Request ======
 const prLoading = ref(false);
 const prList = ref<any[]>([]);
@@ -462,6 +486,8 @@ const prTotal = ref(0);
 const prQuery = reactive({
   page: 1, size: 20,
   factory_id: undefined as number | undefined,
+  // reconcile_id 只由「对账单详情 → 付款申请」的跳转带入，检索区没有对应输入框
+  reconcile_id: undefined as number | undefined,
   approval_status: undefined as string | undefined, due_start: '', due_end: '', paid_start: '', paid_end: '' });
 // 申请日期范围（工厂+日期组合检索，付款申请设计稿 检索区）
 const prDateRange = ref<[string, string] | null>(null);
@@ -484,6 +510,15 @@ function resetPR() {
   Object.assign(prQuery, { factory_id: undefined, approval_status: undefined, page: 1 });
   prDateRange.value = null;
   loadPR();
+}
+
+// 导出 Excel(无详情接口,用列表行;先拉分批付款记录,拉不到则降级为不带记录表)
+async function exportPRRow(row: any) {
+  try {
+    let records: any[] = [];
+    try { records = ((await paymentRequestApi.getRecords(row.id)) as any).data ?? []; } catch { records = []; }
+    exportPaymentRequestExcel({ ...row, records });
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
 }
 
 async function doSubmit(row: any) {
@@ -638,7 +673,27 @@ async function doCreatePR() {
   } finally { saving.value = false; }
 }
 
-onMounted(() => { loadPrepay(); loadPR(); });
+// 从对账单详情跳过来(/payments?tab=request&reconcile_id=N):切到付款申请页签并按该对账单过滤。
+// 付款没有详情页，故落点是「过滤后的列表」而不是某一张单。
+const filteredByReconcile = ref<number | null>(null);
+onMounted(() => {
+  const rid = Number(route.query.reconcile_id);
+  if (rid) {
+    prQuery.reconcile_id = rid;
+    filteredByReconcile.value = rid;
+  }
+  if (route.query.tab === 'request' || rid) activeTab.value = 'request';
+  loadPrepay();
+  loadPR();
+});
+// 清掉来源过滤：不清的话用户在本页做的其它检索都会被这个隐藏条件夹着，很难排查
+function clearReconcileFilter() {
+  prQuery.reconcile_id = undefined;
+  filteredByReconcile.value = null;
+  prQuery.page = 1;
+  router.replace({ name: 'Payments' });
+  loadPR();
+}
 </script>
 
 <style scoped>

@@ -6,6 +6,7 @@ import * as ElementPlusIcons from '@element-plus/icons-vue';
 import 'element-plus/dist/index.css';
 import './styles/theme.css';
 import RuleHint from './components/RuleHint.vue';
+import DocLinks from './components/DocLinks.vue';
 import App from './App.vue';
 import router from './router';
 
@@ -16,6 +17,7 @@ for (const [key, component] of Object.entries(ElementPlusIcons)) {
   app.component(key, component);
 }
 app.component('RuleHint', RuleHint);
+app.component('DocLinks', DocLinks);
 
 app
   .use(createPinia())

@@ -416,13 +416,22 @@ export class ContractService {
     const qtyStats = { contractQty, shippedQty, diffQty: +(contractQty - shippedQty).toFixed(4) };
     // 变更标记(P2#20):源订单在合同生成后被内容级修改 → 提示核对材料明细
     let source_order_changed = false;
+    // 上游单据号（关联单据 chip 显示单据号而非裸 ID）：源订单号；关联单据已删→降级 null，不影响详情
+    let order_no: string | null = null;
     if (contract.order_id) {
       const order = await this.orderRepo.findOne({ where: { id: contract.order_id } });
+      order_no = order?.order_no ?? null;
       if (order?.content_updated_at) {
         source_order_changed = new Date(order.content_updated_at) > new Date(contract.created_at);
       }
     }
-    return { ...contract, materials, shipments, qtyStats, source_order_changed };
+    // 补料合同 → 母合同号
+    let parent_contract_no: string | null = null;
+    if (contract.parent_id) {
+      const parent = await this.repo.findOne({ where: { id: +contract.parent_id } });
+      parent_contract_no = parent?.contract_no ?? null;
+    }
+    return { ...contract, materials, shipments, qtyStats, source_order_changed, order_no, parent_contract_no };
   }
 
   // 合同编辑（设计稿 04 v1.3 编辑页 + E5 锁定规则）：

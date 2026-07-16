@@ -30,6 +30,12 @@ export class QueryReconciliationDto {
   @IsNumber()
   factory_id?: number;
 
+  // 单据反查（关联单据 chip）：合同 → 挂在其名下的对账单
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  contract_id?: number;
+
   @IsOptional()
   keyword?: string;
 }

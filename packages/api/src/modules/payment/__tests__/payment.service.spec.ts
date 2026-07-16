@@ -233,10 +233,28 @@ describe('PaymentService', () => {
   // UT-PAY-15: findPaymentRequests applies factory + 申请日期 range filter (工厂+日期组合检索)
   it('UT-PAY-15 findPaymentRequests filters by factory_id and created_at range', async () => {
     mockPrRepo.findAndCount.mockResolvedValue([[], 0]);
-    await service.findPaymentRequests(7, undefined, 1, 20, '2026-01-01', '2026-01-31');
+    await service.findPaymentRequests({ factory_id: 7, page: 1, size: 20, start_date: '2026-01-01', end_date: '2026-01-31' });
     const arg = mockPrRepo.findAndCount.mock.calls.at(-1)[0];
     expect(arg.where.factory_id).toBe(7);
     expect(arg.where.created_at).toBeDefined(); // Between(...) FindOperator
+  });
+
+  // UT-PAY-16: 对账→付款申请反查（关联单据 chip）
+  it('UT-PAY-16 findPaymentRequests filters by reconcile_id', async () => {
+    mockPrRepo.findAndCount.mockResolvedValue([[], 0]);
+    await service.findPaymentRequests({ reconcile_id: 33 });
+    const arg = mockPrRepo.findAndCount.mock.calls.at(-1)[0];
+    expect(arg.where.reconcile_id).toBe(33);
+  });
+
+  // UT-PAY-17: 空串筛选项（前端清空 el-select/日期区间会发 ''）不得被当作过滤条件
+  it('UT-PAY-17 findPaymentRequests ignores empty-string filters', async () => {
+    mockPrRepo.findAndCount.mockResolvedValue([[], 0]);
+    await service.findPaymentRequests({ approval_status: '' as any, due_start: '', paid_end: '' });
+    const arg = mockPrRepo.findAndCount.mock.calls.at(-1)[0];
+    expect(arg.where.approval_status).toBeUndefined();
+    expect(arg.where.due_date).toBeUndefined();
+    expect(arg.where.slip_uploaded_at).toBeUndefined();
   });
 
   // UT-OVP-01~04: overpayment guard scenarios

@@ -120,11 +120,12 @@ export class OrderService {
   }
 
   async findAll(query: QueryOrderDto, user?: { id: number; role?: string }) {
-    const { page = 1, size = 20, keyword, status, customer_id } = query;
+    const { page = 1, size = 20, keyword, status, customer_id, quote_id } = query;
     const base: FindOptionsWhere<OrderMain> = {
       deleted: 0,
       ...(status !== undefined && { status }),
       ...(customer_id !== undefined && { customer_id }),
+      ...(quote_id !== undefined && { quote_id }), // 报价→订单反查（关联单据 chip）
     };
     const searchable = ['order_no', 'customer_po', 'style_no', 'style_name', 'middleman_name', 'buyer_name'];
     const where: FindOptionsWhere<OrderMain> | FindOptionsWhere<OrderMain>[] = keyword
@@ -160,8 +161,10 @@ export class OrderService {
     // 变更标记(P2#20):①源报价已变更 ②样衣未实测成单→单耗为预估黄条
     let source_quote_changed = false;
     let usage_estimated = false;
+    let quote_no: string | null = null; // 上游单据号（关联单据 chip 显示单据号而非裸 ID）；报价已删→null
     if (order.quote_id) {
       const quote = await this.quoteRepo.findOne({ where: { id: order.quote_id } });
+      quote_no = quote?.quote_no ?? null;
       if (quote?.content_updated_at) {
         const baseline = order.quote_synced_at ?? order.created_at;
         source_quote_changed = baseline != null && new Date(quote.content_updated_at) > new Date(baseline);
@@ -171,7 +174,7 @@ export class OrderService {
         usage_estimated = mats.length > 0 && mats.some((m) => m.actual_usage == null);
       }
     }
-    return { ...order, matrix, materials, shipments, source_quote_changed, usage_estimated };
+    return { ...order, matrix, materials, shipments, source_quote_changed, usage_estimated, quote_no };
   }
 
   async update(id: number, dto: Partial<CreateOrderDto>): Promise<OrderMain> {

@@ -24,13 +24,14 @@ export class ExportInvoiceController {
   }
 
   @Get()
-  @ApiOperation({ summary: '出口发票列表（含款项行/收汇合计）' })
+  @ApiOperation({ summary: '出口发票列表（含款项行/收汇合计；order_id 可按订单反查）' })
   findAll(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('size', new DefaultValuePipe(20), ParseIntPipe) size: number,
     @Query('keyword') keyword?: string,
+    @Query('order_id') orderId?: string,
   ) {
-    return this.service.findAll(page, size, keyword);
+    return this.service.findAll(page, size, keyword, orderId ? Number(orderId) : undefined);
   }
 
   @Get(':id')

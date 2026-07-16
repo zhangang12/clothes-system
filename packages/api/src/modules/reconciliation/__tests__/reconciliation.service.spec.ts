@@ -336,4 +336,34 @@ describe('ReconciliationService', () => {
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await expect(service.generateLabor({ sampleIds: [1, 2] } as any, 9)).rejects.toThrow(BadRequestException);
   });
+
+  // ── 关联单据（单据间跳转）：合同→对账反查 + 详情带出上游单据号/工厂名 ──
+
+  // UT-REC-19: 合同→对账反查（关联单据 chip）
+  it('UT-REC-19 findAll filters by contract_id', async () => {
+    mockReconciliationRepo.findAndCount.mockResolvedValue([[], 0]);
+    await service.findAll({ contract_id: 10 } as any);
+    const arg = mockReconciliationRepo.findAndCount.mock.calls.at(-1)[0];
+    expect(arg.where).toMatchObject({ contract_id: 10, deleted: 0 });
+  });
+
+  // UT-REC-20: 详情带出上游合同号 + 工厂名（此前只有列表补名，详情显示「工厂#12」）
+  it('UT-REC-20 findOne returns contract_no and factory_name', async () => {
+    mockReconciliationRepo.findOne.mockResolvedValue(makeReconciliation({ contract_id: 10, factory_id: 5 }));
+    mockDataSource.query
+      .mockResolvedValueOnce([{ contract_no: 'CT2024010100001' }])
+      .mockResolvedValueOnce([{ nm: '面料厂A' }]);
+    const res: any = await service.findOne(1);
+    expect(res.contract_no).toBe('CT2024010100001');
+    expect(res.factory_name).toBe('面料厂A');
+  });
+
+  // UT-REC-21: 关联合同/工厂已删 → 降级 null，详情不 500
+  it('UT-REC-21 findOne degrades contract_no/factory_name to null when the rows are gone', async () => {
+    mockReconciliationRepo.findOne.mockResolvedValue(makeReconciliation({ contract_id: 10, factory_id: 5 }));
+    mockDataSource.query.mockResolvedValue([]);
+    const res: any = await service.findOne(1);
+    expect(res.contract_no).toBeNull();
+    expect(res.factory_name).toBeNull();
+  });
 });

@@ -36,6 +36,9 @@
       </div>
     </div>
 
+    <!-- 单据间快速跳转:上游报价 + 下游合同/结算/发票;只读查看时同样要显示(查看时更需跳转) -->
+    <DocLinks :links="docLinks" :loading="docLinksLoading" />
+
     <el-alert
       v-if="flags.sourceQuoteChanged"
       type="warning" :closable="false" show-icon class="mark-alert"
@@ -256,7 +259,7 @@
 <script setup lang="ts">
 import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted, h } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
 import { Back, Check, Plus, Minus, Download, Promotion, ArrowDown, Printer } from '@element-plus/icons-vue';
@@ -265,6 +268,8 @@ import DictSelect from '@/components/DictSelect.vue';
 import { printOrder } from '@/utils/orderPrint';
 import { contractApi } from '@/api/contract';
 import { quoteApi } from '@/api/quote';
+import { settlementApi } from '@/api/settlement';
+import { exportInvoiceApi } from '@/api/exportInvoice';
 import { factoryApi } from '@/api/factory';
 import FileUpload from '@/components/FileUpload.vue';
 import { ORDER_STATUS_LABEL } from '@i9/types';
@@ -446,12 +451,81 @@ async function loadRefs() {
 }
 const flags = reactive({ sourceQuoteChanged: false, usageEstimated: false });
 
+// —— 关联单据(单据间快速跳转)——
+const quoteNo = ref('');
+const relContracts = ref<any[]>([]);
+const relSettlements = ref<any[]>([]);
+const relInvoices = ref<any[]>([]);
+const docLinksLoading = ref(false);
+
+const docLinks = computed(() => {
+  const out: Array<{ key: string; text: string; to: RouteLocationRaw; type: 'primary' | 'success' | 'warning' | 'info' }> = [];
+  // 上游·报价:quote_no 拿不到也要出链接,退化成 ID 兜底(合同无 /view 路由,ContractEdit 兼作查看)
+  if (form.quoteId) {
+    out.push({
+      key: `q${form.quoteId}`, type: 'primary',
+      text: quoteNo.value ? `报价 ${quoteNo.value}` : `报价 #${form.quoteId}`,
+      to: { name: 'QuoteEdit', params: { id: form.quoteId } },
+    });
+  }
+  // 下游·合同:一张订单可有多张(材料/加工/补料)
+  for (const c of relContracts.value) {
+    out.push({
+      key: `c${c.id}`, type: 'warning',
+      text: `合同 ${c.contract_no || `#${c.id}`}`,
+      to: { name: 'ContractEdit', params: { id: c.id } },
+    });
+  }
+  for (const s of relSettlements.value) {
+    out.push({
+      key: `s${s.id}`, type: 'success',
+      text: `结算 ${s.settlement_no || `#${s.id}`}`,
+      to: { name: 'SettlementView', params: { id: s.id } },
+    });
+  }
+  for (const i of relInvoices.value) {
+    out.push({
+      key: `i${i.id}`, type: 'info',
+      text: `发票 ${i.invoice_no || `#${i.id}`}`,
+      to: { name: 'ExportInvoiceView', params: { id: i.id } },
+    });
+  }
+  return out;
+});
+
+// 三组下游反查并发发出且各自独立降级:某组失败/后端过滤未就绪只丢该组 chip,不拖垮其它组与主表单
+async function loadDocLinks() {
+  if (!editId.value) return; // 新建页没有关联单据
+  const id = editId.value;
+  docLinksLoading.value = true;
+  try {
+    // 列表响应被 ResponseInterceptor 展开({items,total,...} → data=items),故数组取 res.data
+    const rows = (r: PromiseSettledResult<any>) =>
+      (r.status === 'fulfilled' && Array.isArray(r.value?.data) ? r.value.data : []);
+    const [cs, ss, is] = await Promise.allSettled([
+      contractApi.list({ order_id: id, page: 1, size: 100 }),
+      settlementApi.list({ order_id: id, page: 1, size: 100 }),
+      exportInvoiceApi.list({ order_id: id, page: 1, size: 100 }),
+    ]);
+    // 后端若尚未支持 ?order_id= 会返回全量,故再按 order_id 兜一道(字段缺失的行放行)
+    const mine = (r: any) => r?.order_id == null || +r.order_id === id;
+    relContracts.value = rows(cs).filter(mine);
+    relSettlements.value = rows(ss).filter(mine);
+    // 发票的 order_id 挂在款项行上(一票多款),主表无此列,故按 items 判定
+    relInvoices.value = rows(is).filter((v: any) =>
+      !Array.isArray(v?.items) || v.items.some((it: any) => +it.order_id === id));
+  } finally {
+    docLinksLoading.value = false;
+  }
+}
+
 async function load() {
   if (!editId.value) return;
   const res: any = await orderApi.get(editId.value);
   const d = res.data ?? res;
   flags.sourceQuoteChanged = !!d.source_quote_changed;
   flags.usageEstimated = !!d.usage_estimated;
+  quoteNo.value = d.quote_no ?? '';
   // 矩阵装载：新结构 {pos,rows(qtys[])} 直接用；旧平铺行 {style,color,size,po,dest,qty} 自动升级为 PO 列
   const md = d.matrix?.matrix_data;
   let matrix = { pos: [emptyPo()], rows: [emptyMatrixRow(1)] };
@@ -640,7 +714,8 @@ async function advance() {
   catch (e: any) { errToast(e?.response?.data?.msg ?? '推进失败'); }
 }
 function goBack() { router.push({ name: 'Orders' }); }
-onMounted(async () => { await loadRefs(); await load(); });
+// 关联单据不阻塞主表单:不 await,拉回来再渲染 chip
+onMounted(async () => { await loadRefs(); await load(); void loadDocLinks(); });
 </script>
 
 <style scoped>

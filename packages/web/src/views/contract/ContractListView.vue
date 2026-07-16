@@ -42,6 +42,7 @@
             <el-button v-if="canEdit" link size="small" @click="$router.push(`/contracts/new?type=${row.type}&copy_from=${row.id}`)">复制</el-button>
             <el-button v-if="canEdit && row.type === 'MATERIAL'" link size="small" @click="$router.push(`/contracts/new?type=SUPPLEMENT&parent_id=${row.id}&copy_from=${row.id}`)">补料</el-button>
             <el-button link size="small" @click="printRow(row)">PDF</el-button>
+            <el-button link size="small" @click="exportRow(row)">导出Excel</el-button>
             <el-button v-if="row.approval_status === 'PENDING' && canReview" link type="success" size="small" @click="doApprove(row)">审批</el-button>
             <el-button v-if="row.portal_status === 'DRAFT' && canEdit" link type="warning" size="small" @click="doPush(row)">推送门户</el-button>
             <el-popconfirm v-if="row.portal_status === 'PUSHED' && canEdit" title="撤销后合同回到草稿，可修改后重新推送。确认撤销？" @confirm="doRecall(row)">
@@ -194,6 +195,7 @@ import { Search, Plus, Download } from '@element-plus/icons-vue';
 import { contractApi } from '@/api/contract';
 import { factoryApi } from '@/api/factory';
 import { printContract } from '@/utils/contractPrint';
+import { exportContractExcel } from '@/utils/contractExcel';
 import { companyApi } from '@/api/company';
 import { orderApi } from '@/api/order';
 import { useAuthStore } from '@/stores/auth';
@@ -247,7 +249,8 @@ async function loadRefs() {
 onMounted(() => {
   load();
   loadRefs();
-  // 从对账"来源合同"链接跳转过来时（query.open=合同ID）自动打开该合同详情
+  // query.open=合同ID 自动开详情弹框。站内已无处产生该链接（对账「来源合同」改跳
+  // ContractEdit 的 :id 路由，见 ReconciliationListView.goContract），仅留作旧链接兼容。
   if (route.query.open) viewDetail({ id: Number(route.query.open) });
 });
 
@@ -285,6 +288,15 @@ async function printRow(row: any) {
     }
     printContract(detail, factory, cachedCompany || undefined);
   } catch (e: any) { errToast(e?.message ?? e?.response?.data?.msg ?? '打印失败'); }
+}
+// 导出 Excel(取详情含材料明细/发货批次;.xls)
+async function exportRow(row: any) {
+  try {
+    const res: any = await contractApi.get(row.id);
+    const detail = res.data ?? res;
+    // 详情接口只回 factory_id 不回名字，不补的话导出件里是「工厂#12」
+    exportContractExcel({ ...detail, factory_name: factoryName(detail.factory_id) });
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
 }
 async function doPush(row: any) {
   try { await contractApi.push(row.id); ElMessage.success('已推送至供应商门户'); load(); }

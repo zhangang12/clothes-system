@@ -10,6 +10,7 @@
       <div class="ops">
         <el-button v-if="!readonly" type="primary" :icon="Check" :loading="saving" @click="save">保存</el-button>
         <el-button v-if="editId" :icon="Printer" @click="printDialog = true">打印/PDF</el-button>
+        <el-button v-if="editId" :icon="Download" @click="exportExcel">导出Excel</el-button>
         <el-button v-if="!readonly && editId" :icon="Download" @click="importDialog = true">从样衣导入</el-button>
         <el-button v-if="!readonly && editId && ['DRAFT', 'ADJUSTING'].includes(form.status)" type="warning" @click="submitQuote">发出报价</el-button>
         <el-button v-if="!readonly && editId && form.status === 'QUOTED'" plain @click="adjustQuote">客户调整</el-button>
@@ -18,15 +19,11 @@
       </div>
     </div>
 
-    <!-- 关联订单/占用标记(P2#20/#23):被引用订单号可见;草稿订单引用=占用中软标记 -->
-    <div v-if="relatedOrders.length" class="mark-alert related-orders">
-      <el-tag v-if="occupiedByDraft" type="warning" size="small" effect="dark" style="margin-right:8px">占用中</el-tag>
-      <span class="ro-label">被引用订单：</span>
-      <el-tag
-        v-for="o in relatedOrders" :key="o.id" size="small" class="ro-tag"
-        :type="o.status === 'DRAFT' ? 'warning' : 'success'"
-        style="cursor:pointer" @click="$router.push({ name: 'OrderEdit', params: { id: o.id } })"
-      >{{ o.order_no }} · {{ orderStatusLabel(o.status) }}</el-tag>
+    <!-- 关联单据快速跳转(P2#20/#23):上游样衣 + 下游被引用订单;草稿订单引用=占用中软标记(防误改被占用报价,
+         单列在 DocLinks 外保证反查为空时也不丢) -->
+    <div v-if="docLinks.length || occupiedByDraft" class="doc-links-bar">
+      <el-tag v-if="occupiedByDraft" type="warning" size="small" effect="dark">占用中</el-tag>
+      <DocLinks :links="docLinks" />
     </div>
 
     <!-- 打印内容勾选(P3#32/rev G1-G3):对外默认去客户信息与利润率 -->
@@ -202,7 +199,9 @@ import { companyApi } from '@/api/company';
 import { dictApi } from '@/api/dict';
 import { pasteRowsFromClipboard } from '@/utils/pasteRows';
 import { printQuote } from '@/utils/quotePrint';
+import { exportQuoteExcel } from '@/utils/quoteExcel';
 import FileUpload from '@/components/FileUpload.vue';
+import type { DocLink } from '@/components/DocLinks.vue'; // 仅取类型:组件已全局注册
 import { QUOTE_STATUS_LABEL } from '@i9/types';
 import { TRADE_COUNTRIES, DICT_PRICE_TERMS, DICT_SETTLEMENT } from '@/constants/regions';
 
@@ -374,6 +373,13 @@ async function printCurrent() {
   } catch (e: any) { errToast(e?.message ?? e?.response?.data?.msg ?? '打印失败'); }
 }
 
+// 导出 Excel(.xls)。取详情而非用 form,保证明细与库一致;与打印不同,导出全量不脱敏
+async function exportExcel() {
+  if (!editId.value) return;
+  try { const res: any = await quoteApi.get(editId.value); exportQuoteExcel(res.data ?? res); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
+}
+
 async function loadRefs() {
   const [ms, bs, ss] = await Promise.all([
     customerApi.list({ page: 1, size: 100, type: 'MIDDLEMAN' }),
@@ -387,8 +393,39 @@ async function loadRefs() {
 
 const relatedOrders = ref<any[]>([]);
 const occupiedByDraft = ref(false);
+const sampleNo = ref('');
 const orderStatusLabel = (st: string) =>
   ({ DRAFT: '草稿', CONFIRMED: '已下单', CONTRACTED: '已生成合同', PRODUCING: '生产中', DONE: '已完成' } as Record<string, string>)[st] ?? st;
+
+// 关联单据 chips:上游样衣(1:1) + 下游被引用订单(1:N)。订单 type 沿用原语义:草稿=warning(即占用中)、其余=success
+const docLinks = computed<DocLink[]>(() => {
+  if (!editId.value) return []; // 新建页没有关联单据可列
+  const links: DocLink[] = [];
+  // 没反查到样衣单号就不出 chip:业务不认 ID,宁可不显示也不给裸 ID
+  if (form.sampleId && sampleNo.value) links.push({
+    key: `sample-${form.sampleId}`, type: 'primary',
+    text: `样衣 ${sampleNo.value}`,
+    to: { name: 'SampleEdit', params: { id: form.sampleId } },
+  });
+  for (const o of relatedOrders.value) links.push({
+    key: `order-${o.id}`,
+    type: o.status === 'DRAFT' ? 'warning' : 'success',
+    text: `订单 ${o.order_no} · ${orderStatusLabel(o.status)}`,
+    to: { name: 'OrderEdit', params: { id: o.id } },
+  });
+  return links;
+});
+
+// 报价上的 sample_no 只有走 import-sample 才会写,可能为空 → 先用已加载的样衣下拉兜底,再退回查详情
+async function loadSampleNo() {
+  if (!form.sampleId || sampleNo.value) return;
+  const hit = samples.value.find((s) => String(s.id) === String(form.sampleId));
+  if (hit?.sample_no) { sampleNo.value = hit.sample_no; return; }
+  try {
+    const res: any = await sampleApi.get(Number(form.sampleId));
+    sampleNo.value = (res.data ?? res)?.sample_no ?? '';
+  } catch { /* 反查失败就不显示样衣 chip,不阻断页面 */ }
+}
 
 async function load() {
   if (!editId.value) return;
@@ -396,6 +433,7 @@ async function load() {
   const d = res.data ?? res;
   relatedOrders.value = d.related_orders ?? [];
   occupiedByDraft.value = !!d.occupied_by_draft;
+  sampleNo.value = d.sample_no ?? '';
   Object.assign(form, {
     quoteNo: d.quote_no, inquiryDate: d.inquiry_date ?? '', sampleId: d.sample_id ?? undefined,
     middlemanId: d.customer_id, buyerId: d.buyer_id ?? undefined, buyerNo: d.buyer_no ?? '', styleNo: d.style_no ?? '',
@@ -411,6 +449,7 @@ async function load() {
     fees: d.fees?.length ? d.fees.map((f: any) => ({ feeName: f.fee_name, rmbPrice: f.rmb_price, quoteUsage: f.quote_usage })) : DEFAULT_FEES.map((n) => emptyFee(n)),
   });
   loadContacts(form.middlemanId);
+  void loadSampleNo(); // 不 await:关联单据反查不该拖住主表单
 }
 
 function buildDto() {
@@ -530,10 +569,9 @@ onMounted(async () => { await loadRefs(); await load(); });
 </script>
 
 <style scoped>
-.mark-alert { margin-bottom: 8px; }
-.related-orders { display:flex; align-items:center; flex-wrap:wrap; gap:4px; padding:8px 12px; background: var(--el-fill-color-light); border-radius:4px; font-size:13px; }
-.ro-label { color: var(--el-text-color-secondary); }
-.ro-tag { margin-right: 4px; }
+/* 「占用中」标记与关联单据 chips 同排;DocLinks 自带底色/边框,这里只排版 */
+.doc-links-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.doc-links-bar :deep(.doc-links) { flex: 1; min-width: 0; }
 .edit-page { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
 .toolbar { position: sticky; top: 0; z-index: 5; display: flex; justify-content: space-between; align-items: center;
   background: var(--el-bg-color); padding: 10px 14px; border: 1px solid var(--el-border-color-light); border-radius: 6px; }

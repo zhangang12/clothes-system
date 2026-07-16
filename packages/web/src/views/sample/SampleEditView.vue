@@ -25,6 +25,9 @@
       </div>
     </div>
 
+    <!-- 关联单据快速跳转:下游·由本样衣生成的报价单(反查见 loadRelatedQuotes;版师视图不查,报价对版师不可见) -->
+    <DocLinks :links="docLinks" />
+
     <RuleHint>品名<b>文本录入、不从库导入</b>;颜色可点「加颜色列」动态扩列;<b>参考价格对版师脱敏</b>;实际耗用/拉链长度/工时由版师在工作台填写;填「材料寄出单号」即自动推送版师转打样中。</RuleHint>
     <el-form ref="formRef" :model="form" :rules="rules" label-width="104px" class="form-body">
       <!-- 基本信息 -->
@@ -207,14 +210,16 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
 import { Back, Check, Plus, Minus, Promotion, CopyDocument, Printer, Delete, Download } from '@element-plus/icons-vue';
 import { sampleApi } from '@/api/sample';
+import { quoteApi } from '@/api/quote';
 import { uploadApi } from '@/api/upload';
 import { useAuthStore } from '@/stores/auth';
 import { customerApi } from '@/api/customer';
 import { factoryApi } from '@/api/factory';
 import FileUpload from '@/components/FileUpload.vue';
+import type { DocLink } from '@/components/DocLinks.vue'; // 仅取类型:组件已全局注册
 import { printSample } from '@/utils/samplePrint';
 import { exportSampleExcel } from '@/utils/sampleExcel';
-import { SAMPLE_CATEGORIES, SAMPLE_STATUS_LABEL, UserRole } from '@i9/types';
+import { SAMPLE_CATEGORIES, SAMPLE_STATUS_LABEL, QUOTE_STATUS_LABEL, UserRole } from '@i9/types';
 
 const SectionBlock = (props: { title: string; badge?: string }, { slots }: any) =>
   h('div', { class: 'section-block' }, [
@@ -248,7 +253,7 @@ const emptyMaterial = () => ({ itemName: '', arrangeDate: '', width: '', colors:
 const form = reactive<any>({
   sampleNo: '', categories: '', middlemanId: undefined, styleNo: '', sampleSize: '', sampleQty: '', buyerId: undefined,
   patternmakerId: undefined, patternmakerName: '', maker: authStore.realName || '', makeDate: new Date().toISOString().slice(0, 10),
-  shipSampleDate: '', recipient: '', fileLocation: '', garmentRemark: '', feedbackAttachments: '', attachments: '',
+  shipSampleDate: '', recipient: '', fileLocation: '', garmentRemark: '', feedbackAttachments: '',
   image1: '', image2: '', image3: '', materialShipNo: '', materialShipDate: '',
   returnNo: '', returnDate: '', pieceCount: '', laborUnitPrice: '', status: '',
   materials: [emptyMaterial()],
@@ -323,6 +328,31 @@ function onPatternmaker(id?: number) {
 }
 const actionLabel = (a: string) => ({ CREATE: '创建', UPDATE: '修改', PUSH: '推送版师', PATTERNMAKER_SAVE: '版师保存', SHIP: '已寄出', COMPLETE: '已完成', COPY: '复制' } as any)[a] ?? a;
 
+// 下游·报价单 chips(1:N)
+const relatedQuotes = ref<Array<{ id: number; no: string; status: string }>>([]);
+const docLinks = computed<DocLink[]>(() => {
+  if (!editId.value) return []; // 新建页没有关联单据可列
+  return relatedQuotes.value.map((q) => ({
+    key: `quote-${q.id}`,
+    type: q.status === 'ORDERED' ? 'success' : 'primary',
+    text: `报价单 ${q.no}${(QUOTE_STATUS_LABEL as any)[q.status] ? ` · ${(QUOTE_STATUS_LABEL as any)[q.status]}` : ''}`,
+    to: { name: 'QuoteEdit', params: { id: q.id } },
+  }));
+});
+
+// 反查下游报价单:后端无「按样衣查报价」端点,故借款号(style_no 模糊)搜一批,再按 sample_id 精确过滤。
+// 精确过滤兜底 → 不会串到别的样衣;只可能漏(报价款号事后被改),宁漏不错。版师视图跳过(报价对版师不可见,会 403)
+async function loadRelatedQuotes() {
+  relatedQuotes.value = [];
+  if (!editId.value || !form.styleNo || patternmaker.value) return;
+  try {
+    const res: any = await quoteApi.list({ style_no: form.styleNo, page: 1, size: 100 });
+    relatedQuotes.value = (((res?.data ?? []) as any[]) ?? [])
+      .filter((q) => q?.quote_no && String(q.sample_id) === String(editId.value))
+      .map((q) => ({ id: q.id, no: q.quote_no, status: q.status }));
+  } catch { relatedQuotes.value = []; /* 反查失败就不显示这组 chip,不阻断页面 */ }
+}
+
 async function loadRefs() {
   const [ms, bs, fs] = await Promise.all([
     customerApi.list({ page: 1, size: 100, type: 'MIDDLEMAN' }),
@@ -350,7 +380,7 @@ async function load() {
     buyerId: d.buyer_id ?? undefined, patternmakerId: d.patternmaker_id != null ? Number(d.patternmaker_id) : undefined,
     patternmakerName: d.patternmaker_name ?? '', maker: d.maker ?? '',
     makeDate: d.make_date ?? '', shipSampleDate: d.ship_sample_date ?? '', recipient: d.recipient ?? '',
-    fileLocation: d.file_location ?? '', garmentRemark: d.garment_remark ?? '', feedbackAttachments: d.feedback_attachments ?? '', attachments: d.attachments ?? '',
+    fileLocation: d.file_location ?? '', garmentRemark: d.garment_remark ?? '', feedbackAttachments: d.feedback_attachments ?? '',
     image1: d.image1 ?? '', image2: d.image2 ?? '', image3: d.image3 ?? '',
     materialShipNo: d.material_ship_no ?? '', materialShipDate: d.material_ship_date ?? '',
     returnNo: d.return_no ?? '', returnDate: d.return_date ?? '', pieceCount: d.piece_count ?? '',
@@ -368,6 +398,7 @@ async function load() {
       laborAmount: r.labor_amount ?? '', remark: r.remark ?? '',
     })),
   });
+  void loadRelatedQuotes(); // 不 await:关联单据反查不该拖住主表单
   const vs: any = await sampleApi.getVersionHistory(editId.value);
   versions.value = (vs.data ?? vs) ?? [];
 }
@@ -381,7 +412,7 @@ function buildDto() {
     patternmakerName: form.patternmakerName || undefined, maker: form.maker || undefined,
     shipSampleDate: form.shipSampleDate || undefined, recipient: form.recipient || undefined,
     fileLocation: form.fileLocation || undefined, garmentRemark: form.garmentRemark || undefined,
-    feedbackAttachments: form.feedbackAttachments ?? '', attachments: form.attachments ?? '',
+    feedbackAttachments: form.feedbackAttachments ?? '',
     image1: form.image1 || undefined, image2: form.image2 || undefined, image3: form.image3 || undefined,
     materials: form.materials.filter((m: any) => m.itemName).map((m: any, i: number) => ({ ...m, sortOrder: i })),
     shipRounds: buildRounds(),

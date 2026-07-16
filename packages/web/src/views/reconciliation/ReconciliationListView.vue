@@ -84,9 +84,10 @@
         <el-table-column label="创建时间" width="150">
           <template #default="{ row }">{{ fmtDateTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="viewDetail(row.id)">详情</el-button>
+            <el-button link type="primary" size="small" @click="viewDetail(row)">详情</el-button>
+            <el-button link size="small" @click="exportRow(row)">导出Excel</el-button>
             <el-button
               v-if="row.status === 'DRAFT' && canEdit"
               link type="warning" size="small"
@@ -126,6 +127,7 @@
     <!-- 详情弹窗 -->
     <el-dialog v-model="detailVisible" title="对账单详情" width="800px">
       <template v-if="detailData">
+        <DocLinks :links="detailLinks" style="margin-bottom:12px" />
         <el-descriptions :column="3" border size="small">
           <el-descriptions-item label="对账单编号">{{ detailData.reconcile_no }}</el-descriptions-item>
           <el-descriptions-item label="款号">{{ detailData.style_no || '—' }}</el-descriptions-item>
@@ -138,7 +140,12 @@
               ? (detailData.patternmaker_name || (detailData.patternmaker_id ? '版师#' + detailData.patternmaker_id : '--'))
               : (detailData.factory_name || (detailData.factory_id ? '工厂#' + detailData.factory_id : '--')) }}
           </el-descriptions-item>
-          <el-descriptions-item label="关联合同">{{ detailData.contract_no || (detailData.contract_id ? '合同#' + detailData.contract_id : '--') }}</el-descriptions-item>
+          <el-descriptions-item label="来源合同">
+            <el-link v-if="detailData.contract_id" type="primary" @click="goContract(detailData.contract_id)">
+              {{ detailData.contract_no || `合同#${detailData.contract_id}` }}
+            </el-link>
+            <span v-else>--</span>
+          </el-descriptions-item>
           <el-descriptions-item label="对账金额">{{ (+detailData.total_amount).toFixed(2) }}</el-descriptions-item>
           <el-descriptions-item label="税率">{{ detailData.tax_rate != null ? detailData.tax_rate + '%' : '--' }}</el-descriptions-item>
           <el-descriptions-item label="税额">{{ detailData.tax_amount != null ? (+detailData.tax_amount).toFixed(2) : '--' }}</el-descriptions-item>
@@ -204,6 +211,10 @@
             </el-table-column>
           </el-table>
         </template>
+      </template>
+      <template #footer>
+        <el-button @click="detailVisible = false">关闭</el-button>
+        <el-button type="primary" :disabled="!detailData" @click="exportDetail">导出Excel</el-button>
       </template>
     </el-dialog>
 
@@ -364,26 +375,32 @@
 <script setup lang="ts">
 import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { fmtDateTime } from '@/utils/format';
 import { Search, Refresh, Plus, Coin } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { reconciliationApi } from '@/api/reconciliation';
+import { exportReconciliationExcel } from '@/utils/reconciliationExcel';
 import { sampleApi } from '@/api/sample';
 import { contractApi } from '@/api/contract';
+import { paymentRequestApi } from '@/api/payment';
+import type { DocLink } from '@/components/DocLinks.vue';
 import FactorySelect from '@/components/FactorySelect.vue';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole } from '@i9/types';
 
 const authStore = useAuthStore();
+const route = useRoute();
 const router = useRouter();
 const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
 
-// 发货批次合同号可点跳合同管理（对账付款串流程 B7/C12）
+// 合同号可点跳合同页（对账付款串流程 B7/C12）。原先跳的是 Contracts?open=<id> 让列表开弹框，
+// 但多页签以 fullPath 为键、标题取 meta.title，?open=3 与 ?open=7 会开出两个都叫「合同管理」
+// 的页签、分不清；改跳合同自己的 :id 路由，页签能自动带出「#id」。
 function goContract(contractId: number) {
   detailVisible.value = false;
-  router.push({ name: 'Contracts', query: { open: String(contractId) } });
+  router.push({ name: 'ContractEdit', params: { id: contractId } });
 }
 const canEdit = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.FINANCE) || authStore.hasRole(UserRole.BUSINESS));
 const canReview = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.SUPERVISOR));
@@ -431,15 +448,62 @@ function reset() {
   load();
 }
 
-onMounted(load);
+onMounted(async () => {
+  await load();
+  // 别的单据跳过来(/reconciliations/:id/view):自动打开该对账单详情。
+  // 该单可能不在当前页,故列表里找不到就只按 id 开,工厂名由详情接口自己带。
+  const rid = Number(route.params.id);
+  if (rid) {
+    try { await viewDetail(list.value.find((r: any) => r.id === rid) ?? { id: rid }); }
+    catch (e: any) { errToast(e?.response?.data?.msg ?? '对账单不存在或已删除'); }
+  }
+});
 
 // Detail
 const detailVisible = ref(false);
 const detailData = ref<any>(null);
-async function viewDetail(id: number) {
-  const res = await reconciliationApi.get(id);
-  detailData.value = res?.data ?? res;
+
+// 下游·付款申请。付款模块没有详情页(只有列表),故 chip 落到付款列表并按本对账单过滤，
+// 而不是硬造一个详情路由。上游合同链接不在这里，见「来源合同」那行的 goContract。
+const detailPRs = ref<any[]>([]);
+const detailLinks = computed<DocLink[]>(() =>
+  detailPRs.value.map((p) => ({
+    key: p.id,
+    text: `付款申请 ${p.pr_no}`,
+    type: p.approval_status === 'PAID' ? 'success' : 'warning',
+    to: { name: 'Payments', query: { tab: 'request', reconcile_id: String(detailData.value?.id ?? '') } },
+  })),
+);
+async function loadDetailLinks(reconcileId: number) {
+  detailPRs.value = [];
+  // 反查失败不能带崩详情弹框——关联链接是附加信息，不是主内容
+  try {
+    const res: any = await paymentRequestApi.list({ reconcile_id: reconcileId, page: 1, size: 50 });
+    // 再筛一道防串单：付款列表原先无 query DTO、不做白名单校验，后端万一没接住
+    // reconcile_id 会静默回全量——那会把别家的付款申请挂到这张对账单上，比不显示更糟
+    detailPRs.value = ((res?.data ?? []) as any[]).filter((p) => Number(p.reconcile_id) === Number(reconcileId));
+  } catch { /* 反查失败宁可不显示，也不显示错的关联 */ }
+}
+// 详情接口不回 factory_name(仅列表补名),合并列表行的工厂名,供弹框导出用。
+// 行上没有时不能覆盖——否则会把详情自己的 factory_name 抹成 undefined。
+async function viewDetail(row: any) {
+  const res = await reconciliationApi.get(row.id);
+  const detail = res?.data ?? res;
+  detailData.value = { ...detail, ...(row.factory_name ? { factory_name: row.factory_name } : {}) };
   detailVisible.value = true;
+  void loadDetailLinks(row.id); // 不 await：关联单据是附加信息，不该拖住弹框打开
+}
+// 导出 Excel(取详情含发货/工时/费用明细;.xls)
+async function exportRow(row: any) {
+  try {
+    const res: any = await reconciliationApi.get(row.id);
+    exportReconciliationExcel({ ...(res.data ?? res), factory_name: row.factory_name });
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
+}
+// 弹框内导出(复用已取的详情,不再请求)
+function exportDetail() {
+  try { exportReconciliationExcel(detailData.value); }
+  catch (e: any) { errToast(e?.message ?? '导出失败'); }
 }
 
 async function doSubmit(row: any) {

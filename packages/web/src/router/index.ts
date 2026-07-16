@@ -41,9 +41,15 @@ const routes: RouteRecordRaw[] = [
       { path: 'contracts/new', name: 'ContractCreate', component: () => import('../views/contract/ContractEditView.vue'), meta: { title: '新建合同' } },
       { path: 'contracts/:id/edit', name: 'ContractEdit', component: () => import('../views/contract/ContractEditView.vue'), meta: { title: '编辑合同' } },
       { path: 'reconciliations', name: 'Reconciliations', component: () => import('../views/reconciliation/ReconciliationListView.vue'), meta: { title: '对账管理' } },
+      // 对账/结算/发票的「详情」是列表页里的弹框、没有独立组件，故 :id/view 复用列表页
+      // 并由它按 route.params.id 自动开弹框。给它真路由是为了单据间跳转有稳定地址，
+      // 且多页签能按 :id 区分（原先 ?open=<id> 的跳法会开出两个都叫「合同管理」的页签）。
+      { path: 'reconciliations/:id/view', name: 'ReconciliationView', component: () => import('../views/reconciliation/ReconciliationListView.vue'), meta: { title: '对账详情' } },
       { path: 'payments', name: 'Payments', component: () => import('../views/payment/PaymentListView.vue'), meta: { title: '付款管理' } },
       { path: 'settlements', name: 'Settlements', component: () => import('../views/settlement/SettlementListView.vue'), meta: { title: '结算清单' } },
+      { path: 'settlements/:id/view', name: 'SettlementView', component: () => import('../views/settlement/SettlementListView.vue'), meta: { title: '结算详情' } },
       { path: 'export-invoices', name: 'ExportInvoices', component: () => import('../views/invoice/ExportInvoiceView.vue'), meta: { title: '出口发票' } },
+      { path: 'export-invoices/:id/view', name: 'ExportInvoiceView', component: () => import('../views/invoice/ExportInvoiceView.vue'), meta: { title: '发票详情' } },
       { path: 'reports', name: 'Reports', component: () => import('../views/report/ReportView.vue'), meta: { title: '报表统计' } },
       { path: 'company-profiles', name: 'CompanyProfiles', component: () => import('../views/company/CompanyProfileView.vue'), meta: { title: '本司主体' } },
       { path: 'dicts', name: 'DictManage', component: () => import('../views/dict/DictManageView.vue'), meta: { title: '字典维护' } },

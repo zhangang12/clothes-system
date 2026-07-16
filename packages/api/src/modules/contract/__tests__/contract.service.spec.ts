@@ -501,4 +501,28 @@ describe('ContractService', () => {
     expect(savedLines[0].color).toBe('藏青');
     expect(savedLines[1].qty).toBe(500);
   });
+
+  // ── 关联单据（单据间跳转）：详情带出上游单据号 ──
+
+  // UT-CON-24: 详情带出源订单号 + 母合同号（补料合同→母合同）
+  it('UT-CON-24 findOne returns order_no and parent_contract_no', async () => {
+    mockRepo.findOne
+      .mockResolvedValueOnce(makeContract({ order_id: 10, parent_id: 2, type: ContractType.SUPPLEMENT }))
+      .mockResolvedValueOnce({ id: 2, contract_no: 'CT2024010100002' }); // 母合同
+    mockOrderRepo.findOne.mockResolvedValue({ id: 10, order_no: 'SO2024010100001', deleted: 0 });
+    const res: any = await service.findOne(1);
+    expect(res.order_no).toBe('SO2024010100001');
+    expect(res.parent_contract_no).toBe('CT2024010100002');
+  });
+
+  // UT-CON-25: 源订单/母合同已删 → 降级 null，详情不 500
+  it('UT-CON-25 findOne degrades order_no/parent_contract_no to null when the docs are gone', async () => {
+    mockRepo.findOne
+      .mockResolvedValueOnce(makeContract({ order_id: 10, parent_id: 2 }))
+      .mockResolvedValueOnce(null); // 母合同已删
+    mockOrderRepo.findOne.mockResolvedValue(null); // 源订单已删
+    const res: any = await service.findOne(1);
+    expect(res.order_no).toBeNull();
+    expect(res.parent_contract_no).toBeNull();
+  });
 });

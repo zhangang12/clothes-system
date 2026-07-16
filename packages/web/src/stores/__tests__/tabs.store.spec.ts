@@ -77,6 +77,7 @@ describe('页签 store', () => {
     for (let i = 1; i <= 15; i++) t.open(route(`/orders/${i}/edit`, '编辑订单', String(i)));
     expect(t.tabs).toHaveLength(12);
     expect(t.tabs[0].path).toBe('/dashboard');           // 工作台还在
-    expect(t.tabs.at(-1)!.path).toBe('/orders/15/edit'); // 最新的在
+    // 取末位不用 Array.at：那是 ES2022，本包 tsconfig 的 lib 停在 ES2020，vue-tsc 会报 TS2550
+    expect(t.tabs[t.tabs.length - 1].path).toBe('/orders/15/edit'); // 最新的在
   });
 });
