@@ -2,8 +2,12 @@
  * I9 服装制造管理系统 — 设计系统主题（对齐 UI规范.html · 服装制造业风）
  * 靛蓝(denim) 主色 + 铁锈橙(rust) CTA + 棉麻米色背景
  * 覆盖 element-plus 主题变量，务必在 element-plus/dist/index.css 之后引入
+ *
+ * 2026-07 UI 整改：阴影/圆角体系化、全组件交互打磨（按钮按压/输入聚焦环/
+ * 表格悬停/弹窗毛玻璃/下拉圆角项/分页胶囊）、键盘焦点可见、reduced-motion 降级。
  * ========================================================================== */
 
+/* ── 1. 设计令牌 ─────────────────────────────────────────────────────────── */
 :root {
   /* —— 服装制造业风 配色 —— */
   --indigo: #1E3A5F;        /* 靛蓝 主色（denim） */
@@ -25,10 +29,22 @@
   --gray-0: #F4F1EA;        /* 极浅背景 */
   --font: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
   --font-mono: Consolas, "Courier New", monospace;
-  --r: 4px;
-  --r-lg: 6px;
-  --shadow-sm: 0 1px 2px rgba(30, 58, 95, 0.05);
-  --shadow: 0 2px 6px rgba(30, 58, 95, 0.08);
+
+  /* 圆角体系：控件 6 / 浮层 8 / 卡片 10 / 弹窗 14 */
+  --r: 6px;
+  --r-md: 8px;
+  --r-lg: 10px;
+  --r-xl: 14px;
+
+  /* 阴影体系（带靛蓝色相，不用纯黑灰） */
+  --shadow-xs: 0 1px 2px rgba(30, 58, 95, 0.06);
+  --shadow-sm: 0 1px 3px rgba(30, 58, 95, 0.08), 0 1px 2px rgba(30, 58, 95, 0.04);
+  --shadow-md: 0 4px 12px rgba(30, 58, 95, 0.10), 0 2px 4px rgba(30, 58, 95, 0.05);
+  --shadow-lg: 0 12px 32px rgba(30, 58, 95, 0.16), 0 4px 8px rgba(30, 58, 95, 0.06);
+  --shadow: var(--shadow-md); /* 旧名兼容 */
+
+  /* 动效 */
+  --ease: cubic-bezier(0.2, 0.6, 0.2, 1);
 
   /* —— 覆盖 element-plus 主题变量 —— */
   --el-color-primary: #1E3A5F;
@@ -48,7 +64,7 @@
   --el-color-error: #C04042;
   --el-color-info: #6F7178;
 
-  --el-border-radius-base: 4px;
+  --el-border-radius-base: 6px;
   --el-border-radius-small: 4px;
   --el-font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
   /* 字号整体上调一档（用户反馈原先偏小）。原本 base=13px 压在 Element Plus 默认 14px
@@ -74,17 +90,26 @@
   --el-fill-color-lighter: #FBF8F2;
   --el-bg-color: #FFFFFF;
   --el-bg-color-page: #FBF8F2;
-  --el-box-shadow-light: 0 1px 2px rgba(30, 58, 95, 0.05);
+  --el-box-shadow-light: var(--shadow-sm);
+  --el-box-shadow: var(--shadow-md);
+
+  /* 弹窗遮罩：偏靛蓝的深色而非纯黑 */
+  --el-overlay-color-lighter: rgba(20, 26, 34, 0.45);
 }
 
-/* —— 全局 —— */
+/* ── 2. 全局基底 ─────────────────────────────────────────────────────────── */
 html, body, #app {
   background: var(--canvas);
   font-family: var(--font);
   color: var(--gray-9);
 }
+::selection { background: rgba(30, 58, 95, 0.16); }
 
-/* —— 主按钮：靛蓝 —— */
+/* 键盘可达性：Tab 聚焦有清晰外环（鼠标点击不出现） */
+:focus-visible { outline: 2px solid var(--indigo-l); outline-offset: 2px; border-radius: 2px; }
+.el-input__inner:focus-visible, .el-textarea__inner:focus-visible { outline: none; } /* 输入框由 wrapper 聚焦环负责 */
+
+/* ── 3. 按钮：按压反馈 + 主按钮悬停光晕 ──────────────────────────────────── */
 .el-button--primary {
   --el-button-bg-color: var(--indigo);
   --el-button-border-color: var(--indigo);
@@ -104,7 +129,50 @@ html, body, #app {
   --el-button-hover-text-color: #fff;
   color: #fff;
 }
-.el-button { border-radius: var(--r); font-weight: 500; }
+.el-button {
+  border-radius: var(--r);
+  font-weight: 500;
+  transition: color .15s var(--ease), background-color .15s var(--ease),
+    border-color .15s var(--ease), box-shadow .18s var(--ease), transform .1s var(--ease);
+}
+/* 实心按钮：悬停出同色光晕、按下轻微下沉——「按到了」的手感 */
+.el-button--primary:not(.is-plain):not(.is-link):not(.is-text):hover { box-shadow: 0 4px 12px rgba(30, 58, 95, 0.28); }
+.el-button--warning:not(.is-plain):not(.is-link):not(.is-text):hover,
+.el-button.btn-cta:hover { box-shadow: 0 4px 12px rgba(209, 122, 64, 0.32); }
+.el-button--success:not(.is-plain):not(.is-link):not(.is-text):hover { box-shadow: 0 4px 12px rgba(62, 142, 126, 0.30); }
+.el-button--danger:not(.is-plain):not(.is-link):not(.is-text):hover { box-shadow: 0 4px 12px rgba(192, 64, 66, 0.30); }
+.el-button:not(.is-link):not(.is-text):not(.is-disabled):active { transform: translateY(1px); box-shadow: none; }
+.el-button:focus-visible { outline: 2px solid var(--indigo-l); outline-offset: 2px; }
+
+/* ── 4. 输入 / 选择：聚焦有柔和外环 ─────────────────────────────────────── */
+.el-input__wrapper, .el-textarea__inner, .el-select__wrapper {
+  border-radius: var(--r);
+  transition: box-shadow .16s var(--ease);
+}
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused {
+  box-shadow: 0 0 0 1px var(--indigo) inset, 0 0 0 3px rgba(30, 58, 95, 0.10);
+}
+.el-textarea__inner:focus {
+  box-shadow: 0 0 0 1px var(--indigo) inset, 0 0 0 3px rgba(30, 58, 95, 0.10);
+}
+.el-form-item__label { font-weight: 500; }
+
+/* ── 5. 表格：米底表头 + 悬停亚麻底 + 等宽数字 ───────────────────────────── */
+.el-table {
+  --el-table-border-color: var(--gray-1);
+  --el-table-header-bg-color: var(--gray-0);
+  --el-table-header-text-color: var(--gray-7);
+  --el-table-row-hover-bg-color: #F7F1E4;   /* 亚麻色悬停，比米白更可感知 */
+  font-size: 14px;
+}
+.el-table th.el-table__cell { font-weight: 600; }
+.el-table .cell { font-variant-numeric: tabular-nums; } /* 金额/数量列对齐 */
+.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell { background: #FAF6ED; }
+.el-table__empty-block { padding: 36px 0; }
+.el-table__empty-text { color: var(--gray-3); font-size: 14px; letter-spacing: 1px; }
+/* 行内文字按钮：悬停加下划线，可点性一眼可见 */
+.table-ops .el-button.is-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 /* —— 表格操作列 ——
    Element Plus 靠 `.el-button + .el-button` 给相邻按钮加左边距，一旦中间夹了
@@ -129,23 +197,78 @@ html, body, #app {
 .table-ops .el-dropdown { display: inline-flex; align-items: center; line-height: 1; }
 .table-ops .el-button.is-link .el-icon { margin-left: 2px; }
 
-/* —— 卡片：米边 + 柔和阴影 —— */
+/* ── 6. 卡片 / 列表页容器 ────────────────────────────────────────────────── */
 .el-card {
   --el-card-border-color: var(--gray-1);
   --el-card-border-radius: var(--r-lg);
   border-color: var(--gray-1);
-  box-shadow: var(--shadow-sm) !important;
+  box-shadow: var(--shadow-xs) !important;
+}
+/* 各列表页重复定义的 .toolbar-card/.table-card（scoped）在此统一升级观感：
+   scoped 选择器特异性更高，圆角只能用 !important 收口——这是设计系统对
+   分散样式的兜底，新页面请直接沿用这两个类名。 */
+.toolbar-card, .table-card {
+  border-radius: var(--r-lg) !important;
+  box-shadow: var(--shadow-xs);
 }
 
-/* —— 表格：米色边框 + 米底表头 —— */
-.el-table {
-  --el-table-border-color: var(--gray-1);
-  --el-table-header-bg-color: var(--gray-0);
-  --el-table-header-text-color: var(--gray-7);
-  --el-table-row-hover-bg-color: #FBF8F2;
-  font-size: 14px;
+/* ── 7. 弹窗 / 浮层：更大的圆角 + 毛玻璃遮罩 ─────────────────────────────── */
+.el-dialog { border-radius: var(--r-xl); box-shadow: var(--shadow-lg); }
+.el-dialog__title { color: var(--indigo); font-weight: 600; }
+.el-dialog__title::before {
+  content: '';
+  display: inline-block; width: 4px; height: 14px; border-radius: 2px;
+  background: var(--rust); margin-right: 8px; vertical-align: -1px;
 }
-.el-table th.el-table__cell { font-weight: 600; }
+.el-dialog__header { padding-bottom: 14px; border-bottom: 1px solid var(--gray-0); }
+.el-dialog__footer { border-top: 1px solid var(--gray-0); padding-top: 14px; }
+.el-overlay { backdrop-filter: blur(3px); }
+.el-message-box { border-radius: var(--r-lg); }
+.el-popover.el-popper { border-radius: var(--r-md); box-shadow: var(--shadow-md); }
+.el-page-header__title { color: var(--indigo); }
+
+/* 下拉菜单 / 选择项：圆角项 + 留边，悬停是一块浮起的色块而非整行条 */
+.el-dropdown-menu { padding: 5px; }
+.el-dropdown-menu__item { border-radius: var(--r); padding: 6px 12px; line-height: 1.6; }
+.el-select-dropdown__item { border-radius: var(--r); margin: 0 5px; padding: 0 15px; width: auto; }
+.el-select-dropdown__list { padding: 5px 0; }
+
+/* ── 8. 侧边菜单：靛蓝底 + 胶囊选中项（配 MainLayout 的可折叠侧栏） ──────── */
+.el-menu {
+  --el-menu-bg-color: var(--indigo);
+  --el-menu-text-color: #C9D3DF;
+  --el-menu-hover-bg-color: rgba(255, 255, 255, 0.07);
+  --el-menu-active-color: #fff;
+  --el-menu-hover-text-color: #fff;
+  border-right: none;
+}
+/* 展开态：菜单项内缩成胶囊，选中 = 深靛蓝底 + 左侧铁锈橙短标 */
+.side-menu.el-menu:not(.el-menu--collapse) { padding: 6px 8px; }
+.side-menu.el-menu:not(.el-menu--collapse) .el-menu-item,
+.side-menu.el-menu:not(.el-menu--collapse) .el-sub-menu__title {
+  height: 42px; line-height: 42px;
+  margin: 2px 0; border-radius: var(--r-md);
+  transition: background-color .15s var(--ease), color .15s var(--ease);
+}
+.side-menu .el-menu-item.is-active {
+  background: var(--indigo-d) !important;
+  color: #fff !important;
+  position: relative;
+}
+.side-menu.el-menu:not(.el-menu--collapse) .el-menu-item.is-active::before {
+  content: '';
+  position: absolute; left: 6px; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 16px; border-radius: 2px;
+  background: var(--rust);
+}
+/* 折叠态弹出的子菜单沿用靛蓝底，观感与侧栏一体 */
+.el-menu--vertical .el-menu-item.is-active { background: var(--indigo-d) !important; color: #fff !important; }
+
+/* ── 9. 反馈类：消息 / 通知 / 加载 / 标签 ────────────────────────────────── */
+.el-message { border-radius: var(--r-lg); box-shadow: var(--shadow-md); }
+.el-notification { border-radius: var(--r-lg); box-shadow: var(--shadow-lg); }
+.el-loading-mask { background-color: rgba(251, 248, 242, 0.72); }
+.el-alert { border-radius: var(--r-md); }
 
 /* —— 状态徽章：圆角胶囊 —— */
 .el-tag { border-radius: 10px; font-weight: 500; }
@@ -155,29 +278,26 @@ html, body, #app {
 .el-tag.el-tag--danger  { --el-tag-bg-color: #FBEAEA; --el-tag-border-color: #E8C7C7; --el-tag-text-color: var(--vermilion); }
 .el-tag.el-tag--info    { --el-tag-bg-color: #FBE8DD; --el-tag-border-color: #EDD2BC; --el-tag-text-color: var(--rust); }
 
-/* —— 输入 / 选择：4px 圆角 —— */
-.el-input__wrapper, .el-textarea__inner, .el-select__wrapper { border-radius: var(--r); }
+/* ── 10. 分页 / 页签 / 描述列表 ──────────────────────────────────────────── */
+.el-pager li { border-radius: var(--r); font-variant-numeric: tabular-nums; transition: background-color .15s var(--ease), color .15s var(--ease); }
+.el-pager li.is-active { background: var(--indigo); color: #fff; font-weight: 600; }
+.el-pager li.is-active:hover { color: #fff; }
+.el-pagination button { border-radius: var(--r); }
+.el-tabs__item.is-active { font-weight: 600; }
+.el-tabs__active-bar { height: 3px; border-radius: 3px 3px 0 0; }
+.el-descriptions { --el-descriptions-item-bordered-label-background: var(--gray-0); }
 
-/* —— 侧边菜单：靛蓝底 —— */
-.el-menu {
-  --el-menu-bg-color: var(--indigo);
-  --el-menu-text-color: #C9D3DF;
-  --el-menu-hover-bg-color: var(--indigo-d);
-  --el-menu-active-color: #fff;
-  --el-menu-hover-text-color: #fff;
-  border-right: none;
-}
-.el-menu-item.is-active {
-  background: var(--indigo-d) !important;
-  color: #fff !important;
-  border-left: 3px solid var(--rust);
-}
-
-/* —— 分页 / 对话框标题 —— */
-.el-dialog__title { color: var(--indigo); font-weight: 600; }
-.el-page-header__title { color: var(--indigo); }
-
-/* —— 滚动条 —— */
+/* ── 11. 滚动条 ─────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--gray-3); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--gray-5); }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* ── 12. 动效降级：系统开了「减少动态效果」就全部立即完成 ────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

@@ -1,5 +1,6 @@
 import axios, { AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { ElMessage } from 'element-plus';
+import { progressStart, progressDone } from '../utils/progress';
 
 // 错误提示去重:全局拦截器与各视图 catch 可能对同一错误各弹一次,800ms 内相同文案只显示一次
 let _lastErr = { m: '', t: 0 };
@@ -16,14 +17,22 @@ export const http = axios.create({
   timeout: 15000,
 });
 
-http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const token = localStorage.getItem('token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+http.interceptors.request.use(
+  (config: InternalAxiosRequestConfig) => {
+    progressStart(); // 顶部进度条：请求在途计数 +1
+    const token = localStorage.getItem('token');
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+    return config;
+  },
+  (err) => {
+    progressDone();
+    return Promise.reject(err);
+  },
+);
 
 http.interceptors.response.use(
   (res: AxiosResponse) => {
+    progressDone();
     if (res.data.code !== 0) {
       errToast(res.data.msg);
       return Promise.reject(new Error(res.data.msg));
@@ -31,6 +40,7 @@ http.interceptors.response.use(
     return res.data;
   },
   (err) => {
+    progressDone();
     const status = err.response?.status;
     const onLogin = window.location.pathname.endsWith('/login');
     if (status === 401 && !onLogin) {

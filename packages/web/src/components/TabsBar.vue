@@ -1,12 +1,13 @@
 <template>
   <!-- 多页签：模块间快速切换，免得每次都回侧边栏找（用户反馈：需要能直接跳到别的模块） -->
-  <div class="tabs-bar">
+  <div ref="barRef" class="tabs-bar" @wheel.prevent="onWheel">
     <div
       v-for="t in tabs.tabs"
       :key="t.path"
       class="tab"
       :class="{ active: t.path === route.fullPath, home: t.path === HOME }"
       @click="go(t.path)"
+      @mousedown.middle.prevent="onMiddle(t.path)"
       @contextmenu.prevent="openMenu($event, t.path)"
     >
       <span class="tab-txt">{{ t.title }}</span>
@@ -22,7 +23,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, onMounted, onBeforeUnmount, watch } from 'vue';
+import { reactive, ref, nextTick, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Close } from '@element-plus/icons-vue';
 import { useTabsStore } from '../stores/tabs';
@@ -32,9 +33,26 @@ const route = useRoute();
 const router = useRouter();
 const tabs = useTabsStore();
 const menu = reactive({ show: false, x: 0, y: 0, path: '' });
+const barRef = ref<HTMLElement>();
 
-// 每次导航登记页签（含首屏）
-watch(() => route.fullPath, () => tabs.open(route), { immediate: true });
+// 每次导航登记页签（含首屏），并保证当前页签在可视区内（页签多到溢出时）
+watch(() => route.fullPath, async () => {
+  tabs.open(route);
+  await nextTick();
+  barRef.value?.querySelector('.tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}, { immediate: true });
+
+// 滚轮直接横滚页签栏（栏是横向的，竖向滚轮在这里没别的意义）
+function onWheel(e: WheelEvent) {
+  const el = barRef.value;
+  if (!el || el.scrollWidth <= el.clientWidth) return;
+  el.scrollLeft += Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+}
+
+// 鼠标中键快速关页签（浏览器标签页的习惯动作）
+function onMiddle(path: string) {
+  if (path !== HOME) onClose(path);
+}
 
 function go(path: string) {
   if (path !== route.fullPath) router.push(path);
