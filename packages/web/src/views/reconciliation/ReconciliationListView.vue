@@ -133,10 +133,12 @@
           <el-descriptions-item label="状态">
             <el-tag :type="statusTagType(detailData.status)" size="small">{{ statusLabel(detailData.status) }}</el-tag>
           </el-descriptions-item>
-          <el-descriptions-item :label="detailData.type === 'LABOR' ? '版师' : '工厂ID'">
-            {{ detailData.type === 'LABOR' ? (detailData.patternmaker_name || detailData.patternmaker_id) : detailData.factory_id }}
+          <el-descriptions-item :label="detailData.type === 'LABOR' ? '版师' : '工厂'">
+            {{ detailData.type === 'LABOR'
+              ? (detailData.patternmaker_name || (detailData.patternmaker_id ? '版师#' + detailData.patternmaker_id : '--'))
+              : (detailData.factory_name || (detailData.factory_id ? '工厂#' + detailData.factory_id : '--')) }}
           </el-descriptions-item>
-          <el-descriptions-item label="合同ID">{{ detailData.contract_id ?? '--' }}</el-descriptions-item>
+          <el-descriptions-item label="关联合同">{{ detailData.contract_no || (detailData.contract_id ? '合同#' + detailData.contract_id : '--') }}</el-descriptions-item>
           <el-descriptions-item label="对账金额">{{ (+detailData.total_amount).toFixed(2) }}</el-descriptions-item>
           <el-descriptions-item label="税率">{{ detailData.tax_rate != null ? detailData.tax_rate + '%' : '--' }}</el-descriptions-item>
           <el-descriptions-item label="税额">{{ detailData.tax_amount != null ? (+detailData.tax_amount).toFixed(2) : '--' }}</el-descriptions-item>
@@ -178,9 +180,14 @@
           <el-divider>出货明细（一单多合同·批次可跳来源合同）</el-divider>
           <el-table :data="detailData.shipments ?? []" border size="small">
             <el-table-column prop="shipment_id" label="出货单ID" width="90" />
-            <el-table-column prop="contract_id" label="来源合同" width="90">
+            <el-table-column prop="contract_id" label="来源合同" min-width="140">
               <template #default="{ row }">
-                <el-link v-if="row.contract_id" type="primary" @click="goContract(row.contract_id)">#{{ row.contract_id }}</el-link>
+                <!-- 出货明细行没带 contract_no（后端未 join）：等于本单合同的显示合同号，
+                     跨合同的少数行才回退 #id。仍是可点链接，跳到对应合同。 -->
+                <el-link v-if="row.contract_id" type="primary" @click="goContract(row.contract_id)">
+                  {{ String(row.contract_id) === String(detailData.contract_id) && detailData.contract_no
+                    ? detailData.contract_no : ('#' + row.contract_id) }}
+                </el-link>
                 <span v-else>—</span>
               </template>
             </el-table-column>

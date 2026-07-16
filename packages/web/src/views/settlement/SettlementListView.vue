@@ -156,7 +156,7 @@
         />
         <el-descriptions :column="3" border size="small">
           <el-descriptions-item label="结算单编号">{{ detailData.settlement_no }}</el-descriptions-item>
-          <el-descriptions-item label="订单ID">{{ detailData.order_id }}</el-descriptions-item>
+          <el-descriptions-item label="款号">{{ detailData.style_no || (detailData.order_id ? '订单#' + detailData.order_id : '--') }}</el-descriptions-item>
           <el-descriptions-item label="状态">
             <el-tag :type="detailData.status === 'CONFIRMED' ? 'success' : 'info'" size="small">
               {{ detailData.status === 'CONFIRMED' ? '已结算' : '待收汇' }}
