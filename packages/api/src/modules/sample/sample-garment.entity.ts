@@ -70,9 +70,6 @@ export class SampleGarment {
   @Column({ length: 1000, nullable: true })
   image3: string; // 图片槽3:多图片/PDF/Excel 逗号分隔
 
-  @Column({ length: 1000, nullable: true })
-  attachments: string; // 资料附件（图片/PDF/Excel，多文件逗号分隔）
-
   // 寄样跟踪
   @Column({ length: 50, nullable: true })
   material_ship_no: string;

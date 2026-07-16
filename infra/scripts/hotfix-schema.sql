@@ -369,7 +369,6 @@ CREATE TABLE IF NOT EXISTS `sample_garment` (
   `image1`           VARCHAR(1000) DEFAULT NULL COMMENT '图片槽1(多图片/PDF/Excel,逗号分隔;下游取首图继承)',
   `image2`           VARCHAR(1000) DEFAULT NULL COMMENT '图片槽2(多图片/PDF/Excel,逗号分隔;下游取首图继承)',
   `image3`           VARCHAR(1000) DEFAULT NULL COMMENT '图片槽3(多图片/PDF/Excel,逗号分隔)',
-  `attachments`      VARCHAR(1000) DEFAULT NULL COMMENT '资料附件(图片/PDF/Excel,多文件逗号分隔;已并入图片槽,保留兼容)',
   `material_ship_no`   VARCHAR(50)  DEFAULT NULL COMMENT '材料寄出单号(触发推送版师)',
   `material_ship_date` DATE         DEFAULT NULL COMMENT '材料寄出日期(自动)',
   `return_no`        VARCHAR(50)   DEFAULT NULL COMMENT '寄回快递单号(版师)',
@@ -1444,8 +1443,6 @@ CALL _i9_add_col('sample_garment','image2',"VARCHAR(1000) DEFAULT NULL COMMENT '
 CALL _i9_sync_col('sample_garment','image2',"VARCHAR(1000)","VARCHAR(1000) DEFAULT NULL COMMENT '图片槽2(多图片/PDF/Excel,逗号分隔;下游取首图继承)'");
 CALL _i9_add_col('sample_garment','image3',"VARCHAR(1000) DEFAULT NULL COMMENT '图片槽3(多图片/PDF/Excel,逗号分隔)'");
 CALL _i9_sync_col('sample_garment','image3',"VARCHAR(1000)","VARCHAR(1000) DEFAULT NULL COMMENT '图片槽3(多图片/PDF/Excel,逗号分隔)'");
-CALL _i9_add_col('sample_garment','attachments',"VARCHAR(1000) DEFAULT NULL COMMENT '资料附件(图片/PDF/Excel,多文件逗号分隔;已并入图片槽,保留兼容)'");
-CALL _i9_sync_col('sample_garment','attachments',"VARCHAR(1000)","VARCHAR(1000) DEFAULT NULL COMMENT '资料附件(图片/PDF/Excel,多文件逗号分隔;已并入图片槽,保留兼容)'");
 CALL _i9_add_col('sample_garment','material_ship_no',"VARCHAR(50)  DEFAULT NULL COMMENT '材料寄出单号(触发推送版师)'");
 CALL _i9_sync_col('sample_garment','material_ship_no',"VARCHAR(50)","VARCHAR(50)  DEFAULT NULL COMMENT '材料寄出单号(触发推送版师)'");
 CALL _i9_add_col('sample_garment','material_ship_date',"DATE         DEFAULT NULL COMMENT '材料寄出日期(自动)'");

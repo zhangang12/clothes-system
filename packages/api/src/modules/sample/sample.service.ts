@@ -116,7 +116,7 @@ export class SampleService {
         maker: dto.maker, make_date: today(),
         ship_sample_date: dto.shipSampleDate, recipient: dto.recipient, file_location: dto.fileLocation,
         garment_remark: dto.garmentRemark, image1: dto.image1, image2: dto.image2, image3: dto.image3,
-        attachments: dto.attachments, feedback_attachments: dto.feedbackAttachments,
+        feedback_attachments: dto.feedbackAttachments,
         // 多轮工价汇总回填(有多轮数据时覆盖单值,供对账/结算读取)
         ...(rounds0.length ? sum : {}),
         status: SampleStatus.PENDING, version: 1, created_by: createdBy, deleted: 0,
@@ -233,7 +233,6 @@ export class SampleService {
       if (dto.styleNo !== undefined) entity.style_no = dto.styleNo;
       if (dto.sampleSize !== undefined) entity.sample_size = dto.sampleSize;
       if (dto.sampleQty !== undefined) entity.sample_qty = dto.sampleQty as number;
-      if (dto.attachments !== undefined) entity.attachments = dto.attachments;
       if (dto.recipient !== undefined) entity.recipient = dto.recipient;
       if (dto.fileLocation !== undefined) entity.file_location = dto.fileLocation;
       if (dto.garmentRemark !== undefined) entity.garment_remark = dto.garmentRemark;
@@ -447,7 +446,7 @@ export class SampleService {
         buyer_id: src.buyer_id, buyer_name: src.buyer_name, buyer_no: src.buyer_no,
         patternmaker_id: src.patternmaker_id, patternmaker_name: src.patternmaker_name,
         maker: src.maker, make_date: today(), recipient: src.recipient, file_location: src.file_location,
-        garment_remark: src.garment_remark, attachments: src.attachments, status: SampleStatus.PENDING, version: 1, created_by: createdBy, deleted: 0,
+        garment_remark: src.garment_remark, status: SampleStatus.PENDING, version: 1, created_by: createdBy, deleted: 0,
       }));
       const copied = srcMaterials.map((m, idx) => manager.create(SampleMaterial, {
         sample_id: saved.id, sort_order: idx, arrange_date: m.arrange_date, item_name: m.item_name,

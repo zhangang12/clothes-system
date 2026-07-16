@@ -69,9 +69,6 @@ export class CreateSampleDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1000) image2?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1000) image3?: string;
 
-  @ApiPropertyOptional({ description: '资料附件（图片/PDF/Excel，多文件逗号分隔）' })
-  @IsOptional() @IsString() @MaxLength(1000) attachments?: string;
-
   @ApiPropertyOptional({ description: '样衣意见附件（客户反馈图/PDF，多文件逗号分隔）' })
   @IsOptional() @IsString() @MaxLength(500) feedbackAttachments?: string;
 
