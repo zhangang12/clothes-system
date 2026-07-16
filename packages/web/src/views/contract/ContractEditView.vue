@@ -17,6 +17,7 @@
             📤 {{ isProcess ? '推送工厂' : '推送供应商' }}
           </el-button>
           <el-button v-if="contractId" @click="doPrint">📄 生成 PDF</el-button>
+          <el-button v-if="contractId" @click="exportExcel">📊 导出Excel</el-button>
           <el-button v-if="contractId && form.type === 'MATERIAL'" plain @click="goSupplement">🧩 补料</el-button>
           <el-button v-if="contractId" plain @click="goCopy">复制</el-button>
         </div>
@@ -242,6 +243,7 @@ import { companyApi } from '@/api/company';
 import { uploadApi } from '@/api/upload';
 import { signedUrl } from '@/utils/secureFile';
 import { printContract } from '@/utils/contractPrint';
+import { exportContractExcel } from '@/utils/contractExcel';
 import { useAuthStore } from '@/stores/auth';
 
 const route = useRoute();
@@ -520,6 +522,17 @@ async function doPrint() {
       ?? companies.value.find((c: any) => c.is_default) ?? null;
     printContract(detail, selectedFactory.value ?? factories.value.find((f: any) => f.id === detail.factory_id), company ?? undefined);
   } catch (e: any) { ElMessage.error(e?.message ?? '生成失败'); }
+}
+// 导出 Excel(取详情含材料明细/发货批次;.xls)
+async function exportExcel() {
+  if (!contractId.value) return;
+  try {
+    const res: any = await contractApi.get(contractId.value);
+    const detail = res.data ?? res;
+    // 详情接口只回 factory_id 不回名字，不补的话导出件里是「工厂#12」
+    const f = factories.value.find((x: any) => x.id === detail.factory_id);
+    exportContractExcel({ ...detail, factory_name: f?.name });
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
 }
 function goSupplement() { router.push(`/contracts/new?type=SUPPLEMENT&parent_id=${contractId.value}&copy_from=${contractId.value}`); }
 function goCopy() { router.push(`/contracts/new?type=${form.type}&copy_from=${contractId.value}`); }

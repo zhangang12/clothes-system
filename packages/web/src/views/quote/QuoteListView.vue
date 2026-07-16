@@ -89,6 +89,7 @@
             <el-button v-if="canEdit && row.status === 'QUOTED'" link size="small" @click="doAdjust(row)">客户调整</el-button>
             <el-button link size="small" @click="copyRow(row)">复制</el-button>
             <el-button link size="small" :icon="Printer" @click="printRow(row)">打印/PDF</el-button>
+            <el-button link size="small" @click="exportRow(row)">导出Excel</el-button>
             <el-button v-if="row.approval_status === 'PENDING' && canReview" link type="success" size="small" @click="doApprove(row)">审批</el-button>
           </template>
         </el-table-column>
@@ -140,6 +141,7 @@ import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search, Plus, Download, Delete, CopyDocument, ArrowDown, Printer, DocumentAdd } from '@element-plus/icons-vue';
 import { printQuote, printQuoteBatch } from '@/utils/quotePrint';
+import { exportQuoteExcel } from '@/utils/quoteExcel';
 import { companyApi } from '@/api/company';
 import { quoteApi } from '@/api/quote';
 import { sampleApi } from '@/api/sample';
@@ -253,6 +255,11 @@ async function printRow(row: any) {
     }
     printQuote(res.data ?? res, cachedCompany || undefined);
   } catch (e: any) { errToast(e?.message ?? e?.response?.data?.msg ?? '打印失败'); }
+}
+// 导出 Excel(取详情含报价/费用明细;.xls)。与打印不同,导出按业务要求全量不脱敏
+async function exportRow(row: any) {
+  try { const res: any = await quoteApi.get(row.id); exportQuoteExcel(res.data ?? res); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
 }
 function copyOne() { copyRow(selected.value[0]); }
 // 批量打印：逐个取详情，一个窗口多页（页间分页符），一次打印/导出 PDF

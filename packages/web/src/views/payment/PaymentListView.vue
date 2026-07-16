@@ -48,6 +48,11 @@
           <el-table-column label="创建时间" width="150">
             <template #default="{ row }">{{ fmtDateTime(row.created_at) }}</template>
           </el-table-column>
+          <el-table-column label="操作" width="110" fixed="right">
+            <template #default="{ row }">
+              <el-button link size="small" @click="exportPrepayRow(row)">导出Excel</el-button>
+            </template>
+          </el-table-column>
         </el-table>
 
         <div class="pagination">
@@ -154,8 +159,9 @@
               <el-tag :type="prTagType(row.approval_status)" size="small">{{ prStatusLabel(row.approval_status) }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="260" fixed="right">
+          <el-table-column label="操作" width="330" fixed="right">
             <template #default="{ row }">
+              <el-button link size="small" @click="exportPRRow(row)">导出Excel</el-button>
               <el-button
                 v-if="row.approval_status === 'DRAFT' && canEdit"
                 link type="primary" size="small"
@@ -374,6 +380,7 @@ import FactorySelect from '@/components/FactorySelect.vue';
 import ContractPicker from '@/components/ContractPicker.vue';
 import { uploadApi } from '@/api/upload';
 import { openFile } from '@/utils/secureFile';
+import { exportPaymentRequestExcel, exportPrepaymentExcel } from '@/utils/paymentExcel';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole } from '@i9/types';
 
@@ -455,6 +462,12 @@ async function doCreatePrepay() {
   } finally { saving.value = false; }
 }
 
+// 导出 Excel(付款模块无详情接口,直接用列表行;.xls)
+function exportPrepayRow(row: any) {
+  try { exportPrepaymentExcel(row); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
+}
+
 // ====== Payment Request ======
 const prLoading = ref(false);
 const prList = ref<any[]>([]);
@@ -484,6 +497,15 @@ function resetPR() {
   Object.assign(prQuery, { factory_id: undefined, approval_status: undefined, page: 1 });
   prDateRange.value = null;
   loadPR();
+}
+
+// 导出 Excel(无详情接口,用列表行;先拉分批付款记录,拉不到则降级为不带记录表)
+async function exportPRRow(row: any) {
+  try {
+    let records: any[] = [];
+    try { records = ((await paymentRequestApi.getRecords(row.id)) as any).data ?? []; } catch { records = []; }
+    exportPaymentRequestExcel({ ...row, records });
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
 }
 
 async function doSubmit(row: any) {

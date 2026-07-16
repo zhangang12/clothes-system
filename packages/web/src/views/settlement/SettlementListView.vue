@@ -101,9 +101,10 @@
         <el-table-column prop="confirmed_at" label="确认时间" width="160">
           <template #default="{ row }">{{ row.confirmed_at ? fmtDateTime(row.confirmed_at) : '--' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="240" fixed="right">
+        <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="viewDetail(row.id)">详情</el-button>
+            <el-button link size="small" @click="exportRow(row)">导出Excel</el-button>
             <el-button
               v-if="row.status === 'DRAFT' && canEdit"
               link type="success" size="small"
@@ -321,6 +322,11 @@
             <template #default="{ row }">{{ row.new_value ?? '—' }}</template>
           </el-table-column>
         </el-table>
+      </template>
+      <template #footer>
+        <!-- 直接用弹框已取的详情，不再请求 -->
+        <el-button v-if="detailData" @click="exportSettlementExcel(detailData)">导出Excel</el-button>
+        <el-button type="primary" @click="detailVisible = false">关闭</el-button>
       </template>
     </el-dialog>
 
@@ -551,6 +557,7 @@
 </template>
 
 <script setup lang="ts">
+import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { fmtDateTime } from '@/utils/format';
@@ -562,6 +569,7 @@ import { useAuthStore } from '@/stores/auth';
 import { UserRole } from '@i9/types';
 import FileUpload from '@/components/FileUpload.vue';
 import { openFile } from '@/utils/secureFile';
+import { exportSettlementExcel } from '@/utils/settlementExcel';
 
 const authStore = useAuthStore();
 const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
@@ -746,6 +754,12 @@ async function doRemove(id: number) {
   await settlementApi.remove(id);
   ElMessage.success('删除成功');
   load();
+}
+
+// 导出 Excel(取详情含成本/收汇明细;.xls)
+async function exportRow(row: any) {
+  try { const res: any = await settlementApi.get(row.id); exportSettlementExcel(res.data ?? res); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
 }
 
 // Create

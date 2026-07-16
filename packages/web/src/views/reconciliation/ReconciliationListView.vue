@@ -84,9 +84,10 @@
         <el-table-column label="创建时间" width="150">
           <template #default="{ row }">{{ fmtDateTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="viewDetail(row.id)">详情</el-button>
+            <el-button link type="primary" size="small" @click="viewDetail(row)">详情</el-button>
+            <el-button link size="small" @click="exportRow(row)">导出Excel</el-button>
             <el-button
               v-if="row.status === 'DRAFT' && canEdit"
               link type="warning" size="small"
@@ -197,6 +198,10 @@
             </el-table-column>
           </el-table>
         </template>
+      </template>
+      <template #footer>
+        <el-button @click="detailVisible = false">关闭</el-button>
+        <el-button type="primary" :disabled="!detailData" @click="exportDetail">导出Excel</el-button>
       </template>
     </el-dialog>
 
@@ -363,6 +368,7 @@ import { fmtDateTime } from '@/utils/format';
 import { Search, Refresh, Plus, Coin } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { reconciliationApi } from '@/api/reconciliation';
+import { exportReconciliationExcel } from '@/utils/reconciliationExcel';
 import { sampleApi } from '@/api/sample';
 import { contractApi } from '@/api/contract';
 import FactorySelect from '@/components/FactorySelect.vue';
@@ -429,10 +435,23 @@ onMounted(load);
 // Detail
 const detailVisible = ref(false);
 const detailData = ref<any>(null);
-async function viewDetail(id: number) {
-  const res = await reconciliationApi.get(id);
-  detailData.value = res?.data ?? res;
+// 详情接口不回 factory_name(仅列表补名),合并列表行的工厂名,供弹框导出用
+async function viewDetail(row: any) {
+  const res = await reconciliationApi.get(row.id);
+  detailData.value = { ...(res?.data ?? res), factory_name: row.factory_name };
   detailVisible.value = true;
+}
+// 导出 Excel(取详情含发货/工时/费用明细;.xls)
+async function exportRow(row: any) {
+  try {
+    const res: any = await reconciliationApi.get(row.id);
+    exportReconciliationExcel({ ...(res.data ?? res), factory_name: row.factory_name });
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
+}
+// 弹框内导出(复用已取的详情,不再请求)
+function exportDetail() {
+  try { exportReconciliationExcel(detailData.value); }
+  catch (e: any) { errToast(e?.message ?? '导出失败'); }
 }
 
 async function doSubmit(row: any) {

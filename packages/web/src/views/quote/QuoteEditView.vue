@@ -10,6 +10,7 @@
       <div class="ops">
         <el-button v-if="!readonly" type="primary" :icon="Check" :loading="saving" @click="save">保存</el-button>
         <el-button v-if="editId" :icon="Printer" @click="printDialog = true">打印/PDF</el-button>
+        <el-button v-if="editId" :icon="Download" @click="exportExcel">导出Excel</el-button>
         <el-button v-if="!readonly && editId" :icon="Download" @click="importDialog = true">从样衣导入</el-button>
         <el-button v-if="!readonly && editId && ['DRAFT', 'ADJUSTING'].includes(form.status)" type="warning" @click="submitQuote">发出报价</el-button>
         <el-button v-if="!readonly && editId && form.status === 'QUOTED'" plain @click="adjustQuote">客户调整</el-button>
@@ -202,6 +203,7 @@ import { companyApi } from '@/api/company';
 import { dictApi } from '@/api/dict';
 import { pasteRowsFromClipboard } from '@/utils/pasteRows';
 import { printQuote } from '@/utils/quotePrint';
+import { exportQuoteExcel } from '@/utils/quoteExcel';
 import FileUpload from '@/components/FileUpload.vue';
 import { QUOTE_STATUS_LABEL } from '@i9/types';
 import { TRADE_COUNTRIES, DICT_PRICE_TERMS, DICT_SETTLEMENT } from '@/constants/regions';
@@ -372,6 +374,13 @@ async function printCurrent() {
     try { company = (await companyApi.getDefault() as any)?.data ?? undefined; } catch { company = undefined; }
     printQuote(res.data ?? res, company || undefined, { ...printOpts });
   } catch (e: any) { errToast(e?.message ?? e?.response?.data?.msg ?? '打印失败'); }
+}
+
+// 导出 Excel(.xls)。取详情而非用 form,保证明细与库一致;与打印不同,导出全量不脱敏
+async function exportExcel() {
+  if (!editId.value) return;
+  try { const res: any = await quoteApi.get(editId.value); exportQuoteExcel(res.data ?? res); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
 }
 
 async function loadRefs() {
