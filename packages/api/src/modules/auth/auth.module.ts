@@ -7,10 +7,11 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { SysUser } from './sys-user.entity';
 import { SupplierAccount } from './supplier-account.entity';
+import { Factory } from '../factory/factory.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([SysUser, SupplierAccount]),
+    TypeOrmModule.forFeature([SysUser, SupplierAccount, Factory]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => {

@@ -25,6 +25,7 @@
         <el-menu-item v-if="!isProduction" index="/reports"><el-icon><PieChart /></el-icon>报表统计</el-menu-item>
         <el-menu-item v-if="isAdmin" index="/feedbacks"><el-icon><ChatDotRound /></el-icon>反馈管理</el-menu-item>
         <el-menu-item v-if="isAdmin" index="/error-logs"><el-icon><Warning /></el-icon>系统报错</el-menu-item>
+        <el-menu-item v-if="isAdmin" index="/accounts"><el-icon><UserFilled /></el-icon>账号管理</el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>
@@ -38,7 +39,8 @@
           </span>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item @click="logout">退出登录</el-dropdown-item>
+              <el-dropdown-item @click="pwdDialog = true">修改密码</el-dropdown-item>
+              <el-dropdown-item divided @click="logout">退出登录</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
@@ -55,20 +57,23 @@
   </el-container>
   <!-- 右下角问题反馈悬浮入口(所有登录用户可用) -->
   <FeedbackWidget />
+  <ChangePasswordDialog v-model="pwdDialog" />
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { UserRole } from '@i9/types';
 import { useAuthStore } from '../../stores/auth';
 import { useTabsStore } from '../../stores/tabs';
 import FeedbackWidget from '../../components/FeedbackWidget.vue';
 import TabsBar from '../../components/TabsBar.vue';
+import ChangePasswordDialog from '../../components/ChangePasswordDialog.vue';
 
 const auth = useAuthStore();
 const router = useRouter();
 const route = useRoute();
+const pwdDialog = ref(false);
 const isAdmin = computed(() => auth.hasRole(UserRole.ADMIN));
 // 版师/打样:仅样衣相关,隐藏其无权访问(会 403)的客户报价/报表/本司主体
 const isProduction = computed(() => auth.hasRole(UserRole.PATTERNMAKER, UserRole.SAMPLE_MAKER));

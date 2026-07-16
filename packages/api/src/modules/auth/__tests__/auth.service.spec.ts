@@ -1,10 +1,11 @@
 import { Test } from '@nestjs/testing';
-import { UnauthorizedException } from '@nestjs/common';
+import { UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { AuthService } from '../auth.service';
 import { SysUser } from '../sys-user.entity';
 import { SupplierAccount } from '../supplier-account.entity';
+import { Factory } from '../../factory/factory.entity';
 
 // Mock bcryptjs to keep unit tests fast and deterministic
 jest.mock('bcryptjs', () => ({
@@ -12,8 +13,8 @@ jest.mock('bcryptjs', () => ({
   compare: jest.fn().mockImplementation((plain, hash) => Promise.resolve(hash === `hashed:${plain}`)),
 }));
 
-const mockUserRepo = { findOne: jest.fn() };
-const mockSupplierRepo = { findOne: jest.fn(), update: jest.fn() };
+const mockUserRepo = { findOne: jest.fn(), update: jest.fn(), count: jest.fn(), find: jest.fn(), save: jest.fn(), create: jest.fn((x) => x) };
+const mockSupplierRepo = { findOne: jest.fn(), update: jest.fn(), createQueryBuilder: jest.fn() };
 const mockJwt = { sign: jest.fn().mockReturnValue('mock-token') };
 
 describe('AuthService', () => {
@@ -26,6 +27,7 @@ describe('AuthService', () => {
         AuthService,
         { provide: getRepositoryToken(SysUser), useValue: mockUserRepo },
         { provide: getRepositoryToken(SupplierAccount), useValue: mockSupplierRepo },
+        { provide: getRepositoryToken(Factory), useValue: {} },
         { provide: JwtService, useValue: mockJwt },
       ],
     }).compile();
@@ -122,6 +124,70 @@ describe('AuthService', () => {
       const bcrypt = require('bcryptjs');
       const valid = await bcrypt.compare('mySecret', hash);
       expect(valid).toBe(true);
+    });
+  });
+
+  describe('changePassword()', () => {
+    it('UT-AUTH-12: 内部用户原密码正确则更新为新哈希', async () => {
+      mockUserRepo.findOne.mockResolvedValue({ id: 1, password: 'hashed:old12345' });
+      await service.changePassword({ id: 1, type: 'admin' }, 'old12345', 'new12345');
+      expect(mockUserRepo.update).toHaveBeenCalledWith(1, { password: 'hashed:new12345' });
+    });
+
+    it('UT-AUTH-13: 原密码错误抛 BadRequest，不更新', async () => {
+      mockUserRepo.findOne.mockResolvedValue({ id: 1, password: 'hashed:correct1' });
+      await expect(service.changePassword({ id: 1, type: 'admin' }, 'wrong123', 'new12345'))
+        .rejects.toThrow(BadRequestException);
+      expect(mockUserRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('UT-AUTH-14: 新密码与原密码相同则拒绝', async () => {
+      mockUserRepo.findOne.mockResolvedValue({ id: 1, password: 'hashed:same1234' });
+      await expect(service.changePassword({ id: 1, type: 'admin' }, 'same1234', 'same1234'))
+        .rejects.toThrow(BadRequestException);
+    });
+
+    it('UT-AUTH-15: 供应商按 type 分流到 supplierRepo', async () => {
+      mockSupplierRepo.findOne.mockResolvedValue({ id: 9, password: 'hashed:old12345' });
+      await service.changePassword({ id: 9, type: 'supplier' }, 'old12345', 'new12345');
+      expect(mockSupplierRepo.update).toHaveBeenCalledWith(9, { password: 'hashed:new12345' });
+      expect(mockUserRepo.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateUser()（最后管理员保护）', () => {
+    it('UT-AUTH-16: 停用最后一个启用管理员被拒', async () => {
+      mockUserRepo.findOne.mockResolvedValue({ id: 1, role: 'ADMIN', status: 1 });
+      mockUserRepo.count.mockResolvedValue(1);
+      await expect(service.updateUser(1, { status: 0 }, 99)).rejects.toThrow(BadRequestException);
+      expect(mockUserRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('UT-AUTH-17: 还有其它管理员时可降权', async () => {
+      mockUserRepo.findOne.mockResolvedValue({ id: 2, role: 'ADMIN', status: 1 });
+      mockUserRepo.count.mockResolvedValue(2);
+      await service.updateUser(2, { role: 'BUSINESS' as any }, 99);
+      expect(mockUserRepo.update).toHaveBeenCalledWith(2, { role: 'BUSINESS' });
+    });
+
+    it('UT-AUTH-18: 不能停用当前登录的自己', async () => {
+      mockUserRepo.findOne.mockResolvedValue({ id: 5, role: 'BUSINESS', status: 1 });
+      await expect(service.updateUser(5, { status: 0 }, 5)).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('createUser()', () => {
+    it('UT-AUTH-19: 用户名重复被拒', async () => {
+      mockUserRepo.findOne.mockResolvedValue({ id: 1, username: 'dup' });
+      await expect(service.createUser({ username: 'dup', real_name: 'x', role: 'BUSINESS', password: 'pass1234' }))
+        .rejects.toThrow(BadRequestException);
+    });
+
+    it('UT-AUTH-20: 新用户密码入库为哈希', async () => {
+      mockUserRepo.findOne.mockResolvedValue(null);
+      mockUserRepo.save.mockResolvedValue({ id: 7 });
+      await service.createUser({ username: 'newu', real_name: '新', role: 'FINANCE', password: 'pass1234' });
+      expect(mockUserRepo.save).toHaveBeenCalledWith(expect.objectContaining({ password: 'hashed:pass1234' }));
     });
   });
 });

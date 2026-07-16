@@ -55,6 +55,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'dicts', name: 'DictManage', component: () => import('../views/dict/DictManageView.vue'), meta: { title: '字典维护' } },
       { path: 'feedbacks', name: 'Feedbacks', component: () => import('../views/feedback/FeedbackListView.vue'), meta: { admin: true, title: '反馈管理' } },
       { path: 'error-logs', name: 'ErrorLogs', component: () => import('../views/system/ErrorLogListView.vue'), meta: { admin: true, title: '系统报错' } },
+      { path: 'accounts', name: 'Accounts', component: () => import('../views/system/AccountManageView.vue'), meta: { admin: true, title: '账号管理' } },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/' },
