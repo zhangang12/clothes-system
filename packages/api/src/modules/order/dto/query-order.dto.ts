@@ -33,4 +33,11 @@ export class QueryOrderDto {
   @Type(() => Number)
   @IsInt()
   customer_id?: number;
+
+  // 单据反查（关联单据 chip）：报价 → 由其生成的订单
+  @ApiPropertyOptional({ description: '按源报价单反查订单' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  quote_id?: number;
 }

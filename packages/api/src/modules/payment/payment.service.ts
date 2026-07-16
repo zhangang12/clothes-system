@@ -11,6 +11,7 @@ import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.se
 import { PaymentApprovalStatus, ReconcileType } from '@i9/types';
 import { CreatePrepaymentDto } from './dto/create-prepayment.dto';
 import { CreatePaymentRequestDto } from './dto/create-payment-request.dto';
+import { QueryPaymentRequestDto } from './dto/query-payment-request.dto';
 
 @Injectable()
 export class PaymentService {
@@ -223,21 +224,18 @@ export class PaymentService {
     return this.recordRepo.find({ where: { pr_id: id }, order: { id: 'ASC' } });
   }
 
-  async findPaymentRequests(
-    factoryId?: number,
-    approvalStatus?: PaymentApprovalStatus,
-    page = 1,
-    size = 20,
-    startDate?: string,
-    endDate?: string,
-    dueStart?: string,
-    dueEnd?: string,
-    paidStart?: string,
-    paidEnd?: string,
-  ) {
+  async findPaymentRequests(query: QueryPaymentRequestDto = {}) {
+    const {
+      factory_id: factoryId, approval_status: approvalStatus, reconcile_id: reconcileId,
+      start_date: startDate, end_date: endDate, due_start: dueStart, due_end: dueEnd,
+      paid_start: paidStart, paid_end: paidEnd,
+    } = query;
+    let { page = 1, size = 20 } = query;
     const where: any = { deleted: 0 };
     if (factoryId) where.factory_id = factoryId;
     if (approvalStatus) where.approval_status = approvalStatus;
+    // 对账→付款申请反查（关联单据 chip）
+    if (reconcileId) where.reconcile_id = reconcileId;
     // 供应商(工厂)+申请日期组合检索（付款申请设计稿 检索区）
     if (startDate && endDate) {
       where.created_at = Between(`${startDate} 00:00:00`, `${endDate} 23:59:59`);

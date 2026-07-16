@@ -7,6 +7,17 @@ import { useAuthStore } from '@/stores/auth';
 import { UserRole } from '@i9/types';
 import { commonStubs } from '@/test-utils/el-stubs';
 
+// ── Mock vue-router ─────────────────────────────────────────────────────────
+// 组件用 useRoute 读 :id / query 决定是否自动打开详情；不 mock 的话 useRoute() 返回
+// undefined，onMounted 里读 route.params 会抛（写法同 LoginView.spec）。
+const mockPush = vi.fn();
+const mockReplace = vi.fn();
+const mockRoute: any = { params: {}, query: {} };
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
+  useRoute: () => mockRoute,
+}));
+
 // ── API mock ────────────────────────────────────────────────────────────────
 const mockList = vi.fn();
 const mockGet = vi.fn();
@@ -64,6 +75,9 @@ describe('ReconciliationListView', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    // 用例会改 mockRoute，不复位会串味
+    mockRoute.params = {};
+    mockRoute.query = {};
   });
 
   // ─────────────────────────────────────── basic render & list loading
@@ -267,5 +281,19 @@ describe('ReconciliationListView', () => {
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('50'));
     expect(wrapper.find('.el-pagination-stub').exists()).toBe(true);
+  });
+
+  // ─────────────────────── 单据间快速跳转：/reconciliations/:id/view 自动开详情
+  it('从别的单据跳来(:id/view)时自动拉取并打开该对账单详情', async () => {
+    mockRoute.params = { id: '5' };
+    mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(mockGet).toHaveBeenCalledWith(5));
+  });
+
+  it('直接进列表(无 :id)时不拉详情', async () => {
+    mockRoute.params = {};
+    mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(mockList).toHaveBeenCalled());
+    expect(mockGet).not.toHaveBeenCalled();
   });
 });

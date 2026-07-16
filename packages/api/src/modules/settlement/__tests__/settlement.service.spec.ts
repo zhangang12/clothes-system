@@ -449,4 +449,22 @@ describe('SettlementService', () => {
       goods_amount_extax: 1000,
     });
   });
+
+  // ── 关联单据（单据间跳转）：详情带出上游单据号 ──
+
+  // UT-SLT-22: 详情带出源订单号（chip 显示单据号而非裸 ID）
+  it('UT-SLT-22 findOne returns order_no of the source order', async () => {
+    mockRepo.findOne.mockResolvedValue(makeSettlement({ order_id: 10 }));
+    mockOrderRepo.findOne.mockResolvedValue({ id: 10, order_no: 'SO2024010100001', deleted: 0 });
+    const res: any = await service.findOne(1);
+    expect(res.order_no).toBe('SO2024010100001');
+  });
+
+  // UT-SLT-23: 源订单已删 → order_no 降级 null，详情不 500
+  it('UT-SLT-23 findOne degrades order_no to null when the source order is gone', async () => {
+    mockRepo.findOne.mockResolvedValue(makeSettlement({ order_id: 10 }));
+    mockOrderRepo.findOne.mockResolvedValue(null);
+    const res: any = await service.findOne(1);
+    expect(res.order_no).toBeNull();
+  });
 });

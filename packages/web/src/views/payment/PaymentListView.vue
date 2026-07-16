@@ -69,6 +69,14 @@
 
       <!-- ====== 付款申请 Tab ====== -->
       <el-tab-pane label="付款申请" name="request">
+        <!-- 从对账单跳来时的过滤条：必须显式可见可清，否则用户在本页再检索会被这个
+             看不见的条件夹着、以为是系统查不到数据 -->
+        <el-alert v-if="filteredByReconcile" type="info" :closable="false" show-icon style="margin-bottom:8px">
+          <template #title>
+            仅显示对账单 #{{ filteredByReconcile }} 关联的付款申请
+            <el-link type="primary" style="margin-left:8px" @click="clearReconcileFilter">显示全部</el-link>
+          </template>
+        </el-alert>
         <el-card class="search-card" shadow="never">
           <el-form :model="prQuery" inline>
             <el-form-item label="工厂">
@@ -371,6 +379,7 @@
 <script setup lang="ts">
 import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { fmtDateTime } from '@/utils/format';
 import { Search, Refresh, Plus, UploadFilled } from '@element-plus/icons-vue';
@@ -388,6 +397,8 @@ const authStore = useAuthStore();
 const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
 const canEdit = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.FINANCE));
 
+const route = useRoute();
+const router = useRouter();
 const activeTab = ref('prepayment');
 
 function prStatusLabel(s: string) {
@@ -475,6 +486,8 @@ const prTotal = ref(0);
 const prQuery = reactive({
   page: 1, size: 20,
   factory_id: undefined as number | undefined,
+  // reconcile_id 只由「对账单详情 → 付款申请」的跳转带入，检索区没有对应输入框
+  reconcile_id: undefined as number | undefined,
   approval_status: undefined as string | undefined, due_start: '', due_end: '', paid_start: '', paid_end: '' });
 // 申请日期范围（工厂+日期组合检索，付款申请设计稿 检索区）
 const prDateRange = ref<[string, string] | null>(null);
@@ -660,7 +673,27 @@ async function doCreatePR() {
   } finally { saving.value = false; }
 }
 
-onMounted(() => { loadPrepay(); loadPR(); });
+// 从对账单详情跳过来(/payments?tab=request&reconcile_id=N):切到付款申请页签并按该对账单过滤。
+// 付款没有详情页，故落点是「过滤后的列表」而不是某一张单。
+const filteredByReconcile = ref<number | null>(null);
+onMounted(() => {
+  const rid = Number(route.query.reconcile_id);
+  if (rid) {
+    prQuery.reconcile_id = rid;
+    filteredByReconcile.value = rid;
+  }
+  if (route.query.tab === 'request' || rid) activeTab.value = 'request';
+  loadPrepay();
+  loadPR();
+});
+// 清掉来源过滤：不清的话用户在本页做的其它检索都会被这个隐藏条件夹着，很难排查
+function clearReconcileFilter() {
+  prQuery.reconcile_id = undefined;
+  filteredByReconcile.value = null;
+  prQuery.page = 1;
+  router.replace({ name: 'Payments' });
+  loadPR();
+}
 </script>
 
 <style scoped>

@@ -192,6 +192,7 @@
 
 <script setup lang="ts">
 import { errToast } from '@/api';
+import { useRoute } from 'vue-router';
 import { ref, reactive, computed, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Search, Plus } from '@element-plus/icons-vue';
@@ -208,6 +209,7 @@ const canEdit = computed(() => isAdmin.value || authStore.hasRole(UserRole.FINAN
 
 const loading = ref(false);
 const saving = ref(false);
+const route = useRoute();
 const list = ref<any[]>([]);
 const total = ref(0);
 const page = ref(1);
@@ -231,7 +233,15 @@ function onPickOrder(it: any, id: number) {
   const o = orders.value.find((x: any) => x.id === id);
   if (o?.style_no && !it.style_no) it.style_no = o.style_no;
 }
-onMounted(() => { load(); loadOrders(); });
+onMounted(async () => {
+  await Promise.all([load(), loadOrders()]);
+  // 别的单据跳过来(/export-invoices/:id/view):自动打开该单详情
+  const rid = Number(route.params.id);
+  if (rid) {
+    try { await viewDetail(rid); }
+    catch (e: any) { errToast(e?.response?.data?.msg ?? '出口发票不存在或已删除'); }
+  }
+});
 
 // 创建
 const createVisible = ref(false);

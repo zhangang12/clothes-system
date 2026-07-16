@@ -181,4 +181,30 @@ describe('OrderService', () => {
     const captured = mockMaterialRepo.create.mock.calls[0][0];
     expect(captured.total_purchase).toBe(1498);
   });
+
+  // ── 关联单据（单据间跳转）：报价→订单反查 + 详情带出上游单据号 ──
+
+  // UT-ORD-10: 报价→订单反查（关联单据 chip）
+  it('UT-ORD-10 findAll filters by quote_id', async () => {
+    mockOrderRepo.findAndCount.mockResolvedValue([[], 0]);
+    await service.findAll({ quote_id: 88 } as any);
+    const arg = mockOrderRepo.findAndCount.mock.calls.at(-1)[0];
+    expect(arg.where).toMatchObject({ quote_id: 88, deleted: 0 });
+  });
+
+  // UT-ORD-11: 详情带出上游报价单号（chip 显示单据号而非裸 ID）
+  it('UT-ORD-11 findOne returns quote_no of the source quote', async () => {
+    mockOrderRepo.findOne.mockResolvedValue(makeOrder({ quote_id: 55 }));
+    mockQuoteRepo.findOne.mockResolvedValue({ id: 55, quote_no: 'QT2024010100001' });
+    const res: any = await service.findOne(1);
+    expect(res.quote_no).toBe('QT2024010100001');
+  });
+
+  // UT-ORD-12: 源报价已删 → quote_no 降级 null，详情不 500
+  it('UT-ORD-12 findOne degrades quote_no to null when the source quote is gone', async () => {
+    mockOrderRepo.findOne.mockResolvedValue(makeOrder({ quote_id: 55 }));
+    mockQuoteRepo.findOne.mockResolvedValue(null);
+    const res: any = await service.findOne(1);
+    expect(res.quote_no).toBeNull();
+  });
 });

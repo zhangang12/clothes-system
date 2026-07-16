@@ -7,6 +7,17 @@ import { useAuthStore } from '@/stores/auth';
 import { UserRole } from '@i9/types';
 import { commonStubs } from '@/test-utils/el-stubs';
 
+// ── Mock vue-router ─────────────────────────────────────────────────────────
+// 组件用 useRoute 读 :id / query 决定是否自动打开详情；不 mock 的话 useRoute() 返回
+// undefined，onMounted 里读 route.params 会抛（写法同 LoginView.spec）。
+const mockPush = vi.fn();
+const mockReplace = vi.fn();
+const mockRoute: any = { params: {}, query: {} };
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
+  useRoute: () => mockRoute,
+}));
+
 // ── API mocks ────────────────────────────────────────────────────────────────
 const mockList = vi.fn();
 const mockGet = vi.fn();
@@ -66,6 +77,9 @@ describe('SettlementListView', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    // 用例会改 mockRoute，不复位会串味
+    mockRoute.params = {};
+    mockRoute.query = {};
   });
 
   // ─────────────────────────────────────── list loading
@@ -232,5 +246,27 @@ describe('SettlementListView', () => {
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('30'));
     expect(wrapper.find('.el-pagination-stub').exists()).toBe(true);
+  });
+
+  // ─────────────────────────── 单据间快速跳转：/settlements/:id/view 自动开详情
+  it('从别的单据跳来(:id/view)时自动拉取并打开该结算单详情', async () => {
+    mockRoute.params = { id: '7' };
+    mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(mockGet).toHaveBeenCalledWith(7));
+  });
+
+  it('直接进列表(无 :id)时不拉详情', async () => {
+    mockRoute.params = {};
+    mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(mockList).toHaveBeenCalled());
+    expect(mockGet).not.toHaveBeenCalled();
+  });
+
+  it('跳来的结算单已删除时提示而不是整页崩', async () => {
+    mockRoute.params = { id: '999' };
+    mockGet.mockRejectedValue({ response: { data: { msg: '结算单不存在' } } });
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(mockGet).toHaveBeenCalledWith(999));
+    expect(wrapper.exists()).toBe(true);
   });
 });

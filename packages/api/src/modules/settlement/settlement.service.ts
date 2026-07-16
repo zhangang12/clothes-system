@@ -428,7 +428,13 @@ export class SettlementService {
     if (!settlement) throw new NotFoundException(`结算单 #${id} 不存在`);
     const costs = await this.costRepo.find({ where: { settlement_id: id }, order: { included: 'DESC', id: 'ASC' } });
     const receipts = await this.receiptRepo.find({ where: { settlement_id: id }, order: { receipt_date: 'ASC' } });
-    return { ...settlement, costs, receipts };
+    // 上游单据号（关联单据 chip 显示单据号而非裸 ID）：源订单号；订单已删→降级 null
+    let order_no: string | null = null;
+    if (settlement.order_id) {
+      const order = await this.orderRepo.findOne({ where: { id: settlement.order_id } });
+      order_no = order?.order_no ?? null;
+    }
+    return { ...settlement, costs, receipts, order_no };
   }
 
   // 结算单编辑（草稿限定）：财务两步走——建单后回头补收汇/汇率/发票金额/费用（结算稿B/D 断链修复）

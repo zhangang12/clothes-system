@@ -6,11 +6,12 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { UserRole, PaymentApprovalStatus } from '@i9/types';
+import { UserRole } from '@i9/types';
 import { PaymentService } from './payment.service';
 import { CreatePrepaymentDto } from './dto/create-prepayment.dto';
 import { CreatePaymentRequestDto } from './dto/create-payment-request.dto';
 import { MarkPaidDto } from './dto/mark-paid.dto';
+import { QueryPaymentRequestDto } from './dto/query-payment-request.dto';
 
 @ApiTags('付款管理')
 @ApiBearerAuth()
@@ -53,21 +54,9 @@ export class PaymentController {
   }
 
   @Get('requests')
-  @ApiOperation({ summary: '付款申请列表（工厂+申请日期组合检索）' })
-  findPaymentRequests(
-    @Query('factory_id') factoryId?: string,
-    @Query('approval_status') approvalStatus?: PaymentApprovalStatus,
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
-    @Query('size', new DefaultValuePipe(20), ParseIntPipe) size: number = 20,
-    @Query('start_date') startDate?: string,
-    @Query('end_date') endDate?: string,
-    @Query('due_start') dueStart?: string,
-    @Query('due_end') dueEnd?: string,
-    @Query('paid_start') paidStart?: string,
-    @Query('paid_end') paidEnd?: string,
-  ) {
-    return this.service.findPaymentRequests(
-      factoryId ? Number(factoryId) : undefined, approvalStatus, page, size, startDate, endDate, dueStart, dueEnd, paidStart, paidEnd);
+  @ApiOperation({ summary: '付款申请列表（工厂+申请日期组合检索；reconcile_id 可按对账单反查）' })
+  findPaymentRequests(@Query() query: QueryPaymentRequestDto) {
+    return this.service.findPaymentRequests(query);
   }
 
   @Patch('requests/:id/submit')

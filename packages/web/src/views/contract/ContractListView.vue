@@ -249,7 +249,8 @@ async function loadRefs() {
 onMounted(() => {
   load();
   loadRefs();
-  // 从对账"来源合同"链接跳转过来时（query.open=合同ID）自动打开该合同详情
+  // query.open=合同ID 自动开详情弹框。站内已无处产生该链接（对账「来源合同」改跳
+  // ContractEdit 的 :id 路由，见 ReconciliationListView.goContract），仅留作旧链接兼容。
   if (route.query.open) viewDetail({ id: Number(route.query.open) });
 });
 

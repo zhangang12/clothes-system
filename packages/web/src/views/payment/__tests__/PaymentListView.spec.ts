@@ -7,6 +7,17 @@ import { paymentStubs } from '@/test-utils/el-stubs';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole } from '@i9/types';
 
+// ── Mock vue-router ─────────────────────────────────────────────────────────
+// 组件用 useRoute 读 :id / query 决定是否自动打开详情；不 mock 的话 useRoute() 返回
+// undefined，onMounted 里读 route.params 会抛（写法同 LoginView.spec）。
+const mockPush = vi.fn();
+const mockReplace = vi.fn();
+const mockRoute: any = { params: {}, query: {} };
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
+  useRoute: () => mockRoute,
+}));
+
 // ── API mocks ────────────────────────────────────────────────────────────────
 const mockPrepayList = vi.fn();
 const mockPrepayGetBalance = vi.fn();
@@ -104,6 +115,9 @@ describe('PaymentListView', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    // 用例会改 mockRoute，不复位会串味
+    mockRoute.params = {};
+    mockRoute.query = {};
   });
 
   // ─────────────────────────────────────── tabs render
@@ -339,5 +353,28 @@ describe('PaymentListView', () => {
     await wrapper.findAll('button').find((b) => b.text() === '付款')!.trigger('click');
     await vi.waitFor(() => expect(wrapper.text()).toContain('银行转账'));
     expect(wrapper.text()).toContain('首批');
+  });
+
+  // ────────────── 单据间快速跳转：对账单详情 →「付款申请」按来源对账单过滤
+  it('带 reconcile_id 跳来时切到付款申请页签并按该对账单过滤', async () => {
+    mockRoute.query = { tab: 'request', reconcile_id: '33' };
+    mountView(UserRole.ADMIN);
+    await vi.waitFor(() =>
+      expect(mockPRList).toHaveBeenCalledWith(expect.objectContaining({ reconcile_id: 33 })),
+    );
+  });
+
+  it('过滤生效时给出可见的来源提示（隐藏的过滤条件会让人以为查不到数据）', async () => {
+    mockRoute.query = { reconcile_id: '33' };
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(wrapper.text()).toContain('仅显示对账单 #33 关联的付款申请'));
+  });
+
+  it('直接进付款页时不带 reconcile_id、不显示来源提示', async () => {
+    mockRoute.query = {};
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(mockPRList).toHaveBeenCalled());
+    expect(mockPRList).toHaveBeenCalledWith(expect.objectContaining({ reconcile_id: undefined }));
+    expect(wrapper.text()).not.toContain('仅显示对账单');
   });
 });

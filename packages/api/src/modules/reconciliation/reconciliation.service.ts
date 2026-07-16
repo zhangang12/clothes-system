@@ -228,12 +228,13 @@ export class ReconciliationService {
   }
 
   async findAll(query: QueryReconciliationDto) {
-    const { page = 1, size = 20, keyword, type, status, factory_id } = query;
+    const { page = 1, size = 20, keyword, type, status, factory_id, contract_id } = query;
     const base: FindOptionsWhere<Reconciliation> = {
       deleted: 0,
       ...(type !== undefined && { type }),
       ...(status !== undefined && { status }),
       ...(factory_id !== undefined && { factory_id }),
+      ...(contract_id !== undefined && { contract_id }), // 合同→对账反查（关联单据 chip）
     };
     // 支持按对账单号或款号检索（设计稿 对账 A2）
     const where: FindOptionsWhere<Reconciliation> | FindOptionsWhere<Reconciliation>[] = keyword
@@ -284,7 +285,21 @@ export class ReconciliationService {
     const expenseItems = reconciliation.type === ReconcileType.NO_CONTRACT
       ? await this.expenseItemRepo.find({ where: { reconcile_id: id } })
       : [];
-    return { ...reconciliation, shipments, laborItems, expenseItems };
+    // 裸ID→名称/单据号回显（列表已补，详情此前未补导致导出显示「工厂#12」）：
+    // 上游合同号（关联单据 chip）+ 工厂名；关联行已删→降级 null，不让详情 500
+    let contract_no: string | null = null;
+    let factory_name: string | null = null;
+    if (reconciliation.contract_id) {
+      const rows = await this.dataSource.query(
+        'SELECT contract_no FROM contract WHERE id = ?', [reconciliation.contract_id]);
+      contract_no = rows?.[0]?.contract_no ?? null;
+    }
+    if (reconciliation.factory_id) {
+      const rows = await this.dataSource.query(
+        'SELECT COALESCE(short_name, name) nm FROM factory WHERE id = ?', [reconciliation.factory_id]);
+      factory_name = rows?.[0]?.nm ?? null;
+    }
+    return { ...reconciliation, shipments, laborItems, expenseItems, contract_no, factory_name };
   }
 
   // 业务员初审提交：草稿→待主管复核（设计稿 对账 B1/C1 二级审批）

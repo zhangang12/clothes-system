@@ -558,6 +558,7 @@
 
 <script setup lang="ts">
 import { errToast } from '@/api';
+import { useRoute } from 'vue-router';
 import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { fmtDateTime } from '@/utils/format';
@@ -579,6 +580,7 @@ const canCreate = computed(() => canEdit.value || authStore.hasRole(UserRole.BUS
 
 const loading = ref(false);
 const saving = ref(false);
+const route = useRoute();
 const list = ref<any[]>([]);
 const total = ref(0);
 const stats = reactive({ pending: 0, loss: 0, recalc: 0 });
@@ -621,7 +623,15 @@ const orders = ref<any[]>([]);
 async function loadOrders() {
   try { orders.value = ((await orderApi.list({ page: 1, size: 100 })) as any).data ?? []; } catch { orders.value = []; }
 }
-onMounted(() => { load(); loadOrders(); });
+onMounted(async () => {
+  await Promise.all([load(), loadOrders()]);
+  // 别的单据跳过来(/settlements/:id/view):自动打开该单详情
+  const rid = Number(route.params.id);
+  if (rid) {
+    try { await viewDetail(rid); }
+    catch (e: any) { errToast(e?.response?.data?.msg ?? '结算单不存在或已删除'); }
+  }
+});
 
 // Detail
 const detailVisible = ref(false);
