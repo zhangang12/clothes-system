@@ -53,10 +53,10 @@
         finished-text="没有更多了"
         @load="loadMore"
       >
-        <div v-for="c in list" :key="c.id" class="contract-card" @click="goDetail(c.id)">
+        <div v-for="c in list" :key="c.id" class="contract-card" :class="'edge-' + c.portal_status" @click="goDetail(c.id)">
           <div class="card-header">
             <span class="contract-no">{{ c.contract_no }}</span>
-            <van-tag :type="statusTagType(c.portal_status)" size="medium">{{ statusLabel(c.portal_status) }}</van-tag>
+            <span class="status-pill" :class="'st-' + c.portal_status">{{ statusLabel(c.portal_status) }}</span>
           </div>
           <div class="card-body">
             <span class="type-label">{{ typeLabel(c.type) }}</span>
@@ -149,9 +149,6 @@ const PAGE_SIZE = 20;
 function statusLabel(s: string) {
   return ({ PUSHED: '待盖章', STAMPED: '待发货', SHIPPING: '待对账', RECONCILED: '待开票', COMPLETED: '已完成' } as Record<string, string>)[s] ?? s;
 }
-function statusTagType(s: string): any {
-  return ({ PUSHED: 'warning', STAMPED: 'primary', SHIPPING: 'success', RECONCILED: '', COMPLETED: 'success' } as Record<string, string>)[s] ?? 'default';
-}
 function typeLabel(t: string) {
   return ({ MATERIAL: '面料合同', PROCESS: '加工合同', SUPPLEMENT: '补料合同' } as Record<string, string>)[t] ?? t;
 }
@@ -193,21 +190,43 @@ onMounted(() => {});
 </script>
 
 <style scoped>
-.portal-contracts { background: #f5f5f5; min-height: 100vh; }
+.portal-contracts { background: var(--dx-canvas, #FBF8F2); min-height: 100vh; padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px)); }
 .contract-card {
   background: #fff;
   margin: 12px;
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 14px 16px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  border-left: 4px solid transparent;
+  box-shadow: 0 1px 4px rgba(35, 52, 58, 0.06);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
+.contract-card:active { transform: scale(0.985); }
+/* 左侧色条 = 当前阶段颜色，翻列表时一眼分层 */
+.edge-PUSHED { border-left-color: var(--dx-amber, #C8901E); }
+.edge-STAMPED { border-left-color: var(--dx-rust, #D17A40); }
+.edge-SHIPPING { border-left-color: var(--dx-green, #2E8B78); }
+.edge-RECONCILED { border-left-color: #4A6572; }
+.edge-COMPLETED { border-left-color: #C4C8CC; }
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
 }
-.contract-no { font-size: 15px; font-weight: 600; color: #323233; }
+.contract-no { font-size: 15px; font-weight: 600; color: #23343A; }
+/* 状态徽章：品牌色胶囊(浅底深字) */
+.status-pill {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  flex: none;
+}
+.st-PUSHED { background: #FBF1DA; color: #A87715; }
+.st-STAMPED { background: #FBE8DD; color: #B86530; }
+.st-SHIPPING { background: #E8F4F0; color: #24705F; }
+.st-RECONCILED { background: #E9EEF1; color: #4A6572; }
+.st-COMPLETED { background: #F1F2F3; color: #85888C; }
 .card-body {
   display: flex;
   justify-content: space-between;
@@ -216,7 +235,7 @@ onMounted(() => {});
 }
 .type-label { font-size: 13px; color: #646566; }
 .style-nos { font-size: 12px; color: #666; margin: 0 8px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.amount { font-size: 16px; font-weight: 600; color: #ee0a24; }
+.amount { font-size: 16px; font-weight: 600; color: var(--dx-rust, #D17A40); font-variant-numeric: tabular-nums; }
 .card-footer {
   display: flex;
   justify-content: space-between;

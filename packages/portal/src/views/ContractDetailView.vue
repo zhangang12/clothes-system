@@ -13,7 +13,7 @@
 
     <!-- 状态徽标 + 四步顺序锁定进度（供应商门户设计稿 §B：🔖盖章→📦发货→🧾对账→💵开票）-->
     <div class="status-banner">当前状态：<b>{{ portalStatusLabel(contract.portal_status) }}</b></div>
-    <van-steps :active="currentStep" active-color="#1E3A5F" class="steps-bar">
+    <van-steps :active="currentStep" active-color="#2E8B78" class="steps-bar">
       <van-step>🔖 盖章</van-step>
       <van-step>📦 发货</van-step>
       <van-step>🧾 对账</van-step>
@@ -659,7 +659,12 @@ onMounted(load);
   min-height: 100vh;
   padding-bottom: calc(210px + var(--van-tabbar-height, 50px) + env(safe-area-inset-bottom, 0px));
 }
-.status-banner { background: #1E3A5F; color: #fff; padding: 10px 16px; font-size: 14px; }
+.status-banner {
+  background:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.03) 0 2px, transparent 2px 6px),
+    linear-gradient(120deg, #23343A, #2E8B78 160%);
+  color: #fff; padding: 10px 16px; font-size: 14px;
+}
 .status-banner b { color: #F5EDDC; }
 .steps-bar { background: #fff; margin-bottom: 12px; padding: 16px 0; }
 .amount-value { color: #D17A40; font-weight: 600; }

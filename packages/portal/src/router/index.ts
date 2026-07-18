@@ -14,7 +14,9 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true },
     children: [
       { path: 'contracts', name: 'PortalContracts', component: () => import('../views/ContractListView.vue') },
-      { path: 'contracts/:id', name: 'PortalContractDetail', component: () => import('../views/ContractDetailView.vue') },
+      // ownNav: 详情页自带返回导航栏，布局的门户导航栏让位（否则双导航叠放）
+      { path: 'contracts/:id', name: 'PortalContractDetail', component: () => import('../views/ContractDetailView.vue'), meta: { ownNav: true } },
+      { path: 'mine', name: 'PortalMine', component: () => import('../views/MineView.vue') },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/portal/login' },

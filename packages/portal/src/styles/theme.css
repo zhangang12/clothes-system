@@ -1,0 +1,75 @@
+/* =============================================================================
+ * DATEX 供应商门户 — 品牌主题（墨绿 + 炭黑 + 棉麻米白）
+ * 覆盖 Vant 4 主题变量，须在 vant/lib/index.css 之后引入。
+ * 说明：门户走 DATEX 对外品牌色（墨绿 #2E8B78，与门户登录页/官方 logo 一致），
+ * 与内部管理端的靛蓝 denim 有意区分——供应商看到的是「DATEX 的门户」，
+ * 不是「工厂管理系统的手机版」。
+ * ========================================================================== */
+
+:root {
+  /* —— DATEX 品牌令牌 —— */
+  --dx-green: #2E8B78;      /* 墨绿 主色 */
+  --dx-green-d: #24705F;
+  --dx-ink: #23343A;        /* 炭黑 导航/标题 */
+  --dx-ink-d: #1A272C;
+  --dx-canvas: #FBF8F2;     /* 米白 页面底 */
+  --dx-rust: #D17A40;       /* 铁锈橙 金额/强调 */
+  --dx-amber: #C8901E;      /* 琥珀 待办 */
+  --dx-red: #C04042;        /* 朱砂 驳回/危险 */
+  --dx-gray: #6F7178;
+
+  /* —— Vant 变量覆盖 —— */
+  --van-primary-color: #2E8B78;
+  --van-danger-color: #C04042;
+  --van-warning-color: #C8901E;
+  --van-nav-bar-background: #23343A;
+  --van-nav-bar-title-text-color: #fff;
+  --van-nav-bar-icon-color: #fff;
+  --van-nav-bar-text-color: #fff;
+  --van-tabbar-item-active-color: #2E8B78;
+  --van-tabs-bottom-bar-color: #2E8B78;
+  --van-tab-active-text-color: #23343A;
+  --van-button-primary-background: #2E8B78;
+  --van-button-primary-border-color: #2E8B78;
+  --van-cell-group-title-color: #6F7178;
+  --van-font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+}
+
+body {
+  background: var(--dx-canvas);
+  font-family: var(--van-font-family);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 分组卡片：更大的圆角 + 柔和阴影，标题加墨绿短标 */
+.van-cell-group--inset {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(35, 52, 58, 0.05);
+}
+.van-cell-group__title--inset {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.van-cell-group__title--inset::before {
+  content: '';
+  width: 3px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--dx-green);
+}
+
+/* 主按钮按压反馈 */
+.van-button--primary:active,
+.van-button--success:active { opacity: 0.85; }
+
+/* 弹窗圆角与标题 */
+.van-dialog { border-radius: 14px; }
+.van-dialog__header { font-weight: 600; color: var(--dx-ink); }
+
+/* 步骤条文案颜色微调 */
+.van-step--horizontal .van-step__title { font-size: 12px; }
+
+/* iOS 底部安全区由各吸底元素自带 env() 处理，这里只兜页面底色 */
