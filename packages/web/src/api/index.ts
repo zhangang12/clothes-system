@@ -1,6 +1,7 @@
 import axios, { AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { ElMessage } from 'element-plus';
 import { progressStart, progressDone } from '../utils/progress';
+import { useTabsStore } from '../stores/tabs';
 
 // 错误提示去重:全局拦截器与各视图 catch 可能对同一错误各弹一次,800ms 内相同文案只显示一次
 let _lastErr = { m: '', t: 0 };
@@ -44,7 +45,10 @@ http.interceptors.response.use(
     const status = err.response?.status;
     const onLogin = window.location.pathname.endsWith('/login');
     if (status === 401 && !onLogin) {
-      // 登录态失效:清理并跳登录
+      // 登录态失效:清理并跳登录。页签存 sessionStorage，整页刷新清不掉，
+      // 必须显式 reset，否则换账号登录会看到上一个人开的页签。
+      // （reset 幂等；pinia 未就绪的极端场景下静默跳过，不挡登出跳转）
+      try { useTabsStore().reset(); } catch { /* 忽略 */ }
       localStorage.removeItem('token');
       window.location.href = '/login';
     } else {

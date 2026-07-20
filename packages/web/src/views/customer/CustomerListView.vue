@@ -289,7 +289,9 @@ async function doRevoke(g: any) {
 function exportCsv() {
   const cols = ['customer_no', 'name', 'type', 'trade_country', 'price_terms', 'grade', 'status'];
   const head = ['编号', '客户名称', '类型', '国别', '价格条款', '信用', '状态'];
-  const rows = list.value.map((r) => cols.map((c) => `"${r[c] ?? ''}"`).join(','));
+  // 转义同 utils/exportAll：内嵌双引号翻倍，防破列
+  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = list.value.map((r) => cols.map((c) => esc(r[c])).join(','));
   const csv = '﻿' + [head.join(','), ...rows].join('\n');
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
   const a = document.createElement('a'); a.href = url; a.download = '客户资料.csv'; a.click();

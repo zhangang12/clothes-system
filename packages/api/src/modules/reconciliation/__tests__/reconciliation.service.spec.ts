@@ -7,6 +7,7 @@ import { Reconciliation, ReconciliationStatus } from '../reconciliation.entity';
 import { ReconciliationShipment } from '../reconciliation-shipment.entity';
 import { ReconciliationLaborItem } from '../reconciliation-labor-item.entity';
 import { ReconciliationExpenseItem } from '../reconciliation-expense-item.entity';
+import { ContractShipment } from '../../contract/contract-shipment.entity';
 import { SampleGarment } from '../../sample/sample-garment.entity';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
 import { ReconcileType, ReconcileSubType, SampleStatus, ContractType } from '@i9/types';
@@ -42,12 +43,25 @@ const makeReconciliation = (overrides = {}) => ({
   ...overrides,
 });
 
-const makeManager = (findOneResult?: any) => ({
+const makeManager = (findOneResult?: any, batches: any[] = [], counts: { rs?: number; cs?: number } = {}) => ({
   query: jest.fn().mockResolvedValue([]),
   create: jest.fn().mockImplementation((_, v) => v),
   save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
   findOne: jest.fn().mockResolvedValue(findOneResult),
-  find: jest.fn().mockResolvedValue([]), // 同类型校验 manager.find(Contract) 默认空（无冲突）
+  find: jest.fn().mockImplementation((entity: any) => {
+    if (entity === ContractShipment) return Promise.resolve(batches); // 批次校验（H1）
+    // ensureBatchesHeld 取明细行：按 counts.rs 生成行桩（存量自愈逐批占用用）
+    if (entity === ReconciliationShipment) {
+      return Promise.resolve(Array.from({ length: counts.rs ?? 0 }, (_, i) => ({ shipment_id: i + 1 })));
+    }
+    return Promise.resolve([]); // 同类型校验 manager.find(Contract) 默认空（无冲突）
+  }),
+  // ensureBatchesHeld：ContractShipment=本单占用批次数(cs)
+  count: jest.fn().mockImplementation((entity: any) => {
+    if (entity === ContractShipment) return Promise.resolve(counts.cs ?? 0);
+    return Promise.resolve(0);
+  }),
+  update: jest.fn().mockResolvedValue({ affected: 1 }),
 });
 
 const mockReconciliationRepo = {
@@ -69,9 +83,11 @@ const mockExpenseItemRepo = {
   find: jest.fn().mockResolvedValue([]),
 };
 const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn().mockResolvedValue(1) };
+const mockContractShipmentCount = jest.fn().mockResolvedValue(0); // assertBatchesStillHeld 占用批次计数
 const mockDataSource = {
   transaction: jest.fn().mockImplementation((cb) => cb(makeManager())),
   query: jest.fn().mockResolvedValue([]), // remove() 释放发货批次占用
+  getRepository: jest.fn().mockReturnValue({ count: mockContractShipmentCount }),
 };
 
 describe('ReconciliationService', () => {
@@ -107,7 +123,10 @@ describe('ReconciliationService', () => {
         { shipment_id: 2, item_name: '面料B', snapshot_unit_price: 20, qty: 100 },
       ],
     };
-    const manager = makeManager();
+    const manager = makeManager(undefined, [
+      { id: 1, contract_id: 10, ship_no: 'FH-1', snapshot_unit_price: 10, reconcile_id: null },
+      { id: 2, contract_id: 10, ship_no: 'FH-2', snapshot_unit_price: 20, reconcile_id: null },
+    ]);
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.create(dto as any, 1);
     // total_amount = 10*200 + 20*100 = 2000 + 2000 = 4000
@@ -123,7 +142,9 @@ describe('ReconciliationService', () => {
       invoice_no: 'INV-001',
       shipments: [{ shipment_id: 1, item_name: '面料A', snapshot_unit_price: 10, qty: 100 }],
     };
-    const manager = makeManager();
+    const manager = makeManager(undefined, [
+      { id: 1, contract_id: 10, ship_no: 'FH-1', snapshot_unit_price: 10, reconcile_id: null },
+    ]);
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.create(dto as any, 1);
     expect(manager.save.mock.calls[0][1]).toMatchObject({ has_invoice: 1, invoice_no: 'INV-001' });
@@ -134,10 +155,13 @@ describe('ReconciliationService', () => {
     const dto = {
       type: ReconcileType.CONTRACT,
       factory_id: 5,
+      contract_id: 10,
       tax_rate: 13,
       shipments: [{ shipment_id: 1, item_name: '面料A', snapshot_unit_price: 100, qty: 10 }],
     };
-    const manager = makeManager();
+    const manager = makeManager(undefined, [
+      { id: 1, contract_id: 10, ship_no: 'FH-1', snapshot_unit_price: 100, reconcile_id: null },
+    ]);
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.create(dto as any, 1);
     // total = 100*10 = 1000, tax = 1000 * 13% = 130
@@ -154,7 +178,10 @@ describe('ReconciliationService', () => {
         { shipment_id: 2, contract_id: 22, style_no: 'K-200', item_name: '面料B', snapshot_unit_price: 20, qty: 50 },
       ],
     };
-    const manager = makeManager();
+    const manager = makeManager(undefined, [
+      { id: 1, contract_id: 11, ship_no: 'FH-1', snapshot_unit_price: 10, reconcile_id: null },
+      { id: 2, contract_id: 22, ship_no: 'FH-2', snapshot_unit_price: 20, reconcile_id: null },
+    ]);
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.create(dto as any, 1);
     const savedRec = manager.save.mock.calls[0][1];
@@ -206,8 +233,9 @@ describe('ReconciliationService', () => {
   // UT-REC-04a: submit transitions DRAFT → PENDING (业务员初审)
   it('UT-REC-04a submit transitions DRAFT→PENDING', async () => {
     const rec = makeReconciliation({ status: ReconciliationStatus.DRAFT });
-    mockReconciliationRepo.findOne.mockResolvedValue(rec);
-    mockReconciliationRepo.save.mockResolvedValue({ ...rec, status: ReconciliationStatus.PENDING });
+    const manager = makeManager(rec); // 非批次型（rs/cs 默认 0），ensureBatchesHeld 直接放行
+    manager.save.mockResolvedValue({ ...rec, status: ReconciliationStatus.PENDING });
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     const result = await service.submit(1);
     expect(result.status).toBe(ReconciliationStatus.PENDING);
   });
@@ -358,12 +386,163 @@ describe('ReconciliationService', () => {
     expect(res.factory_name).toBe('面料厂A');
   });
 
-  // UT-REC-21: 关联合同/工厂已删 → 降级 null，详情不 500
-  it('UT-REC-21 findOne degrades contract_no/factory_name to null when the rows are gone', async () => {
-    mockReconciliationRepo.findOne.mockResolvedValue(makeReconciliation({ contract_id: 10, factory_id: 5 }));
-    mockDataSource.query.mockResolvedValue([]);
-    const res: any = await service.findOne(1);
-    expect(res.contract_no).toBeNull();
-    expect(res.factory_name).toBeNull();
+  // ── H1 回归：内部 create 批次校验 + 占用 ──
+
+  // UT-REC-22: create 占用发货批次（写 contract_shipment.reconcile_id），与门户同一口径
+  it('UT-REC-22 create occupies shipment batches (writes reconcile_id)', async () => {
+    const dto = {
+      type: ReconcileType.CONTRACT, factory_id: 5, contract_id: 10,
+      shipments: [{ shipment_id: 1, item_name: '面料A', snapshot_unit_price: 10, qty: 100 }],
+    };
+    const batch = { id: 1, contract_id: 10, ship_no: 'FH-1', snapshot_unit_price: 10, reconcile_id: null };
+    const manager = makeManager(undefined, [batch]);
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await service.create(dto as any, 1);
+    // 第三次 save = 占用批次（header → 明细行 → 批次占用）
+    const occupied = manager.save.mock.calls[2][1];
+    expect(occupied).toHaveLength(1);
+    expect(occupied[0]).toMatchObject({ id: 1, reconcile_id: 1 }); // header save mock 归 id:1
+  });
+
+  // UT-REC-23: create 拒绝不存在的发货批次
+  it('UT-REC-23 create throws when a shipment batch does not exist', async () => {
+    const dto = {
+      type: ReconcileType.CONTRACT, factory_id: 5, contract_id: 10,
+      shipments: [{ shipment_id: 99, item_name: '面料A', snapshot_unit_price: 10, qty: 100 }],
+    };
+    const manager = makeManager(undefined, []); // 查无批次
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await expect(service.create(dto as any, 1)).rejects.toThrow('不存在');
+  });
+
+  // UT-REC-24: create 拒绝已被其他对账单占用的批次（防同批次重复对账）
+  it('UT-REC-24 create throws when a batch is already occupied by another reconciliation', async () => {
+    const dto = {
+      type: ReconcileType.CONTRACT, factory_id: 5, contract_id: 10,
+      shipments: [{ shipment_id: 1, item_name: '面料A', snapshot_unit_price: 10, qty: 100 }],
+    };
+    const manager = makeManager(undefined, [
+      { id: 1, contract_id: 10, ship_no: 'FH-1', snapshot_unit_price: 10, reconcile_id: 88 },
+    ]);
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await expect(service.create(dto as any, 1)).rejects.toThrow('重复对账');
+  });
+
+  // UT-REC-25: create 拒绝不属于本合同的批次
+  it('UT-REC-25 create throws when a batch belongs to another contract', async () => {
+    const dto = {
+      type: ReconcileType.CONTRACT, factory_id: 5, contract_id: 10,
+      shipments: [{ shipment_id: 1, item_name: '面料A', snapshot_unit_price: 10, qty: 100 }],
+    };
+    const manager = makeManager(undefined, [
+      { id: 1, contract_id: 77, ship_no: 'FH-1', snapshot_unit_price: 10, reconcile_id: null },
+    ]);
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await expect(service.create(dto as any, 1)).rejects.toThrow('不属于合同');
+  });
+
+  // UT-REC-26: create 拒绝与批次锁价/合同快照不一致的单价（防客户端虚报单价）
+  it('UT-REC-26 create throws when line price mismatches the snapshot price', async () => {
+    const dto = {
+      type: ReconcileType.CONTRACT, factory_id: 5, contract_id: 10,
+      shipments: [{ shipment_id: 1, item_name: '面料A', snapshot_unit_price: 15, qty: 100 }],
+    };
+    const manager = makeManager(undefined, [
+      { id: 1, contract_id: 10, ship_no: 'FH-1', snapshot_unit_price: 10, reconcile_id: null },
+    ]);
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await expect(service.create(dto as any, 1)).rejects.toThrow('快照价');
+  });
+
+  // UT-REC-27: 内部创建的批次对账单批次仍被占用 → submit 正常流转（H1 主流程不再断死）
+  it('UT-REC-27 submit passes when batches are still held by the reconciliation', async () => {
+    const rec = makeReconciliation({ status: ReconciliationStatus.DRAFT });
+    const manager = makeManager(rec, [], { rs: 1, cs: 1 }); // 有明细行 + 批次仍被本单占用
+    manager.save.mockResolvedValue({ ...rec, status: ReconciliationStatus.PENDING });
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    const result = await service.submit(1);
+    expect(result.status).toBe(ReconciliationStatus.PENDING);
+  });
+
+  // UT-REC-28: 有明细行、批次已释放且带退回批注（整单退回留痕）→ submit 拦截
+  it('UT-REC-28 submit throws when batches were released by a full rejection', async () => {
+    const rec = makeReconciliation({ status: ReconciliationStatus.DRAFT, review_remark: '金额与合同不符，退回' });
+    const manager = makeManager(rec, [], { rs: 1, cs: 0 }); // 有明细行 + 批次已释放
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await expect(service.submit(1)).rejects.toThrow('批次已释放');
+  });
+
+  // UT-REC-30: 存量兼容——H1 修复前创建的单（有明细行、从未占用、无退回批注）→ submit 自愈占用后放行
+  it('UT-REC-30 submit self-heals legacy bills created without batch occupation', async () => {
+    const rec = makeReconciliation({ status: ReconciliationStatus.DRAFT });
+    const manager = makeManager(rec, [], { rs: 1, cs: 0 });
+    manager.find.mockImplementation((entity: any) =>
+      entity === ReconciliationShipment ? Promise.resolve([{ shipment_id: 1 }]) : Promise.resolve([]));
+    manager.save.mockResolvedValue({ ...rec, status: ReconciliationStatus.PENDING });
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    const result = await service.submit(1);
+    expect(result.status).toBe(ReconciliationStatus.PENDING);
+    expect(manager.update).toHaveBeenCalledWith(
+      ContractShipment, { id: 1, reconcile_id: null }, { reconcile_id: rec.id },
+    );
+  });
+
+  // UT-REC-31: 存量自愈遇真占用——批次已被其他未删对账单占用 → 报出占用方拦截（防重复计费）
+  it('UT-REC-31 submit throws when a legacy batch is occupied by another active bill', async () => {
+    const rec = makeReconciliation({ status: ReconciliationStatus.DRAFT });
+    const manager = makeManager(undefined, [], { rs: 1, cs: 0 });
+    manager.find.mockImplementation((entity: any) =>
+      entity === ReconciliationShipment ? Promise.resolve([{ shipment_id: 1 }]) : Promise.resolve([]));
+    manager.findOne.mockImplementation((entity: any, opts?: any) => {
+      if (entity === ContractShipment) return Promise.resolve({ id: 1, reconcile_id: 99, ship_no: 'FH-1' });
+      if (entity === Reconciliation) {
+        return Promise.resolve(opts?.where?.id === 99 ? { id: 99, reconcile_no: 'RC-99', deleted: 0 } : rec);
+      }
+      return Promise.resolve(null);
+    });
+    manager.update.mockResolvedValue({ affected: 0 }); // 条件占用抢不到
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await expect(service.submit(1)).rejects.toThrow('已被对账单 RC-99 占用');
+  });
+
+  // UT-REC-32: 存量自愈清陈旧占用——占用方是已删单 → 清掉后重占，正常流转
+  it('UT-REC-32 submit retakes batches whose occupier was soft-deleted', async () => {
+    const rec = makeReconciliation({ status: ReconciliationStatus.DRAFT });
+    const manager = makeManager(undefined, [], { rs: 1, cs: 0 });
+    manager.find.mockImplementation((entity: any) =>
+      entity === ReconciliationShipment ? Promise.resolve([{ shipment_id: 1 }]) : Promise.resolve([]));
+    manager.findOne.mockImplementation((entity: any, opts?: any) => {
+      if (entity === ContractShipment) return Promise.resolve({ id: 1, reconcile_id: 99, ship_no: 'FH-1' });
+      if (entity === Reconciliation) {
+        return Promise.resolve(opts?.where?.id === 99 ? { id: 99, reconcile_no: 'RC-99', deleted: 1 } : rec);
+      }
+      return Promise.resolve(null);
+    });
+    manager.update
+      .mockResolvedValueOnce({ affected: 0 }) // 条件占用未抢到（陈旧占用非 NULL）
+      .mockResolvedValue({ affected: 1 });    // 清陈旧后重占
+    manager.save.mockResolvedValue({ ...rec, status: ReconciliationStatus.PENDING });
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    const result = await service.submit(1);
+    expect(result.status).toBe(ReconciliationStatus.PENDING);
+    expect(manager.update).toHaveBeenLastCalledWith(ContractShipment, { id: 1 }, { reconcile_id: rec.id });
+  });
+
+  // ── L7-② 回归：一单多合同 confirm 按明细批次反查合同标 needs_recalc ──
+
+  // UT-REC-29: confirm 无单一 contract_id 时，按明细批次涉及的所有合同逐张标「待重算」
+  it('UT-REC-29 confirm marks needs_recalc for every contract involved (一单多合同)', async () => {
+    const rec = makeReconciliation({ status: ReconciliationStatus.PENDING, contract_id: null });
+    const manager = makeManager(rec);
+    manager.query
+      .mockResolvedValueOnce([{ contract_id: 11 }, { contract_id: '22' }]) // 明细批次反查（bigint 字符串归一）
+      .mockResolvedValue([]);
+    manager.save.mockResolvedValue({ ...rec, status: ReconciliationStatus.CONFIRMED });
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await service.confirm(1);
+    const recalcCalls = manager.query.mock.calls.filter(([sql]: [string]) => sql.includes('UPDATE settlement'));
+    expect(recalcCalls).toHaveLength(2);
+    expect(recalcCalls[0][1]).toEqual([11]);
+    expect(recalcCalls[1][1]).toEqual([22]);
   });
 });

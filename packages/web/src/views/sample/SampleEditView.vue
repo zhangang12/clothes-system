@@ -365,9 +365,23 @@ async function loadRefs() {
   // 制版师下拉(role=PATTERNMAKER);加载失败/无数据 → 降级为文本输入
   try {
     const us: any = await sampleApi.listPatternmakers();
-    pmUsers.value = (us.data ?? us) ?? [];
+    // id 归一成数字:主键 bigint 经 mysql2 出来是字符串,而 load() 回显用 Number(d.patternmaker_id),
+    // 两边类型不一致时 el-select 匹配不到选项 → 回显裸 ID(归一惯例同 FactorySelect)
+    pmUsers.value = (((us.data ?? us) ?? []) as any[]).map((u) => ({ ...u, id: Number(u.id) }));
     if (!pmUsers.value.length) pmLoadFailed.value = true;
   } catch { pmLoadFailed.value = true; }
+}
+
+// 选项 size:100 截断兜底:当前选中值可能不在已载入的前 100 条选项里 → 按 id 单独补拉入选项,避免回显裸 ID;
+// 补拉失败(机密未授权/记录已删)则维持原样,最多回显裸 ID,与修复前行为一致,不阻断页面
+async function ensureRefOption(options: any[], id: unknown) {
+  if (id === null || id === undefined || id === '') return;
+  if (options.some((o) => String(o.id) === String(id))) return;
+  try {
+    const res: any = await customerApi.get(Number(id));
+    const c = res.data ?? res;
+    if (c?.id !== null && c?.id !== undefined) options.unshift(c);
+  } catch { /* 无选项可补,维持现状 */ }
 }
 
 async function load() {
@@ -398,6 +412,11 @@ async function load() {
       laborAmount: r.labor_amount ?? '', remark: r.remark ?? '',
     })),
   });
+  // 中间商/买家下拉 size:100 截断兜底:当前选中值不在选项里时单独按 id 补拉(见 ensureRefOption)
+  await Promise.all([
+    ensureRefOption(middlemen.value, form.middlemanId),
+    ensureRefOption(buyers.value, form.buyerId),
+  ]);
   void loadRelatedQuotes(); // 不 await:关联单据反查不该拖住主表单
   const vs: any = await sampleApi.getVersionHistory(editId.value);
   versions.value = (vs.data ?? vs) ?? [];

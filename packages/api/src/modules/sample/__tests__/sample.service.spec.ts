@@ -1,7 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { QuoteService } from '../../quote/quote.service';
 import { CustomerService } from '../../customer/customer.service';
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { SampleGarment } from '../sample-garment.entity';
@@ -36,7 +36,11 @@ const mockManager = {
   save: jest.fn().mockImplementation((_e: any, v: any) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: v.id ?? 1 })),
   delete: jest.fn().mockResolvedValue({}),
 };
-const mockDataSource = { transaction: jest.fn((cb: any) => cb(mockManager)) };
+const mockDataSource = {
+  transaction: jest.fn((cb: any) => cb(mockManager)),
+  getRepository: jest.fn(), // patternmakerSave 指派校验回查 sys_user
+};
+const mockSysUserRepo = { findOne: jest.fn() };
 
 const MATERIALS = [{ itemName: '32S 全棉府绸', part: '主面料' }];
 
@@ -51,6 +55,8 @@ describe('SampleService', () => {
     mockCustomerRepo.findOne.mockResolvedValue({ id: 1, deleted: 0, name: '中间商A', customer_no: 'CN001' });
     mockQuoteRepo.find.mockResolvedValue([]);
     mockDataSource.transaction.mockImplementation((cb: any) => cb(mockManager));
+    mockDataSource.getRepository.mockReturnValue(mockSysUserRepo);
+    mockSysUserRepo.findOne.mockResolvedValue({ id: 7, role: 'PATTERNMAKER' });
     const module = await Test.createTestingModule({
       providers: [
         SampleService,
@@ -128,6 +134,30 @@ describe('SampleService', () => {
     it('UT-SAM-05: piece without unit price throws', async () => {
       mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.SAMPLING, version: 1, deleted: 0 });
       await expect(service.patternmakerSave(1, { pieceCount: 3 } as any, 7)).rejects.toThrow(BadRequestException);
+    });
+
+    it('UT-SAM-15: 非指派版师保存被拒(L2 指派归属校验)', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.SAMPLING, version: 1, deleted: 0, patternmaker_id: 5 });
+      mockSysUserRepo.findOne.mockResolvedValue({ id: 7, role: 'PATTERNMAKER' });
+      await expect(service.patternmakerSave(1, { pieceCount: 3, laborUnitPrice: 50 } as any, 7))
+        .rejects.toThrow(ForbiddenException);
+      expect(mockRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('UT-SAM-16: 指派版师本人可保存(bigint 字符串 id 归一匹配)', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.SAMPLING, version: 1, deleted: 0, patternmaker_id: '5' });
+      mockSysUserRepo.findOne.mockResolvedValue({ id: 5, role: 'PATTERNMAKER' });
+      await service.patternmakerSave(1, { pieceCount: 3, laborUnitPrice: 50 } as any, 5);
+      expect(mockRepo.save).toHaveBeenCalledWith(expect.objectContaining({
+        piece_count: 3, labor_amount: 150, status: SampleStatus.RECONCILED,
+      }));
+    });
+
+    it('UT-SAM-17: 管理员代保存不受指派限制', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.SAMPLING, version: 1, deleted: 0, patternmaker_id: 5 });
+      mockSysUserRepo.findOne.mockResolvedValue({ id: 1, role: 'ADMIN' });
+      await service.patternmakerSave(1, { pieceCount: 3, laborUnitPrice: 50 } as any, 1);
+      expect(mockRepo.save).toHaveBeenCalled();
     });
   });
 

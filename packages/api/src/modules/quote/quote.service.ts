@@ -139,6 +139,12 @@ export class QuoteService {
         buyer_id: Raw((a) => `(${a} IS NULL OR ${a} IN (${set.join(',')}))`),
       });
     }
+    // 查询参数 customer_id 必须与机密可见集求交集(H4):不可见客户 → 强制空结果(In([0])),绝不用原值覆盖 secretCond
+    let customerCond: FindOptionsWhere<Quotation> = {};
+    if (customer_id !== undefined) {
+      const allowed = visibleIds === null || visibleIds.map(Number).includes(+customer_id);
+      customerCond = { customer_id: allowed ? customer_id : In([0]) };
+    }
     // 询价日期范围（起/止均含）
     const inquiryCond = inquiry_start && inquiry_end
       ? Between(inquiry_start, inquiry_end)
@@ -150,7 +156,7 @@ export class QuoteService {
       deleted: 0,
       ...secretCond,
       ...(status !== undefined && { status }),
-      ...(customer_id !== undefined && { customer_id }),
+      ...customerCond,
       ...(quote_no && { quote_no: Like(`%${quote_no}%`) }),
       ...(style_no && { style_no: Like(`%${style_no}%`) }),
       ...(middleman_name && { middleman_name: Like(`%${middleman_name}%`) }),
@@ -210,9 +216,20 @@ export class QuoteService {
     return { ...quote, items: outItems, fees, related_orders: relatedOrders, occupied_by_draft };
   }
 
-  async update(id: number, dto: Partial<CreateQuoteDto>): Promise<Quotation> {
+  // 机密可见性断言(H6):所有写操作与 findOne 同一防线——中间商/最终买家任一不可见 → 与「不存在」同响应(防探测,不抛 403 暴露存在性)
+  private async assertVisible(quote: Quotation, user?: { id: number; role?: string }): Promise<void> {
+    const visibleIds = await this.customerService.visibleCustomerIds(user);
+    if (visibleIds === null) return;
+    const set = new Set(visibleIds.map(Number));
+    const hidden = (quote.customer_id && !set.has(+quote.customer_id))
+      || (quote.buyer_id && !set.has(+quote.buyer_id));
+    if (hidden) throw new NotFoundException(`报价单 #${quote.id} 不存在`);
+  }
+
+  async update(id: number, dto: Partial<CreateQuoteDto>, user?: { id: number; role?: string }): Promise<Quotation> {
     const quote = await this.quoteRepo.findOne({ where: { id, deleted: 0 } });
     if (!quote) throw new NotFoundException(`报价单 #${id} 不存在`);
+    await this.assertVisible(quote, user);
     if (![QuoteStatus.DRAFT, QuoteStatus.ADJUSTING].includes(quote.status)) {
       throw new BadRequestException('只有草稿/客户调整状态的报价单可以编辑');
     }
@@ -254,9 +271,10 @@ export class QuoteService {
   }
 
   // 从样衣导入：材料明细 → 报价明细（部位/品名/门幅/颜色/供应商/耗用），独立快照
-  async importFromSample(id: number, sampleId: number): Promise<Quotation> {
+  async importFromSample(id: number, sampleId: number, user?: { id: number; role?: string }): Promise<Quotation> {
     const quote = await this.quoteRepo.findOne({ where: { id, deleted: 0 } });
     if (!quote) throw new NotFoundException(`报价单 #${id} 不存在`);
+    await this.assertVisible(quote, user);
     if (![QuoteStatus.DRAFT, QuoteStatus.ADJUSTING].includes(quote.status)) {
       throw new BadRequestException('只有草稿/客户调整状态可从样衣导入');
     }
@@ -324,9 +342,10 @@ export class QuoteService {
   }
 
   // 保存/发出报价：草稿 → 已报价
-  async submitQuote(id: number): Promise<Quotation> {
+  async submitQuote(id: number, user?: { id: number; role?: string }): Promise<Quotation> {
     const quote = await this.quoteRepo.findOne({ where: { id, deleted: 0 } });
     if (!quote) throw new NotFoundException(`报价单 #${id} 不存在`);
+    await this.assertVisible(quote, user);
     if (![QuoteStatus.DRAFT, QuoteStatus.ADJUSTING].includes(quote.status)) {
       throw new BadRequestException('只有草稿/客户调整状态可发出报价');
     }
@@ -353,9 +372,10 @@ export class QuoteService {
   }
 
   // 主管审批（超阈值报价）：待审批 → 已审批，放行报价
-  async approveQuote(id: number, approverId: number): Promise<Quotation> {
+  async approveQuote(id: number, approverId: number, user?: { id: number; role?: string }): Promise<Quotation> {
     const quote = await this.quoteRepo.findOne({ where: { id, deleted: 0 } });
     if (!quote) throw new NotFoundException(`报价单 #${id} 不存在`);
+    await this.assertVisible(quote, user); // 同为写操作，与 H6 其他端点同一防线
     if (quote.approval_status !== ApprovalStatus.PENDING) {
       throw new BadRequestException('该报价无待审批项（未超阈值或已审批）');
     }
@@ -366,9 +386,10 @@ export class QuoteService {
   }
 
   // 客户调整：已报价 → 客户调整
-  async adjust(id: number): Promise<Quotation> {
+  async adjust(id: number, user?: { id: number; role?: string }): Promise<Quotation> {
     const quote = await this.quoteRepo.findOne({ where: { id, deleted: 0 } });
     if (!quote) throw new NotFoundException(`报价单 #${id} 不存在`);
+    await this.assertVisible(quote, user);
     if (quote.status !== QuoteStatus.QUOTED) {
       throw new BadRequestException('只有已报价状态可转客户调整');
     }
@@ -377,17 +398,15 @@ export class QuoteService {
   }
 
   // 转销售合同：已报价/客户调整 → 已成单；关联样衣自动置已成单（B1）；并自动生成订单草稿（含报价明细导入）
-  async toContract(id: number, userId: number) {
+  async toContract(id: number, userId: number, user?: { id: number; role?: string }) {
     const quote = await this.quoteRepo.findOne({ where: { id, deleted: 0 } });
     if (!quote) throw new NotFoundException(`报价单 #${id} 不存在`);
+    await this.assertVisible(quote, user);
     if (![QuoteStatus.QUOTED, QuoteStatus.ADJUSTING].includes(quote.status)) {
       throw new BadRequestException('只有已报价/客户调整状态才可转销售合同');
     }
-    quote.status = QuoteStatus.ORDERED;
-    const saved = await this.quoteRepo.save(quote);
-    if (quote.sample_id) {
-      await this.sampleRepo.update({ id: quote.sample_id, deleted: 0 }, { status: SampleStatus.ORDERED });
-    }
+    // L4:先建订单+导入报价材料,全部成功后才在单个事务内翻转已成单/联动样衣;
+    // 中途失败报价保持原状态可整体重试,杜绝「报价已成单但订单缺失且无法重试」
     // 自动建订单：create 必填仅 customer_id/qty_total；customer_po 暂无客户 PO，用报价单号占位（订单草稿可改）
     const order = await this.orderService.create({
       quote_id: id,
@@ -400,9 +419,24 @@ export class QuoteService {
       // 报价数量不导入订单(总览走查P1#12/ORD A2 决议):留空强制在尺码矩阵补录,矩阵合计回填大货总数
       qty_total: 0,
     } as CreateOrderDto, userId);
-    // 报价明细 → 订单材料明细（快照；importFromQuote 会带出中间商/买家等基础字段）
-    await this.orderService.importFromQuote(order.id, id);
-    return { ...saved, order_id: order.id, order_no: order.order_no };
+    try {
+      // 报价明细 → 订单材料明细（快照；importFromQuote 会带出中间商/买家等基础字段）
+      await this.orderService.importFromQuote(order.id, id);
+      // 状态变更+关联样衣联动同一事务（原来与建单分属多事务,现已收敛为收尾单事务）
+      const saved = await this.dataSource.transaction(async (manager) => {
+        quote.status = QuoteStatus.ORDERED;
+        const s = await manager.save(Quotation, quote);
+        if (quote.sample_id) {
+          await manager.update(SampleGarment, { id: quote.sample_id, deleted: 0 }, { status: SampleStatus.ORDERED });
+        }
+        return s;
+      });
+      return { ...saved, order_id: order.id, order_no: order.order_no };
+    } catch (e) {
+      // 补偿:后续步骤失败则删除刚建的草稿订单,报价仍原状态,可整体重试
+      await this.orderService.remove(order.id).catch(() => {});
+      throw e;
+    }
   }
 
   // 报价历史导入(P3#43/TRI J2):历史报价批量入库(仅主表要点:款号/客户/币种/汇率/合计),
@@ -444,8 +478,8 @@ export class QuoteService {
   }
 
   // 复制：withItems=true 含明细/费用；false 仅复制基本信息（设计稿：复制可选是否带明细）
-  async copy(id: number, createdBy: number, withItems = true): Promise<Quotation> {
-    const src = await this.findOne(id);
+  async copy(id: number, createdBy: number, withItems = true, user?: { id: number; role?: string }): Promise<Quotation> {
+    const src = await this.findOne(id, user); // findOne 内含机密可见性 404 防探测(H6)
     const quote_no = await this.numbering.next(NUM_PREFIX.QUOTATION);
     const rate = +src.exchange_rate;
     return this.dataSource.transaction(async (manager) => {
@@ -476,9 +510,10 @@ export class QuoteService {
     });
   }
 
-  async remove(id: number): Promise<void> {
+  async remove(id: number, user?: { id: number; role?: string }): Promise<void> {
     const quote = await this.quoteRepo.findOne({ where: { id, deleted: 0 } });
     if (!quote) throw new NotFoundException(`报价单 #${id} 不存在`);
+    await this.assertVisible(quote, user);
     if (quote.status !== QuoteStatus.DRAFT) {
       throw new BadRequestException('只有草稿状态的报价单可以删除');
     }

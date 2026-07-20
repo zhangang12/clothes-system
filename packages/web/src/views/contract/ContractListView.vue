@@ -34,7 +34,7 @@
         <el-table-column label="定金/中期/尾款" width="150" align="center"><template #default="{ row }">{{ row.deposit_ratio }}/{{ row.mid_ratio }}/{{ row.final_ratio }}%</template></el-table-column>
         <el-table-column prop="account_period_days" label="账期(天)" width="90" align="right" />
         <el-table-column label="门户状态" width="150"><template #default="{ row }"><el-tag :type="portalTagType(row.portal_status)" size="small">{{ portalLabel(row.portal_status) }}</el-tag><el-tag v-if="row.approval_status === 'PENDING'" type="warning" size="small" style="margin-left:4px">待审批</el-tag><el-tag v-if="Number(row.revised) === 1 && row.portal_status === 'PUSHED'" type="danger" size="small" style="margin-left:4px">已更新</el-tag></template></el-table-column>
-        <el-table-column prop="stamped_at" label="盖章时间" width="160"><template #default="{ row }">{{ row.stamped_at || '—' }}</template></el-table-column>
+        <el-table-column prop="stamped_at" label="盖章时间" width="160"><template #default="{ row }">{{ fmtDateTime(row.stamped_at) }}</template></el-table-column>
         <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="$router.push(`/contracts/${row.id}/edit`)">{{ row.portal_status === 'DRAFT' && canEdit ? '编辑' : '查看' }}</el-button>
@@ -72,7 +72,7 @@
           <el-descriptions-item label="定金/中期/尾款">{{ detail.deposit_ratio }}/{{ detail.mid_ratio }}/{{ detail.final_ratio }}%</el-descriptions-item>
           <el-descriptions-item label="最后发货日">{{ detail.last_ship_date || '—' }}</el-descriptions-item>
           <el-descriptions-item label="盖章供应商">{{ detail.stamped_by_supplier || '—' }}</el-descriptions-item>
-          <el-descriptions-item label="盖章时间">{{ detail.stamped_at || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="盖章时间">{{ fmtDateTime(detail.stamped_at) }}</el-descriptions-item>
           <el-descriptions-item label="源订单">
             <el-tag v-if="detail.source_order_changed" type="warning" size="small">源订单已变更，请核对材料明细</el-tag>
             <span v-else>—</span>
@@ -196,6 +196,7 @@ import { contractApi } from '@/api/contract';
 import { factoryApi } from '@/api/factory';
 import { printContract } from '@/utils/contractPrint';
 import { exportContractExcel } from '@/utils/contractExcel';
+import { fmtDateTime } from '@/utils/format';
 import { companyApi } from '@/api/company';
 import { orderApi } from '@/api/order';
 import { useAuthStore } from '@/stores/auth';
@@ -313,7 +314,9 @@ async function remove(id: number) {
 function exportCsv() {
   const cols = ['contract_no', 'type', 'total_amount', 'currency', 'account_period_days', 'portal_status'];
   const head = ['合同编号', '类型', '金额', '币种', '账期', '门户状态'];
-  const rows = list.value.map((r) => cols.map((c) => `"${r[c] ?? ''}"`).join(','));
+  // 转义同 utils/exportAll：内嵌双引号翻倍，防破列
+  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = list.value.map((r) => cols.map((c) => esc(r[c])).join(','));
   const csv = '﻿' + [head.join(','), ...rows].join('\n');
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
   const a = document.createElement('a'); a.href = url; a.download = '合同.csv'; a.click();

@@ -1,4 +1,6 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
+import { ElMessage } from 'element-plus';
+import { UserRole } from '@i9/types';
 import { useAuthStore } from '../stores/auth';
 
 const routes: RouteRecordRaw[] = [
@@ -70,6 +72,12 @@ router.beforeEach((to) => {
   const auth = useAuthStore();
   if (!to.meta.public && !auth.token) {
     return { name: 'Login', query: { redirect: to.fullPath } };
+  }
+  // meta.admin 页只挡 token 不够：非管理员手输 URL 只会看到空壳页 + 后端 403，
+  // 前端直接拦回工作台并提示（与侧栏 v-if="isAdmin" 的口径一致）
+  if (to.meta.admin && !auth.hasRole(UserRole.ADMIN)) {
+    ElMessage.warning('该页面仅管理员可访问');
+    return { name: 'Dashboard' };
   }
 });
 

@@ -247,7 +247,9 @@ async function submitImport(rows: any[]) {
 function exportCsv() {
   const cols = ['sample_no', 'style_no', 'categories', 'middleman_name', 'patternmaker_name', 'status', 'make_date'];
   const head = ['样衣编号', '客户款号', '样衣类别', '中间商', '制版师', '状态', '制单日期'];
-  const rows = list.value.map((r) => cols.map((c) => `"${r[c] ?? ''}"`).join(','));
+  // 转义内嵌双引号(" → ""),写法同 utils/exportAll.ts,防名称含引号破列
+  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = list.value.map((r) => cols.map((c) => esc(r[c])).join(','));
   const csv = '﻿' + [head.join(','), ...rows].join('\n');
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
   const a = document.createElement('a'); a.href = url; a.download = '样衣管理.csv'; a.click();

@@ -112,6 +112,20 @@ export class PaymentService {
           lock: { mode: 'pessimistic_write' },
         });
         if (!rec) throw new NotFoundException(`对账单 #${dto.reconcile_id} 不存在`);
+        // 状态闸门(H8):仅「已确认」对账单可建付款申请——DRAFT/PENDING 未完成二级审批,
+        // 直接付款会架空超发闸门/发票校验,且付清联动(CONFIRMED→PAID)无法落地
+        if (rec.status !== ReconciliationStatus.CONFIRMED) {
+          throw new BadRequestException(
+            `对账单 #${dto.reconcile_id} 未复核确认（当前状态 ${rec.status}），不可申请付款`,
+          );
+        }
+        // 工厂一致性(M4):申请的 factory_id 必须与对账单供应商一致,
+        // 防「按 B 厂扣预付款付 A 厂的账」;工时对账无工厂(factory_id 空)不校验
+        if (rec.factory_id != null && Number(rec.factory_id) !== Number(dto.factory_id)) {
+          throw new BadRequestException(
+            `付款工厂 #${dto.factory_id} 与对账单 #${dto.reconcile_id} 归属工厂 #${rec.factory_id} 不一致`,
+          );
+        }
         const existing = await manager.find(PaymentRequest, {
           where: { reconcile_id: dto.reconcile_id, deleted: 0 },
         });
@@ -201,18 +215,7 @@ export class PaymentService {
         pr.slip_uploaded_at = new Date();
         if (dto.slip_url) pr.slip_url = dto.slip_url;
         if (pr.reconcile_id) {
-          await manager.update(Reconciliation,
-            { id: pr.reconcile_id, status: ReconciliationStatus.CONFIRMED },
-            { status: ReconciliationStatus.PAID });
-      // 软锁(P2#22):上游对账/付款变动后,已确认结算单标「待重算」(刷新付款汇总时清除)
-      await manager.query(
-        `UPDATE settlement s
-           JOIN contract c ON c.order_id = s.order_id
-           JOIN reconciliation r ON r.contract_id = c.id
-            SET s.needs_recalc = 1
-          WHERE r.id = ? AND s.status = 'CONFIRMED' AND s.deleted = 0`,
-        [pr.reconcile_id],
-      );
+          await this._syncReconcilePaid(manager, pr.reconcile_id);
         }
       }
       const saved = await manager.save(PaymentRequest, pr);
@@ -313,37 +316,32 @@ export class PaymentService {
     return this.prRepo.save(pr);
   }
 
+  // 一次性付清(L10):与 addPaymentRecord 同口径——事务内悲观锁读取申请,串行化并发付款,
+  // 防「分批流水与标记付清并发」时 paid_total 被盖成全额且不留差额流水
   async markPaid(id: number, slipUrl: string, paidBy: number): Promise<PaymentRequest> {
     if (!slipUrl) throw new BadRequestException('请上传银行水单后再标记付款');
-    const pr = await this.prRepo.findOne({ where: { id, deleted: 0 } });
-    if (!pr) throw new NotFoundException(`付款申请 #${id} 不存在`);
-    if (pr.approval_status !== PaymentApprovalStatus.APPROVED) {
-      throw new BadRequestException('只有已审批状态才可标记付款');
-    }
-    pr.approval_status = PaymentApprovalStatus.PAID;
-    pr.slip_url = slipUrl;
-    pr.paid_by = paidBy;
-    pr.slip_uploaded_at = new Date();
-    pr.paid_total = +(pr.actual_pay ?? pr.amount); // 一次性付清兼容口径：已付=应付
-    const saved = await this.prRepo.save(pr);
+    return this.dataSource.transaction(async (manager) => {
+      const pr = await manager.findOne(PaymentRequest, {
+        where: { id, deleted: 0 },
+        lock: { mode: 'pessimistic_write' }, // 与 addPaymentRecord 互斥,防并发覆盖 paid_total
+      });
+      if (!pr) throw new NotFoundException(`付款申请 #${id} 不存在`);
+      if (pr.approval_status !== PaymentApprovalStatus.APPROVED) {
+        throw new BadRequestException('只有已审批状态才可标记付款');
+      }
+      pr.approval_status = PaymentApprovalStatus.PAID;
+      pr.slip_url = slipUrl;
+      pr.paid_by = paidBy;
+      pr.slip_uploaded_at = new Date();
+      pr.paid_total = +(pr.actual_pay ?? pr.amount); // 一次性付清兼容口径：已付=应付
+      const saved = await manager.save(PaymentRequest, pr);
 
-    // 付款完成后联动关联对账单进入已付款状态（系统开发手册·状态流转规则）
-    if (pr.reconcile_id) {
-      await this.reconcileRepo.update(
-        { id: pr.reconcile_id, status: ReconciliationStatus.CONFIRMED },
-        { status: ReconciliationStatus.PAID },
-      );
-      // 软锁(P2#22):上游对账/付款变动后,已确认结算单标「待重算」(刷新付款汇总时清除)
-      await this.dataSource.query(
-        `UPDATE settlement s
-           JOIN contract c ON c.order_id = s.order_id
-           JOIN reconciliation r ON r.contract_id = c.id
-            SET s.needs_recalc = 1
-          WHERE r.id = ? AND s.status = 'CONFIRMED' AND s.deleted = 0`,
-        [pr.reconcile_id],
-      );
-    }
-    return saved;
+      // 付款完成后联动关联对账单进入已付款状态（系统开发手册·状态流转规则）
+      if (pr.reconcile_id) {
+        await this._syncReconcilePaid(manager, pr.reconcile_id);
+      }
+      return saved;
+    });
   }
 
   async removePaymentRequest(id: number): Promise<void> {
@@ -354,6 +352,37 @@ export class PaymentService {
     }
     pr.deleted = 1;
     await this.prRepo.save(pr);
+  }
+
+  // 付清联动(H8):对账单须由 CONFIRMED 翻 PAID 且恰好命中一行;
+  // 0 行说明对账单状态已漂移(如被退回/未确认),抛错回滚,保证「付款申请 PAID ⇒ 对账单 PAID」原子一致
+  private async _syncReconcilePaid(manager: any, reconcileId: number): Promise<void> {
+    const upd = await manager.update(Reconciliation,
+      { id: reconcileId, status: ReconciliationStatus.CONFIRMED },
+      { status: ReconciliationStatus.PAID });
+    if (!upd?.affected) {
+      throw new BadRequestException(`对账单 #${reconcileId} 非已确认状态，无法联动已付款`);
+    }
+    // 软锁(P2#22):上游对账/付款变动后,已确认结算单标「待重算」(刷新付款汇总时清除)
+    await manager.query(
+      `UPDATE settlement s
+         JOIN contract c ON c.order_id = s.order_id
+         JOIN reconciliation r ON r.contract_id = c.id
+          SET s.needs_recalc = 1
+        WHERE r.id = ? AND s.status = 'CONFIRMED' AND s.deleted = 0`,
+      [reconcileId],
+    );
+    // 软锁(L7-①):无合同费用对账按款号归入结算期间费用,合同链路 join 不到,按款号补标
+    const rec = await manager.findOne(Reconciliation, { where: { id: reconcileId } });
+    if (rec?.type === ReconcileType.NO_CONTRACT && rec.style_no) {
+      await manager.query(
+        `UPDATE settlement s
+           JOIN order_main o ON o.id = s.order_id
+            SET s.needs_recalc = 1
+          WHERE o.style_no = ? AND o.deleted = 0 AND s.status = 'CONFIRMED' AND s.deleted = 0`,
+        [rec.style_no],
+      );
+    }
   }
 
   private async _deductPrepay(manager: any, factoryId: number, amount: number): Promise<void> {

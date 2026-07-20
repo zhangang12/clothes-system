@@ -193,7 +193,8 @@ export class OrderService {
     ];
     for (const [k, col] of map) if (dto[k] !== undefined) (order as any)[col] = dto[k];
     if (dto.delivery_date !== undefined) order.delivery_date = dto.delivery_date as any;
-    if (order.unit_price && order.qty_total) order.total_amount = +(order.unit_price * order.qty_total).toFixed(4);
+    // 金额与单价/数量始终一致(L5):单价或数量任一被清空(如单价改 null)时同步清空总金额,避免下单审批阈值校验基于陈旧金额
+    order.total_amount = order.unit_price && order.qty_total ? +(order.unit_price * order.qty_total).toFixed(4) : null;
     // 编辑会重算金额:清除已有审批状态,避免「审批通过后改高金额再下单」绕过阈值校验
     order.approval_status = ApprovalStatus.NONE;
     order.content_updated_at = new Date(); // 内容级修改——合同侧「源订单已变更」标记依据(P2#20)
@@ -401,16 +402,59 @@ export class OrderService {
     return shipment;
   }
 
+  // 尺码数量搭配矩阵独立更新(M9):终态守卫 + 回填 qty_total + 重算材料,保证矩阵/主表/材料三线一致
   async updateMatrix(id: number, matrix_data: Record<string, unknown>): Promise<OrderSizeMatrix> {
     const order = await this.orderRepo.findOne({ where: { id, deleted: 0 } });
     if (!order) throw new NotFoundException(`订单 #${id} 不存在`);
-    const existing = await this.matrixRepo.findOne({ where: { order_id: id } });
-    await this.orderRepo.update({ id }, { content_updated_at: new Date() }); // 矩阵改动=内容级修改(P2#20)
-    if (existing) {
-      existing.matrix_data = matrix_data;
-      return this.matrixRepo.save(existing);
+    // 状态守卫:终态订单禁止改矩阵(订单状态机无「已取消」,DONE 为唯一终态)
+    if (order.status === OrderStatus.DONE) {
+      throw new BadRequestException('已完成订单不可再修改尺码数量矩阵');
     }
-    return this.matrixRepo.save(this.matrixRepo.create({ order_id: id, matrix_data }));
+    const existing = await this.matrixRepo.findOne({ where: { order_id: id } });
+    // 矩阵→大货总数:新结构 qtys=各PO数量数组;旧平铺行 qty 单值(口径同合同材料拆行 expandMaterialLines)
+    const rows = Array.isArray((matrix_data as any)?.rows) ? ((matrix_data as any).rows as any[]) : null;
+    const qtyTotal = rows == null ? null : rows.reduce((s: number, r: any) =>
+      s + (Array.isArray(r?.qtys) ? r.qtys.reduce((x: number, n: any) => x + (+n || 0), 0) : (+r?.qty || 0)), 0);
+    const matrixChanged = JSON.stringify(existing?.matrix_data ?? null) !== JSON.stringify(matrix_data ?? null);
+    const qtyChanged = qtyTotal != null && qtyTotal !== +order.qty_total;
+
+    return this.dataSource.transaction(async (manager) => {
+      if (matrixChanged || qtyChanged) {
+        // 矩阵内容确有变化才 bump——合同材料拆行直接读矩阵行,属合同侧需感知的内容级修改;
+        // 无变化重复提交不 bump,防合同侧「源订单已变更」误报(P2#20)
+        if (matrixChanged) order.content_updated_at = new Date();
+        if (qtyTotal != null && qtyChanged) {
+          order.qty_total = qtyTotal;
+          // 金额与单价/数量始终一致(同 L5 口径);数量变动→清审批,避免「审批通过后改高金额再下单」绕过阈值校验
+          order.total_amount = order.unit_price && qtyTotal ? +(order.unit_price * qtyTotal).toFixed(4) : null;
+          order.approval_status = ApprovalStatus.NONE;
+        }
+        await manager.save(OrderMain, order);
+      }
+      if (qtyTotal != null && qtyChanged) {
+        // 按既有逻辑重算材料(采购量=大货总数×单件耗用×(1+损耗%),与 buildMaterials 同式)
+        const materials = await manager.find(OrderMaterial, { where: { order_id: id } });
+        for (const m of materials) {
+          const roundOverride = m.round_up == null ? undefined : m.round_up === 1;
+          const lossRate = m.loss_rate == null ? 3 : +m.loss_rate;
+          const { perUnit, total } = calcPurchase(qtyTotal, m.net_usage == null ? 0 : +m.net_usage, lossRate, m.unit, roundOverride);
+          // final_purchase=业务微调值:与系统量一致(未微调)时跟随重算;有偏差(人工微调过)则保留人工值
+          const wasAuto = m.final_purchase == null || +m.final_purchase === +m.total_purchase;
+          m.loss_usage = perUnit;
+          m.qty = qtyTotal;
+          m.total_purchase = total;
+          m.final_purchase = wasAuto ? total : m.final_purchase;
+          m.budget = m.unit_price ? +(m.final_purchase * +m.unit_price).toFixed(4) : null;
+        }
+        if (materials.length) await manager.save(OrderMaterial, materials);
+      }
+      if (existing) {
+        if (!matrixChanged) return existing; // 矩阵无变化:幂等返回,不写库
+        existing.matrix_data = matrix_data;
+        return manager.save(OrderSizeMatrix, existing);
+      }
+      return manager.save(OrderSizeMatrix, manager.create(OrderSizeMatrix, { order_id: id, matrix_data }));
+    });
   }
 
   async remove(id: number): Promise<void> {

@@ -467,4 +467,31 @@ describe('SettlementService', () => {
     const res: any = await service.findOne(1);
     expect(res.order_no).toBeNull();
   });
+
+  // UT-SLT-24: 期间费用归集读实体 expense_name 正确分列（M1 回归：误读 item_name/fee_name 恒落 other）；
+  // 且明细行须圈定 CONFIRMED/PAID 且未删母单（M2 同口径，防软删孤儿行混入）
+  it('UT-SLT-24 aggregates period expenses by expense_name keywords into four buckets', async () => {
+    mockReconcileRepo.find.mockResolvedValueOnce([
+      { id: 55, total_amount: 300, status: 'PAID', description: '季度杂费' },
+    ]);
+    mockExpenseItemRepo.find.mockResolvedValueOnce([
+      { reconcile_id: 55, expense_name: '货代拖运费', amount: 100, style_no: 'V27.230' },
+      { reconcile_id: 55, expense_name: '快邮费', amount: 60, style_no: 'V27.230' },
+      { reconcile_id: 55, expense_name: '打样费', amount: 40, style_no: 'V27.230' },
+    ]);
+    const dto = { order_id: 10, goods_amount_tax: 1130, receipt_usd: 100, exchange_rate: 7 };
+    const manager = makeManager();
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await service.create(dto as any, 1);
+    // 明细行按母单圈定查询（M2：与母单 status/deleted 过滤同口径）
+    const itemWhere = mockExpenseItemRepo.find.mock.calls[0][0].where;
+    expect(itemWhere.style_no).toBe('V27.230');
+    expect(itemWhere.reconcile_id).toBeDefined();
+    expect(manager.save.mock.calls[0][1]).toMatchObject({
+      freight_fee: 100, // 运杂关键词入运杂列（修复前恒 0 全堆 other）
+      express_fee: 60, // 快邮
+      sample_fee: 40, // 打样
+      other_fee: 100, // 头合计300−行合计200 的整单差额按首单描述兜底入其它
+    });
+  });
 });

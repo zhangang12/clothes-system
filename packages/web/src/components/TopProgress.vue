@@ -43,11 +43,15 @@ watch(pending, (n) => {
   else if (n === 0 && show.value) finish();
 });
 
-// 路由跳转也计入（懒加载路由的 chunk 下载正好被覆盖到）
+// 路由跳转也计入（懒加载路由的 chunk 下载正好被覆盖到）。
+// 配对守卫：重复导航/守卫重定向时 vue-router 会短路——不跑 beforeEach 却仍触发
+// afterEach，直接成对 +- 会把计数扣穿。只有本轮 beforeEach 真的 +1 过才允许 -1，
+// 保证 pending 不负数、不残留。
+let routePending = 0;
 const router = useRouter();
-router.beforeEach(() => { progressStart(); });
-router.afterEach(() => { progressDone(); });
-router.onError(() => { progressDone(); });
+router.beforeEach(() => { routePending += 1; progressStart(); });
+router.afterEach(() => { if (routePending > 0) { routePending -= 1; progressDone(); } });
+router.onError(() => { if (routePending > 0) { routePending -= 1; progressDone(); } });
 
 onBeforeUnmount(() => window.clearInterval(timer));
 </script>

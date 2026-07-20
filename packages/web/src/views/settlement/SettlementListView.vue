@@ -163,7 +163,7 @@
               {{ detailData.status === 'CONFIRMED' ? '已结算' : '待收汇' }}
             </el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="款号">{{ detailData.style_no || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="品名">{{ detailData.style_name || '—' }}</el-descriptions-item>
           <el-descriptions-item label="出货件数">{{ detailData.shipped_qty ?? 0 }}</el-descriptions-item>
           <el-descriptions-item label="结算汇率">
             {{ detailData.exchange_rate != null ? (+detailData.exchange_rate).toFixed(4) : '—' }}

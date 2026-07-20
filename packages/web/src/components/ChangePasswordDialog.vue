@@ -26,6 +26,7 @@ import type { FormInstance, FormRules } from 'element-plus';
 import { ElMessage } from 'element-plus';
 import { authApi } from '../api/auth';
 import { useAuthStore } from '../stores/auth';
+import { useTabsStore } from '../stores/tabs';
 import { useRouter } from 'vue-router';
 
 defineProps<{ modelValue: boolean }>();
@@ -62,8 +63,9 @@ async function submit() {
     await authApi.changePassword({ old_password: form.old_password, new_password: form.new_password });
     emit('update:modelValue', false);
     ElMessage.success('密码已修改，请用新密码重新登录');
-    // 改密后强制重登，旧 token 作废观感更安全
-    setTimeout(() => { auth.clearAuth(); router.push('/login'); }, 800);
+    // 改密后强制重登，旧 token 作废观感更安全；页签一并清空，重登后不该看到旧页签
+    // （reset 幂等，与 MainLayout 的 logout 不冲突）
+    setTimeout(() => { useTabsStore().reset(); auth.clearAuth(); router.push('/login'); }, 800);
   } catch { /* 拦截器已提示 */ } finally { saving.value = false; }
 }
 </script>

@@ -34,6 +34,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { showToast } from 'vant';
 import { usePortalAuthStore } from '../stores/auth';
 import { http } from '../api/index';
 const router = useRouter();
@@ -46,6 +47,9 @@ async function handleLogin() {
     const res: any = await http.post('/auth/portal/login', form.value);
     auth.setAuth(res.data, form.value.username.trim());
     router.push('/portal/contracts');
+  } catch (e: any) {
+    // 登录失败留在本页、输入不清空:401=账号或密码错误,其余给通用提示(M11)
+    showToast(e?.response?.status === 401 ? '账号或密码错误' : (e?.response?.data?.msg ?? '网络错误，请稍后重试'));
   } finally {
     loading.value = false;
   }

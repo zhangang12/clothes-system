@@ -14,6 +14,7 @@ const makeQb = () => ({
   andWhere: jest.fn().mockReturnThis(),
   orderBy: jest.fn().mockReturnThis(),
   getMany: jest.fn().mockResolvedValue([]),
+  getRawMany: jest.fn().mockResolvedValue([]),
 });
 const mockRepo = {
   create: jest.fn().mockImplementation((v) => v),
@@ -27,6 +28,7 @@ const mockRepo = {
 const mockContactRepo = {
   create: jest.fn().mockImplementation((v) => v),
   find: jest.fn().mockResolvedValue([]),
+  createQueryBuilder: jest.fn(() => makeQb()), // findAll 联系人检索子查询
 };
 const mockContractRepo = { count: jest.fn() };
 const mockRedis = { incr: jest.fn(), expire: jest.fn(), exists: jest.fn().mockResolvedValue(1), set: jest.fn() };
@@ -124,6 +126,23 @@ describe('FactoryService', () => {
       mockRepo.findAndCount.mockResolvedValue([[], 0]);
       await service.findAll({ page: 3, size: 10 } as any);
       expect(mockRepo.findAndCount).toHaveBeenCalledWith(expect.objectContaining({ skip: 20, take: 10 }));
+    });
+
+    it('UT-FAC-17: keyword 与 contact 同用时为 AND 关系(L8:contact 过滤不丢失)', async () => {
+      const contactQb = makeQb();
+      contactQb.getRawMany.mockResolvedValue([{ fid: '7' }]); // 联系人子查询命中工厂 #7
+      mockContactRepo.createQueryBuilder.mockReturnValueOnce(contactQb);
+      mockRepo.findAndCount.mockResolvedValue([[], 0]);
+      await service.findAll({ page: 1, size: 20, keyword: 'abc', contact: '张' } as any);
+      const call = mockRepo.findAndCount.mock.calls[0][0];
+      // keyword 展开为 OR 分支数组,每个分支都必须带上 contact 求出的 id 过滤(In([7]))
+      expect(Array.isArray(call.where)).toBe(true);
+      expect(call.where.length).toBeGreaterThanOrEqual(5);
+      for (const w of call.where) {
+        expect(w.deleted).toBe(0);
+        expect((w.id as any)?._type).toBe('in');
+        expect((w.id as any)?._value).toEqual([7]);
+      }
     });
   });
 

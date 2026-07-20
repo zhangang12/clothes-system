@@ -84,7 +84,7 @@ const todos = reactive<Card[]>([
   { label: '草稿报价待发出', route: '/quotes', count: null, shown: 0, api: () => quoteApi.list({ page: 1, size: 1, status: 'DRAFT' }) },
   { label: '待盖章合同', route: '/contracts', count: null, shown: 0, api: () => contractApi.list({ page: 1, size: 1, portal_status: 'PUSHED' }) },
   { label: '生产中订单', route: '/orders', count: null, shown: 0, api: () => orderApi.list({ page: 1, size: 1, status: 'PRODUCING' }) },
-  { label: '待审批付款', route: '/payments', count: null, shown: 0, api: () => paymentRequestApi.list({ page: 1, size: 1, approval_status: 'PENDING' }) },
+  { label: '待审批付款', route: '/payments?tab=request', count: null, shown: 0, api: () => paymentRequestApi.list({ page: 1, size: 1, approval_status: 'PENDING' }) },
 ]);
 
 function go(name: string) { router.push({ name }); }

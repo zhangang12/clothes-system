@@ -13,7 +13,7 @@ import { Quotation } from '../../quote/quotation.entity';
 import { QuotationItem } from '../../quote/quotation-item.entity';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
 import { SysConfigService } from '../../../common/config/sys-config.service';
-import { OrderStatus } from '@i9/types';
+import { OrderStatus, ApprovalStatus } from '@i9/types';
 
 const makeOrder = (overrides = {}): any => ({
   id: 1,
@@ -206,5 +206,75 @@ describe('OrderService', () => {
     mockQuoteRepo.findOne.mockResolvedValue(null);
     const res: any = await service.findOne(1);
     expect(res.quote_no).toBeNull();
+  });
+
+  // UT-ORD-13: L5——编辑清空单价(unit_price→null)时 total_amount 同步清空,不保留旧值
+  it('UT-ORD-13 update clears total_amount when unit_price is cleared (L5)', async () => {
+    const order = makeOrder({ status: OrderStatus.DRAFT, unit_price: 10, qty_total: 500, total_amount: 5000 });
+    mockOrderRepo.findOne.mockResolvedValue(order);
+    const manager = {
+      create: jest.fn().mockImplementation((_, v) => v),
+      save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
+      delete: jest.fn(),
+      findOne: jest.fn().mockResolvedValue(null),
+    };
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await service.update(1, { unit_price: null } as any);
+    const savedMain = manager.save.mock.calls.find((c) => c[0] === OrderMain)?.[1];
+    expect(savedMain.total_amount).toBeNull();
+    expect(savedMain.approval_status).toBe(ApprovalStatus.NONE);
+  });
+
+  // UT-ORD-14: M9——已完成(终态)订单禁止改矩阵
+  it('UT-ORD-14 updateMatrix rejects DONE orders (M9)', async () => {
+    mockOrderRepo.findOne.mockResolvedValue(makeOrder({ status: OrderStatus.DONE }));
+    await expect(service.updateMatrix(1, { rows: [] })).rejects.toThrow(BadRequestException);
+    expect(mockMatrixRepo.save).not.toHaveBeenCalled();
+  });
+
+  // UT-ORD-15: M9——矩阵变更回填 qty_total/重算 total_amount 与材料,矩阵/主表/材料三线一致
+  it('UT-ORD-15 updateMatrix backfills qty_total and recalcs materials (M9)', async () => {
+    const order = makeOrder({ status: OrderStatus.CONFIRMED, qty_total: 500, unit_price: 10, total_amount: 5000 });
+    mockOrderRepo.findOne.mockResolvedValue(order);
+    mockMatrixRepo.findOne.mockResolvedValue({ id: 9, order_id: 1, matrix_data: { pos: [], rows: [{ style_no: 'A', qtys: [500] }] } });
+    const material = {
+      id: 5, order_id: 1, item_name: '面料A', unit: 'M', net_usage: 1.5, loss_rate: 10,
+      loss_usage: 1.65, qty: 500, total_purchase: 825, final_purchase: 825, round_up: null, unit_price: 20, budget: 16500,
+    };
+    const manager = {
+      create: jest.fn().mockImplementation((_, v) => v),
+      save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: v.id ?? 1 })),
+      find: jest.fn().mockResolvedValue([material]),
+    };
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await service.updateMatrix(1, { pos: [], rows: [{ style_no: 'A', qtys: [100, 200] }, { style_no: 'A', qtys: [300] }] });
+    // 矩阵总数 600 → 主表回填 + 清审批 + bump 内容时间
+    expect(order.qty_total).toBe(600);
+    expect(order.total_amount).toBe(6000);
+    expect(order.approval_status).toBe(ApprovalStatus.NONE);
+    expect(order.content_updated_at).toBeInstanceOf(Date);
+    // 材料重算:600×1.5×(1+10%)=990(未微调过的 final_purchase 跟随),budget=990×20
+    expect(material.qty).toBe(600);
+    expect(material.total_purchase).toBeCloseTo(990, 2);
+    expect(material.final_purchase).toBeCloseTo(990, 2);
+    expect(material.budget).toBeCloseTo(19800, 2);
+  });
+
+  // UT-ORD-16: M9——矩阵内容无变化时不 bump content_updated_at,防合同侧「源订单已变更」误报
+  it('UT-ORD-16 updateMatrix does not bump content_updated_at when matrix unchanged (M9)', async () => {
+    const md = { pos: [], rows: [{ style_no: 'A', qtys: [500] }] };
+    const order = makeOrder({ status: OrderStatus.CONFIRMED, qty_total: 500, unit_price: 10, total_amount: 5000 });
+    (order as any).content_updated_at = null;
+    mockOrderRepo.findOne.mockResolvedValue(order);
+    mockMatrixRepo.findOne.mockResolvedValue({ id: 9, order_id: 1, matrix_data: md });
+    const manager = {
+      create: jest.fn().mockImplementation((_, v) => v),
+      save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
+      find: jest.fn().mockResolvedValue([]),
+    };
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await service.updateMatrix(1, JSON.parse(JSON.stringify(md)));
+    expect(order.content_updated_at).toBeNull();
+    expect(manager.save).not.toHaveBeenCalled();
   });
 });

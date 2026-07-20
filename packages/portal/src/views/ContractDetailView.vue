@@ -346,8 +346,8 @@
       :before-close="handleInvoiceClose"
     >
       <div class="invoice-form">
-        <van-field v-model="invoiceForm.invoice_no" label="发票号" placeholder="请输入发票号（选填）" />
-        <van-field v-model="invoiceForm.invoice_amount" label="发票金额" type="number" placeholder="请输入发票金额（选填）" />
+        <van-field v-model="invoiceForm.invoice_no" label="发票号" placeholder="请输入发票号（必填）" required />
+        <van-field v-model="invoiceForm.invoice_amount" label="发票金额" type="number" placeholder="请输入发票金额（必填）" required />
         <van-field v-model="invoiceForm.remark" label="备注" placeholder="可选备注" />
         <div class="invoice-upload">
           <span class="upload-label">发票附件</span>
@@ -366,6 +366,11 @@
 
   <div v-else class="loading-state">
     <van-loading v-if="loadingDetail" type="spinner" size="36px" />
+    <!-- 加载失败（如越权 404）：错误文案 + 重试入口(L29) -->
+    <div v-else-if="loadError" class="load-error">
+      <p>{{ loadError }}</p>
+      <van-button size="small" type="primary" plain round @click="load">重新加载</van-button>
+    </div>
   </div>
 </template>
 
@@ -379,9 +384,11 @@ import { uploadApi } from '../api/upload';
 const route = useRoute();
 const contract = ref<any>({});
 const loadingDetail = ref(true);
+const loadError = ref(''); // 详情加载失败文案(L29)
 const actioning = ref(false);
 const agreedTerms = ref(false); // 盖章前须勾选「已阅读并同意合同条款」
 const showShipDialog = ref(false);
+const shipSubmitting = ref(false); // 防连点：发货提交期间拦截重复确认(M12)
 const shipForm = ref({ qty: '', remark: '', express_company: '', express_no: '', attach_url: '', ship_address: '' });
 // 逐物料行实发数(P3#30)
 const shipByLine = ref(false);
@@ -391,6 +398,7 @@ const lineTotal = computed(() =>
 const shipFiles = ref<any[]>([]);
 // 我要对账（设计稿 05 §C）
 const showReconcileDialog = ref(false);
+const reconcileSubmitting = ref(false); // 防连点：对账提交期间拦截重复确认(M12)
 const selectedBatchIds = ref<number[]>([]);
 const reconcilableBatches = computed(() =>
   (contract.value.shipments ?? []).filter((s: any) => s.approval_status === 'APPROVED' && !s.reconcile_id));
@@ -410,10 +418,12 @@ function openReconcileDialog() {
 }
 async function handleReconcileClose(action: string) {
   if (action === 'cancel') return true;
+  if (reconcileSubmitting.value) return false; // 提交中连点无效，防重复对账单(M12)
   if (!selectedBatchIds.value.length) {
     showConfirmDialog({ title: '提示', message: '请至少勾选 1 个发货批次', showCancelButton: false });
     return false;
   }
+  reconcileSubmitting.value = true;
   try {
     const res = await portalContractApi.createReconcile(contract.value.id, selectedBatchIds.value);
     const rec = (res as any).data ?? res;
@@ -423,6 +433,8 @@ async function handleReconcileClose(action: string) {
     return true;
   } catch {
     return false;
+  } finally {
+    reconcileSubmitting.value = false;
   }
 }
 // 发货附件上传（装箱单/货物照片）
@@ -447,7 +459,8 @@ async function onInvoiceRead(item: any) {
   f.status = 'uploading';
   f.message = '上传中...';
   try {
-    const res = await uploadApi.upload(f.file);
+    // 发票含税号金额，按敏感附件上传（对齐发货附件，落私有目录）(M10)
+    const res = await uploadApi.upload(f.file, { sensitive: true });
     const data = (res as any).data ?? res;
     invoiceForm.value.invoice_url = data.url;
     f.status = 'done';
@@ -460,7 +473,8 @@ async function onInvoiceRead(item: any) {
 }
 
 const currentStep = computed(() => {
-  const map: Record<string, number> = { PUSHED: 0, STAMPED: 1, SHIPPING: 2, RECONCILED: 3 };
+  // COMPLETED 映射为全部步骤完成(active=步数)，不再回退到第一步(L27)
+  const map: Record<string, number> = { PUSHED: 0, STAMPED: 1, SHIPPING: 2, RECONCILED: 3, COMPLETED: 4 };
   return map[contract.value.portal_status] ?? 0;
 });
 
@@ -487,9 +501,13 @@ function openAtt(urls: string) {
 
 async function load() {
   loadingDetail.value = true;
+  loadError.value = '';
   try {
     const res = await portalContractApi.get(Number(route.params.id));
     contract.value = (res as any).data ?? res;
+  } catch (e: any) {
+    // 加载失败（如越权 404）展示错误态 + 重试入口，不再全白(L29)
+    loadError.value = e?.response?.data?.msg ?? e?.message ?? '合同加载失败，请稍后重试';
   } finally {
     loadingDetail.value = false;
   }
@@ -528,12 +546,14 @@ async function doStamp() {
     showConfirmDialog({ title: '提示', message: '请先勾选「我已阅读并同意合同条款」后再盖章', showCancelButton: false });
     return;
   }
-  await showConfirmDialog({
-    title: '确认盖章',
-    message: stampPaperUrl.value
-      ? '将以「纸质盖章照片」留痕完成签约，盖章后合同材料明细将被锁定，确认？'
-      : '盖章即视为同意合同条款（电子章将贴入合同 PDF 落款），盖章后合同材料明细将被锁定，确认盖章？',
-  });
+  try {
+    await showConfirmDialog({
+      title: '确认盖章',
+      message: stampPaperUrl.value
+        ? '将以「纸质盖章照片」留痕完成签约，盖章后合同材料明细将被锁定，确认？'
+        : '盖章即视为同意合同条款（电子章将贴入合同 PDF 落款），盖章后合同材料明细将被锁定，确认盖章？',
+    });
+  } catch { return; } // 点取消静默返回，避免 unhandled rejection(L32)
   actioning.value = true;
   try {
     const res = await portalContractApi.stamp(contract.value.id, agreedTerms.value, stampPaperUrl.value || undefined);
@@ -547,6 +567,7 @@ async function doStamp() {
 
 async function handleShipClose(action: string) {
   if (action === 'cancel') return true;
+  if (shipSubmitting.value) return false; // 提交中连点无效，防重复发货批次(M12)
   // 数量/物流必填（总览走查P1#16）;逐物料行模式数量=Σ行(P3#30)
   const items = shipByLine.value
     ? Object.entries(shipLineQty.value)
@@ -570,28 +591,18 @@ async function handleShipClose(action: string) {
     attach_url: shipForm.value.attach_url || undefined,
     ship_address: shipForm.value.ship_address?.trim() || undefined,
   };
+  shipSubmitting.value = true;
   try {
     await portalContractApi.confirmShip(contract.value.id, payload);
     showSuccessToast('已确认出货');
     shipForm.value = { qty: '', remark: '', express_company: '', express_no: '', attach_url: '', ship_address: '' }; shipFiles.value = []; shipLineQty.value = {}; shipByLine.value = false;
     await load();
     return true;
-  } catch (e: any) {
-    // 超合同量 → 二次确认后 force 放行（设计稿 门户 C4）
-    const msg = String(e?.response?.data?.msg || e?.message || '');
-    if (msg.includes('超过合同量')) {
-      try {
-        await showConfirmDialog({ title: '超发确认', message: '本次发货将超过合同量，确认超发？' });
-        await portalContractApi.confirmShip(contract.value.id, { ...payload, force: true });
-        showSuccessToast('已确认超发出货');
-        shipForm.value = { qty: '', remark: '', express_company: '', express_no: '', attach_url: '', ship_address: '' }; shipFiles.value = []; shipLineQty.value = {}; shipByLine.value = false;
-        await load();
-        return true;
-      } catch {
-        return false;
-      }
-    }
+  } catch {
+    // 后端已不再抛「超过合同量」错误（超发直接放行），失败仅保持弹窗打开，错误文案由拦截器 toast(L31)
     return false;
+  } finally {
+    shipSubmitting.value = false;
   }
 }
 
@@ -626,12 +637,18 @@ async function doWithdrawBatch(batch: any) {
     showSuccessToast('批次已撤回');
     await load();
   } catch (e: any) {
-    showConfirmDialog({ title: '撤回失败', message: e?.response?.data?.msg ?? '请稍后重试', showCancelButton: false });
+    // 透出后端业务错误文案（如 COMPLETED 合同禁止撤回）(L33)
+    showConfirmDialog({ title: '撤回失败', message: e?.response?.data?.msg ?? e?.message ?? '请稍后重试', showCancelButton: false });
   }
 }
 
 async function handleInvoiceClose(action: string) {
   if (action === 'cancel') return true;
+  // 发票号/金额后端必填（缺一 400），前端先校验，与后端口径一致(L30)
+  if (!invoiceForm.value.invoice_no.trim() || !(Number(invoiceForm.value.invoice_amount) > 0)) {
+    showConfirmDialog({ title: '提示', message: '请填写发票号与发票金额（均为必填）', showCancelButton: false });
+    return false;
+  }
   try {
     await portalContractApi.uploadInvoice(contract.value.id, {
       invoice_no: invoiceForm.value.invoice_no || undefined,
@@ -696,6 +713,7 @@ onMounted(load);
   align-items: center;
   height: 200px;
 }
+.load-error { text-align: center; font-size: 13px; color: #969799; }
 .matrix-scroll { overflow-x: auto; padding: 8px 12px; }
 .matrix-table { border-collapse: collapse; font-size: 12px; min-width: 100%; }
 .matrix-table th, .matrix-table td { border: 1px solid #eee; padding: 4px 8px; text-align: center; white-space: nowrap; }

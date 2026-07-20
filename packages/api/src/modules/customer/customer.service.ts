@@ -197,6 +197,10 @@ export class CustomerService {
 
   // 批量导入（Excel→CSV 前端解析后逐行入库，返回每行结果）
   async importBatch(rows: CreateCustomerDto[], createdBy: number) {
+    // 撞名覆盖更新必须与单个 update 走同一套 assertEditable 授权校验（修复 M8）：
+    // 取操作者真实角色透传，禁止硬编码 ADMIN 绕过机密客户修改权限；无权限的行如实计入 failed
+    const opRows = await this.dataSource.query('SELECT role FROM sys_user WHERE id = ? LIMIT 1', [createdBy]);
+    const operator = { id: createdBy, role: opRows?.[0]?.role as string | undefined };
     const failed: Array<{ index: number; name?: string; error: string }> = [];
     let created = 0;
     for (let i = 0; i < rows.length; i++) {
@@ -206,7 +210,7 @@ export class CustomerService {
           ? await this.repo.findOne({ where: { name: rows[i].name, deleted: 0 } })
           : null;
         if (existing) {
-          await this.update(existing.id, rows[i], { id: createdBy, role: 'ADMIN' });
+          await this.update(existing.id, rows[i], operator);
         } else {
           await this.create(rows[i], createdBy);
         }
@@ -248,8 +252,9 @@ export class CustomerService {
         .where('c.name LIKE :k OR c.mobile LIKE :k OR c.phone LIKE :k', { k: `%${contact}%` })
         .getRawMany();
       const ids = hits.map((h) => +h.cid);
-      const cur = (base as any).id;
-      const merged = cur ? ids.filter((x) => JSON.stringify(cur).includes(String(x))) : ids;
+      // 与机密可见集做真正的 Set 交集（修复 H5：曾用 JSON 子串匹配，In([12]) 会误命中 id 1/2）
+      const visible = visibleIds !== null ? new Set(visibleIds.map((v) => +v)) : null;
+      const merged = visible ? ids.filter((x) => visible.has(x)) : ids;
       Object.assign(base, { id: In(merged.length ? merged : [0]) });
     }
     // 智能搜索：客户编号/贸易国别/国家区域/所在城市/公司主页/详细地址 + 客户名称（设计稿 §2.2）
@@ -344,12 +349,16 @@ export class CustomerService {
   async remove(id: number): Promise<void> {
     const entity = await this.repo.findOne({ where: { id, deleted: 0 } });
     if (!entity) throw new NotFoundException(`客户 #${id} 不存在`);
-    const [samples, quotes, orders] = await Promise.all([
+    const [samples, quotes, orders, sampleBuyerRefs, quoteBuyerRefs, orderBuyerRefs] = await Promise.all([
       this.sampleRepo.count({ where: { customer_id: id, deleted: 0 } }),
       this.quoteRepo.count({ where: { customer_id: id, deleted: 0 } }),
       this.orderRepo.count({ where: { customer_id: id, deleted: 0 } }),
+      // 修复 L3：客户作为「最终买家」(buyer_id) 被引用时同样阻止删除，避免留下悬空 buyer_id
+      this.sampleRepo.count({ where: { buyer_id: id, deleted: 0 } }),
+      this.quoteRepo.count({ where: { buyer_id: id, deleted: 0 } }),
+      this.orderRepo.count({ where: { buyer_id: id, deleted: 0 } }),
     ]);
-    const refs = samples + quotes + orders;
+    const refs = samples + quotes + orders + sampleBuyerRefs + quoteBuyerRefs + orderBuyerRefs;
     if (refs > 0) {
       throw new BadRequestException(`已被 ${refs} 张单据引用，无法删除`);
     }

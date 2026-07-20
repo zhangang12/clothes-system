@@ -21,6 +21,7 @@
       title="🚚 合并发货"
       show-cancel-button
       confirm-button-text="确认发货"
+      :confirm-button-disabled="mergeSubmitting"
       :before-close="handleMergeClose"
     >
       <div class="merge-form">
@@ -78,7 +79,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref } from 'vue';
 import { showConfirmDialog, showSuccessToast } from 'vant';
 import { useRouter } from 'vue-router';
 import { portalContractApi } from '../api/contract';
@@ -95,6 +96,7 @@ const actionable = (st: string) => ['PUSHED', 'STAMPED', 'SHIPPING', 'RECONCILED
 
 // ── 跨合同合并发货(P3#29) ──
 const showMergeDialog = ref(false);
+const mergeSubmitting = ref(false); // 防连点(M12):before-close 异步期间禁用重复确认
 const mergeCandidates = ref<any[]>([]);
 const mergeSelected = ref<number[]>([]);
 const mergeQty = ref<Record<number, string>>({});
@@ -115,9 +117,11 @@ function toggleMerge(id: number) {
 }
 async function handleMergeClose(action: string) {
   if (action === 'cancel') return true;
+  if (mergeSubmitting.value) return false; // 防连点(M12):提交中忽略重复确认
   const entries = mergeSelected.value
     .filter((id) => Number(mergeQty.value[id]) > 0)
-    .map((id) => ({ contract_id: id, qty: Number(mergeQty.value[id]) }));
+    // bigint 主键经 mysql2 出来是字符串,提交时与 qty 一样 Number() 归一(H7)
+    .map((id) => ({ contract_id: Number(id), qty: Number(mergeQty.value[id]) }));
   if (entries.length < 2) {
     showConfirmDialog({ title: '提示', message: '请至少勾选 2 张合同并填写数量', showCancelButton: false });
     return false;
@@ -126,6 +130,7 @@ async function handleMergeClose(action: string) {
     showConfirmDialog({ title: '提示', message: '请填写物流信息（快递公司与单号）', showCancelButton: false });
     return false;
   }
+  mergeSubmitting.value = true;
   try {
     const res: any = await portalContractApi.mergeShip({
       express_company: mergeForm.value.express_company,
@@ -141,6 +146,8 @@ async function handleMergeClose(action: string) {
   } catch (e: any) {
     showConfirmDialog({ title: '发货失败', message: e?.response?.data?.msg ?? '请稍后重试', showCancelButton: false });
     return false;
+  } finally {
+    mergeSubmitting.value = false;
   }
 }
 const page = ref(1);
@@ -172,8 +179,13 @@ async function onRefresh() {
   list.value = [];
   page.value = 1;
   finished.value = false;
-  await loadMore();
-  refreshing.value = false;
+  try {
+    await loadMore();
+  } catch {
+    // 失败提示已由响应拦截器统一 toast,这里只保证刷新态复位(L28)
+  } finally {
+    refreshing.value = false;
+  }
 }
 
 function onTabChange() {
@@ -185,8 +197,6 @@ function onTabChange() {
 function goDetail(id: number) {
   router.push(`/portal/contracts/${id}`);
 }
-
-onMounted(() => {});
 </script>
 
 <style scoped>

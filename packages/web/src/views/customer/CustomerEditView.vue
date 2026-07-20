@@ -4,7 +4,8 @@
       <div class="title-wrap">
         <el-button link :icon="Back" @click="goBack">返回</el-button>
         <span class="title">客户资料 · {{ modeLabel }}</span>
-        <el-tag size="small" type="danger" effect="plain">🔒 机密 etSecret</el-tag>
+        <!-- 客户资料属机密单据(设计稿 01),与列表页「加密」列口径一致 -->
+        <el-tag size="small" type="danger" effect="plain">🔒 机密</el-tag>
         <el-tag v-if="form.customerNo" size="small" type="primary">{{ form.customerNo }}</el-tag>
       </div>
       <el-button v-if="!readonly" type="primary" :icon="Check" :loading="saving" @click="save">保存</el-button>
@@ -220,12 +221,10 @@ async function loadRefs() {
   forwarders.value = (((fs as any).data ?? fs) as any[]).map((f) => f.name);
 }
 
-async function load() {
-  if (!editId.value) return;
-  const res: any = await customerApi.get(editId.value);
-  const d = res.data ?? res;
+// 详情回显;asCopy=复制为新建时编号留空(保存后系统生成新编号)
+function applyDetail(d: any, asCopy = false) {
   Object.assign(form, {
-    customerNo: d.customer_no, name: d.name ?? '', type: d.type, relatedMiddleman: d.related_middleman ?? '',
+    customerNo: asCopy ? '' : d.customer_no, name: d.name ?? '', type: d.type, relatedMiddleman: d.related_middleman ?? '',
     tradeCountry: d.trade_country ?? '', countryRegion: d.country_region ?? '', city: d.city ?? '',
     homepage: d.homepage ?? '', address: d.address ?? '', priceTerms: d.price_terms ?? '',
     settlementMethod: d.settlement_method ?? '', grade: d.grade ?? '', cooperationLevel: d.cooperation_level ?? '',
@@ -245,6 +244,19 @@ async function load() {
       company: e.company ?? '', account: e.account ?? '', payMethod: e.pay_method ?? '', remark: e.remark ?? '',
     })) : [emptyExpress()],
   });
+}
+
+async function load() {
+  if (editId.value) {
+    const res: any = await customerApi.get(editId.value);
+    applyDetail(res.data ?? res);
+    return;
+  }
+  // 复制为新建(/new?copy_from=):同组件复用时表单数据本就在,整页重挂载(router-view 带 :key)时在此重新载入源数据
+  if (route.query.copy_from) {
+    const res: any = await customerApi.get(Number(route.query.copy_from));
+    applyDetail(res.data ?? res, true);
+  }
 }
 
 function buildDto() {
@@ -292,11 +304,15 @@ watch(() => form.name, (n) => { form.banks.forEach((b: any) => { if (!b.accountN
 
 onMounted(async () => { await loadRefs(); await load(); });
 
-// 编辑页复制(设计稿 §编辑页工具栏):当前数据载为新建(编号留空由系统生成)
+// 编辑/查看页复制(设计稿 §编辑页工具栏):跳 /new?copy_from=,当前数据载为新建(编号留空由系统生成)。
+// 查看态路径是 /:id/view,原先正则只匹配 /edit$ 导致查看页复制静默无效。
 function copyAsNew() {
   form.customerNo = '';
   ElMessage.info('已复制当前数据为新建,保存后生成新编号');
-  router.replace({ path: router.currentRoute.value.path.replace(/\/\d+\/edit$/, '/new') });
+  router.replace({
+    path: router.currentRoute.value.path.replace(/\/\d+\/(edit|view)$/, '/new'),
+    query: { copy_from: String(editId.value) },
+  });
 }
 </script>
 

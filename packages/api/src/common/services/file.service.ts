@@ -46,7 +46,7 @@ export class FileService implements OnModuleInit {
         destination: (req, _file, cb) => {
           const today = new Date();
           // 敏感附件(身份证/水单/发票等)落 private/ 子目录,读取须签名令牌(总览走查P0#7)
-          const sensitive = (req as any)?.query?.sensitive === '1' || (req as any)?.body?.sensitive === '1';
+          const sensitive = this.isSensitiveUpload(req);
           const dir = path.join(
             this.uploadRoot,
             sensitive ? 'private' : subDir,
@@ -142,9 +142,32 @@ export class FileService implements OnModuleInit {
     };
   }
 
+  /**
+   * 判定本次上传是否按敏感附件处理（落 private/ 子目录）。
+   * 客户端显式声明 sensitive=1 即敏感；此外供应商账号的上传入口只有发票/发货附件等
+   * 敏感业务件，即使客户端漏传 sensitive 也强制私有兜底（L9：敏感标志不可纯客户端自声明）。
+   */
+  isSensitiveUpload(req: any): boolean {
+    if (req?.query?.sensitive === '1' || req?.body?.sensitive === '1') return true;
+    if (req?.user?.type === 'supplier') return true;
+    return false;
+  }
+
   /** 敏感附件判定：private/ 子目录下的文件读取须签名令牌 */
   isPrivate(relativePath: string): boolean {
     return (relativePath ?? '').replace(/^[/\\]+/, '').startsWith('private/');
+  }
+
+  /**
+   * 校验相对路径是否可签发访问令牌：必须无路径穿越、确属 private/ 目录且文件真实存在。
+   * 各类失败统一返回 false（不区分「不存在」与「不可签发」），由调用方抛统一错误，
+   * 避免借响应差异探测文件是否存在（L9）。
+   */
+  canSign(relativePath: string): boolean {
+    const p = (relativePath ?? '').replace(/\\/g, '/').replace(/^\/+/, '');
+    if (!p || p.split('/').includes('..')) return false; // 路径穿越一律拒绝
+    if (!this.isPrivate(p)) return false; // 仅 private/ 敏感附件需要（且允许）签发
+    return this.resolvePath(p) !== null; // 目标文件必须真实存在
   }
 
   /** 为敏感附件签发短时访问令牌（HMAC-SHA256(path:exp)，默认 5 分钟） */

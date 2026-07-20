@@ -205,7 +205,7 @@
         <el-descriptions-item label="签约时间">{{ form.sign_date || '—' }}</el-descriptions-item>
         <el-descriptions-item label="盖章方式">① 一键电子章(自动贴PDF落款)　② 上传纸质盖章合同照片</el-descriptions-item>
         <el-descriptions-item :label="isProcess ? '受托方盖章' : '甲方盖章'">
-          <template v-if="form.stamped_at"><el-tag type="success" size="small">已盖章</el-tag> {{ form.stamped_by_supplier }} · {{ String(form.stamped_at).slice(0, 19) }}</template>
+          <template v-if="form.stamped_at"><el-tag type="success" size="small">已盖章</el-tag> {{ form.stamped_by_supplier }} · {{ fmtDateTime(form.stamped_at) }}</template>
           <template v-else>🖋 {{ isProcess ? '加工厂' : '供应商' }}在门户「我要盖章」处加盖（电子章自动贴 / 上传照片）</template>
         </el-descriptions-item>
         <el-descriptions-item :label="isProcess ? '委托方盖章' : '乙方盖章'">✓ 本司电子章随 PDF 生成自动贴入落款</el-descriptions-item>
@@ -248,6 +248,7 @@ import type { DocLink } from '@/components/DocLinks.vue';
 import { companyApi } from '@/api/company';
 import { uploadApi } from '@/api/upload';
 import { signedUrl } from '@/utils/secureFile';
+import { fmtDateTime } from '@/utils/format';
 import { printContract } from '@/utils/contractPrint';
 import { exportContractExcel } from '@/utils/contractExcel';
 import { useAuthStore } from '@/stores/auth';
@@ -373,9 +374,10 @@ async function loadDocLinks(id: number) {
         }).catch(() => { /* 订单详情取不到就不显示报价单 chip */ })
       : Promise.resolve(),
     reconciliationApi.list({ contract_id: id, page: 1, size: 100 }).then((res: any) => {
-      // 列表响应被 ResponseInterceptor 展开:数组在 res.data。后端若尚未支持 contract_id 过滤会回全量,前端再筛一道防串单
+      // 列表响应被 ResponseInterceptor 展开:数组在 res.data。后端若尚未支持 contract_id 过滤会回全量,前端再筛一道防串单。
+      // bigint 归一:contract_id 经 mysql2 出来是字符串,入参 id 也可能是字符串(save 新建后传 created.id),统一转数字再比
       relatedRecons.value = ((res?.data ?? []) as any[])
-        .filter((r: any) => r?.contract_id === id)
+        .filter((r: any) => Number(r?.contract_id) === Number(id))
         .map((r: any) => ({ id: r.id, no: r.reconcile_no || '#' + r.id }));
     }).catch(() => { relatedRecons.value = []; }),
   ]);
@@ -445,7 +447,7 @@ async function doImport() {
   try {
     const res: any = await orderApi.get(importOrderId.value);
     const od = res.data ?? res;
-    if (!form.order_id) form.order_id = od.id;
+    if (!form.order_id) form.order_id = Number(od.id);
     if (od.style_no && !styleNoList.value.includes(od.style_no)) form.style_nos = [...styleNoList.value, od.style_no].join(',');
     let lines: any[] = [];
     if (isProcess.value) {
@@ -543,10 +545,11 @@ async function save() {
       const res: any = await contractApi.create(dto);
       const created = res.data ?? res;
       ElMessage.success(`创建成功：${created.contract_no}`);
-      contractId.value = created.id;
-      router.replace(`/contracts/${created.id}/edit`);
-      await loadDetail(created.id);
-      void loadDocLinks(created.id);
+      // bigint 归一:created.id 经 mysql2 出来可能是字符串,统一成数字,后续 update/loadDocLinks 都按数字走
+      contractId.value = Number(created.id);
+      router.replace(`/contracts/${contractId.value}/edit`);
+      await loadDetail(contractId.value);
+      void loadDocLinks(contractId.value);
     }
   } catch (e: any) { errToast(e?.response?.data?.msg ?? '保存失败'); }
   finally { saving.value = false; }
@@ -604,15 +607,32 @@ async function loadRefs() {
     companyApi.list().catch(() => ({ data: [] })),
   ]);
   factories.value = (((fs as any).data ?? fs) as any[]) ?? [];
-  orders.value = (os as any).data ?? [];
+  // 订单 id 规范成数字:bigint 主键经 mysql2 出来是字符串,而 form.order_id 是数字,
+  // 类型不一致 el-select 匹配不到选项 → 「关联订单」回显裸数字(同 FactorySelect 的 Number() 归一惯例)
+  orders.value = (((os as any).data ?? []) as any[]).map((o: any) => ({ ...o, id: Number(o.id) }));
   companies.value = ((cs as any).data ?? []) as any[];
   if (!form.company_id) form.company_id = companies.value.find((c: any) => c.is_default)?.id ?? companies.value[0]?.id;
+}
+// 订单下拉只装前 100 条(size:100):当前选中订单可能不在其中 → 回显裸 ID。
+// 选中值缺选项时按 id 单拉一条补进选项,保证回显正常(工厂/公司接口是全量不分页,无此问题)
+async function ensureOrderOption() {
+  const oid = form.order_id;
+  if (oid == null || orders.value.some((o: any) => o.id === oid)) return;
+  try {
+    const res: any = await orderApi.get(oid);
+    const od = res.data ?? res;
+    if (od?.id != null && !orders.value.some((o: any) => o.id === Number(od.id))) {
+      orders.value = [{ ...od, id: Number(od.id) }, ...orders.value];
+    }
+  } catch { /* 单条拉取失败不挡主流程,维持原样 */ }
 }
 function applyDetail(d: any, opts: { asCopy?: boolean; zeroQty?: boolean } = {}) {
   const keep = ['factory_id', 'order_id', 'currency', 'deposit_ratio', 'mid_ratio', 'final_ratio', 'account_period_days',
     'sign_place', 'company_id', 'company_rep', 'guarantor', 'guarantor_id_photo', 'delivery_deadline',
     'ship_to_address', 'style_nos', 'price_other', 'remark'];
   for (const k of keep) if (d[k] != null) (form as any)[k] = d[k];
+  // bigint 归一:订单 id 与下拉选项同为数字(mysql2 出 bigint 是字符串),否则回显裸 ID
+  if (d.order_id != null) form.order_id = Number(d.order_id);
   form.deposit_ratio = +d.deposit_ratio; form.mid_ratio = +d.mid_ratio; form.final_ratio = +d.final_ratio;
   form.vat_rate = d.vat_rate != null ? +d.vat_rate : form.vat_rate;
   form.price_includes = Array.isArray(d.price_includes) ? d.price_includes : form.price_includes;
@@ -657,6 +677,8 @@ onMounted(async () => {
       applyDetail(res.data ?? res, { asCopy: true, zeroQty: form.type === 'SUPPLEMENT' });
       if (form.type === 'SUPPLEMENT') ElMessage.info('补料合同：已复制原合同基础信息与材料清单，各行数量默认 0，请按实际补料量填写');
     }
+    // 详情/复制落定后兜底:选中订单不在前 100 条选项里时单拉补入,防回显裸 ID
+    await ensureOrderOption();
     if (!form.company_rep) form.company_rep = authStore.realName || '';
   } finally { loading.value = false; }
 });

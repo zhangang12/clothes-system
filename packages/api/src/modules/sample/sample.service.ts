@@ -1,5 +1,5 @@
 import {
-  Injectable, NotFoundException, BadRequestException,
+  Injectable, NotFoundException, BadRequestException, ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
@@ -18,7 +18,8 @@ import { ReconciliationExpenseItem } from '../reconciliation/reconciliation-expe
 import { Factory } from '../factory/factory.entity';
 import { ReconcileType } from '@i9/types';
 import { CustomerService } from '../customer/customer.service';
-import { SampleStatus } from '@i9/types';
+import { SampleStatus, UserRole } from '@i9/types';
+import { SysUser } from '../auth/sys-user.entity';
 import {
   CreateSampleDto, PushPatternmakerDto, PatternmakerSaveDto, ShipSampleDto, ImportSampleRowDto,
 } from './dto/create-sample.dto';
@@ -354,6 +355,13 @@ export class SampleService {
   async patternmakerSave(id: number, dto: PatternmakerSaveDto, operatorId: number): Promise<SampleGarment> {
     const entity = await this.repo.findOne({ where: { id, deleted: 0 } });
     if (!entity) throw new NotFoundException(`样衣 #${id} 不存在`);
+    // 指派归属校验(L2):版师仅能写自己名下的样衣(实耗/工价直接驱动对账金额);管理员等角色按既有惯例放行
+    // controller 仅传 operatorId,角色经 sys_user 回查(同 purchaseMaterial 跨模块取 Factory 的 dataSource 惯例)
+    const operator = await this.dataSource.getRepository(SysUser).findOne({ where: { id: operatorId } });
+    if (operator?.role === UserRole.PATTERNMAKER && entity.patternmaker_id != null
+      && Number(entity.patternmaker_id) !== Number(operatorId)) {
+      throw new ForbiddenException('仅该样衣的指派制版师可保存实耗/工价');
+    }
     if (![SampleStatus.SAMPLING, SampleStatus.SHIPPED, SampleStatus.RETURNED, SampleStatus.RECONCILED].includes(entity.status)) {
       throw new BadRequestException('当前状态不允许版师保存(样衣未在打样/寄回/对账阶段,或已成单/完成)');
     }

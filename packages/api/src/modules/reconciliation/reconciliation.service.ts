@@ -2,7 +2,7 @@ import {
   Injectable, NotFoundException, BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, Like, In, DataSource } from 'typeorm';
+import { Repository, FindOptionsWhere, Like, In, DataSource, EntityManager } from 'typeorm';
 import { Reconciliation, ReconciliationStatus } from './reconciliation.entity';
 import { ReconciliationShipment } from './reconciliation-shipment.entity';
 import { ReconciliationLaborItem } from './reconciliation-labor-item.entity';
@@ -66,6 +66,45 @@ export class ReconciliationService {
         const types = Array.from(new Set(contracts.map((c) => c.type)));
         if (types.length > 1) {
           throw new BadRequestException('一张对账单只能同一类型合同（材料 或 加工），不可混含');
+        }
+      }
+
+      // 发货批次校验（H1：内部创建与门户同一占用口径）——
+      // 批次须存在、归属本对账单合同、未被其他对账单占用；单价须与批次锁价/合同快照一致
+      const heldBatches: ContractShipment[] = [];
+      if (shipmentLines.length) {
+        const batches = await manager.find(ContractShipment, {
+          where: { id: In(shipmentLines.map((s) => +s.shipment_id)) },
+        });
+        const batchById = new Map(batches.map((b) => [+b.id, b])); // bigint 归一：mysql 出来可能是字符串
+        for (const s of shipmentLines) {
+          const batch = batchById.get(+s.shipment_id);
+          if (!batch) throw new BadRequestException(`发货批次 #${s.shipment_id} 不存在，无法对账`);
+          const lineContractId = s.contract_id ?? dto.contract_id;
+          if (!lineContractId) {
+            throw new BadRequestException(`批次 ${batch.ship_no ?? s.shipment_id} 须指明来源合同（一单多合同请逐批带 contract_id）`);
+          }
+          if (+batch.contract_id !== +lineContractId) {
+            throw new BadRequestException(`发货批次 ${batch.ship_no ?? s.shipment_id} 不属于合同 #${lineContractId}`);
+          }
+          if (batch.reconcile_id != null && +batch.reconcile_id > 0) {
+            throw new BadRequestException(`发货批次 ${batch.ship_no ?? s.shipment_id} 已在其他对账单中，不可重复对账`);
+          }
+          // 单价核对：优先批次锁价（逐批锁价 B8），缺失时回退合同快照材料价
+          //（同 ContractService.getSnapshotUnitPrice 思路，本模块内直查快照避免跨模块循环依赖）
+          let expectPrice: number | null = batch.snapshot_unit_price != null ? +batch.snapshot_unit_price : null;
+          if (expectPrice == null) {
+            const contract = await manager.findOne(Contract, { where: { id: lineContractId, deleted: 0 } });
+            const snap = contract?.snapshot_json as any;
+            const item = (snap?.materials ?? []).find((m: any) => m.item_name === s.item_name);
+            expectPrice = item?.unit_price != null ? +item.unit_price : null;
+          }
+          if (expectPrice != null && Math.abs(+s.snapshot_unit_price - expectPrice) > 0.0001) {
+            throw new BadRequestException(
+              `批次 ${batch.ship_no ?? s.shipment_id}（${s.item_name}）单价 ${s.snapshot_unit_price} 与合同快照价 ${expectPrice} 不一致，请核对`,
+            );
+          }
+          heldBatches.push(batch);
         }
       }
 
@@ -135,6 +174,12 @@ export class ReconciliationService {
           }),
         );
         await manager.save(ReconciliationShipment, lines);
+        // 占用批次（H1：内部创建此前不占用，致门户可对同批次重复发起对账；
+        // 删单 remove / 整单退回 reject 的既有释放路径与之对称，不留孤儿占用）
+        for (const b of heldBatches) {
+          b.reconcile_id = reconciliation.id;
+        }
+        await manager.save(ContractShipment, heldBatches);
       }
 
       // 无合同空白对账单·费用明细落库（补充确认v1.1）
@@ -303,15 +348,21 @@ export class ReconciliationService {
   }
 
   // 业务员初审提交：草稿→待主管复核（设计稿 对账 B1/C1 二级审批）
+  // 事务化：存量自愈占用（见 ensureBatchesHeld）与状态变更须原子，防并发双提交抢批
   async submit(id: number): Promise<Reconciliation> {
-    const rec = await this.repo.findOne({ where: { id, deleted: 0 } });
-    if (!rec) throw new NotFoundException(`对账单 #${id} 不存在`);
-    if (rec.status !== ReconciliationStatus.DRAFT) {
-      throw new BadRequestException('只有草稿状态才可提交复核');
-    }
-    await this.assertBatchesStillHeld(id);
-    rec.status = ReconciliationStatus.PENDING;
-    return this.repo.save(rec);
+    return this.dataSource.transaction(async (manager) => {
+      const rec = await manager.findOne(Reconciliation, {
+        where: { id, deleted: 0 },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!rec) throw new NotFoundException(`对账单 #${id} 不存在`);
+      if (rec.status !== ReconciliationStatus.DRAFT) {
+        throw new BadRequestException('只有草稿状态才可提交复核');
+      }
+      await this.ensureBatchesHeld(rec, manager);
+      rec.status = ReconciliationStatus.PENDING;
+      return manager.save(Reconciliation, rec);
+    });
   }
 
   // 主管整单退回：待复核→草稿，记录退回批注（补充确认：可逐批批注、整单退回）。
@@ -331,15 +382,43 @@ export class ReconciliationService {
     });
   }
 
-  // 批次型对账单（门户勾选发货批次生成）被退回后批次已释放——不可再提交/确认，防同批次重复计费
-  private async assertBatchesStillHeld(id: number): Promise<void> {
-    const linked = await this.shipmentRepo.count({ where: { reconcile_id: id } });
-    if (!linked) return; // 非批次型对账单
-    const held = await this.dataSource.getRepository(ContractShipment).count({ where: { reconcile_id: id } });
-    if (!held) {
+  // 批次占用保障（submit/confirm 前调用，须在事务内）：
+  // - 正常路径：本单仍占用批次 → 放行；
+  // - 整单退回留痕（review_remark 非空且批次已释放）→ 拦截，防同批次两单重复计费；
+  // - 存量兼容（H1 修复前内部创建的单只写明细、从未占用批次）：自愈——事务内逐批
+  //   占用空闲批次继续流转；批次已被其他未删对账单占用 → 明确报出占用方（真正防
+  //   重复计费的一关）；占用方是已删单 → 清陈旧占用后重占。
+  private async ensureBatchesHeld(rec: Reconciliation, manager: EntityManager): Promise<void> {
+    const linked = await manager.find(ReconciliationShipment, { where: { reconcile_id: rec.id } });
+    if (!linked.length) return; // 非批次型对账单
+    const held = await manager.count(ContractShipment, { where: { reconcile_id: rec.id } });
+    if (held > 0) return;
+    if (rec.review_remark) {
       throw new BadRequestException(
-        '该对账单为门户批次对账且已整单退回、批次已释放——请由供应商在门户按批注重新发起，本单仅作退回留痕',
+        '该批次对账单已整单退回、批次已释放——请按退回批注重新发起对账，本单仅作退回留痕',
       );
+    }
+    // 存量自愈：逐批条件占用（WHERE reconcile_id IS NULL 保证不抢别单批次，并发安全）
+    for (const line of linked) {
+      const res = await manager.update(
+        ContractShipment,
+        { id: line.shipment_id, reconcile_id: null as any },
+        { reconcile_id: rec.id },
+      );
+      if (res.affected) continue;
+      // 条件占用 0 行：判明批次去向——已归本单（并发同单）放行；别单占用拦截；已删单占用清后重占
+      const batch = await manager.findOne(ContractShipment, { where: { id: line.shipment_id } });
+      if (!batch) throw new BadRequestException(`发货批次 #${line.shipment_id} 不存在，无法继续本单`);
+      if (batch.reconcile_id != null && +batch.reconcile_id === +rec.id) continue;
+      const occupier = batch.reconcile_id != null
+        ? await manager.findOne(Reconciliation, { where: { id: +batch.reconcile_id } })
+        : null;
+      if (occupier && !occupier.deleted) {
+        throw new BadRequestException(
+          `发货批次 ${batch.ship_no ?? line.shipment_id} 已被对账单 ${occupier.reconcile_no} 占用，本单无法继续（防重复计费）`,
+        );
+      }
+      await manager.update(ContractShipment, { id: line.shipment_id }, { reconcile_id: rec.id });
     }
   }
 
@@ -355,7 +434,7 @@ export class ReconciliationService {
       if (rec.status !== ReconciliationStatus.PENDING) {
         throw new BadRequestException('只有待复核状态才可复核确认（需业务员先提交）');
       }
-      await this.assertBatchesStillHeld(id);
+      await this.ensureBatchesHeld(rec, manager);
       // 超发闸门(P2#28):累计实发超合同量时须业务填写放行原因留痕
       if (rec.type === ReconcileType.CONTRACT && rec.contract_id) {
         const contract = await manager.findOne(Contract, { where: { id: rec.contract_id, deleted: 0 } });
@@ -384,13 +463,23 @@ export class ReconciliationService {
       rec.confirmed_at = new Date();
       const saved = await manager.save(Reconciliation, rec);
       // 软锁(P2#22):上游对账确认后,同订单已确认结算单标「待重算」
-      await manager.query(
+      const markRecalcSql =
         `UPDATE settlement s
            JOIN contract c ON c.order_id = s.order_id
             SET s.needs_recalc = 1
-          WHERE c.id = ? AND s.status = 'CONFIRMED' AND s.deleted = 0`,
-        [rec.contract_id ?? 0],
-      );
+          WHERE c.id = ? AND s.status = 'CONFIRMED' AND s.deleted = 0`;
+      if (rec.contract_id) {
+        await manager.query(markRecalcSql, [rec.contract_id]);
+      } else {
+        // 一单多合同(L7-②):对账单无单一 contract_id,按明细批次反查涉及的所有合同逐张标记
+        const rows: { contract_id: number | string }[] = await manager.query(
+          'SELECT DISTINCT contract_id FROM reconciliation_shipment WHERE reconcile_id = ? AND contract_id IS NOT NULL',
+          [rec.id],
+        );
+        for (const row of rows) {
+          await manager.query(markRecalcSql, [+row.contract_id]); // bigint 归一
+        }
+      }
 
       // 对账确认后推进合同门户至「已对账」，解锁供应商开票（设计稿 门户 B2/E4：开票须对账后）
       if (rec.type === ReconcileType.CONTRACT && rec.contract_id) {

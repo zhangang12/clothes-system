@@ -61,7 +61,8 @@ function mountView(role: UserRole) {
   return mount(SettlementListView, {
     global: {
       plugins: [pinia, ElementPlus],
-      stubs: commonStubs,
+      // RuleHint 是 main.ts 全局注册的组件，测试环境未注册需 stub，否则报 resolve 警告
+      stubs: { ...commonStubs, RuleHint: true },
     },
   });
 }

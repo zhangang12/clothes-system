@@ -2,7 +2,8 @@ import {
   Controller, Get, Post, Delete, Patch, Body, Param, Query,
   ParseIntPipe, UseGuards, Request,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiProperty } from '@nestjs/swagger';
+import { IsEnum } from 'class-validator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -13,6 +14,14 @@ import { ContractStatus } from './contract.entity';
 import { CreateContractDto } from './dto/create-contract.dto';
 import { UpdateContractDto } from './dto/update-contract.dto';
 import { QueryContractDto } from './dto/query-contract.dto';
+
+// 合同状态更新 DTO（2026-07-19 排查 L6）：status 必须过 class-validator 枚举校验，
+// 非法值在入口 400，不再裸打到 MySQL enum 列报 500
+export class UpdateContractStatusDto {
+  @ApiProperty({ enum: ContractStatus, description: '目标状态（ACTIVE/COMPLETED/CANCELLED）' })
+  @IsEnum(ContractStatus)
+  status: ContractStatus;
+}
 
 @ApiTags('合同管理')
 @ApiBearerAuth()
@@ -35,16 +44,24 @@ export class ContractController {
     return this.service.generateFromOrder(orderId, req.user.id);
   }
 
+  // 价格提示/按款号查合同均含供应商成本价（unit_price/total_amount），属脱敏基建覆盖范围
+  // （2026-07-19 排查 M3）：补齐 @Roles 挡版师/打样，返回统一过 maskContract 兜底
   @Get('price-hint')
+  @Roles(UserRole.ADMIN, UserRole.BUSINESS, UserRole.FINANCE, UserRole.SUPERVISOR)
   @ApiOperation({ summary: '历史同款价格提示（同款号+品名最近合同单价，P3#41）' })
-  priceHint(@Query('style_no') styleNo: string, @Query('item_name') itemName?: string) {
-    return this.service.priceHint(styleNo ?? '', itemName);
+  async priceHint(
+    @Query('style_no') styleNo: string,
+    @Query('item_name') itemName: string | undefined,
+    @Request() req: any,
+  ) {
+    return maskContract(await this.service.priceHint(styleNo ?? '', itemName), req.user.role);
   }
 
   @Get('by-style')
+  @Roles(UserRole.ADMIN, UserRole.BUSINESS, UserRole.FINANCE, UserRole.SUPERVISOR)
   @ApiOperation({ summary: '按款号列出合同（对账/付款「搜款号→选合同」，带出工厂）' })
-  byStyle(@Query('style_no') styleNo: string) {
-    return this.service.contractsByStyle(styleNo ?? '');
+  async byStyle(@Query('style_no') styleNo: string, @Request() req: any) {
+    return maskContract(await this.service.contractsByStyle(styleNo ?? ''), req.user.role);
   }
 
   @Get()
@@ -107,9 +124,9 @@ export class ContractController {
 
   @Patch(':id/status')
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: '更新合同状态（ACTIVE/COMPLETED/CANCELLED）' })
-  updateStatus(@Param('id', ParseIntPipe) id: number, @Body('status') status: ContractStatus) {
-    return this.service.updateStatus(id, status);
+  @ApiOperation({ summary: '更新合同状态（状态机白名单流转；有对账/付款关联禁止直接作废）' })
+  updateStatus(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateContractStatusDto) {
+    return this.service.updateStatus(id, dto.status);
   }
 
   @Delete(':id')

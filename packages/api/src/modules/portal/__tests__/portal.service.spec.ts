@@ -290,4 +290,22 @@ describe('PortalService', () => {
     await expect(service.createReconcile(1, 'supplier_A', 10, { shipment_ids: [11] }))
       .rejects.toThrow(/对账须在发货后/);
   });
+
+  // ===== 撤回发货批次（门户B3 / L33 状态校验）=====
+
+  // UT-PORTAL-14: COMPLETED 合同不可撤回批次（流程死角闸门，状态校验先于批次查询）
+  it('UT-PORTAL-14 withdrawShipment rejects when contract COMPLETED', async () => {
+    contractRepo.findOne.mockResolvedValue(makeContract({ portal_status: ContractPortalStatus.COMPLETED }));
+    await expect(service.withdrawShipment(1, 11, 'supplier_A', 10))
+      .rejects.toThrow(/不可撤回发货批次/);
+    expect(shipmentRepo.findOne).not.toHaveBeenCalled();
+  });
+
+  // UT-PORTAL-14b: PUSHED/STAMPED 等发货前状态同样拒绝（与前端按钮口径一致：仅 SHIPPING/RECONCILED 可撤回）
+  it('UT-PORTAL-14b withdrawShipment rejects when contract STAMPED', async () => {
+    contractRepo.findOne.mockResolvedValue(makeContract({ portal_status: ContractPortalStatus.STAMPED }));
+    await expect(service.withdrawShipment(1, 11, 'supplier_A', 10))
+      .rejects.toThrow(BadRequestException);
+    expect(shipmentRepo.findOne).not.toHaveBeenCalled();
+  });
 });

@@ -2,20 +2,26 @@ import { IsArray, IsNumber, IsOptional, IsPositive, IsString, MaxLength, Validat
 import { Type } from 'class-transformer';
 
 export class ShipLineDto {
+  // bigint 主键经 mysql2 返回字符串，须显式转型（同 createReconcile 的 shipment_ids 写法）
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   material_id?: number;
 
+  @Type(() => Number)
   @IsNumber()
   @IsPositive()
   qty: number;
 }
 
 export class MergeShipEntryDto {
+  // bigint 主键经 mysql2 返回字符串，无 @Type 会被全局 ValidationPipe 判 400（H7）
+  @Type(() => Number)
   @IsNumber()
   contract_id: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @IsPositive()
   qty?: number;

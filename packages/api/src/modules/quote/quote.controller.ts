@@ -50,56 +50,56 @@ export class QuoteController {
   @Put(':id')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
   @ApiOperation({ summary: '编辑报价单（草稿/客户调整状态，覆盖式）' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: Partial<CreateQuoteDto>) {
-    return this.service.update(id, dto);
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: Partial<CreateQuoteDto>, @Request() req: any) {
+    return this.service.update(id, dto, req.user);
   }
 
   @Patch(':id/import-sample/:sampleId')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
   @ApiOperation({ summary: '从样衣导入材料明细到报价明细' })
-  importFromSample(@Param('id', ParseIntPipe) id: number, @Param('sampleId', ParseIntPipe) sampleId: number) {
-    return this.service.importFromSample(id, sampleId);
+  importFromSample(@Param('id', ParseIntPipe) id: number, @Param('sampleId', ParseIntPipe) sampleId: number, @Request() req: any) {
+    return this.service.importFromSample(id, sampleId, req.user);
   }
 
   @Patch(':id/submit')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
   @ApiOperation({ summary: '发出报价（草稿/客户调整→已报价；超阈值需先审批）' })
-  submit(@Param('id', ParseIntPipe) id: number) {
-    return this.service.submitQuote(id);
+  submit(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.service.submitQuote(id, req.user);
   }
 
   @Patch(':id/approve')
   @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
   @ApiOperation({ summary: '主管审批超阈值报价（待审批→已审批）' })
   approve(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
-    return this.service.approveQuote(id, req.user.id);
+    return this.service.approveQuote(id, req.user.id, req.user);
   }
 
   @Patch(':id/adjust')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
   @ApiOperation({ summary: '客户调整（已报价→客户调整）' })
-  adjust(@Param('id', ParseIntPipe) id: number) {
-    return this.service.adjust(id);
+  adjust(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.service.adjust(id, req.user);
   }
 
   @Patch(':id/to-contract')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
   @ApiOperation({ summary: '转销售合同（已报价/客户调整→已成单，关联样衣置已成单，自动生成订单草稿）' })
   toContract(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
-    return this.service.toContract(id, req.user.id);
+    return this.service.toContract(id, req.user.id, req.user);
   }
 
   @Post(':id/copy')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
   @ApiOperation({ summary: '复制报价单（新单草稿；with_items=false 仅复制基本信息）' })
   copy(@Param('id', ParseIntPipe) id: number, @Request() req: any, @Body('with_items') withItems?: boolean) {
-    return this.service.copy(id, req.user.id, withItems !== false);
+    return this.service.copy(id, req.user.id, withItems !== false, req.user);
   }
 
   @Delete(':id')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
   @ApiOperation({ summary: '删除报价单（草稿状态，逻辑删除）' })
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.service.remove(id);
+  remove(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.service.remove(id, req.user);
   }
 }

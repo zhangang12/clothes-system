@@ -55,7 +55,9 @@
       <el-main class="main">
         <router-view v-slot="{ Component }">
           <transition name="page" mode="out-in">
-            <component :is="Component" />
+            <!-- key 必须绑 fullPath：同一路由换 :id（如「编辑样衣 #5」切「#7」）时强制重建组件，
+                 否则 Vue 复用实例、onMounted 不重跑，表单残留上一张单据，保存即覆盖错单 -->
+            <component :is="Component" :key="$route.fullPath" />
           </transition>
         </router-view>
       </el-main>

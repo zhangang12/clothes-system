@@ -5,7 +5,6 @@
       <div class="title-wrap">
         <el-button link :icon="Back" @click="goBack">返回</el-button>
         <span class="title">工厂资料 · {{ modeLabel }}</span>
-        <el-tag size="small" effect="plain" type="info">一般 etGeneral</el-tag>
         <el-tag v-if="form.factoryNo" size="small" type="primary">{{ form.factoryNo }}</el-tag>
       </div>
       <div class="ops">
@@ -222,12 +221,10 @@ function removeContacts() {
   if (!form.contacts.length) form.contacts.push(emptyContact());
 }
 
-async function load() {
-  if (!editId.value) return;
-  const res: any = await factoryApi.get(editId.value);
-  const d = res.data ?? res;
+// 详情回显;asCopy=复制为新建时编号留空(保存后系统生成新编号)
+function applyDetail(d: any, asCopy = false) {
   Object.assign(form, {
-    factoryNo: d.factory_no, type: d.type, extraTypes: d.extra_types ? String(d.extra_types).split(',').filter(Boolean) : [], canInvoice: d.can_invoice !== 0, name: d.name,
+    factoryNo: asCopy ? '' : d.factory_no, type: d.type, extraTypes: d.extra_types ? String(d.extra_types).split(',').filter(Boolean) : [], canInvoice: d.can_invoice !== 0, name: d.name,
     province: d.province ?? '', city: d.city ?? '', address: d.address ?? '',
     businessScope: d.business_scope ?? '', grade: d.grade ?? '', developDate: d.develop_date ?? '',
     bankName: d.bank_name ?? '', bankAccount: d.bank_account ?? '', taxNo: d.tax_no ?? '',
@@ -243,6 +240,19 @@ async function load() {
       phone: c.phone ?? '', mobile: c.mobile ?? '', email: c.email ?? '', remark: c.remark ?? '',
     })) : [emptyContact()]),
   });
+}
+
+async function load() {
+  if (editId.value) {
+    const res: any = await factoryApi.get(editId.value);
+    applyDetail(res.data ?? res);
+    return;
+  }
+  // 复制为新建(/new?copy_from=):同组件复用时表单数据本就在,整页重挂载(router-view 带 :key)时在此重新载入源数据
+  if (route.query.copy_from) {
+    const res: any = await factoryApi.get(Number(route.query.copy_from));
+    applyDetail(res.data ?? res, true);
+  }
 }
 
 function buildDto() {
@@ -292,11 +302,15 @@ async function save() {
 function goBack() { router.push({ name: 'Factories' }); }
 onMounted(load);
 
-// 编辑页复制(设计稿 §编辑页工具栏):当前数据载为新建(编号留空由系统生成)
+// 编辑/查看页复制(设计稿 §编辑页工具栏):跳 /new?copy_from=,当前数据载为新建(编号留空由系统生成)。
+// 查看态路径是 /:id/view,原先正则只匹配 /edit$ 导致查看页复制静默无效。
 function copyAsNew() {
   form.factoryNo = '';
   ElMessage.info('已复制当前数据为新建,保存后生成新编号');
-  router.replace({ path: router.currentRoute.value.path.replace(/\/\d+\/edit$/, '/new') });
+  router.replace({
+    path: router.currentRoute.value.path.replace(/\/\d+\/(edit|view)$/, '/new'),
+    query: { copy_from: String(editId.value) },
+  });
 }
 </script>
 

@@ -16,6 +16,9 @@ import { SupplierAccount } from '../../auth/supplier-account.entity';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
 import { SysConfigService } from '../../../common/config/sys-config.service';
 import { ContractPortalStatus, ContractType } from '@i9/types';
+import { Reconciliation } from '../../reconciliation/reconciliation.entity';
+import { ReconciliationShipment } from '../../reconciliation/reconciliation-shipment.entity';
+import { Prepayment } from '../../payment/prepayment.entity';
 
 const makeContract = (overrides = {}): any => ({
   id: 1,
@@ -36,6 +39,7 @@ const mockRepo = {
   save: jest.fn().mockImplementation((v) => Promise.resolve({ ...v, id: v.id ?? 1 })),
   findOne: jest.fn(),
   findAndCount: jest.fn().mockResolvedValue([[], 0]),
+  count: jest.fn().mockResolvedValue(0),
 };
 const mockMaterialRepo = {
   create: jest.fn().mockImplementation((v) => v),
@@ -65,6 +69,15 @@ const mockFactoryRepo = {
   findOne: jest.fn().mockResolvedValue({ id: 7, name: '面料厂A', deleted: 0 }),
 };
 const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn().mockResolvedValue(1), expire: jest.fn() };
+// updateStatus 作废前检查对账/付款关联（L6）：按实体分流 mock
+const mockReconRepo = { count: jest.fn().mockResolvedValue(0) };
+const mockReconShipQb = {
+  innerJoin: jest.fn().mockReturnThis(),
+  where: jest.fn().mockReturnThis(),
+  getCount: jest.fn().mockResolvedValue(0),
+};
+const mockReconShipRepo = { createQueryBuilder: jest.fn().mockReturnValue(mockReconShipQb) };
+const mockPrepayRepo = { count: jest.fn().mockResolvedValue(0) };
 const mockDataSource = {
   transaction: jest.fn().mockImplementation((cb) => cb({
     create: jest.fn().mockImplementation((_, v) => v),
@@ -75,6 +88,12 @@ const mockDataSource = {
     update: jest.fn().mockResolvedValue({ affected: 1 }),
     query: jest.fn().mockResolvedValue([]),
   })),
+  getRepository: jest.fn().mockImplementation((entity: any) => {
+    if (entity === Reconciliation) return mockReconRepo;
+    if (entity === ReconciliationShipment) return mockReconShipRepo;
+    if (entity === Prepayment) return mockPrepayRepo;
+    return {};
+  }),
 };
 
 const mockChangeLogDep = { record: jest.fn().mockResolvedValue(undefined), list: jest.fn().mockResolvedValue([]) };
@@ -91,7 +110,7 @@ describe('ContractService', () => {
         { provide: ChangeLogService, useValue: mockChangeLogDep },
         { provide: getRepositoryToken(Contract), useValue: mockRepo },
         { provide: getRepositoryToken(ContractMaterial), useValue: mockMaterialRepo },
-        { provide: getRepositoryToken(ContractShipment), useValue: { find: jest.fn().mockResolvedValue([]) } },
+        { provide: getRepositoryToken(ContractShipment), useValue: { find: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) } },
         { provide: getRepositoryToken(ContractPortalLog), useValue: mockLogRepo },
         { provide: getRepositoryToken(OrderMaterial), useValue: mockOrderMaterialRepo },
         { provide: getRepositoryToken(OrderMain), useValue: mockOrderRepo },
@@ -201,14 +220,24 @@ describe('ContractService', () => {
       { item_name: '拉链', supplier: '辅料厂B', unit_price: 2, total_purchase: 200, sort_order: 2 },
       { item_name: '未知料', supplier: '', unit_price: 1, total_purchase: 10, sort_order: 3 },
     ]);
-    mockFactoryRepo.findOne
-      .mockResolvedValueOnce({ id: 7, name: '面料厂A', deleted: 0 })
-      .mockResolvedValueOnce({ id: 8, name: '辅料厂B', deleted: 0 })
-      // 占位工厂查询(P3#41):库里已有「待定供应商」
-      .mockResolvedValueOnce({ id: 99, name: '待定供应商', deleted: 0 });
+    // L1 后工厂匹配/占位查询走在整体事务的 manager 上；create 内部还会查一次 OrderMain
+    const manager = {
+      create: jest.fn().mockImplementation((_: any, v: any) => v),
+      save: jest.fn().mockImplementation((_: any, v: any) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
+      findOne: jest.fn()
+        .mockResolvedValueOnce({ id: 7, name: '面料厂A', deleted: 0 })   // 面料厂A 匹配
+        .mockResolvedValueOnce(null)                                     // create→OrderMain
+        .mockResolvedValueOnce({ id: 8, name: '辅料厂B', deleted: 0 })   // 辅料厂B 匹配
+        .mockResolvedValueOnce(null)                                     // create→OrderMain
+        .mockResolvedValueOnce({ id: 99, name: '待定供应商', deleted: 0 }) // 占位工厂查询(P3#41)
+        .mockResolvedValue(null),                                        // create→OrderMain
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
     const result = await service.generateFromOrder(10, 1);
+    expect(mockDataSource.transaction).toHaveBeenCalledTimes(1); // 整批单一事务（L1）
     expect(result.created).toBe(3); // 面料厂A + 辅料厂B + 待定供应商占位(P3#41)
-    expect(result.unmatched).toContain('未指定供应商'); // 仍回报未匹配清单供改绑
+    expect(result.unmatched).toEqual(['未指定供应商']); // 仍回报未匹配清单供改绑
   });
 
   // UT-CON-03: push transitions DRAFT → PUSHED and logs action
@@ -524,5 +553,101 @@ describe('ContractService', () => {
     const res: any = await service.findOne(1);
     expect(res.order_no).toBeNull();
     expect(res.parent_contract_no).toBeNull();
+  });
+
+  // ===== 2026-07-19 排查回归：M3 / L1 / L6 / L11 =====
+
+  // UT-CON-26: priceHint 空 style_no → 400（M3：空串 LIKE '%%' 会捞出任意合同最近 5 条成本价）
+  it('UT-CON-26 priceHint rejects empty style_no (M3)', async () => {
+    await expect(service.priceHint('')).rejects.toThrow(BadRequestException);
+    await expect(service.priceHint('   ')).rejects.toThrow(BadRequestException);
+  });
+
+  // UT-CON-27: generateFromOrder 幂等守卫——订单已生成过合同则拒绝整批重跑（L1）
+  it('UT-CON-27 generateFromOrder rejects re-run when order already has contracts (L1 幂等守卫)', async () => {
+    mockOrderRepo.findOne.mockResolvedValueOnce({ id: 10, currency: 'CNY', deleted: 0 });
+    mockRepo.count.mockResolvedValueOnce(2); // 该订单已有 2 张合同
+    await expect(service.generateFromOrder(10, 1)).rejects.toThrow(BadRequestException);
+    expect(mockDataSource.transaction).not.toHaveBeenCalled(); // 未进入生成事务
+  });
+
+  // UT-CON-28: updateStatus 非法值/跨档跳转 → 400（L6 状态机白名单）
+  it('UT-CON-28 updateStatus rejects invalid value and illegal transition (L6)', async () => {
+    mockRepo.findOne.mockResolvedValue(makeContract({ status: ContractStatus.ACTIVE }));
+    await expect(service.updateStatus(1, 'FOO' as any)).rejects.toThrow(BadRequestException);
+    mockRepo.findOne.mockResolvedValue(makeContract({ status: ContractStatus.COMPLETED }));
+    await expect(service.updateStatus(1, ContractStatus.CANCELLED)).rejects.toThrow(BadRequestException);
+  });
+
+  // UT-CON-29: 已有对账/付款关联的合同禁止直接 CANCELLED（L6）
+  it('UT-CON-29 updateStatus blocks CANCELLED when reconciliation links exist (L6)', async () => {
+    mockRepo.findOne.mockResolvedValue(makeContract({ status: ContractStatus.ACTIVE }));
+    mockReconRepo.count.mockResolvedValueOnce(1); // 已有对账单挂该合同
+    await expect(service.updateStatus(1, ContractStatus.CANCELLED)).rejects.toThrow(BadRequestException);
+    expect(mockRepo.save).not.toHaveBeenCalled();
+  });
+
+  // UT-CON-30: 无关联时 ACTIVE→CANCELLED 放行；同状态幂等空操作（L6）
+  it('UT-CON-30 updateStatus allows ACTIVE→CANCELLED without links; same-status is no-op (L6)', async () => {
+    mockRepo.findOne.mockResolvedValue(makeContract({ status: ContractStatus.ACTIVE }));
+    await service.updateStatus(1, ContractStatus.CANCELLED);
+    expect(mockRepo.save).toHaveBeenCalledWith(expect.objectContaining({ status: ContractStatus.CANCELLED }));
+    mockRepo.save.mockClear();
+    mockRepo.findOne.mockResolvedValue(makeContract({ status: ContractStatus.COMPLETED }));
+    const same: any = await service.updateStatus(1, ContractStatus.COMPLETED);
+    expect(same.status).toBe(ContractStatus.COMPLETED);
+    expect(mockRepo.save).not.toHaveBeenCalled(); // 幂等：不落库
+  });
+
+  // UT-CON-31: 补料合同号在事务内按 count+1 生成（L11）
+  it('UT-CON-31 create SUPPLEMENT generates 补料 contract_no inside transaction (L11)', async () => {
+    const manager = {
+      create: jest.fn().mockImplementation((_: any, v: any) => v),
+      save: jest.fn().mockImplementation((_: any, v: any) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
+      findOne: jest.fn().mockResolvedValue({ id: 2, contract_no: 'HT-20260701-001', deleted: 0 }), // 原合同
+      count: jest.fn().mockResolvedValue(1), // 已有 1 张补料
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+    await service.create({
+      type: ContractType.SUPPLEMENT, parent_id: 2, factory_id: 5, order_id: 10,
+      materials: [{ item_name: '面料', unit_price: 10, qty: 5 }],
+    } as any, 1);
+    expect(manager.count).toHaveBeenCalled(); // 序号在事务内取
+    expect(manager.save.mock.calls[0][1]).toMatchObject({ contract_no: '补料-HT-20260701-001-02', parent_id: 2 });
+  });
+
+  // UT-CON-32: 补料并发撞 contract_no 唯一索引 → 回滚重试成功；持续撞号 → 业务异常不裸 500（L11）
+  it('UT-CON-32 create SUPPLEMENT retries duplicate contract_no; persistent conflict → BadRequest (L11)', async () => {
+    const dupErr = Object.assign(
+      new Error("Duplicate entry '补料-HT-20260701-001-02' for key 'contract.IDX_dup'"),
+      { code: 'ER_DUP_ENTRY', errno: 1062 },
+    );
+    const manager = {
+      create: jest.fn().mockImplementation((_: any, v: any) => v),
+      save: jest.fn().mockImplementation((_: any, v: any) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
+      findOne: jest.fn().mockResolvedValue({ id: 2, contract_no: 'HT-20260701-001', deleted: 0 }),
+      count: jest.fn().mockResolvedValue(2), // 重试时序号 +1
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
+    // 第一次撞唯一索引回滚，第二次按最新 count 成功
+    mockDataSource.transaction
+      .mockImplementationOnce(() => Promise.reject(dupErr))
+      .mockImplementationOnce((cb: any) => cb(manager));
+    await service.create({
+      type: ContractType.SUPPLEMENT, parent_id: 2, factory_id: 5, order_id: 10,
+      materials: [{ item_name: '面料', unit_price: 10, qty: 5 }],
+    } as any, 1);
+    expect(mockDataSource.transaction).toHaveBeenCalledTimes(2);
+    expect(manager.save.mock.calls[0][1]).toMatchObject({ contract_no: '补料-HT-20260701-001-03' });
+    // 持续撞号（3 次全失败）→ 明确业务异常而非裸 500
+    mockDataSource.transaction
+      .mockImplementationOnce(() => Promise.reject(dupErr))
+      .mockImplementationOnce(() => Promise.reject(dupErr))
+      .mockImplementationOnce(() => Promise.reject(dupErr));
+    await expect(service.create({
+      type: ContractType.SUPPLEMENT, parent_id: 2, factory_id: 5, order_id: 10,
+      materials: [{ item_name: '面料', unit_price: 10, qty: 5 }],
+    } as any, 1)).rejects.toThrow(BadRequestException);
   });
 });

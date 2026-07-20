@@ -181,10 +181,10 @@ async function doImport() {
   } finally { importing.value = false; }
 }
 
-// 三套脱敏打印(P3#32/ORD E2)
+// 三套脱敏打印(P3#32/ORD E2)。弹窗被浏览器拦截时 printOrder 会抛错,须 catch 提示用户允许弹窗(同报价/样衣侧)
 async function onPrint(mode: string, row: any) {
-  const res: any = await orderApi.get(row.id);
-  printOrder(res.data ?? res, mode as any);
+  try { const res: any = await orderApi.get(row.id); printOrder(res.data ?? res, mode as any); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '打印失败'); }
 }
 
 // 订单复制(P3#34)
@@ -242,8 +242,10 @@ async function batchRemove() {
 function exportCsv() {
   const cols = ['order_no', 'style_no', 'customer_po', 'middleman_name', 'buyer_name', 'qty_total', 'unit_price', 'delivery_date', 'status'];
   const head = ['订单编号', '客户款号', '客户PO', '中间商', '最终买家', '大货总数', '单品单价', '约定交期', '状态'];
-  const rows = list.value.map((r) => cols.map((c) => `"${r[c] ?? ''}"`).join(','));
-  const csv = '﻿' + [head.join(','), ...rows].join('\n');
+  // CSV 转义与 utils/exportAll.ts 口径一致:字段整体包引号,内嵌双引号成双(否则名称含引号即破列)
+  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = list.value.map((r) => cols.map((c) => esc(r[c])).join(','));
+  const csv = '﻿' + [head.map(esc).join(','), ...rows].join('\n');
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
   const a = document.createElement('a'); a.href = url; a.download = '订单.csv'; a.click();
   URL.revokeObjectURL(url);

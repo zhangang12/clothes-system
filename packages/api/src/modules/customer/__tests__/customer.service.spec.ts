@@ -22,7 +22,7 @@ const mockRepo = {
   find: jest.fn(),
   count: jest.fn(),
 };
-const subRepo = () => ({ create: jest.fn().mockImplementation((v) => v), find: jest.fn().mockResolvedValue([]) });
+const subRepo = () => ({ create: jest.fn().mockImplementation((v) => v), find: jest.fn().mockResolvedValue([]), createQueryBuilder: jest.fn() });
 const mockContactRepo = subRepo();
 const mockBankRepo = subRepo();
 const mockExpressRepo = subRepo();
@@ -273,6 +273,24 @@ describe('CustomerService', () => {
         (c: any[]) => c[1] && !Array.isArray(c[1]) && c[1].user_id === 42 && c[1].can_edit === 1,
       );
       expect(grantSave).toBeTruthy();
+    });
+
+    it('UT-CUS-G6: 联系人检索与可见集做真交集——id 子串不误命中（回归 H5）', async () => {
+      // 可见集仅 {12}；联系人检索命中 12 和 1（旧实现用 JSON 子串匹配，In([12]) 含 "1" 会误放行 id=1）
+      mockGrantRepo.find.mockResolvedValue([{ customer_id: 12 }]);
+      mockRepo.find.mockResolvedValue([]);
+      const qb = {
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([{ cid: 12 }, { cid: 1 }]),
+      };
+      (mockContactRepo as any).createQueryBuilder.mockReturnValue(qb);
+      mockRepo.findAndCount.mockResolvedValue([[], 0]);
+      await service.findAll({ page: 1, size: 20, contact: '张' } as any, biz);
+      const where = mockRepo.findAndCount.mock.calls[0][0].where;
+      const cond = Array.isArray(where) ? where[0] : where;
+      const inValues = (cond.id as any).value ?? (cond.id as any)._value;
+      expect(inValues).toEqual([12]); // 仅保留真交集，id=1 不得混入
     });
   });
 });

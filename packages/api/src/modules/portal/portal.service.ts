@@ -467,6 +467,13 @@ export class PortalService {
     if (!contract || !VISIBLE_STATUSES.includes(contract.portal_status)) {
       throw new NotFoundException('合同不存在');
     }
+    // 状态校验（L33）：仅「发货中/已对账」可撤回；已完成等状态放行会造成既撤不了也对不了账的流程死角
+    if (
+      contract.portal_status !== ContractPortalStatus.SHIPPING &&
+      contract.portal_status !== ContractPortalStatus.RECONCILED
+    ) {
+      throw new BadRequestException('当前合同状态不可撤回发货批次（仅发货中或已对账状态可撤回）');
+    }
     const batch = await this.shipmentRepo.findOne({ where: { id: shipmentId, contract_id: id } });
     if (!batch) throw new NotFoundException('发货批次不存在');
     if (batch.reconcile_id) {

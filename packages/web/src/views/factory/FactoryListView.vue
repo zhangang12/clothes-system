@@ -228,7 +228,9 @@ const submitImport = (rows: any[]) => factoryApi.importBatch(rows);
 function exportCsv() {
   const cols = ['factory_no', 'name', 'type', 'province', 'city', 'status'];
   const head = ['编号', '厂商名称', '类型', '省份', '城市', '状态'];
-  const rows = list.value.map((r) => cols.map((c) => `"${r[c] ?? ''}"`).join(','));
+  // 转义同 utils/exportAll：内嵌双引号翻倍，防破列
+  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = list.value.map((r) => cols.map((c) => esc(r[c])).join(','));
   const csv = '﻿' + [head.join(','), ...rows].join('\n');
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
   const a = document.createElement('a'); a.href = url; a.download = '工厂资料.csv'; a.click();

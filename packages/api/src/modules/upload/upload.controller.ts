@@ -7,6 +7,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagg
 import type { Response } from 'express';
 import { FileService } from '../../common/services/file.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 
 @ApiTags('文件上传')
 @Controller('uploads')
@@ -33,13 +34,19 @@ export class UploadController {
     };
   }
 
-  // 为敏感附件签发短时访问链接（须登录；<img>/window.open 用带令牌 URL 打开）
+  // 为敏感附件签发短时访问链接（须登录；<img>/window.open 用带令牌 URL 打开）。
+  // L9 加固：①挂 RolesGuard(未声明 @Roles)——供应商 token 一律拒签，private 路径外泄也无法被门户账号兑换；
+  // ②仅对「确属 private/ 且真实存在」的文件签发，失败统一 404，不暴露文件存在性差异。
+  // （上传记录无归属数据可查，无法按上传者/业务单据逐文件判归属，故按角色整体收紧，残余风险见修复报告。）
   @Get('sign')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: '签发敏感附件短时访问链接（5分钟有效）' })
   sign(@Query('p') relativePath: string) {
     if (!relativePath) throw new BadRequestException('缺少文件路径');
+    if (!this.fileService.canSign(relativePath)) {
+      throw new NotFoundException('文件不存在或不可签发访问链接');
+    }
     return {
       url: `/api/v1/uploads/file?p=${encodeURIComponent(relativePath)}&t=${this.fileService.signToken(relativePath)}`,
     };

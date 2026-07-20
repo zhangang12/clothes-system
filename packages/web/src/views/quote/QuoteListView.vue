@@ -322,8 +322,10 @@ async function batchRemove() {
 function exportCsv() {
   const cols = ['quote_no', 'middleman_name', 'buyer_name', 'style_no', 'inquiry_date', 'quote_qty', 'usd_total', 'status'];
   const head = ['报价单号', '中间商', '最终买家', '客户款号', '询价日期', '数量', '美金总计', '状态'];
-  const rows = list.value.map((r) => cols.map((c) => `"${r[c] ?? ''}"`).join(','));
-  const csv = '﻿' + [head.join(','), ...rows].join('\n');
+  // 转义同 utils/exportAll.ts：内嵌双引号翻倍，否则名称含 " 即破列
+  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = list.value.map((r) => cols.map((c) => esc(r[c])).join(','));
+  const csv = '﻿' + [head.map(esc).join(','), ...rows].join('\n');
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
   const a = document.createElement('a'); a.href = url; a.download = '客户报价.csv'; a.click();
   URL.revokeObjectURL(url);

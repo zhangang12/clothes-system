@@ -2735,6 +2735,50 @@ INSERT INTO sys_dict (type,label,sort)
 SELECT * FROM (SELECT 'title' t,'经理' l,1 s UNION SELECT 'title','主管',2 UNION SELECT 'title','跟单员',3 UNION SELECT 'title','业务员',4) x
 WHERE NOT EXISTS (SELECT 1 FROM sys_dict WHERE type='title');
 
+-- ── 存量数据修复(2026-07-20,H1 配套):对账单批次占用回填,幂等 ─────────────
+-- 背景:H1 修复前内部创建的对账单只写 reconciliation_shipment 明细、从不占用
+-- contract_shipment.reconcile_id——既堵不死「同批次重复对账」,又被后加的占用检查
+-- 误判为「整单退回」卡死提交。此处随发版幂等回填:
+-- ① 清理指向已软删/不存在对账单的陈旧占用;
+-- ② 按对账单 id 升序(先到先得)让未删、非整单退回留痕(review_remark 为空)的
+--    批次型对账单占用其空闲明细批次;已被其他单占用的批次跳过(保留给人工核对);
+-- 整单退回留痕单(DRAFT 且有 review_remark)按产品设计不再占用批次。
+-- 代码侧同步兜底:submit/confirm 对存量单事务内自愈占用
+-- (reconciliation.service.ts ensureBatchesHeld),两口径保持一致。
+DROP PROCEDURE IF EXISTS _i9_backfill_reconcile_hold;
+DELIMITER $$
+CREATE PROCEDURE _i9_backfill_reconcile_hold()
+BEGIN
+  DECLARE done INT DEFAULT 0;
+  DECLARE v_rid BIGINT;
+  DECLARE cur CURSOR FOR
+    SELECT DISTINCT r.id
+      FROM reconciliation r
+      JOIN reconciliation_shipment rs ON rs.reconcile_id = r.id
+     WHERE r.deleted = 0 AND (r.review_remark IS NULL OR r.review_remark = '')
+     ORDER BY r.id;
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
+  -- ① 陈旧占用:占用方对账单已软删或不存在 → 释放,允许被回填重占
+  UPDATE contract_shipment cs
+    LEFT JOIN reconciliation r ON r.id = cs.reconcile_id AND r.deleted = 0
+     SET cs.reconcile_id = NULL
+   WHERE cs.reconcile_id IS NOT NULL AND r.id IS NULL;
+  -- ② 逐单回填:仅空闲批次(reconcile_id IS NULL),单号小者优先,重复执行为 no-op
+  OPEN cur;
+  read_loop: LOOP
+    FETCH cur INTO v_rid;
+    IF done THEN LEAVE read_loop; END IF;
+    UPDATE contract_shipment cs
+      JOIN reconciliation_shipment rs ON rs.shipment_id = cs.id AND rs.reconcile_id = v_rid
+       SET cs.reconcile_id = v_rid
+     WHERE cs.reconcile_id IS NULL;
+  END LOOP;
+  CLOSE cur;
+END$$
+DELIMITER ;
+CALL _i9_backfill_reconcile_hold();
+DROP PROCEDURE IF EXISTS _i9_backfill_reconcile_hold;
+
 -- ── 清理助手 ─────────────────────────────────────────────────────
 DROP PROCEDURE IF EXISTS _i9_add_col;
 DROP PROCEDURE IF EXISTS _i9_modify_col;

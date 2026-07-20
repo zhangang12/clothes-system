@@ -6,7 +6,7 @@ import { PaymentService } from '../payment.service';
 import { Prepayment } from '../prepayment.entity';
 import { PaymentRequest } from '../payment-request.entity';
 import { PaymentRecord } from '../payment-record.entity';
-import { Reconciliation } from '../../reconciliation/reconciliation.entity';
+import { Reconciliation, ReconciliationStatus } from '../../reconciliation/reconciliation.entity';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
 import { PaymentApprovalStatus, ReconcileType } from '@i9/types';
 
@@ -183,11 +183,11 @@ describe('PaymentService', () => {
     expect(result.approval_status).toBe(PaymentApprovalStatus.REJECTED);
   });
 
-  // UT-PAY-10: markPaid transitions APPROVED → PAID
+  // UT-PAY-10: markPaid transitions APPROVED → PAID（L10 后走事务+悲观锁,mock 事务管理器）
   it('UT-PAY-10 markPaid transitions APPROVED→PAID', async () => {
     const pr = makePR({ approval_status: PaymentApprovalStatus.APPROVED });
-    mockPrRepo.findOne.mockResolvedValue(pr);
-    mockPrRepo.save.mockResolvedValue({ ...pr, approval_status: PaymentApprovalStatus.PAID });
+    const manager = makeRecordManager(pr);
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
 
     const result = await service.markPaid(1, 'http://example.com/slip.jpg', 99);
     expect(result.approval_status).toBe(PaymentApprovalStatus.PAID);
@@ -196,31 +196,33 @@ describe('PaymentService', () => {
   // UT-PAY-11: markPaid throws if not APPROVED
   it('UT-PAY-11 markPaid throws BadRequest if status is not APPROVED', async () => {
     const pr = makePR({ approval_status: PaymentApprovalStatus.PENDING });
-    mockPrRepo.findOne.mockResolvedValue(pr);
+    const manager = makeRecordManager(pr);
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
     await expect(service.markPaid(1, 'url', 99)).rejects.toThrow(BadRequestException);
   });
 
   // UT-PAY-13: markPaid syncs linked reconciliation to PAID (系统开发手册·状态流转规则)
   it('UT-PAY-13 markPaid advances linked reconciliation to PAID', async () => {
     const pr = makePR({ approval_status: PaymentApprovalStatus.APPROVED, reconcile_id: 77 });
-    mockPrRepo.findOne.mockResolvedValue(pr);
-    mockPrRepo.save.mockResolvedValue({ ...pr, approval_status: PaymentApprovalStatus.PAID });
+    const manager = makeRecordManager(pr);
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
 
     await service.markPaid(1, 'http://example.com/slip.jpg', 99);
-    expect(mockReconcileRepo.update).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 77 }),
-      expect.objectContaining({ status: 'PAID' }),
+    expect(manager.update).toHaveBeenCalledWith(
+      Reconciliation,
+      expect.objectContaining({ id: 77, status: ReconciliationStatus.CONFIRMED }),
+      expect.objectContaining({ status: ReconciliationStatus.PAID }),
     );
   });
 
   // UT-PAY-14: markPaid skips reconciliation sync when no reconcile_id (NO_CONTRACT flow)
   it('UT-PAY-14 markPaid does not touch reconciliation when reconcile_id is absent', async () => {
     const pr = makePR({ approval_status: PaymentApprovalStatus.APPROVED, reconcile_id: undefined });
-    mockPrRepo.findOne.mockResolvedValue(pr);
-    mockPrRepo.save.mockResolvedValue({ ...pr, approval_status: PaymentApprovalStatus.PAID });
+    const manager = makeRecordManager(pr);
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
 
     await service.markPaid(1, 'http://example.com/slip.jpg', 99);
-    expect(mockReconcileRepo.update).not.toHaveBeenCalled();
+    expect(manager.update).not.toHaveBeenCalled();
   });
 
   // UT-PAY-12: removePaymentRequest throws if not DRAFT
@@ -343,5 +345,88 @@ describe('PaymentService', () => {
     mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager2));
     await expect(service.addPaymentRecord(1, { slip_url: '/uploads/slip.jpg', pay_date: '2026-07-09', amount: 100 }, 3))
       .rejects.toThrow(/已付清/);
+  });
+
+  // ===== H8/M4/L10/L7-① 回归 =====
+  const makeRec = (overrides = {}) => ({
+    id: 7,
+    status: ReconciliationStatus.CONFIRMED,
+    type: ReconcileType.CONTRACT,
+    factory_id: 5,
+    total_amount: 10000,
+    contract_id: null,
+    deleted: 0,
+    ...overrides,
+  });
+
+  // UT-H8-01: DRAFT/PENDING 对账单不可建付款申请（须先复核确认）
+  it('UT-H8-01 createPaymentRequest rejects DRAFT/PENDING reconciliation', async () => {
+    mockManager.findOne.mockResolvedValue(makeRec({ status: ReconciliationStatus.DRAFT }));
+    const dto = { type: ReconcileType.CONTRACT, factory_id: 5, amount: 3000, reconcile_id: 7 };
+    await expect(service.createPaymentRequest(dto as any, 1)).rejects.toThrow(/未复核确认/);
+    mockManager.findOne.mockResolvedValue(makeRec({ status: ReconciliationStatus.PENDING }));
+    await expect(service.createPaymentRequest(dto as any, 1)).rejects.toThrow(/未复核确认/);
+  });
+
+  // UT-H8-02: CONFIRMED 对账单可正常建付款申请
+  it('UT-H8-02 createPaymentRequest allows CONFIRMED reconciliation', async () => {
+    mockManager.findOne.mockResolvedValue(makeRec());
+    const dto = { type: ReconcileType.CONTRACT, factory_id: 5, amount: 3000, reconcile_id: 7 };
+    await expect(service.createPaymentRequest(dto as any, 1)).resolves.toBeDefined();
+    expect(mockManager.create).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      reconcile_id: 7,
+      amount: 3000,
+    }));
+  });
+
+  // UT-M4-01: 申请 factory_id 与对账单归属工厂不一致时拦截
+  it('UT-M4-01 createPaymentRequest rejects factory mismatch with reconciliation', async () => {
+    mockManager.findOne.mockResolvedValue(makeRec({ factory_id: 8 }));
+    const dto = { type: ReconcileType.CONTRACT, factory_id: 5, amount: 3000, reconcile_id: 7 };
+    await expect(service.createPaymentRequest(dto as any, 1)).rejects.toThrow(/不一致/);
+  });
+
+  // UT-H8-03: 分批付清联动对账单 0 行命中 → 抛错回滚（付款/对账原子一致）
+  it('UT-H8-03 addPaymentRecord final payment rolls back when reconciliation sync hits 0 rows', async () => {
+    const pr = makePR({ approval_status: PaymentApprovalStatus.APPROVED, actual_pay: 5000, paid_total: 3000, reconcile_id: 7 });
+    const manager = makeRecordManager(pr);
+    manager.update.mockResolvedValue({ affected: 0 });
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+    await expect(service.addPaymentRecord(1, { pay_date: '2026-07-09', amount: 2000, slip_url: '/u/slip.png' }, 3))
+      .rejects.toThrow(/非已确认状态/);
+  });
+
+  // UT-H8-04: markPaid 联动对账单 0 行命中 → 抛错回滚
+  it('UT-H8-04 markPaid rolls back when reconciliation sync hits 0 rows', async () => {
+    const pr = makePR({ approval_status: PaymentApprovalStatus.APPROVED, reconcile_id: 7 });
+    const manager = makeRecordManager(pr);
+    manager.update.mockResolvedValue({ affected: 0 });
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+    await expect(service.markPaid(1, 'http://example.com/slip.jpg', 99)).rejects.toThrow(/非已确认状态/);
+  });
+
+  // UT-L10-01: markPaid 在事务内以悲观锁读取申请（与 addPaymentRecord 互斥）
+  it('UT-L10-01 markPaid reads request with pessimistic_write lock inside transaction', async () => {
+    const pr = makePR({ approval_status: PaymentApprovalStatus.APPROVED });
+    const manager = makeRecordManager(pr);
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+    await service.markPaid(1, 'http://example.com/slip.jpg', 99);
+    expect(mockDataSource.transaction).toHaveBeenCalled();
+    expect(manager.findOne).toHaveBeenCalledWith(PaymentRequest, expect.objectContaining({
+      lock: { mode: 'pessimistic_write' },
+    }));
+  });
+
+  // UT-L7-01: 无合同费用对账付清后,按款号补标同款式结算单 needs_recalc
+  it('UT-L7-01 final payment on NO_CONTRACT reconciliation marks settlement needs_recalc by style_no', async () => {
+    const pr = makePR({ approval_status: PaymentApprovalStatus.APPROVED, actual_pay: 5000, paid_total: 3000, reconcile_id: 7 });
+    const ncRec = makeRec({ type: ReconcileType.NO_CONTRACT, style_no: 'ST001' });
+    const manager = makeRecordManager(pr);
+    manager.findOne.mockImplementation((e: any) => Promise.resolve(e === Reconciliation ? ncRec : pr));
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+    await service.addPaymentRecord(1, { pay_date: '2026-07-09', amount: 2000, slip_url: '/u/slip.png' }, 3);
+    const recalcCall = manager.query.mock.calls.find((c: any[]) => String(c[0]).includes('order_main'));
+    expect(recalcCall).toBeDefined();
+    expect(recalcCall[1]).toEqual(['ST001']);
   });
 });

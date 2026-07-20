@@ -459,7 +459,7 @@ const prepayRules: FormRules = {
 function onPrepayPickContract(c: any) { if (c?.factory_id) prepayForm.factory_id = Number(c.factory_id); }
 function openCreatePrepay() { createPrepayVisible.value = true; }
 function resetPrepayForm() {
-  Object.assign(prepayForm, { factory_id: undefined, contract_id: undefined, amount: undefined, pay_date: '', remark: '' });
+  Object.assign(prepayForm, { factory_id: undefined, contract_id: undefined, amount: undefined, pay_date: '', style_no: '', remark: '' });
 }
 async function doCreatePrepay() {
   await prepayFormRef.value?.validate();

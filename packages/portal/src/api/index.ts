@@ -21,6 +21,10 @@ http.interceptors.response.use(
     return res.data;
   },
   (err) => {
+    // 登录请求自身的失败(含 401 密码错误)放行给业务层提示,不清 token/不整页跳登录(M11)
+    if ((err.config?.url ?? '').includes('/auth/portal/login')) {
+      return Promise.reject(err);
+    }
     if (err.response?.status === 401) {
       localStorage.removeItem('portal_token');
       window.location.href = '/portal/login';

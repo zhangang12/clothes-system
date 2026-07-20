@@ -2,7 +2,7 @@ import {
   Injectable, NotFoundException, BadRequestException, ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, Like, DataSource, In } from 'typeorm';
+import { Repository, FindOptionsWhere, Like, DataSource, In, EntityManager, Not, IsNull } from 'typeorm';
 import { Contract, ContractStatus } from './contract.entity';
 import { ContractMaterial } from './contract-material.entity';
 import { ContractShipment } from './contract-shipment.entity';
@@ -13,6 +13,9 @@ import { OrderMain } from '../order/order-main.entity';
 import { OrderSizeMatrix } from '../order/order-size-matrix.entity';
 import { Factory } from '../factory/factory.entity';
 import { SupplierAccount } from '../auth/supplier-account.entity';
+import { Reconciliation } from '../reconciliation/reconciliation.entity';
+import { ReconciliationShipment } from '../reconciliation/reconciliation-shipment.entity';
+import { Prepayment } from '../payment/prepayment.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { ChangeLogService } from '../../common/changelog/change-log.service';
 import { SysConfigService } from '../../common/config/sys-config.service';
@@ -48,6 +51,13 @@ function minusDays(date: Date | string | null | undefined, days: number): string
 
 // 整数类单位（设计稿 订单⑤：损耗后向上取整）
 const INT_UNITS = ['个', '条', '只', '件', '粒', '套', '对', 'pcs', 'PCS', 'PC'];
+
+// MySQL 唯一索引冲突判定（2026-07-19 排查 L11）：contract_no 是合同表唯一业务键，
+// 并发建补料撞号时 mysql2 抛 ER_DUP_ENTRY(errno 1062)，捕获后重试/转业务异常，不裸 500
+function isDuplicateContractNo(e: any): boolean {
+  const code = e?.code ?? e?.driverError?.code;
+  return code === 'ER_DUP_ENTRY' || e?.errno === 1062 || e?.driverError?.errno === 1062;
+}
 
 @Injectable()
 export class ContractService {
@@ -137,6 +147,14 @@ export class ContractService {
   async generateFromOrder(orderId: number, createdBy: number) {
     const order = await this.orderRepo.findOne({ where: { id: orderId, deleted: 0 } });
     if (!order) throw new NotFoundException(`订单 #${orderId} 不存在`);
+    // 幂等守卫（2026-07-19 排查 L1）：该订单已生成过合同则拒绝整批重跑，杜绝重复合同；
+    // 中途失败由下方整体事务回滚兜底，修正数据后可安全重入
+    const existingCount = await this.repo.count({ where: { order_id: orderId, deleted: 0 } });
+    if (existingCount > 0) {
+      throw new BadRequestException(
+        `订单 #${orderId} 已生成过 ${existingCount} 张合同，请勿重复生成（如需重建请先删除原有草稿合同）`,
+      );
+    }
     const materials = await this.orderMaterialRepo.find({ where: { order_id: orderId }, order: { sort_order: 'ASC' } });
     if (!materials.length) throw new BadRequestException('订单无用料核算记录，无法生成合同');
 
@@ -152,58 +170,57 @@ export class ContractService {
     const matrixRows = await this.getMatrixRows(orderId);
     const lineDelivery = minusDays(order.delivery_date as any, DELIVERY_OFFSET_DAYS[ContractType.MATERIAL]);
 
-    const created: Contract[] = [];
-    const unmatched: string[] = [];
-    // 待定供应商占位(P3#41/CON C2):未匹配供应商也生成合同,挂「待定供应商」占位工厂,后续改绑
-    let placeholder: Factory | null = null;
-    const getPlaceholder = async (): Promise<Factory> => {
-      if (placeholder) return placeholder;
-      placeholder = await this.factoryRepo.findOne({ where: { name: '待定供应商', deleted: 0 } });
-      if (!placeholder) {
-        placeholder = await this.factoryRepo.save(this.factoryRepo.create({
-          factory_no: 'S000', name: '待定供应商', type: 'OTHER', status: 1, deleted: 0,
-          contact_name: '-', contact_phone: '-',
-        } as any) as any) as Factory;
+    // 整体事务（L1）：任一供应商建单失败则整批回滚，不留半成品合同
+    return this.dataSource.transaction(async (manager) => {
+      const created: Contract[] = [];
+      const unmatched: string[] = [];
+      // 待定供应商占位(P3#41/CON C2):未匹配供应商也生成合同,挂「待定供应商」占位工厂,后续改绑
+      let placeholder: Factory | null = null;
+      const getPlaceholder = async (): Promise<Factory> => {
+        if (placeholder) return placeholder;
+        placeholder = await manager.findOne(Factory, { where: { name: '待定供应商', deleted: 0 } });
+        if (!placeholder) {
+          placeholder = await manager.save(Factory, manager.create(Factory, {
+            factory_no: 'S000', name: '待定供应商', type: 'OTHER', status: 1, deleted: 0,
+            contact_name: '-', contact_phone: '-',
+          } as any) as any) as Factory;
+        }
+        return placeholder;
+      };
+      for (const [supplier, mats] of groups) {
+        // 供应商名匹配工厂库（供应商须落工厂库，设计稿 订单 B9）
+        let factory = supplier === '未指定供应商'
+          ? null
+          : await manager.findOne(Factory, { where: { name: supplier, deleted: 0 } });
+        if (!factory) {
+          unmatched.push(supplier);
+          factory = await getPlaceholder();
+        }
+        const isPlaceholder = factory.name === '待定供应商';
+        const contract = await this.create(
+          {
+            type: ContractType.MATERIAL,
+            factory_id: factory.id,
+            order_id: orderId,
+            currency: order.currency ?? 'CNY',
+            remark: isPlaceholder ? `供应商待定（用料填写:${supplier}）——确定后在草稿改绑真实供应商` : undefined,
+            materials: mats.flatMap((m) =>
+              this.expandMaterialLines(m, matrixRows, order.style_no ?? null, lineDelivery)) as any,
+          } as CreateContractDto,
+          createdBy,
+          manager,
+        );
+        created.push(contract);
       }
-      return placeholder;
-    };
-    for (const [supplier, mats] of groups) {
-      // 供应商名匹配工厂库（供应商须落工厂库，设计稿 订单 B9）
-      let factory = supplier === '未指定供应商'
-        ? null
-        : await this.factoryRepo.findOne({ where: { name: supplier, deleted: 0 } });
-      if (!factory) {
-        unmatched.push(supplier);
-        factory = await getPlaceholder();
-      }
-      const isPlaceholder = factory.name === '待定供应商';
-      const contract = await this.create(
-        {
-          type: ContractType.MATERIAL,
-          factory_id: factory.id,
-          order_id: orderId,
-          currency: order.currency ?? 'CNY',
-          remark: isPlaceholder ? `供应商待定（用料填写:${supplier}）——确定后在草稿改绑真实供应商` : undefined,
-          materials: mats.flatMap((m) =>
-            this.expandMaterialLines(m, matrixRows, order.style_no ?? null, lineDelivery)) as any,
-        } as CreateContractDto,
-        createdBy,
-      );
-      created.push(contract);
-    }
-    return { orderId, created: created.length, contracts: created, unmatched };
+      return { orderId, created: created.length, contracts: created, unmatched };
+    });
   }
 
-  async create(dto: CreateContractDto, createdBy: number): Promise<Contract> {
-    // 补料合同用「补料-原合同号-序号」独立标识，不占 HT 主序号（设计稿 合同 D1/Q23）
-    let contract_no: string;
-    if (dto.type === ContractType.SUPPLEMENT) {
-      if (!dto.parent_id) throw new BadRequestException('补料合同必须指定原合同（parent_id）');
-      const parent = await this.repo.findOne({ where: { id: dto.parent_id, deleted: 0 } });
-      if (!parent) throw new NotFoundException(`原合同 #${dto.parent_id} 不存在`);
-      const seq = await this.repo.count({ where: { parent_id: dto.parent_id, type: ContractType.SUPPLEMENT } });
-      contract_no = `补料-${parent.contract_no}-${String(seq + 1).padStart(2, '0')}`;
-    } else {
+  async create(dto: CreateContractDto, createdBy: number, manager?: EntityManager): Promise<Contract> {
+    // 补料合同号在事务内生成（见下方 run），这里只做前置校验；
+    // 非补料合同走 Redis 发号服务，撞号概率为零，维持事务外取号（事务失败跳号与现状一致）
+    let contract_no: string | null = null;
+    if (dto.type !== ContractType.SUPPLEMENT) {
       contract_no = await this.numbering.next(NUM_PREFIX.CONTRACT);
     }
 
@@ -263,11 +280,23 @@ export class ContractService {
       throw new BadRequestException('材料明细不能为空（该订单无可带出的用料核算记录，请手动填写 materials）');
     }
 
-    return this.dataSource.transaction(async (manager) => {
-      const totalAmount = materialInputs.reduce((sum, m) => sum + m.unit_price * m.qty, 0);
+    const run = async (m: EntityManager): Promise<Contract> => {
+      // 补料合同用「补料-原合同号-序号」独立标识，不占 HT 主序号（设计稿 合同 D1/Q23）。
+      // count+1 必须移入事务内（2026-07-19 排查 L11）：配合 contract_no 唯一索引兜底 +
+      // 下方冲突重试，并发建补料不再撞号裸 500
+      let no = contract_no;
+      if (dto.type === ContractType.SUPPLEMENT) {
+        if (!dto.parent_id) throw new BadRequestException('补料合同必须指定原合同（parent_id）');
+        const parent = await m.findOne(Contract, { where: { id: dto.parent_id, deleted: 0 } });
+        if (!parent) throw new NotFoundException(`原合同 #${dto.parent_id} 不存在`);
+        const seq = await m.count(Contract, { where: { parent_id: dto.parent_id, type: ContractType.SUPPLEMENT } });
+        no = `补料-${parent.contract_no}-${String(seq + 1).padStart(2, '0')}`;
+      }
 
-      const contract = await manager.save(Contract, manager.create(Contract, {
-        contract_no,
+      const totalAmount = materialInputs.reduce((sum, m2) => sum + m2.unit_price * m2.qty, 0);
+
+      const contract = await m.save(Contract, m.create(Contract, {
+        contract_no: no!,
         type: dto.type,
         parent_id: dto.parent_id,
         factory_id: dto.factory_id,
@@ -300,47 +329,69 @@ export class ContractService {
         status: ContractStatus.ACTIVE,
       }));
 
-      const materials = materialInputs.map((m, idx) => manager.create(ContractMaterial, {
+      const materials = materialInputs.map((mi, idx) => m.create(ContractMaterial, {
         contract_id: contract.id,
-        sort_order: m.sort_order ?? idx,
-        item_name: m.item_name,
-        spec: m.spec,
-        color: m.color ?? null,
-        size: m.size ?? null,
-        style_no: m.style_no ?? null,
-        delivery_date: (m.delivery_date ?? null) as any,
-        photo_url: m.photo_url ?? null,
-        unit: m.unit,
-        unit_price: m.unit_price,
-        qty: m.qty,
-        amount: +(m.unit_price * m.qty).toFixed(4),
-        qty_source: m.qty_source ?? null,
-        remark: m.remark,
+        sort_order: mi.sort_order ?? idx,
+        item_name: mi.item_name,
+        spec: mi.spec,
+        color: mi.color ?? null,
+        size: mi.size ?? null,
+        style_no: mi.style_no ?? null,
+        delivery_date: (mi.delivery_date ?? null) as any,
+        photo_url: mi.photo_url ?? null,
+        unit: mi.unit,
+        unit_price: mi.unit_price,
+        qty: mi.qty,
+        amount: +(mi.unit_price * mi.qty).toFixed(4),
+        qty_source: mi.qty_source ?? null,
+        remark: mi.remark,
       }));
-      await manager.save(ContractMaterial, materials);
+      await m.save(ContractMaterial, materials);
 
       // 最近交易日期回写（基础资料稿 §1.2：列表按最近交易超期标红——此前该字段无任何写入方，规则恒不触发）
-      await manager.update(Factory, { id: dto.factory_id }, { last_trade_date: new Date().toISOString().slice(0, 10) as any });
+      await m.update(Factory, { id: dto.factory_id }, { last_trade_date: new Date().toISOString().slice(0, 10) as any });
 
       // 生成合同后订单自动置「已生成合同」（设计稿 合同 A9）：仅从「已下单」推进，补料合同不改订单态
       if (dto.order_id && dto.type !== ContractType.SUPPLEMENT) {
-        const order = await manager.findOne(OrderMain, { where: { id: dto.order_id, deleted: 0 } });
-        if (order && order.status === OrderStatus.CONFIRMED) {
-          order.status = OrderStatus.CONTRACTED;
-          await manager.save(OrderMain, order);
+        const linkedOrder = await m.findOne(OrderMain, { where: { id: dto.order_id, deleted: 0 } });
+        if (linkedOrder && linkedOrder.status === OrderStatus.CONFIRMED) {
+          linkedOrder.status = OrderStatus.CONTRACTED;
+          await m.save(OrderMain, linkedOrder);
         }
       }
 
       return contract;
-    });
+    };
+
+    // 外层事务（generateFromOrder 整批生成）内直接复用其 manager：失败由外层整批回滚
+    if (manager) return run(manager);
+
+    // 补料合同并发撞 contract_no 唯一索引（L11）：整事务回滚后按最新 count 重试；
+    // 重试仍冲突则转明确业务异常，任何路径都不再裸 500
+    const maxAttempts = dto.type === ContractType.SUPPLEMENT ? 3 : 1;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await this.dataSource.transaction(run);
+      } catch (e: any) {
+        if (isDuplicateContractNo(e) && attempt < maxAttempts) continue;
+        if (isDuplicateContractNo(e)) {
+          throw new BadRequestException('补料合同号生成冲突（存在并发建补料），请重试');
+        }
+        throw e;
+      }
+    }
+    throw new BadRequestException('补料合同号生成冲突（存在并发建补料），请重试');
   }
 
   // 加工价历史同款提示(P3#41/CON C3半):同款号+同品名最近一次合同单价
   async priceHint(styleNo: string, itemName?: string) {
+    // style_no 必填（2026-07-19 排查 M3）：空串会 LIKE '%%' 捞出任意合同最近 5 条成本价
+    const s = (styleNo ?? '').trim();
+    if (!s) throw new BadRequestException('style_no 为必填参数');
     const qb = this.materialRepo.createQueryBuilder('m')
       .innerJoin(Contract, 'c', 'c.id = m.contract_id AND c.deleted = 0')
       .select(['m.item_name AS item_name', 'm.unit_price AS unit_price', 'c.contract_no AS contract_no', 'c.type AS type'])
-      .where('(m.style_no = :styleNo OR c.style_nos LIKE :like)', { styleNo, like: `%${styleNo}%` })
+      .where('(m.style_no = :styleNo OR c.style_nos LIKE :like)', { styleNo: s, like: `%${s}%` })
       .orderBy('m.id', 'DESC')
       .limit(5);
     if (itemName) qb.andWhere('m.item_name = :itemName', { itemName });
@@ -660,9 +711,45 @@ export class ContractService {
     return contract;
   }
 
+  // 合同业务状态机（2026-07-19 排查 L6）：仅白名单内流转；误完结/误作废可回退 ACTIVE；
+  // 跨档跳转（如 COMPLETED→CANCELLED）拒绝，避免绕过下游对账/付款口径
+  private static readonly STATUS_FLOW: Record<ContractStatus, ContractStatus[]> = {
+    [ContractStatus.ACTIVE]: [ContractStatus.COMPLETED, ContractStatus.CANCELLED],
+    [ContractStatus.COMPLETED]: [ContractStatus.ACTIVE],
+    [ContractStatus.CANCELLED]: [ContractStatus.ACTIVE],
+  };
+
   async updateStatus(id: number, status: ContractStatus): Promise<Contract> {
     const contract = await this.repo.findOne({ where: { id, deleted: 0 } });
     if (!contract) throw new NotFoundException(`合同 #${id} 不存在`);
+    // 兜底校验（正常由 UpdateContractStatusDto 在入口 400）：非法值不落到 MySQL enum 报 500
+    if (!Object.values(ContractStatus).includes(status)) {
+      throw new BadRequestException(`非法合同状态：${status}`);
+    }
+    if (contract.status === status) return contract; // 同状态幂等空操作
+    if (!ContractService.STATUS_FLOW[contract.status]?.includes(status)) {
+      throw new BadRequestException(`合同状态不允许从 ${contract.status} 流转为 ${status}`);
+    }
+    if (status === ContractStatus.CANCELLED) {
+      // 已有对账/付款关联的合同禁止直接作废（L6）：对账主表挂合同、批次被对账占用、
+      // 对账明细行（一单多合同主表 contract_id 为空）、预付款挂合同，任一命中即拦截
+      const reconCount = await this.dataSource.getRepository(Reconciliation)
+        .count({ where: { contract_id: id, deleted: 0 } });
+      const heldShipments = await this.shipmentRepo
+        .count({ where: { contract_id: id, reconcile_id: Not(IsNull()) } });
+      const reconDetailCount = await this.dataSource.getRepository(ReconciliationShipment)
+        .createQueryBuilder('rs')
+        .innerJoin(Reconciliation, 'r', 'r.id = rs.reconcile_id AND r.deleted = 0')
+        .where('rs.contract_id = :id', { id })
+        .getCount();
+      const prepayCount = await this.dataSource.getRepository(Prepayment)
+        .count({ where: { contract_id: id } });
+      if (reconCount + heldShipments + reconDetailCount + prepayCount > 0) {
+        throw new BadRequestException(
+          `该合同已存在对账/付款关联（对账单 ${reconCount} 张、被占用发货批次 ${heldShipments} 个、对账明细 ${reconDetailCount} 行、预付款 ${prepayCount} 笔），不可直接作废；请先处理关联单据`,
+        );
+      }
+    }
     contract.status = status;
     return this.repo.save(contract);
   }

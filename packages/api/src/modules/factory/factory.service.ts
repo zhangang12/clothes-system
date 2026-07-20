@@ -150,13 +150,7 @@ export class FactoryService {
         : develop_start ? { develop_date: MoreThanOrEqual(develop_start) }
         : develop_end ? { develop_date: LessThanOrEqual(develop_end) } : {}),
     };
-    // 智能搜索：厂商编号/名称/省份/城市/地址/业务范围/法人代表（设计稿 §1.2）
-    const searchable = ['factory_no', 'name', 'province', 'city', 'address', 'business_scope', 'legal_rep'];
-    const where: FindOptionsWhere<Factory> | FindOptionsWhere<Factory>[] = keyword
-      ? searchable.map((f) => ({ ...base, [f]: Like(`%${keyword}%`) }))
-      : base;
-
-    // 联系人检索(设计稿 §1.2)
+    // 联系人检索(设计稿 §1.2):先求出命中工厂 id 并入 base,再展开 keyword 的 OR 分支(L8:保证 keyword 与 contact 为 AND)
     if (contact) {
       const hits = await this.contactRepo
         .createQueryBuilder('c')
@@ -166,6 +160,11 @@ export class FactoryService {
       const ids = hits.map((h) => +h.fid);
       Object.assign(base, { id: In(ids.length ? ids : [0]) });
     }
+    // 智能搜索：厂商编号/名称/省份/城市/地址/业务范围/法人代表（设计稿 §1.2）
+    const searchable = ['factory_no', 'name', 'province', 'city', 'address', 'business_scope', 'legal_rep'];
+    const where: FindOptionsWhere<Factory> | FindOptionsWhere<Factory>[] = keyword
+      ? searchable.map((f) => ({ ...base, [f]: Like(`%${keyword}%`) }))
+      : base;
     const [items, total] = await this.repo.findAndCount({
       where, skip: (page - 1) * size, take: size, order: { id: 'DESC' },
     });

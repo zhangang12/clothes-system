@@ -286,11 +286,11 @@ const SectionBlock = (props: { title: string; badge?: string }, { slots }: any) 
 const route = useRoute();
 const router = useRouter();
 
-// 三套脱敏打印(P3#32)
+// 三套脱敏打印(P3#32)。弹窗被浏览器拦截时 printOrder 会抛错,须 catch 提示用户允许弹窗(同报价/样衣侧)
 async function onPrintOrder(mode: string) {
   if (!editId.value) return;
-  const res: any = await orderApi.get(editId.value);
-  printOrder(res.data ?? res, mode as any);
+  try { const res: any = await orderApi.get(editId.value); printOrder(res.data ?? res, mode as any); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '打印失败'); }
 }
 
 // 生成合同入口（设计稿 合同 A1 主流程:订单侧拆单）
@@ -348,13 +348,16 @@ const form = reactive<any>({
 const rowTotal = (row: any) => (row.qtys ?? []).reduce((s: number, q: any) => s + (Number(q) || 0), 0);
 const qtyTotal = computed(() => form.matrix.rows.reduce((s: number, r: any) => s + rowTotal(r), 0));
 // 表尾：各 PO 合计 + 总计（设计稿：改动实时重算）
+// 固定列数不手写死，以模板列定义为单一来源：「各PO合计」放「款号」列下，PO 列从「尺码」列之后开始。
+// （曾因模板新增「洗标号/Article」列而此处写死的 3/4 未同步，整行错位一列——增删固定列务必只改模板）
 function matrixSummary({ columns }: any) {
-  const fixed = readonly.value ? 3 : 4; // [选择列]+款号/颜色/尺码
+  const labelIdx = columns.findIndex((c: any) => c.label === '款号');
+  const poStart = columns.findIndex((c: any) => c.label === '尺码') + 1;
   return columns.map((_: any, i: number) => {
-    if (i === fixed - 3) return '各PO合计';
-    if (i < fixed) return '';
+    if (i === labelIdx) return '各PO合计';
+    if (i < poStart) return '';
     if (i === columns.length - 1) return String(qtyTotal.value);
-    const pi = i - fixed;
+    const pi = i - poStart;
     return String(form.matrix.rows.reduce((s: number, r: any) => s + (Number(r.qtys?.[pi]) || 0), 0));
   });
 }

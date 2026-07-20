@@ -199,11 +199,16 @@ export class SettlementService {
       return 'other';
     };
     const buckets = { ...empty };
-    // 费用明细行(带款号)优先按行名分类;仅有整单头的对账按单据描述分类
-    const items = await this.expenseItemRepo.find({ where: { style_no: styleNo } });
+    // 费用明细行(带款号)优先按行名分类;仅有整单头的对账按单据描述分类。
+    // 明细行须圈定在本批母对账单内(reconcile_id)：母单已按 status(CONFIRMED/PAID)/deleted 过滤，
+    // 杜绝软删/作废母单的孤儿行混入，itemSum 与 headerSum 严格同口径。
+    const recIds = recons.map((rc) => rc.id);
+    const items = recIds.length
+      ? await this.expenseItemRepo.find({ where: { style_no: styleNo, reconcile_id: In(recIds) } })
+      : [];
     let itemSum = 0;
     for (const it of items) {
-      buckets[classify((it as any).item_name ?? (it as any).fee_name)] += +it.amount;
+      buckets[classify(it.expense_name)] += +it.amount; // 实体字段为 expense_name
       itemSum += +it.amount;
     }
     const headerSum = recons.reduce((s, rc) => s + +rc.total_amount, 0);
@@ -612,7 +617,8 @@ export class SettlementService {
     });
   }
 
-  // 刷新付款汇总：重取出货件数（随船务更新）+ 按订单重聚合对账付款，AUTO 快照行整组重建（结算稿D）
+  // 刷新付款汇总：重取出货件数（随船务更新）+ 按订单重聚合对账付款与期间费用分列，
+  // AUTO 快照行整组重建（结算稿D）；期间费用口径同 create（母单 CONFIRMED/PAID 且未删）
   async refreshCost(id: number): Promise<Settlement> {
     const vatRate = await this.config.getNumber('vat_rate', 13);
     const refundRate = await this.config.getNumber('export_refund_rate', 13);
@@ -634,6 +640,14 @@ export class SettlementService {
 
       const order = await manager.findOne(OrderMain, { where: { id: settlement.order_id, deleted: 0 } });
       const agg = order ? await this.aggregateGoods(order, vatRate) : { ...EMPTY_AGG, autoRows: [] };
+      // 期间费用分列同步重聚合（与 create 同口径），否则软删/作废对账单的费用长期滞留(L7-③)
+      const aggPeriod = order
+        ? await this.aggregatePeriodExpense(order)
+        : { freight: 0, express: 0, sample: 0, other: 0 };
+      settlement.freight_fee = aggPeriod.freight;
+      settlement.express_fee = aggPeriod.express;
+      settlement.sample_fee = aggPeriod.sample;
+      settlement.other_fee = aggPeriod.other;
 
       await manager.delete(SettlementCost, { settlement_id: id, source: 'AUTO' });
       if (agg.autoRows.length) {

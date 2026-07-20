@@ -320,6 +320,8 @@ async function onSample(id?: number) {
     }
     if (!form.styleNo && s.style_no) form.styleNo = s.style_no;
     if (!form.buyerId && s.buyer_id) form.buyerId = s.buyer_id;
+    // 样衣带出的中间商/买家同样可能不在前 100 条选项里 → 按需补拉
+    await ensureSelectedOptions();
   } catch { /* 样衣详情失败不阻断 */ }
 }
 
@@ -391,6 +393,31 @@ async function loadRefs() {
   samples.value = (ss as any).data ?? [];
 }
 
+// L24：下拉只拉前 100 条，客户/买家/样衣超量后当前值可能不在选项里 → el-select 回显裸 ID。
+// 校验当前选中值，缺哪个按 id 单独补拉并入选项（id 比较走字符串对齐的老惯例；补拉失败不阻断编辑）
+async function ensureSelectedOptions() {
+  const jobs: Promise<void>[] = [];
+  if (form.middlemanId != null && !middlemen.value.some((m) => String(m.id) === String(form.middlemanId))) {
+    jobs.push(customerApi.get(Number(form.middlemanId)).then((res: any) => {
+      const c = res.data ?? res;
+      if (c?.id != null) middlemen.value.push(c);
+    }).catch(() => { /* 补拉失败不阻断编辑 */ }));
+  }
+  if (form.buyerId != null && !buyers.value.some((b) => String(b.id) === String(form.buyerId))) {
+    jobs.push(customerApi.get(Number(form.buyerId)).then((res: any) => {
+      const c = res.data ?? res;
+      if (c?.id != null) buyers.value.push(c);
+    }).catch(() => { /* 补拉失败不阻断编辑 */ }));
+  }
+  if (form.sampleId != null && !samples.value.some((s) => String(s.id) === String(form.sampleId))) {
+    jobs.push(sampleApi.get(Number(form.sampleId)).then((res: any) => {
+      const s = res.data ?? res;
+      if (s?.id != null) samples.value.push(s);
+    }).catch(() => { /* 补拉失败不阻断编辑 */ }));
+  }
+  await Promise.all(jobs);
+}
+
 const relatedOrders = ref<any[]>([]);
 const occupiedByDraft = ref(false);
 const sampleNo = ref('');
@@ -449,6 +476,7 @@ async function load() {
     fees: d.fees?.length ? d.fees.map((f: any) => ({ feeName: f.fee_name, rmbPrice: f.rmb_price, quoteUsage: f.quote_usage })) : DEFAULT_FEES.map((n) => emptyFee(n)),
   });
   loadContacts(form.middlemanId);
+  await ensureSelectedOptions(); // 当前值若被 size:100 截断则补拉入选项,防回显裸 ID
   void loadSampleNo(); // 不 await:关联单据反查不该拖住主表单
 }
 
