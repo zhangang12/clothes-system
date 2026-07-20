@@ -21,6 +21,10 @@ export class SysUser {
   @Column({ type: 'tinyint', default: 1 })
   status: number;
 
+  // 账号级菜单权限（key 见 @i9/types MENU_REGISTRY）；NULL=按角色默认菜单（ROLE_DEFAULT_MENUS）
+  @Column({ type: 'json', nullable: true })
+  menu_keys: string[] | null;
+
   @CreateDateColumn()
   created_at: Date;
 

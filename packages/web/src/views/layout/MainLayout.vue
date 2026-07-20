@@ -8,25 +8,25 @@
       <el-menu :router="true" :default-active="$route.path" class="side-menu"
         :collapse="collapsed" :collapse-transition="false">
         <el-menu-item index="/dashboard"><el-icon><Odometer /></el-icon><template #title>工作台</template></el-menu-item>
-        <el-sub-menu index="base">
+        <el-sub-menu v-if="canMenu('factories') || canMenu('customers') || canMenu('company-profiles') || canMenu('dicts')" index="base">
           <template #title><el-icon><Setting /></el-icon><span>基础资料</span></template>
-          <el-menu-item index="/factories">工厂管理</el-menu-item>
-          <el-menu-item index="/customers">客户管理</el-menu-item>
-          <el-menu-item v-if="!isProduction" index="/company-profiles">本司主体</el-menu-item>
-          <el-menu-item v-if="isAdmin" index="/dicts">字典维护</el-menu-item>
+          <el-menu-item v-if="canMenu('factories')" index="/factories">工厂管理</el-menu-item>
+          <el-menu-item v-if="canMenu('customers')" index="/customers">客户管理</el-menu-item>
+          <el-menu-item v-if="canMenu('company-profiles')" index="/company-profiles">本司主体</el-menu-item>
+          <el-menu-item v-if="canMenu('dicts')" index="/dicts">字典维护</el-menu-item>
         </el-sub-menu>
-        <el-menu-item index="/samples"><el-icon><Shirt /></el-icon><template #title>样衣管理</template></el-menu-item>
-        <el-menu-item v-if="!isProduction" index="/quotes"><el-icon><Document /></el-icon><template #title>客户报价</template></el-menu-item>
-        <el-menu-item index="/orders"><el-icon><List /></el-icon><template #title>订单管理</template></el-menu-item>
-        <el-menu-item index="/contracts"><el-icon><Tickets /></el-icon><template #title>合同管理</template></el-menu-item>
-        <el-menu-item index="/reconciliations"><el-icon><DataAnalysis /></el-icon><template #title>对账管理</template></el-menu-item>
-        <el-menu-item index="/payments"><el-icon><CreditCard /></el-icon><template #title>付款管理</template></el-menu-item>
-        <el-menu-item index="/settlements"><el-icon><TrendCharts /></el-icon><template #title>结算清单</template></el-menu-item>
-        <el-menu-item index="/export-invoices"><el-icon><Postcard /></el-icon><template #title>出口发票</template></el-menu-item>
-        <el-menu-item v-if="!isProduction" index="/reports"><el-icon><PieChart /></el-icon><template #title>报表统计</template></el-menu-item>
-        <el-menu-item v-if="isAdmin" index="/feedbacks"><el-icon><ChatDotRound /></el-icon><template #title>反馈管理</template></el-menu-item>
-        <el-menu-item v-if="isAdmin" index="/error-logs"><el-icon><Warning /></el-icon><template #title>系统报错</template></el-menu-item>
-        <el-menu-item v-if="isAdmin" index="/accounts"><el-icon><UserFilled /></el-icon><template #title>账号管理</template></el-menu-item>
+        <el-menu-item v-if="canMenu('samples')" index="/samples"><el-icon><Shirt /></el-icon><template #title>样衣管理</template></el-menu-item>
+        <el-menu-item v-if="canMenu('quotes')" index="/quotes"><el-icon><Document /></el-icon><template #title>客户报价</template></el-menu-item>
+        <el-menu-item v-if="canMenu('orders')" index="/orders"><el-icon><List /></el-icon><template #title>订单管理</template></el-menu-item>
+        <el-menu-item v-if="canMenu('contracts')" index="/contracts"><el-icon><Tickets /></el-icon><template #title>合同管理</template></el-menu-item>
+        <el-menu-item v-if="canMenu('reconciliations')" index="/reconciliations"><el-icon><DataAnalysis /></el-icon><template #title>对账管理</template></el-menu-item>
+        <el-menu-item v-if="canMenu('payments')" index="/payments"><el-icon><CreditCard /></el-icon><template #title>付款管理</template></el-menu-item>
+        <el-menu-item v-if="canMenu('settlements')" index="/settlements"><el-icon><TrendCharts /></el-icon><template #title>结算清单</template></el-menu-item>
+        <el-menu-item v-if="canMenu('export-invoices')" index="/export-invoices"><el-icon><Postcard /></el-icon><template #title>出口发票</template></el-menu-item>
+        <el-menu-item v-if="canMenu('reports')" index="/reports"><el-icon><PieChart /></el-icon><template #title>报表统计</template></el-menu-item>
+        <el-menu-item v-if="canMenu('feedbacks')" index="/feedbacks"><el-icon><ChatDotRound /></el-icon><template #title>反馈管理</template></el-menu-item>
+        <el-menu-item v-if="canMenu('error-logs')" index="/error-logs"><el-icon><Warning /></el-icon><template #title>系统报错</template></el-menu-item>
+        <el-menu-item v-if="canMenu('accounts')" index="/accounts"><el-icon><UserFilled /></el-icon><template #title>账号管理</template></el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>
@@ -71,7 +71,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { UserRole } from '@i9/types';
 import { useAuthStore } from '../../stores/auth';
 import { useTabsStore } from '../../stores/tabs';
 import FeedbackWidget from '../../components/FeedbackWidget.vue';
@@ -82,9 +81,8 @@ const auth = useAuthStore();
 const router = useRouter();
 const route = useRoute();
 const pwdDialog = ref(false);
-const isAdmin = computed(() => auth.hasRole(UserRole.ADMIN));
-// 版师/打样:仅样衣相关,隐藏其无权访问(会 403)的客户报价/报表/本司主体
-const isProduction = computed(() => auth.hasRole(UserRole.PATTERNMAKER, UserRole.SAMPLE_MAKER));
+// 侧栏可见性统一走账号级菜单权限（未配置按角色默认，ADMIN 恒全量）——auth store 单一口径
+const canMenu = auth.canMenu;
 
 // 侧栏折叠：小屏/大表格时把横向空间还给内容，状态跨会话记忆
 const SIDE_KEY = 'i9.side.collapsed';

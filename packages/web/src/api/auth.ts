@@ -5,16 +5,16 @@ export const authApi = {
   changePassword: (dto: { old_password: string; new_password: string }) =>
     http.patch<unknown, any>('/auth/change-password', dto),
 
-  // ── 管理员：内部用户 ──
+  // ── 账号管理（管理员+主管；主管服务端限指派非管理角色）：内部用户 ──
   adminListUsers: () => http.get<unknown, any>('/auth/admin/users'),
-  createUser: (dto: { username: string; real_name: string; role: string; password: string }) =>
+  createUser: (dto: { username: string; real_name: string; role: string; password: string; menuKeys?: string[] | null }) =>
     http.post<unknown, any>('/auth/admin/users', dto),
-  updateUser: (id: number, dto: { real_name?: string; role?: string; status?: number }) =>
+  updateUser: (id: number, dto: { real_name?: string; role?: string; status?: number; menuKeys?: string[] | null }) =>
     http.patch<unknown, any>(`/auth/admin/users/${id}`, dto),
   resetUserPassword: (id: number, new_password: string) =>
     http.patch<unknown, any>(`/auth/admin/users/${id}/password`, { new_password }),
 
-  // ── 管理员：供应商门户账号 ──
+  // ── 账号管理：供应商门户账号 ──
   adminListSuppliers: () => http.get<unknown, any>('/auth/admin/suppliers'),
   resetSupplierPassword: (id: number, new_password: string) =>
     http.patch<unknown, any>(`/auth/admin/suppliers/${id}/password`, { new_password }),

@@ -142,4 +142,65 @@ describe('auth store', () => {
       expect(store.realName).toBe('持久化用户');
     });
   });
+
+  // ------------------------------------------------------------------ canMenu
+  describe('canMenu()（账号级菜单权限）', () => {
+    it('ADMIN 恒全量（含 adminOnly 项，无视 menuKeys 配置）', () => {
+      const store = useAuthStore();
+      store.setAuth({ access_token: 't', role: UserRole.ADMIN, real_name: 'A', menu_keys: ['orders'] });
+      expect(store.canMenu('accounts')).toBe(true);
+      expect(store.canMenu('error-logs')).toBe(true);
+      expect(store.canMenu('payments')).toBe(true);
+    });
+
+    it('menuKeys 为 null 时按角色默认（船务仅 订单/合同/对账/工作台）', () => {
+      const store = useAuthStore();
+      store.setAuth({ access_token: 't', role: UserRole.SHIPPING, real_name: '船' });
+      expect(store.canMenu('orders')).toBe(true);
+      expect(store.canMenu('contracts')).toBe(true);
+      expect(store.canMenu('reconciliations')).toBe(true);
+      expect(store.canMenu('payments')).toBe(false);
+      expect(store.canMenu('samples')).toBe(false);
+      expect(store.canMenu('accounts')).toBe(false);
+    });
+
+    it('主管默认菜单含账号管理、不含管理员专属项', () => {
+      const store = useAuthStore();
+      store.setAuth({ access_token: 't', role: UserRole.SUPERVISOR, real_name: '主' });
+      expect(store.canMenu('accounts')).toBe(true);
+      expect(store.canMenu('feedbacks')).toBe(false);
+      expect(store.canMenu('error-logs')).toBe(false);
+      expect(store.canMenu('dicts')).toBe(false);
+    });
+
+    it('财务默认仅财务相关菜单', () => {
+      const store = useAuthStore();
+      store.setAuth({ access_token: 't', role: UserRole.FINANCE, real_name: '财' });
+      expect(store.canMenu('payments')).toBe(true);
+      expect(store.canMenu('settlements')).toBe(true);
+      expect(store.canMenu('reconciliations')).toBe(true);
+      expect(store.canMenu('orders')).toBe(false);
+      expect(store.canMenu('quotes')).toBe(false);
+    });
+
+    it('配置 menuKeys 后按配置（覆盖角色默认，可增可减）', () => {
+      const store = useAuthStore();
+      store.setAuth({ access_token: 't', role: UserRole.SHIPPING, real_name: '船', menu_keys: ['orders', 'payments'] });
+      expect(store.canMenu('payments')).toBe(true);   // 配置新增
+      expect(store.canMenu('contracts')).toBe(false); // 角色默认被覆盖
+    });
+
+    it('menuKeys 持久化并在刷新后恢复；clearAuth 一并清除', () => {
+      const store = useAuthStore();
+      store.setAuth({ access_token: 't', role: UserRole.SHIPPING, real_name: '船', menu_keys: ['orders'] });
+      expect(localStorageMock.getItem('menuKeys')).toBe('["orders"]');
+      setActivePinia(createPinia());
+      const reloaded = useAuthStore();
+      expect(reloaded.canMenu('orders')).toBe(true);
+      expect(reloaded.canMenu('contracts')).toBe(false);
+      reloaded.clearAuth();
+      expect(localStorageMock.getItem('menuKeys')).toBeNull();
+      expect(reloaded.canMenu('orders')).toBe(false);
+    });
+  });
 });

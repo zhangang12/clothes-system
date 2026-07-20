@@ -142,8 +142,9 @@ CREATE TABLE IF NOT EXISTS `sys_user` (
   `username`     VARCHAR(50)  NOT NULL COMMENT '登录用户名',
   `password`     VARCHAR(255) NOT NULL COMMENT '密码(bcrypt)',
   `real_name`    VARCHAR(50)  NOT NULL COMMENT '真实姓名',
-  `role`         ENUM('ADMIN','BUSINESS','FINANCE','PATTERNMAKER','SUPERVISOR','SAMPLE_MAKER') NOT NULL DEFAULT 'BUSINESS',
+  `role`         ENUM('ADMIN','BUSINESS','FINANCE','PATTERNMAKER','SUPERVISOR','SAMPLE_MAKER','SHIPPING') NOT NULL DEFAULT 'BUSINESS',
   `status`       TINYINT      NOT NULL DEFAULT 1 COMMENT '1=启用 0=停用',
+  `menu_keys`    JSON         NULL COMMENT '账号级菜单权限(JSON数组);NULL=按角色默认菜单',
   `created_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -1107,10 +1108,12 @@ CALL _i9_add_col('sys_user','password',"VARCHAR(255) NOT NULL COMMENT '密码(bc
 CALL _i9_sync_col('sys_user','password',"VARCHAR(255)","VARCHAR(255) NOT NULL COMMENT '密码(bcrypt)'");
 CALL _i9_add_col('sys_user','real_name',"VARCHAR(50)  NOT NULL COMMENT '真实姓名'");
 CALL _i9_sync_col('sys_user','real_name',"VARCHAR(50)","VARCHAR(50)  NOT NULL COMMENT '真实姓名'");
-CALL _i9_add_col('sys_user','role',"ENUM('ADMIN','BUSINESS','FINANCE','PATTERNMAKER','SUPERVISOR','SAMPLE_MAKER') NOT NULL DEFAULT 'BUSINESS'");
-CALL _i9_sync_col('sys_user','role',"ENUM('ADMIN','BUSINESS','FINANCE','PATTERNMAKER','SUPERVISOR','SAMPLE_MAKER')","ENUM('ADMIN','BUSINESS','FINANCE','PATTERNMAKER','SUPERVISOR','SAMPLE_MAKER') NOT NULL DEFAULT 'BUSINESS'");
+CALL _i9_add_col('sys_user','role',"ENUM('ADMIN','BUSINESS','FINANCE','PATTERNMAKER','SUPERVISOR','SAMPLE_MAKER','SHIPPING') NOT NULL DEFAULT 'BUSINESS'");
+CALL _i9_sync_col('sys_user','role',"ENUM('ADMIN','BUSINESS','FINANCE','PATTERNMAKER','SUPERVISOR','SAMPLE_MAKER','SHIPPING')","ENUM('ADMIN','BUSINESS','FINANCE','PATTERNMAKER','SUPERVISOR','SAMPLE_MAKER','SHIPPING') NOT NULL DEFAULT 'BUSINESS'");
 CALL _i9_add_col('sys_user','status',"TINYINT      NOT NULL DEFAULT 1 COMMENT '1=启用 0=停用'");
 CALL _i9_sync_col('sys_user','status',"TINYINT","TINYINT      NOT NULL DEFAULT 1 COMMENT '1=启用 0=停用'");
+CALL _i9_add_col('sys_user','menu_keys',"JSON         NULL COMMENT '账号级菜单权限(JSON数组);NULL=按角色默认菜单'");
+CALL _i9_sync_col('sys_user','menu_keys',"JSON","JSON         NULL COMMENT '账号级菜单权限(JSON数组);NULL=按角色默认菜单'");
 CALL _i9_add_col('sys_user','created_at',"DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP");
 CALL _i9_sync_col('sys_user','created_at',"DATETIME","DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP");
 CALL _i9_add_col('sys_user','updated_at',"DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");

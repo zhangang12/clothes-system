@@ -50,6 +50,7 @@ http.interceptors.response.use(
       // （reset 幂等；pinia 未就绪的极端场景下静默跳过，不挡登出跳转）
       try { useTabsStore().reset(); } catch { /* 忽略 */ }
       localStorage.removeItem('token');
+      localStorage.removeItem('menuKeys'); // 与 clearAuth 口径一致，防下一账号读到上一人的菜单配置
       window.location.href = '/login';
     } else {
       // 登录页密码错(401)或其它错误:提示而非刷新丢失输入

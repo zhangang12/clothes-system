@@ -1,11 +1,13 @@
-import { IsString, MinLength, MaxLength, Matches, IsOptional, IsIn, IsInt } from 'class-validator';
+import { IsString, MinLength, MaxLength, Matches, IsOptional, IsIn, IsInt, IsArray } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { UserRole } from '@i9/types';
+import { UserRole, MENU_REGISTRY } from '@i9/types';
 
 // 口令强度：≥8 位且同时含字母与数字。挡住 123456 / Admin@123 这类弱默认密码延续到用户自设。
 const STRONG =
   /^(?=.*[A-Za-z])(?=.*\d).{8,64}$/;
 const STRONG_MSG = '密码至少 8 位，且须同时包含字母和数字';
+
+const MENU_KEYS = MENU_REGISTRY.map((m) => m.key);
 
 export class ChangePasswordDto {
   @ApiProperty({ description: '原密码' })
@@ -21,7 +23,7 @@ export class ChangePasswordDto {
 
 const INTERNAL_ROLES = [
   UserRole.ADMIN, UserRole.BUSINESS, UserRole.FINANCE,
-  UserRole.PATTERNMAKER, UserRole.SUPERVISOR, UserRole.SAMPLE_MAKER,
+  UserRole.PATTERNMAKER, UserRole.SUPERVISOR, UserRole.SAMPLE_MAKER, UserRole.SHIPPING,
 ];
 
 export class CreateUserDto {
@@ -43,6 +45,12 @@ export class CreateUserDto {
   @IsString()
   @Matches(STRONG, { message: STRONG_MSG })
   password: string;
+
+  @ApiPropertyOptional({ description: '账号级菜单权限（key 数组）；不传/null=按角色默认', enum: MENU_KEYS, isArray: true })
+  @IsOptional()
+  @IsArray()
+  @IsIn(MENU_KEYS, { each: true, message: '菜单 key 不合法' })
+  menuKeys?: string[] | null;
 }
 
 export class UpdateUserDto {
@@ -57,6 +65,12 @@ export class UpdateUserDto {
   @ApiPropertyOptional({ description: '1=启用 0=停用' })
   @IsOptional() @IsInt() @IsIn([0, 1])
   status?: number;
+
+  @ApiPropertyOptional({ description: '账号级菜单权限（key 数组）；null=恢复角色默认', enum: MENU_KEYS, isArray: true })
+  @IsOptional()
+  @IsArray()
+  @IsIn(MENU_KEYS, { each: true, message: '菜单 key 不合法' })
+  menuKeys?: string[] | null;
 }
 
 export class ResetPasswordDto {

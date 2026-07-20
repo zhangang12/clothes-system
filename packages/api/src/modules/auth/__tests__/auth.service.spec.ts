@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing';
-import { UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { UnauthorizedException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { AuthService } from '../auth.service';
@@ -159,35 +159,118 @@ describe('AuthService', () => {
     it('UT-AUTH-16: 停用最后一个启用管理员被拒', async () => {
       mockUserRepo.findOne.mockResolvedValue({ id: 1, role: 'ADMIN', status: 1 });
       mockUserRepo.count.mockResolvedValue(1);
-      await expect(service.updateUser(1, { status: 0 }, 99)).rejects.toThrow(BadRequestException);
+      await expect(service.updateUser(1, { status: 0 }, { id: 99, role: 'ADMIN' })).rejects.toThrow(BadRequestException);
       expect(mockUserRepo.update).not.toHaveBeenCalled();
     });
 
     it('UT-AUTH-17: 还有其它管理员时可降权', async () => {
       mockUserRepo.findOne.mockResolvedValue({ id: 2, role: 'ADMIN', status: 1 });
       mockUserRepo.count.mockResolvedValue(2);
-      await service.updateUser(2, { role: 'BUSINESS' as any }, 99);
+      await service.updateUser(2, { role: 'BUSINESS' as any }, { id: 99, role: 'ADMIN' });
       expect(mockUserRepo.update).toHaveBeenCalledWith(2, { role: 'BUSINESS' });
     });
 
     it('UT-AUTH-18: 不能停用当前登录的自己', async () => {
       mockUserRepo.findOne.mockResolvedValue({ id: 5, role: 'BUSINESS', status: 1 });
-      await expect(service.updateUser(5, { status: 0 }, 5)).rejects.toThrow(BadRequestException);
+      await expect(service.updateUser(5, { status: 0 }, { id: 5, role: 'BUSINESS' })).rejects.toThrow(BadRequestException);
     });
   });
 
   describe('createUser()', () => {
     it('UT-AUTH-19: 用户名重复被拒', async () => {
       mockUserRepo.findOne.mockResolvedValue({ id: 1, username: 'dup' });
-      await expect(service.createUser({ username: 'dup', real_name: 'x', role: 'BUSINESS', password: 'pass1234' }))
+      await expect(service.createUser({ username: 'dup', real_name: 'x', role: 'BUSINESS', password: 'pass1234' }, { role: 'ADMIN' }))
         .rejects.toThrow(BadRequestException);
     });
 
     it('UT-AUTH-20: 新用户密码入库为哈希', async () => {
       mockUserRepo.findOne.mockResolvedValue(null);
       mockUserRepo.save.mockResolvedValue({ id: 7 });
-      await service.createUser({ username: 'newu', real_name: '新', role: 'FINANCE', password: 'pass1234' });
+      await service.createUser({ username: 'newu', real_name: '新', role: 'FINANCE', password: 'pass1234' }, { role: 'ADMIN' });
       expect(mockUserRepo.save).toHaveBeenCalledWith(expect.objectContaining({ password: 'hashed:pass1234' }));
+    });
+  });
+
+  describe('账号管理·主管(SUPERVISOR)越权防线', () => {
+    const SUP = { id: 50, role: 'SUPERVISOR' };
+
+    it('UT-AUTH-21: 主管可建 5 种非管理角色（含新角色 SHIPPING）', async () => {
+      mockUserRepo.findOne.mockResolvedValue(null);
+      mockUserRepo.save.mockResolvedValue({ id: 8 });
+      await service.createUser({ username: 'ship1', real_name: '船务', role: 'SHIPPING', password: 'pass1234' }, SUP);
+      expect(mockUserRepo.save).toHaveBeenCalledWith(expect.objectContaining({ role: 'SHIPPING' }));
+    });
+
+    it('UT-AUTH-22: 主管建 ADMIN / SUPERVISOR 被拒（防提权）', async () => {
+      await expect(service.createUser({ username: 'x1', real_name: 'x', role: 'ADMIN', password: 'pass1234' }, SUP))
+        .rejects.toThrow(ForbiddenException);
+      await expect(service.createUser({ username: 'x2', real_name: 'x', role: 'SUPERVISOR', password: 'pass1234' }, SUP))
+        .rejects.toThrow(ForbiddenException);
+      expect(mockUserRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('UT-AUTH-23: 主管不能编辑/重置 ADMIN、SUPERVISOR 账号', async () => {
+      mockUserRepo.findOne.mockResolvedValue({ id: 1, role: 'ADMIN', status: 1 });
+      await expect(service.updateUser(1, { real_name: '改名' }, SUP)).rejects.toThrow(ForbiddenException);
+      await expect(service.resetUserPassword(1, 'new12345', SUP)).rejects.toThrow(ForbiddenException);
+      mockUserRepo.findOne.mockResolvedValue({ id: 2, role: 'SUPERVISOR', status: 1 });
+      await expect(service.updateUser(2, { status: 0 }, SUP)).rejects.toThrow(ForbiddenException);
+      expect(mockUserRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('UT-AUTH-24: 主管不能把他人提成管理角色', async () => {
+      mockUserRepo.findOne.mockResolvedValue({ id: 3, role: 'BUSINESS', status: 1 });
+      await expect(service.updateUser(3, { role: 'ADMIN' as any }, SUP)).rejects.toThrow(ForbiddenException);
+      await expect(service.updateUser(3, { role: 'SUPERVISOR' as any }, SUP)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('UT-AUTH-25: 主管可正常管理非管理角色账号', async () => {
+      mockUserRepo.findOne.mockResolvedValue({ id: 4, role: 'BUSINESS', status: 1 });
+      await service.updateUser(4, { role: 'SHIPPING' as any, status: 0 }, SUP);
+      expect(mockUserRepo.update).toHaveBeenCalledWith(4, { role: 'SHIPPING', status: 0 });
+      await service.resetUserPassword(4, 'new12345', SUP);
+      expect(mockUserRepo.update).toHaveBeenCalledWith(4, { password: 'hashed:new12345' });
+    });
+  });
+
+  describe('账号级菜单权限 menu_keys', () => {
+    it('UT-AUTH-26: ADMIN 角色强制存 NULL（管理员恒全菜单，防锁死）', async () => {
+      mockUserRepo.findOne.mockResolvedValue(null);
+      mockUserRepo.save.mockResolvedValue({ id: 9 });
+      await service.createUser({ username: 'a1', real_name: 'x', role: 'ADMIN', password: 'pass1234', menuKeys: ['orders'] }, { role: 'ADMIN' });
+      expect(mockUserRepo.save).toHaveBeenCalledWith(expect.objectContaining({ menu_keys: null }));
+    });
+
+    it('UT-AUTH-27: 非法 key 被过滤，合法配置入库', async () => {
+      mockUserRepo.findOne.mockResolvedValue(null);
+      mockUserRepo.save.mockResolvedValue({ id: 10 });
+      await service.createUser(
+        { username: 'b1', real_name: 'x', role: 'SHIPPING', password: 'pass1234', menuKeys: ['orders', 'bogus-key', 'contracts'] },
+        { role: 'SUPERVISOR' },
+      );
+      expect(mockUserRepo.save).toHaveBeenCalledWith(expect.objectContaining({ menu_keys: ['orders', 'contracts'] }));
+    });
+
+    it('UT-AUTH-28: updateUser 传 null 恢复角色默认；目标为 ADMIN 时强制 NULL', async () => {
+      mockUserRepo.findOne.mockResolvedValue({ id: 5, role: 'BUSINESS', status: 1 });
+      await service.updateUser(5, { menuKeys: null }, { id: 99, role: 'ADMIN' });
+      expect(mockUserRepo.update).toHaveBeenCalledWith(5, { menu_keys: null });
+      mockUserRepo.findOne.mockResolvedValue({ id: 1, role: 'ADMIN', status: 1 });
+      await service.updateUser(1, { menuKeys: ['orders'] }, { id: 99, role: 'ADMIN' });
+      expect(mockUserRepo.update).toHaveBeenCalledWith(1, { menu_keys: null });
+    });
+
+    it('UT-AUTH-29: loginAdmin 响应带 menu_keys（无配置为 null）', async () => {
+      mockUserRepo.findOne.mockResolvedValue({
+        id: 6, username: 'u6', password: 'hashed:pass', role: 'SHIPPING', real_name: '船务', status: 1, menu_keys: ['orders'],
+      });
+      const r1 = await service.loginAdmin('u6', 'pass');
+      expect(r1.menu_keys).toEqual(['orders']);
+      mockUserRepo.findOne.mockResolvedValue({
+        id: 7, username: 'u7', password: 'hashed:pass', role: 'BUSINESS', real_name: '业务', status: 1, menu_keys: null,
+      });
+      const r2 = await service.loginAdmin('u7', 'pass');
+      expect(r2.menu_keys).toBeNull();
     });
   });
 });
