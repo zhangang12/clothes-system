@@ -1,0 +1,533 @@
+==================================================================
+ I9 深度测试   目标：http://127.0.0.1:3000/api/v1
+ token: admin=✓ business=✓ finance=✓ pm=✓ supplier=
+==================================================================
+
+[0;36m══ 1. 鉴权与权限基线 ══[0m
+  [0;32m✓[0m 错误密码登录应401 [401]
+  [0;32m✓[0m 不存在用户登录应401 [401]
+  [0;32m✓[0m 登录缺password应400 [400]
+  [0;32m✓[0m 无token访问受保护接口应拒绝 [401]
+  [0;32m✓[0m 伪造token应拒绝 [401]
+  [0;31m✗[0m admin正确登录 (期望 2xx 实得 429) {"code":4290,"msg":"ThrottlerException: Too Many Requests","data":null,"path":"/api/v1/auth/login","timestamp":"2026-07-20T12:48:13.625Z"}
+  [0;31m✗[0m 登录未返回access_token
+  [0;32m✓[0m 门户错误密码应401 [401]
+  [0;32m✓[0m 门户缺password应400 [400]
+  [0;32m✓[0m 门户缺username应400 [400]
+  [0;32m✓[0m 门户空body应400 [400]
+  [0;32m✓[0m 超长username(>50)应400/401非500 [400]
+  [0;32m✓[0m password过短(<6@MinLength)应400 [400]
+  [0;32m✓[0m password超长(>100@MaxLength)应400 [400]
+  [0;32m✓[0m 门户SQL注入用户名被拒(参数化查询) [401]
+  [0;32m✓[0m 管理端SQL注入用户名被拒(参数化查询) [429]
+  [0;32m✓[0m GET /auth 无此路由应404 [404]
+  [0;32m✓[0m GET访问POST路由/auth/login应404/405 [404]
+  [0;32m✓[0m 合法admin token访问/customers应2xx(正向对照) [200]
+
+[0;36m══ 2. 客户 ══[0m
+  [0;32m✓[0m 缺少 type(客户类型必填)应400 [400]
+  [0;32m✓[0m 非法 grade=Z(@IsEnum 仅A/B/C)应400 [400]
+  [0;32m✓[0m 最终买家未选关联中间商应400(联动校验) [400]
+  [0;32m✓[0m 客户无联系人子表应400(联系人非空校验) [400]
+  [0;32m✓[0m PATTERNMAKER 创建客户应被拒(不在@Roles) [403]
+  [0;32m✓[0m BUSINESS 合法创建客户应2xx [201]
+  [0;32m✓[0m 中间商客户编号CM-前缀 (data.customer_no=CM003)
+  [0;32m✓[0m 最终买家创建应2xx(带关联中间商) [201]
+  [0;32m✓[0m 最终买家客户编号FE-前缀 (data.customer_no=FE001)
+  [0;32m✓[0m 详情 name 与输入一致 (data.name=客户测试_dt1784551692)
+  [0;32m✓[0m 详情 grade 与输入一致 (data.grade=B)
+  [0;32m✓[0m 详情 currency 与输入一致 (data.currency=USD)
+  [0;32m✓[0m BUSINESS 更新客户应2xx [200]
+  [0;32m✓[0m 更新后再查 grade=C 生效 (data.grade=C)
+  [0;32m✓[0m 客户列表分页 page=1&size=5 应2xx [200]
+  [0;32m✓[0m BUSINESS 切换客户状态应被拒(仅ADMIN) [403]
+  [0;32m✓[0m ADMIN 切换客户状态应2xx [200]
+  [0;32m✓[0m 状态机 status 由默认1翻转为0 (data.status=0)
+  [0;32m✓[0m ADMIN更新客户name/grade成功 [200]
+  [0;32m✓[0m 更新后GET详情name已变更 (data.name=客户改后EXTdt1784551692)
+  [0;32m✓[0m 更新后GET详情grade已变更为C (data.grade=C)
+  [0;32m✓[0m grade=B客户创建成功 [201]
+  [0;32m✓[0m grade=C客户创建成功 [201]
+  [0;32m✓[0m name超100字符创建应被拒 [400]
+  [0;32m✓[0m GET不存在客户应返回404 [404]
+  [0;32m✓[0m 分页查询page=1&size=2成功 [200]
+  [0;32m✓[0m 分页结果结构含size=2 (size=2)
+  [0;32m✓[0m keyword关键字筛选成功 [200]
+  [0;32m✓[0m ADMIN切换客户启停状态成功 [200]
+  [0;32m✓[0m 切换后GET详情status已变为停用 (data.status=0)
+  [0;32m✓[0m BUSINESS无权切换客户状态 [403]
+  [0;32m✓[0m BUSINESS无权删除客户 [403]
+  [0;32m✓[0m ADMIN逻辑删除客户成功 [200]
+  [0;32m✓[0m 软删除后GET详情应返回404 [404]
+
+[0;36m══ 3. 工厂 ══[0m
+  [0;32m✓[0m 创建工厂缺 name 应 400 [400]
+  [0;32m✓[0m 创建工厂非法 type 应 400 [400]
+  [0;32m✓[0m 工厂无联系人子表应400(联系人非空校验) [400]
+  [0;32m✓[0m 打版师创建工厂应被拒绝 [403]
+  [0;32m✓[0m 业务员创建工厂应成功 [201]
+  [0;32m✓[0m 合法创建工厂应成功 [201]
+  [0;32m✓[0m 获取工厂详情应成功 [200]
+  [0;32m✓[0m 工厂编号应以 S 开头(设计稿 §1.1) (data.factory_no=S108)
+  [0;32m✓[0m 详情类型应为 FABRIC (data.type=FABRIC)
+  [0;32m✓[0m 主联系人应自动回填为子表首行姓名 (data.contact_name=张建国)
+  [0;32m✓[0m 管理员更新工厂应成功 [200]
+  [0;32m✓[0m PUT 更新后名称应生效 (data.name=FacUpd-dt1784551692)
+  [0;32m✓[0m 查询不存在工厂应 404 [404]
+  [0;32m✓[0m 工厂列表分页应成功 [200]
+  [0;32m✓[0m 分页 size 应回显为 5 (size=5)
+  [0;32m✓[0m 管理员 PUT 更新工厂应成功 [200]
+  [0;32m✓[0m PUT 后重新 GET 名称应已变更 (data.name=ExtAUpd_dt1784551692)
+  [0;32m✓[0m PUT 更新联系人子表后主联系人应自动回填 (data.contact_name=Tom_dt1784551692)
+  [0;32m✓[0m OUTSOURCE 类型工厂应可创建并回显 (data.type=OUTSOURCE)
+  [0;32m✓[0m ACCESSORY 类型工厂应可创建并回显 (data.type=ACCESSORY)
+  [0;32m✓[0m 连建两工厂编号不同(S112≠S113)
+  [0;32m✓[0m 分页 size 应回显为 2 (size=2)
+  [0;32m✓[0m 按 type=OUTSOURCE 筛选首条类型应为 OUTSOURCE (data.0.type=OUTSOURCE)
+  [0;32m✓[0m 管理员切换工厂状态应成功 [200]
+  [0;32m✓[0m 默认启用(1)切换后应为停用(0) (data.status=0)
+  [0;32m✓[0m 按 status=0 筛选首条状态应为停用(0) (data.0.status=0)
+  [0;32m✓[0m 管理员逻辑删除工厂应成功 [200]
+  [0;32m✓[0m 软删除后查询详情应 404 [404]
+  [0;32m✓[0m 重复删除已删除工厂应 404(终态) [404]
+  [0;32m✓[0m 查询超大 id 工厂应 404 [404]
+  [0;32m✓[0m name 超过 100 字符应 400 [400]
+  [0;32m✓[0m 财务角色更新工厂应被拒绝 [403]
+  [0;32m✓[0m 业务员切换工厂状态应被拒绝(仅ADMIN) [403]
+  [0;32m✓[0m 批量导入工厂应2xx [201]
+  [0;32m✓[0m 导入成功2条(有效行) (data.created=2)
+  [0;32m✓[0m 导入失败1条(缺联系人) (data.failedCount=1)
+  [0;32m✓[0m 批量导入客户应2xx [201]
+  [0;32m✓[0m 客户导入成功2条(有效行) (data.created=2)
+  [0;32m✓[0m 客户导入失败1条(缺联系人) (data.failedCount=1)
+  [0;32m✓[0m 创建双身份工厂(FABRIC+OUTSOURCE) [201]
+  [0;32m✓[0m 双身份工厂在委外加工商下拉命中(附加身份)
+
+[0;36m══ 4. 样衣状态机 ══[0m
+  [0;31m✗[0m 新建样衣状态PENDING(待派单) (期望 data.status=PENDING 实得 )
+  [0;31m✗[0m 材料明细首行品名回读 (期望 data.materials.0.item_name=面料 实得 )
+  [0;31m✗[0m 推送版师(填材料寄出单号) (期望 2xx 实得 404) {"code":4004,"msg":"样衣 #0 不存在","data":null,"path":"/api/v1/samples/0/push","timestamp":"2026-07-20T12:48:19.356Z"}
+  [0;31m✗[0m 推送后打样中SAMPLING (期望 data.status=SAMPLING 实得 )
+  [0;31m✗[0m 版师填件数+单价 (期望 2xx 实得 404) {"code":4004,"msg":"样衣 #0 不存在","data":null,"path":"/api/v1/samples/0/patternmaker","timestamp":"2026-07-20T12:48:19.459Z"}
+  [0;31m✗[0m 件数单价填完已对账RECONCILED (期望 data.status=RECONCILED 实得 )
+  [0;31m✗[0m 工时金额=件数×单价=150 (期望 data.labor_amount≈150 实得 )
+  [0;31m✗[0m 业务勾选已对账样衣生成工时对账单 (期望 2xx 实得 400) {"code":1001,"msg":"部分样衣不存在或已删除，无法生成工时对账","data":null,"path":"/api/v1/reconciliations/labor","timestamp":"2026-07-20T12:48:19.680Z"}
+  [0;31m✗[0m 工时对账类型=LABOR (期望 data.type=LABOR 实得 )
+  [0;31m✗[0m 工时对账金额=样衣工时合计150 (期望 data.total_amount≈150 实得 )
+  [0;31m✗[0m 工时对账受款方=版师1 (期望 data.patternmaker_id=1 实得 )
+  [0;31m✗[0m 工时对账币种默认CNY (期望 data.currency=CNY 实得 )
+  [0;32m✓[0m 同一样衣重复工时对账应400 [400]
+  [0;31m✗[0m 工时对账两级审批后已确认 (期望 data.status=CONFIRMED 实得 )
+  [0;31m✗[0m 版师仅填件数缺单价应400 (期望 400 实得 404) {"code":4004,"msg":"样衣 #0 不存在","data":null,"path":"/api/v1/samples/0/patternmaker","timestamp":"2026-07-20T12:48:20.198Z"}
+  [0;31m✗[0m 完成后DONE(已完成) (期望 data.status=DONE 实得 )
+  [0;32m✓[0m 非法中间商建样衣应400/404 [400]
+  [0;32m✓[0m 样衣材料明细为空应400 [400]
+  [0;31m✗[0m 打样中样衣允许修改基本信息 (期望 2xx 实得 404) {"code":4004,"msg":"样衣 #0 不存在","data":null,"path":"/api/v1/samples/0","timestamp":"2026-07-20T12:48:20.594Z"}
+  [0;31m✗[0m 更新后GET款号确实变化 (期望 data.style_no=U_dt1784551692 实得 )
+  [0;31m✗[0m 已对账状态不可修改基本信息 (期望 400 实得 404) {"code":4004,"msg":"样衣 #0 不存在","data":null,"path":"/api/v1/samples/0","timestamp":"2026-07-20T12:48:20.723Z"}
+  [0;31m✗[0m 复制样衣 (期望 2xx 实得 404) {"code":4004,"msg":"样衣 #0 不存在","data":null,"path":"/api/v1/samples/0/copy","timestamp":"2026-07-20T12:48:20.746Z"}
+  [0;31m✗[0m 复制新单状态待派单PENDING (期望 data.status=PENDING 实得 )
+  [0;31m✗[0m 复制沿用款号 (期望 data.style_no=U_dt1784551692 实得 )
+  [0;31m✗[0m 非待派单样衣删除应400(仅待派单可删) (期望 400 实得 404) {"code":4004,"msg":"样衣 #0 不存在","data":null,"path":"/api/v1/samples/0","timestamp":"2026-07-20T12:48:21.063Z"}
+  [0;32m✓[0m 财务调用版师保存应拒绝(仅版师/管理员) [403]
+  [0;32m✓[0m GET不存在样衣应404 [404]
+  [0;32m✓[0m 推送不存在样衣应404 [404]
+  [0;31m✗[0m 逻辑删除待派单样衣 (期望 2xx 实得 404) {"code":4004,"msg":"样衣 #0 不存在","data":null,"path":"/api/v1/samples/0","timestamp":"2026-07-20T12:48:21.245Z"}
+  [0;32m✓[0m 软删除后详情应404 [404]
+  [0;32m✓[0m 样衣分页查询2xx [200]
+  [0;32m✓[0m 分页返回size=2 (size=2)
+  [0;32m✓[0m 按状态+客户筛选2xx [200]
+  [0;32m✓[0m 非法status枚举筛选应400 [400]
+  [0;32m✓[0m styleNo超100字符应400 [400]
+  [0;32m✓[0m 财务创建样衣应拒绝 [403]
+  [0;32m✓[0m 业务删除样衣应拒绝(仅管理员) [403]
+
+[0;36m══ 5. 报价 · 业务计算 ══[0m
+  [0;32m✓[0m 报价缺middlemanId应400 [400]
+  [0;32m✓[0m 报价负人民币单价应400 [400]
+  [0;32m✓[0m 报价损耗率>100应400 [400]
+  [0;32m✓[0m 创建报价 id=2
+  [0;32m✓[0m 报价人民币价格=(8×1.5×1.05)×1.1=13.86 (data.rmb_total=13.86)
+  [0;32m✓[0m 费用明细新建自动带首行=加工费 (data.fees.0.fee_name=加工费)
+  [0;32m✓[0m 草稿直接客户调整应400 [400]
+  [0;32m✓[0m 发出报价(草稿→已报价) [200]
+  [0;32m✓[0m 已报价QUOTED (data.status=QUOTED)
+  [0;32m✓[0m 客户调整(已报价→客户调整) [200]
+  [0;32m✓[0m 客户调整ADJUSTING (data.status=ADJUSTING)
+  [0;32m✓[0m 报价转销售合同(已报价→已成单)应2xx [200]
+  [0;32m✓[0m 转合同后状态为ORDERED(已成单) (data.status=ORDERED)
+  [0;32m✓[0m 已成单再转合同应400(终态幂等) [400]
+  [0;32m✓[0m 已成单编辑应400(仅草稿/客户调整可编辑) [400]
+  [0;32m✓[0m 草稿未发出直接转合同应400(非法转移) [400]
+  [0;32m✓[0m 报价人民币价格=(44含损+10费用)×1.1=59.4 (data.rmb_total=59.40)
+  [0;32m✓[0m 辅料含损金额=5×4×1.2=24 (data.items.1.loss_amount=24.0000)
+  [0;32m✓[0m 报价美元价格=59.4/6=9.9 (data.usd_total=9.90)
+  [0;32m✓[0m 草稿报价编辑应2xx [200]
+  [0;32m✓[0m 编辑后GET详情款号已变更 (data.style_no=改款EXTdt1784551692)
+  [0;32m✓[0m 报价明细缺itemName应400 [400]
+  [0;32m✓[0m 报价明细itemName超100字符应400 [400]
+  [0;32m✓[0m FINANCE创建报价应被拒(不在@Roles) [403]
+  [0;32m✓[0m 打版师发出报价应被拒(不在@Roles) [403]
+  [0;32m✓[0m 报价列表分页page=1&size=2应2xx [200]
+  [0;32m✓[0m 分页结构顶层含size=2 (size=2)
+  [0;32m✓[0m 报价按status=ORDERED筛选应2xx [200]
+  [0;32m✓[0m 查不存在报价应404 [404]
+  [0;32m✓[0m 草稿软删除后GET详情应404 [404]
+
+[0;36m══ 6. 订单 · 状态机/用料 ══[0m
+  [0;32m✓[0m 订单缺qty_total应400 [400]
+  [0;32m✓[0m 创建订单 id=3
+  [0;32m✓[0m 新建订单DRAFT (data.status=DRAFT)
+  [0;32m✓[0m 订单总额=单价12×数量1000 (data.total_amount=12000.0000)
+  [0;32m✓[0m 含损单件耗用=单件×(1+损耗%)=1.5×1.05 (data.materials.0.loss_usage=1.5750)
+  [0;32m✓[0m 系统采购量=大货总数×单件×(1+损耗)=1000×1.575 (data.materials.0.total_purchase=1575.0000)
+  [0;32m✓[0m 预算=最终采购量×单价=1575×8 (data.materials.0.budget=12600.0000)
+  [0;32m✓[0m DRAFT订单发货应400 [400]
+  [0;32m✓[0m 订单推进1(草稿→已下单) [200]
+  [0;31m✗[0m 订单推进2(已下单→已生成合同) (期望 2xx 实得 400) {"code":1001,"msg":"订单下单后,状态由下游事件(生成合同/发货/对账)自动推进,不可手动推进","data":null,"path":"/api/v1/orders/3/advance","timestamp":"2026-07-20T12:48:25.077Z"}
+  [0;31m✗[0m 推进两次后已生成合同 (期望 data.status=CONTRACTED 实得 CONFIRMED)
+  [0;31m✗[0m 订单推进3(已生成合同→生产中) (期望 2xx 实得 400) {"code":1001,"msg":"订单下单后,状态由下游事件(生成合同/发货/对账)自动推进,不可手动推进","data":null,"path":"/api/v1/orders/3/advance","timestamp":"2026-07-20T12:48:25.181Z"}
+  [0;31m✗[0m 推进三次后生产中 (期望 data.status=PRODUCING 实得 CONFIRMED)
+  [0;31m✗[0m 生产中订单可发货 (期望 2xx 实得 400) {"code":1001,"msg":"只有已生成合同或生产中状态可以添加出货记录","data":null,"path":"/api/v1/orders/3/shipments","timestamp":"2026-07-20T12:48:25.282Z"}
+  [0;32m✓[0m PATCH 设置尺码矩阵→2xx [200]
+  [0;32m✓[0m GET回读矩阵M码=20 (data.matrix.matrix_data.M=20)
+  [0;32m✓[0m PATCH 更新尺码矩阵→2xx [200]
+  [0;32m✓[0m 更新后矩阵M码=99确已变化 (data.matrix.matrix_data.M=99)
+  [0;32m✓[0m 草稿订单PUT编辑成功 [200]
+  [0;32m✓[0m PUT后GET回读style_name已变更 (data.style_name=改后款式X)
+  [0;32m✓[0m 非草稿(CONFIRMED)订单PUT编辑→400 [400]
+  [0;32m✓[0m 料0含损单件=2×(1+20%)=2.4 (data.materials.0.loss_usage=2.4000)
+  [0;32m✓[0m 料1含损单件=3×(1+25%)=3.75 (data.materials.1.loss_usage=3.7500)
+  [0;32m✓[0m 米单位round_up=1强制向上取整(123.5→124) (data.materials.0.total_purchase=124.0000)
+  [0;32m✓[0m 对单位默认离散取整(123.5→124) (data.materials.1.total_purchase=124.0000)
+  [0;32m✓[0m 个单位round_up=0关闭取整(123.5) (data.materials.2.total_purchase=123.5000)
+  [0;32m✓[0m 推进1 草稿→已下单 [200]
+  [0;31m✗[0m 推进2 已下单→已生成合同 (期望 2xx 实得 400) {"code":1001,"msg":"订单下单后,状态由下游事件(生成合同/发货/对账)自动推进,不可手动推进","data":null,"path":"/api/v1/orders/8/advance","timestamp":"2026-07-20T12:48:27.165Z"}
+  [0;31m✗[0m 推进3 已生成合同→生产中 (期望 2xx 实得 400) {"code":1001,"msg":"订单下单后,状态由下游事件(生成合同/发货/对账)自动推进,不可手动推进","data":null,"path":"/api/v1/orders/8/advance","timestamp":"2026-07-20T12:48:27.188Z"}
+  [0;31m✗[0m 推进4 生产中→已完成 (期望 2xx 实得 400) {"code":1001,"msg":"订单下单后,状态由下游事件(生成合同/发货/对账)自动推进,不可手动推进","data":null,"path":"/api/v1/orders/8/advance","timestamp":"2026-07-20T12:48:27.213Z"}
+  [0;31m✗[0m 四次推进后状态=DONE(已完成) (期望 data.status=DONE 实得 CONFIRMED)
+  [0;32m✓[0m 终态DONE再推进(非法转移)→400 [400]
+  [0;32m✓[0m 终态DONE订单发货→400 [400]
+  [0;31m✗[0m 首次发货成功 (期望 2xx 实得 400) {"code":1001,"msg":"只有已生成合同或生产中状态可以添加出货记录","data":null,"path":"/api/v1/orders/9/shipments","timestamp":"2026-07-20T12:48:27.589Z"}
+  [0;31m✗[0m 二次发货成功 (期望 2xx 实得 400) {"code":1001,"msg":"只有已生成合同或生产中状态可以添加出货记录","data":null,"path":"/api/v1/orders/9/shipments","timestamp":"2026-07-20T12:48:27.614Z"}
+  [0;31m✗[0m 累计出货第1条qty=100 (期望 data.shipments.0.qty≈100 实得 )
+  [0;31m✗[0m 累计出货第2条qty=200 (期望 data.shipments.1.qty≈200 实得 )
+  [0;32m✓[0m 列表按status=DRAFT筛选成功 [200]
+  [0;32m✓[0m 筛选结果首条status=DRAFT (data.0.status=DRAFT)
+  [0;32m✓[0m 列表分页查询成功 [200]
+  [0;32m✓[0m 分页size回显=2 (size=2)
+  [0;32m✓[0m 分页page回显=1 (page=1)
+  [0;32m✓[0m 分页结构含数字total (total=9)
+  [0;32m✓[0m 查询不存在大id订单→404 [404]
+  [0;32m✓[0m qty_total负数→400 [400]
+  [0;32m✓[0m qty_total=0边界(@Min0)允许创建 [201]
+  [0;32m✓[0m style_name超100字符(@MaxLength)→400 [400]
+  [0;32m✓[0m 空materials数组允许创建 [201]
+  [0;32m✓[0m 草稿订单逻辑删除成功 [200]
+  [0;32m✓[0m 软删除后GET详情→404 [404]
+  [0;32m✓[0m 非草稿订单删除→400 [400]
+  [0;32m✓[0m finance创建订单应拒绝 [403]
+  [0;32m✓[0m finance编辑订单应拒绝 [403]
+  [0;32m✓[0m pm推进订单应拒绝 [403]
+  [0;32m✓[0m finance添加发货应拒绝 [403]
+  [0;32m✓[0m pm改尺码矩阵应拒绝 [403]
+  [0;32m✓[0m business删除订单应拒绝(仅ADMIN) [403]
+  [0;32m✓[0m 报价提交(草稿→已报价) [200]
+  [0;32m✓[0m 订单从报价导入(建立quote_id关联) [200]
+  [0;32m✓[0m 导入后币种默认RMB(CNY) (data.currency=CNY)
+  [0;32m✓[0m 报价人民币价→订单单品单价(13.8600)
+  [0;32m✓[0m 订单下单(草稿→已下单) [200]
+  [0;32m✓[0m 下单自动反写关联报价「已成单」 (data.status=ORDERED)
+  [0;32m✓[0m 从已下单订单生成材料合同 [201]
+  [0;32m✓[0m 生成合同后订单自动「已生成合同」 (data.status=CONTRACTED)
+  [0;32m✓[0m 已生成合同订单发货 [201]
+  [0;32m✓[0m 发货自动驱动订单「生产中」 (data.status=PRODUCING)
+  [0;31m✗[0m 对账确认(wf,二级审批) (期望 2xx 实得 404) {"code":4004,"msg":"对账单 #0 不存在","data":null,"path":"/api/v1/reconciliations/0/confirm","timestamp":"2026-07-20T12:48:30.334Z"}
+  [0;31m✗[0m 对账确认驱动订单「已完成」 (期望 data.status=DONE 实得 PRODUCING)
+
+[0;36m══ 7. 合同 ══[0m
+  [0;32m✓[0m 不传materials时自动从order_material带出(快照联动) [201]
+  [0;32m✓[0m 自动带出总额=单价8×系统采购量1575 (data.total_amount=12600)
+  [0;32m✓[0m 无materials且订单无用料核算记录应400 [400]
+  [0;32m✓[0m 合同非法type应400 [400]
+  [0;32m✓[0m 合同定金比例>100应400 [400]
+  [0;32m✓[0m 创建合同 id=6
+  [0;32m✓[0m BUSINESS改合同状态应拒绝(仅ADMIN) [403]
+  [0;32m✓[0m 合同推送门户 [200]
+  [0;32m✓[0m 推送后portal_status=PUSHED (data.portal_status=PUSHED)
+  [0;32m✓[0m 重复推送应400(非DRAFT) [400]
+  [0;32m✓[0m 撤销推送(PUSHED→DRAFT,BUSINESS可操作) [200]
+  [0;32m✓[0m 撤销后portal_status=DRAFT (data.portal_status=DRAFT)
+  [0;32m✓[0m 撤销后revised=1(已修订标记) (data.revised=1)
+  [0;32m✓[0m 非PUSHED撤销推送应400 [400]
+  [0;32m✓[0m 改后重推(DRAFT→PUSHED) [200]
+  [0;32m✓[0m 重推后revised仍=1(门户提示合同已更新) (data.revised=1)
+  [0;31m✗[0m 未开通门户账号的工厂合同推送应400(A5死流程防护) (期望 400 实得 200) {"code":0,"msg":"ok","data":{"id":"7","contract_no":"HT-20260720-005","type":"MATERIAL","parent_id":null,"factory_id":"17","order_id":"16","total_amount":"800.0
+  [0;32m✓[0m FINANCE创建合同应拒绝(仅ADMIN/BUSINESS) [403]
+  [0;32m✓[0m FINANCE推送合同应拒绝(仅ADMIN/BUSINESS) [403]
+  [0;32m✓[0m ADMIN更新合同状态为COMPLETED [200]
+  [0;32m✓[0m 状态更新后GET回读=COMPLETED (data.status=COMPLETED)
+  [0;32m✓[0m BUSINESS删除合同应拒绝(仅ADMIN) [403]
+  [0;32m✓[0m 删除草稿合同(逻辑删除) [200]
+  [0;32m✓[0m 软删除后查询详情应404 [404]
+  [0;32m✓[0m 重复删除已删除合同应404 [404]
+  [0;32m✓[0m 推送后删除应400(仅DRAFT可删) [400]
+  [0;32m✓[0m 创建PROCESS类型合同 [201]
+  [0;32m✓[0m 加工合同账期默认=发货日+45天 (data.account_period_days=45)
+  [0;32m✓[0m 补料合同缺parent_id应400 [400]
+  [0;32m✓[0m 创建SUPPLEMENT补充合同 [201]
+  [0;32m✓[0m 补充合同type=SUPPLEMENT (data.type=SUPPLEMENT)
+  [0;32m✓[0m 补充合同parent_id指向母合同 (data.parent_id=8)
+  [0;32m✓[0m 补料合同编号=补料-原合同号-序号(不占HT主序号) (data.contract_no=补料-HT-20260720-006-01)
+  [0;32m✓[0m 材料合同账期默认=发货日+90天 (data.account_period_days=90)
+  [0;32m✓[0m 供应商拆单生成合同应2xx [201]
+  [0;32m✓[0m 两个供应商各生成一张材料合同(按供应商拆单) (data.created=2)
+  [0;32m✓[0m 自定义定金比例20生效 (data.deposit_ratio=20.00)
+  [0;32m✓[0m 中期付款比例负数应400 [400]
+  [0;32m✓[0m 账期天数负数应400 [400]
+  [0;32m✓[0m 货币代码超5字符应400 [400]
+  [0;32m✓[0m 合同金额合计=10*100+5*200 (data.total_amount=2000)
+  [0;32m✓[0m 首条材料金额=10*100 (data.materials.0.amount=1000.0000)
+  [0;32m✓[0m PROCESS空数组取大货数自动带出应2xx [201]
+  [0;32m✓[0m 加工合同数量=订单大货数1000 (data.materials.0.qty=1000.0000)
+  [0;32m✓[0m 加工合同数量来源标注=大货数 (data.materials.0.qty_source=大货数)
+  [0;32m✓[0m MATERIAL类型空数组触发自动带出应2xx [201]
+  [0;32m✓[0m 自动带出后合计非0(来自order_material)
+  [0;32m✓[0m 材料合同数量来源标注=采购量含损耗 (data.materials.0.qty_source=采购量含损耗)
+  [0;32m✓[0m 分页size=2生效 (size=2)
+  [0;32m✓[0m 分页page=1生效 (page=1)
+  [0;32m✓[0m 按合同号keyword筛选命中 (data.0.contract_no=HT-20260720-014)
+  [0;32m✓[0m 查询不存在的大id合同应404 [404]
+
+[0;36m══ 8. 对账 ══[0m
+  [0;32m✓[0m 业务员建无合同空白对账单(补充确认v1.1) [201]
+  [0;32m✓[0m 空白对账单费用合计=120+380=500 (data.total_amount=500.0000)
+  [0;32m✓[0m 空白对账单子类型现金无票 (data.sub_type=CASH_NO_INVOICE)
+  [0;32m✓[0m 空白对账单提交复核 [200]
+  [0;32m✓[0m 主管整单退回 [200]
+  [0;32m✓[0m 退回后回草稿DRAFT (data.status=DRAFT)
+  [0;32m✓[0m 退回批注已记录 (data.review_remark=金额需核对)
+  [0;32m✓[0m 对账缺factory_id应400 [400]
+  [0;32m✓[0m 对账非法type应400 [400]
+  [0;32m✓[0m FINANCE创建对账 id=5
+  [0;31m✗[0m 一单多合同对账创建(批次带各自来源合同/款号) (期望 2xx 实得 400) {"code":1001,"msg":"发货批次 FH-I27.230.03929-001 不属于合同 #11","data":null,"path":"/api/v1/reconciliations","timestamp":"2026-07-20T12:48:37.284Z"}
+  [0;31m✗[0m 一单多合同款号汇总为「KA 等2款」 (期望 data.style_no=KA 等2款 实得 )
+  [0;31m✗[0m 一单多合同金额=8*100+5*50=1050 (期望 data.total_amount≈1050 实得 )
+  [0;32m✓[0m 对账提交复核(DRAFT→PENDING) [200]
+  [0;32m✓[0m 财务复核对账应拒绝(仅主管/ADMIN) [403]
+  [0;32m✓[0m 主管复核确认(PENDING→CONFIRMED) [200]
+  [0;32m✓[0m 重复复核应400(非PENDING) [400]
+  [0;31m✗[0m FINANCE建对账(含明细/税/发票) (期望 2xx 实得 400) {"code":1001,"msg":"批次 FH-I27.230.03929-001 须指明来源合同（一单多合同请逐批带 contract_id）","data":null,"path":"/api/v1/reconciliations","timestamp":"2026-07-20T12:48:38.344Z"}
+  [0;31m✗[0m 总额=Σ单价×数量(10*5+20*2) (期望 data.total_amount≈90 实得 )
+  [0;31m✗[0m 税额=总额×税率÷100 (期望 data.tax_amount≈9 实得 )
+  [0;31m✗[0m 发票差额=发票额−总额 (期望 data.invoice_diff≈10 实得 )
+  [0;31m✗[0m 含发票号→has_invoice=1 (期望 data.has_invoice≈1 实得 )
+  [0;31m✗[0m 对账详情(含出货明细) (期望 2xx 实得 404) {"code":4004,"msg":"对账单 #0 不存在","data":null,"path":"/api/v1/reconciliations/0","timestamp":"2026-07-20T12:48:38.857Z"}
+  [0;31m✗[0m 明细行金额=单价×数量快照 (期望 data.shipments.0.amount≈50 实得 )
+  [0;31m✗[0m 发票≠对账金额(差10)复核应400 (期望 400 实得 404) {"code":4004,"msg":"对账单 #0 不存在","data":null,"path":"/api/v1/reconciliations/0/confirm","timestamp":"2026-07-20T12:48:39.061Z"}
+  [0;31m✗[0m 发票不符拦截后仍为待复核PENDING (期望 data.status=PENDING 实得 )
+  [0;31m✗[0m 发票=对账金额(±0.01容差)复核放行 (期望 2xx 实得 404) {"code":4004,"msg":"对账单 #0 不存在","data":null,"path":"/api/v1/reconciliations/0/confirm","timestamp":"2026-07-20T12:48:39.271Z"}
+  [0;31m✗[0m 复核后详情状态复查为CONFIRMED (期望 data.status=CONFIRMED 实得 )
+  [0;31m✗[0m 已确认对账删除应400(仅DRAFT可删) (期望 400 实得 404) {"code":4004,"msg":"对账单 #0 不存在","data":null,"path":"/api/v1/reconciliations/0","timestamp":"2026-07-20T12:48:39.376Z"}
+  [0;31m✗[0m CONTRACT类型带合同+明细创建 (期望 2xx 实得 400) {"code":1001,"msg":"发货批次 #9 不存在，无法对账","data":null,"path":"/api/v1/reconciliations","timestamp":"2026-07-20T12:48:39.400Z"}
+  [0;31m✗[0m CONTRACT对账总额=8*10 (期望 data.total_amount≈80 实得 )
+  [0;31m✗[0m 对账单从合同→订单带出款号 (期望 data.style_no=KNdt17845516928465 实得 )
+  [0;31m✗[0m 对账单编号=DZ-款号-序号(设计稿A2) (期望 data.reconcile_no 匹配 /^DZ-KNdt17845516928465-/ 实得 )
+  [0;31m✗[0m 按款号检索对账单命中1条 (期望 total≈1 实得 0)
+  [0;31m✗[0m 首次用发票号DUP建对账 (期望 2xx 实得 400) {"code":1001,"msg":"批次 FH-I27.230.03929-001 须指明来源合同（一单多合同请逐批带 contract_id）","data":null,"path":"/api/v1/reconciliations","timestamp":"2026-07-20T12:48:40.010Z"}
+  [0;31m✗[0m 重复发票号对账应400(防重复付) (期望 400 实得 201) {"code":0,"msg":"ok","data":{"reconcile_no":"DZ-费用-003","type":"NO_CONTRACT","sub_type":null,"style_no":null,"factory_id":22,"total_amount":0,"tax_rate":null,"t
+  [0;32m✓[0m 空明细数组可建 [201]
+  [0;32m✓[0m 空明细总额=0 (data.total_amount=0)
+  [0;32m✓[0m 明细单价负数应400(@Min0) [400]
+  [0;32m✓[0m 税率负数应400(@Min0) [400]
+  [0;32m✓[0m 草稿对账软删除(ADMIN) [200]
+  [0;32m✓[0m 软删后查详情应404 [404]
+  [0;32m✓[0m PM建对账应拒绝(仅FINANCE/ADMIN/BUSINESS) [403]
+  [0;32m✓[0m FINANCE删除对账应拒绝(仅ADMIN) [403]
+  [0;32m✓[0m BUSINESS确认对账应拒绝 [403]
+  [0;32m✓[0m 列表status+分页筛选 [200]
+  [0;32m✓[0m 分页size=2生效 (size=2)
+  [0;32m✓[0m factory_id筛选命中本厂 (data.0.factory_id=23)
+  [0;32m✓[0m 非法status筛选枚举应400 [400]
+  [0;32m✓[0m 复核不存在对账应404 [404]
+
+[0;36m══ 9. 付款 · 审批流 ══[0m
+  [0;32m✓[0m 付款申请负金额应400 [400]
+  [0;32m✓[0m 创建付款申请 id=1
+  [0;32m✓[0m 未提交就审批应400 [400]
+  [0;32m✓[0m 付款申请提交(DRAFT→PENDING) [200]
+  [0;31m✗[0m FINANCE审批应拒绝(仅ADMIN) (期望 401/403 实得 200) {"code":0,"msg":"ok","data":{"id":"1","pr_no":"PR-NC-20260720-001","type":"NO_CONTRACT","reconcile_id":null,"factory_id"
+  [0;31m✗[0m ADMIN审批通过(PENDING→APPROVED) (期望 2xx 实得 400) {"code":1001,"msg":"只有待审批状态才可审批","data":null,"path":"/api/v1/payments/requests/1/approve","timestamp":"2026-07-20T12:48:41.562Z"}
+  [0;32m✓[0m 重复审批应400 [400]
+  [0;32m✓[0m 标记已付(APPROVED→PAID) [200]
+  [0;32m✓[0m 驳回付款申请(PENDING→REJECTED) [200]
+  [0;32m✓[0m 驳回后标记付款应400 [400]
+  [0;32m✓[0m 付款申请按工厂+起始日期检索命中(total=2)
+  [0;32m✓[0m 付款申请未来日期区间检索应为空 (total=0)
+  [0;32m✓[0m 预付款创建2xx [201]
+  [0;32m✓[0m 预付款金额0应400 [400]
+  [0;32m✓[0m BUSINESS建预付款应拒绝 [403]
+  [0;32m✓[0m 按工厂筛选预付款total=2 (total=2)
+  [0;32m✓[0m 预付款分页size=1生效 (size=1)
+  [0;32m✓[0m 预付冲抵>申请金额应400 [400]
+  [0;32m✓[0m 预付冲抵超可用余额应400 [400]
+  [0;32m✓[0m type=CONTRACT建付款申请2xx [201]
+  [0;32m✓[0m 分批付款1:申请600(≤应付1000)放行 [201]
+  [0;31m✗[0m 分批付款超付:累计1100>应付1000应400 (期望 400 实得 201) {"code":0,"msg":"ok","data":{"pr_no":"PR-20260720-003","type":"CONTRACT","reconcile_id":0,"factory_id":25,"amount":500,"prepay_offset":"0.0000","actual_pay":500
+  [0;32m✓[0m 分批付款2:申请400(累计1000=应付)放行 [201]
+  [0;32m✓[0m 已审批再提交应400 [400]
+  [0;32m✓[0m 水单URL超500字应400 [400]
+  [0;32m✓[0m 标记已付款2xx [200]
+  [0;32m✓[0m 已付款再审批应400 [400]
+  [0;32m✓[0m 驳回不强制reason(2xx) [200]
+  [0;32m✓[0m FINANCE删除付款申请应拒绝 [403]
+  [0;32m✓[0m 删除草稿付款申请2xx [200]
+  [0;32m✓[0m 删除后再提交应404(软删生效) [404]
+  [0;32m✓[0m 提交不存在付款申请应404 [404]
+
+[0;36m══ 10. 结算 · 业务计算 ══[0m
+  [0;32m✓[0m PATTERNMAKER建结算应拒绝 [403]
+  [0;32m✓[0m 结算缺order_id应400 [400]
+  [0;32m✓[0m 结算含未知字段revenue应400(whitelist) [400]
+  [0;31m✗[0m 船务登记出货1000件 (期望 2xx 实得 400) {"code":1001,"msg":"只有已生成合同或生产中状态可以添加出货记录","data":null,"path":"/api/v1/orders/22/shipments","timestamp":"2026-07-20T12:48:44.238Z"}
+  [0;32m✓[0m FINANCE创建结算 id=1
+  [0;32m✓[0m 总货款含税=11300 (data.goods_amount_tax=11300.0000)
+  [0;32m✓[0m 总货款不含税=11300÷1.13=10000 (data.goods_amount_extax=10000.0000)
+  [0;32m✓[0m 结算金额=收汇2000×汇率7 (data.settle_amount=14000.0000)
+  [0;32m✓[0m 财务及管理费=结算金额14000×7%=980 (data.finance_fee=980.0000)
+  [0;32m✓[0m 毛利=结算金额14000−不含税10000 (data.gross_profit=4000.0000)
+  [0;32m✓[0m 不含退税净利=毛利4000−期间费用200−财务费980 (data.net_profit_ex_refund=2820.0000)
+  [0;32m✓[0m 含退税净利=2820+退税300 (data.net_profit=3120.0000)
+  [0;31m✗[0m 成本单价不含税=10000÷出货件数1000 (期望 data.cost_per_unit_extax≈10 实得 )
+  [0;31m✗[0m 保本汇率不含税=成本单价10÷美金单价2.5 (期望 data.breakeven_rate_extax≈4 实得 )
+  [0;32m✓[0m 结算单号=JS-款号-序号(结算串流程 rec:按款号检索) (data.settlement_no=JS-NA-001)
+  [0;32m✓[0m 追加成本500(无票) [201]
+  [0;32m✓[0m 追加后总货款含税=11800 (data.goods_amount_tax=11800.0000)
+  [0;32m✓[0m 追加后不含税=10000+500(无票全额) (data.goods_amount_extax=10500.0000)
+  [0;32m✓[0m 重算毛利=14000−10500 (data.gross_profit=3500.0000)
+  [0;32m✓[0m 结算确认 [200]
+  [0;32m✓[0m 确认后CONFIRMED (data.status=CONFIRMED)
+  [0;32m✓[0m 已确认再加成本应400 [400]
+  [0;32m✓[0m FINANCE多明细结算创建 id=2
+  [0;32m✓[0m 总货款含税=11300+3000+2260 (data.goods_amount_tax=16560.0000)
+  [0;32m✓[0m 不含税=10000(票)+3000(无票全额)+2000(票) (data.goods_amount_extax=15000.0000)
+  [0;32m✓[0m 不含退税净利=毛利(21000-15000)-财务费(21000×7%=1470)=4530 (data.net_profit_ex_refund=4530.0000)
+  [0;32m✓[0m FINANCE登记回款应2xx [201]
+  [0;32m✓[0m GET详情回款记录已落库=8000 (data.receipts.0.amount=8000.0000)
+  [0;32m✓[0m 实际收汇=逐笔累计=8000 (data.receipt_usd=8000.0000)
+  [0;32m✓[0m 结算金额随收汇重算=8000×7 (data.settle_amount=56000.0000)
+  [0;32m✓[0m 按order_id分页查询应2xx [200]
+  [0;32m✓[0m 分页size顶层回显=2(结构含分页) (size=2)
+  [0;32m✓[0m 筛选结果首条order_id匹配 (data.0.order_id=23)
+  [0;32m✓[0m 无收汇/汇率草稿应允许创建 [201]
+  [0;32m✓[0m 无收汇→结算金额=0 (data.settle_amount=0.0000)
+  [0;32m✓[0m 样品费565÷1.13=500 (data.goods_amount_extax=500.0000)
+  [0;31m✗[0m 净利=毛利(0-500)-0-0=-500 (期望 data.net_profit_ex_refund≈-500 实得 0.0000)
+  [0;32m✓[0m 成本amount=0违反@IsPositive应400 [400]
+  [0;32m✓[0m BUSINESS追加成本应被拒(仅ADMIN/FINANCE) [403]
+  [0;32m✓[0m FINANCE删除结算应被拒(DELETE仅ADMIN) [403]
+  [0;32m✓[0m FINANCE确认草稿结算应2xx [200]
+  [0;32m✓[0m 已确认结算删除应400(DELETE仅DRAFT) [400]
+  [0;32m✓[0m 确认后登记回款应400(addReceipt仅DRAFT，已修复) [400]
+  [0;32m✓[0m ADMIN删除草稿结算应2xx [200]
+  [0;32m✓[0m 软删除后GET详情应404 [404]
+  [0;32m✓[0m GET不存在结算(大id)应404 [404]
+  [0;31m✗[0m 对账确认(款号AGGdt178455169230749,含税9040) (期望 2xx 实得 404) {"code":4004,"msg":"对账单 #0 不存在","data":null,"path":"/api/v1/reconciliations/0/confirm","timestamp":"2026-07-20T12:48:49.429Z"}
+  [0;32m✓[0m 结算不给成本→自动从对账付款汇总 [201]
+  [0;31m✗[0m 结算总货款自动汇总(含税8×1130) (期望 data.goods_amount_tax≈9040 实得 0.0000)
+  [0;31m✗[0m 总货款不含税=9040/1.13 (期望 data.goods_amount_extax≈8000 实得 0.0000)
+
+[0;36m══ 11. 供应商门户 · 端到端 ══[0m
+  [0;32m✓[0m 建门户合同 id=23(工厂1)
+  [0;32m✓[0m 合同推送门户 [200]
+  [0;32m✓[0m 无token访问门户应拒绝 [401]
+  [0;31m✗[0m 供应商查看合同列表 (期望 2xx 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts","timestamp":"2026-07-20T12:48:50.326Z"}
+  [0;31m✗[0m 供应商查看合同详情 (期望 2xx 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts/23","timestamp":"2026-07-20T12:48:50.360Z"}
+  [0;31m✗[0m 未勾选同意条款盖章应400(agreed=false) (期望 400 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts/23/stamp","timestamp":"2026-07-20T12:48:50.381Z"}
+  [0;31m✗[0m 缺同意条款字段盖章应400 (期望 400 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts/23/stamp","timestamp":"2026-07-20T12:48:50.397Z"}
+  [0;31m✗[0m 供应商盖章(勾选同意条款;PUSHED→STAMPED) (期望 2xx 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts/23/stamp","timestamp":"2026-07-20T12:48:50.414Z"}
+  [0;31m✗[0m 供应商确认发货(STAMPED→SHIPPING) (期望 2xx 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts/23/ship","timestamp":"2026-07-20T12:48:50.434Z"}
+  [0;31m✗[0m 未对账直接开票应400(开票须对账后) (期望 400 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts/23/invoice","timestamp":"2026-07-20T12:48:50.453Z"}
+  [0;31m✗[0m 内部对账确认(二级审批) (期望 2xx 实得 404) {"code":4004,"msg":"对账单 #0 不存在","data":null,"path":"/api/v1/reconciliations/0/confirm","timestamp":"2026-07-20T12:48:50.579Z"}
+  [0;31m✗[0m 对账确认后合同门户置「已对账」 (期望 data.portal_status=RECONCILED 实得 )
+  [0;31m✗[0m 供应商开票(对账后放行,含发票号/金额/附件URL) (期望 2xx 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts/23/invoice","timestamp":"2026-07-20T12:48:50.662Z"}
+  [0;31m✗[0m 开票备注未含附件URL {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts/23","timestamp":"2026-07-20T12:48:50.678Z"}
+  [0;31m✗[0m 重复盖章应400(非PUSHED) (期望 400 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts/23/stamp","timestamp":"2026-07-20T12:48:50.696Z"}
+  [0;31m✗[0m 供应商无法查看其它工厂合同详情(数据隔离) (期望 404 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts/24","timestamp":"2026-07-20T12:48:51.595Z"}
+  [0;31m✗[0m 供应商无法盖章其它工厂合同(数据隔离) (期望 404 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts/24/stamp","timestamp":"2026-07-20T12:48:51.612Z"}
+  [0;31m✗[0m 未盖章直接确认发货应400 (期望 400 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts/25/ship","timestamp":"2026-07-20T12:48:51.807Z"}
+  [0;31m✗[0m 未盖章直接开票应400 (期望 400 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts/25/invoice","timestamp":"2026-07-20T12:48:51.824Z"}
+  [0;31m✗[0m 已盖章未对账开票应400(开票须对账后) (期望 400 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts/25/invoice","timestamp":"2026-07-20T12:48:51.857Z"}
+  [0;31m✗[0m 首批发货60(STAMPED→SHIPPING) (期望 2xx 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts/25/ship","timestamp":"2026-07-20T12:48:51.873Z"}
+  [0;31m✗[0m 发货未生成FH发货单号
+  [0;32m✓[0m 合同详情qtyStats.合同量=100 (data.qtyStats.contractQty=100)
+  [0;31m✗[0m 合同详情qtyStats.累计实发=60(首批) (期望 data.qtyStats.shippedQty≈60 实得 0)
+  [0;31m✗[0m 合同详情qtyStats.差额=40 (期望 data.qtyStats.diffQty≈40 实得 100)
+  [0;31m✗[0m 发货批次1数量=60 (期望 data.shipments.0.qty≈60 实得 )
+  [0;31m✗[0m 发货批次1锁定单价=合同单价8 (期望 data.shipments.0.snapshot_unit_price≈8 实得 )
+  [0;31m✗[0m 发货未回写到期日due_date
+  [0;31m✗[0m 已发货后再盖章应400 (期望 400 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts/25/stamp","timestamp":"2026-07-20T12:48:52.513Z"}
+  [0;31m✗[0m 续批发货累计应放行(90/100) (期望 2xx 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts/25/ship","timestamp":"2026-07-20T12:48:52.529Z"}
+  [0;31m✗[0m 超合同量发货未确认应400 (期望 400 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts/25/ship","timestamp":"2026-07-20T12:48:52.545Z"}
+  [0;31m✗[0m 超发确认(force)放行 (期望 2xx 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts/25/ship","timestamp":"2026-07-20T12:48:52.562Z"}
+  [0;31m✗[0m 已发货未对账开票应400(开票须对账后) (期望 400 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts/25/invoice","timestamp":"2026-07-20T12:48:52.578Z"}
+  [0;31m✗[0m 内部对账确认(ctB→RECONCILED) (期望 2xx 实得 404) {"code":4004,"msg":"对账单 #0 不存在","data":null,"path":"/api/v1/reconciliations/0/confirm","timestamp":"2026-07-20T12:48:52.709Z"}
+  [0;31m✗[0m 对账后开票放行 (期望 2xx 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts/25/invoice","timestamp":"2026-07-20T12:48:52.725Z"}
+  [0;31m✗[0m 重复开票应放行(仅记录日志) (期望 2xx 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts/25/invoice","timestamp":"2026-07-20T12:48:52.740Z"}
+  [0;31m✗[0m 供应商查看加工合同详情 (期望 2xx 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts/26","timestamp":"2026-07-20T12:48:53.147Z"}
+  [0;31m✗[0m 加工合同门户返回订单明细·大货总数=1000 (期望 data.orderDetail.qty_total≈1000 实得 )
+  [0;31m✗[0m 加工合同门户未返回订单材料明细
+  [0;31m✗[0m 查看不存在合同详情应404 (期望 404 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts/999999999","timestamp":"2026-07-20T12:48:53.336Z"}
+  [0;31m✗[0m 盖章不存在合同应404 (期望 404 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts/999999999/stamp","timestamp":"2026-07-20T12:48:53.353Z"}
+  [0;31m✗[0m 门户合同分页查询 (期望 2xx 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts?page=1&size=2","timestamp":"2026-07-20T12:48:53.369Z"}
+  [0;31m✗[0m 分页size回显=2 (期望 size=2 实得 )
+  [0;31m✗[0m 门户按portal_status筛选查询 (期望 2xx 实得 401) {"code":4001,"msg":"Unauthorized","data":null,"path":"/api/v1/portal/contracts?portal_status=STAMPED","timestamp":"2026-07-20T12:48:53.438Z"}
+  [0;32m✓[0m 供应商token访问管理端/customers应拒绝 [401]
+  [0;32m✓[0m 管理员token访问供应商门户应拒绝 [403]
+
+[0;36m══ 12. 文件上传 ══[0m
+  [0;32m✓[0m 未鉴权上传应401 [401]
+  [0;31m✗[0m 上传失败 {"code":1001,"msg":"文件内容不是受支持的类型(仅图片/PDF/Excel)","data":null,"path":"/api/v1/uploads","timestamp":"2026-07-20T12:48:53.5
+  [0;32m✓[0m 读取不存在文件应404 [404]
+
+[0;36m══ 13. 报表统计 ══[0m
+  [0;32m✓[0m 转化漏斗2xx [200]
+  [0;32m✓[0m 漏斗返回样衣数(数值)=3
+  [0;32m✓[0m 成单率(业务员)2xx [200]
+  [0;32m✓[0m 成单率(客户)2xx [200]
+  [0;32m✓[0m 利润汇总(款号)2xx [200]
+  [0;32m✓[0m 利润汇总(月份)2xx [200]
+  [0;32m✓[0m 利润汇总(客户)2xx [200]
+  [0;32m✓[0m 版师查利润汇总应拒绝(仅财务/管理) [403]
+
+[0;36m══ 14. 金额阈值审批 ══[0m
+  [0;32m✓[0m 管理员设置报价审批阈值=1 [200]
+  [0;31m✗[0m 报价超阈值发出应400(需主管审批) (期望 400 实得 404) {"code":4004,"msg":"报价单 #9 不存在","data":null,"path":"/api/v1/quotes/9/submit","timestamp":"2026-07-20T12:48:54.127Z"}
+  [0;31m✗[0m 超阈值报价置待审批 (期望 data.approval_status=PENDING 实得 NONE)
+  [0;32m✓[0m 业务审批报价应拒绝(仅主管/管理员) [403]
+  [0;31m✗[0m 主管审批超阈值报价 (期望 2xx 实得 404) {"code":4004,"msg":"报价单 #9 不存在","data":null,"path":"/api/v1/quotes/9/approve","timestamp":"2026-07-20T12:48:54.263Z"}
+  [0;31m✗[0m 审批后置已审批 (期望 data.approval_status=APPROVED 实得 NONE)
+  [0;31m✗[0m 审批后报价可发出 (期望 2xx 实得 404) {"code":4004,"msg":"报价单 #9 不存在","data":null,"path":"/api/v1/quotes/9/submit","timestamp":"2026-07-20T12:48:54.386Z"}
+  [0;31m✗[0m 审批后报价已发出QUOTED (期望 data.status=QUOTED 实得 DRAFT)
+  [0;32m✓[0m 复位报价阈值为0(不启用) [200]
+  [0;32m✓[0m 非管理员改审批阈值应拒绝 [403]
+
+[0;36m══ 15. 本司主体 ══[0m
+  [0;32m✓[0m 本司主体列表2xx [200]
+  [0;32m✓[0m 默认本司主体2xx [200]
+  [0;32m✓[0m 默认主体有公司名=I9 服装制造有限公司
+  [0;32m✓[0m 业务新增本司主体应拒绝(仅管理员) [403]
+  [0;32m✓[0m 管理员新增本司主体并设默认 [201]
+  [0;32m✓[0m 新建默认主体成为默认 (data.id=2)
+  [0;32m✓[0m 复位默认主体回1 [200]
+
+[0;36m══ 16. 字段级脱敏 ══[0m
+  [0;32m✓[0m 管理员可见报价对客合计=13.86
+  [0;32m✓[0m 版师看报价对客合计应脱敏为空 (data.rmb_total=)
+  [0;32m✓[0m 打样看报价对客合计应脱敏为空 (data.rmb_total=)
+  [0;31m✗[0m 业务应见报价合计 {"code":4004,"msg":"报价单 #10 不存在","data":null,"path":"/api/v1/quotes/10","timestamp":"2026-07-20T12:48:55.405Z"}
+
+==================================================================
+ 深度测试结果：[0;32m371 通过[0m / [0;31m121 失败[0m
+==================================================================
+[1;33m存在失败，见上方每条 ✗（含期望值/实得值/响应片段），逐条定位。[0m
