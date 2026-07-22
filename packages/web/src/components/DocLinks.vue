@@ -3,10 +3,13 @@
      逐张列 chip。目标页没有独立详情页时(对账/结算/发票)跳 :id/view 由列表页开弹框;
      付款没有任何详情 UI,故跳其列表并按来源单据过滤(见各页 to 的构造)。 -->
 <template>
+  <!-- links 为空且未 loading 时整体不渲染——避免亮一个空条占位，干扰无关联单据的页面（如新建页） -->
   <div v-if="links.length || loading" class="doc-links">
     <span class="dl-label">{{ label }}</span>
+    <!-- 加载中先出 loading 图标；已有部分 chip 到达也不藏起来——先用 loading 形态兜底，数据到位后自动切换 -->
     <el-icon v-if="loading" class="dl-loading"><Loading /></el-icon>
     <template v-else>
+      <!-- key 未传时用 text 兜底（不同单据的 text 必带单号/ID，不会撞 key） -->
       <el-tag
         v-for="l in links"
         :key="l.key ?? l.text"
@@ -40,6 +43,7 @@ withDefaults(defineProps<{ links: DocLink[]; label?: string; loading?: boolean }
 });
 
 const router = useRouter();
+// 用编程式跳转而非 <router-link>：to 可能携带 query（如付款列表按 reconcile_id 过滤），统一走 push 简单可控
 function go(l: DocLink) {
   router.push(l.to);
 }

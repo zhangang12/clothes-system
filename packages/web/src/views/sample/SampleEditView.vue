@@ -340,8 +340,10 @@ const docLinks = computed<DocLink[]>(() => {
   }));
 });
 
-// 反查下游报价单:后端无「按样衣查报价」端点,故借款号(style_no 模糊)搜一批,再按 sample_id 精确过滤。
-// 精确过滤兜底 → 不会串到别的样衣;只可能漏(报价款号事后被改),宁漏不错。版师视图跳过(报价对版师不可见,会 403)
+// 反查下游报价单：后端无「按样衣查报价」端点，故借款号(style_no)模糊搜一批，再按 sample_id 精确过滤。
+// 精确过滤兜底 → 不会串到别的样衣；只可能漏（报价款号事后被改），宁漏不错。
+// 同一款号下的不同sample_id会被滤掉，故不会把别张样衣的报价单挂到这张上。
+// 版师视图跳过（报价对版师不可见，会 403）
 async function loadRelatedQuotes() {
   relatedQuotes.value = [];
   if (!editId.value || !form.styleNo || patternmaker.value) return;

@@ -227,6 +227,8 @@ export class PaymentService {
     return this.recordRepo.find({ where: { pr_id: id }, order: { id: 'ASC' } });
   }
 
+  // 付款申请列表检索。入参原为 10 个散参，收敛为 DTO（加 reconcile_id 反查时顺手重构）；
+  // DTO 键是 snake_case（对齐前端 query），这里解构改回驼峰仅为行内可读，条件语义不变。
   async findPaymentRequests(query: QueryPaymentRequestDto = {}) {
     const {
       factory_id: factoryId, approval_status: approvalStatus, reconcile_id: reconcileId,

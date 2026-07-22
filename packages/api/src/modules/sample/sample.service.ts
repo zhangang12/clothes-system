@@ -45,7 +45,7 @@ export class SampleService {
   private buildMaterials(sampleId: number, materials: CreateSampleDto['materials']): SampleMaterial[] {
     return (materials ?? []).map((m, idx) => this.materialRepo.create({
       sample_id: sampleId, sort_order: m.sortOrder ?? idx,
-      arrange_date: m.arrangeDate, item_name: m.itemName, width: m.width, colors: m.colors,
+      arrange_date: m.arrangeDate || null, item_name: m.itemName, width: m.width, colors: m.colors,
       part: m.part, composition: m.composition, code_band: m.codeBand, zipper_length: m.zipperLength,
       puller: m.puller, qty: m.qty, size: m.size, ref_price: m.refPrice, actual_usage: m.actualUsage,
       supplier_id: m.supplierId, supplier_name: m.supplierName, image: m.image, remark: m.remark,
@@ -115,7 +115,7 @@ export class SampleService {
         buyer_id: dto.buyerId, buyer_name: buyerName, buyer_no: buyerNo,
         patternmaker_id: dto.patternmakerId, patternmaker_name: dto.patternmakerName,
         maker: dto.maker, make_date: today(),
-        ship_sample_date: dto.shipSampleDate, recipient: dto.recipient, file_location: dto.fileLocation,
+        ship_sample_date: dto.shipSampleDate || null, recipient: dto.recipient, file_location: dto.fileLocation,
         garment_remark: dto.garmentRemark, image1: dto.image1, image2: dto.image2, image3: dto.image3,
         feedback_attachments: dto.feedbackAttachments,
         // 多轮工价汇总回填(有多轮数据时覆盖单值,供对账/结算读取)
@@ -237,7 +237,7 @@ export class SampleService {
       if (dto.recipient !== undefined) entity.recipient = dto.recipient;
       if (dto.fileLocation !== undefined) entity.file_location = dto.fileLocation;
       if (dto.garmentRemark !== undefined) entity.garment_remark = dto.garmentRemark;
-      if (dto.shipSampleDate !== undefined) entity.ship_sample_date = dto.shipSampleDate;
+      if (dto.shipSampleDate !== undefined) entity.ship_sample_date = dto.shipSampleDate || null;
       if (dto.image1 !== undefined) entity.image1 = dto.image1;
       if (dto.image2 !== undefined) entity.image2 = dto.image2;
       if (dto.image3 !== undefined) entity.image3 = dto.image3;

@@ -55,6 +55,8 @@ export class PaymentController {
 
   @Get('requests')
   @ApiOperation({ summary: '付款申请列表（工厂+申请日期组合检索；reconcile_id 可按对账单反查）' })
+  // 散参收为 DTO：原 10 个 Query 参数散落无校验，收敛后 forbidNonWhitelisted 生效，
+  // 但日期/状态字段用 @IsString() 宽松校验——前端清空筛选项时发出空串 ''（不通过 IsDateString/IsEnum）
   findPaymentRequests(@Query() query: QueryPaymentRequestDto) {
     return this.service.findPaymentRequests(query);
   }
