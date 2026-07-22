@@ -1,6 +1,6 @@
 <template>
   <div class="list-page">
-    <RuleHint>订单由报价「转销售合同」自动生成;<b>只有草稿状态可编辑</b>,下单后状态由下游(生成合同/发货/对账)<b>自动推进,不可手改</b>;可用行内「生成合同」按供应商拆单生成材料/加工合同。</RuleHint>
+    <RuleHint>订单由报价「转销售合同」自动生成;<b>只有草稿状态可编辑</b>,已下单可「撤回」回草稿修改(已生成合同起不可撤回);下单后状态由下游(生成合同/发货/对账)<b>自动推进,不可手改</b>;可用行内「生成合同」按供应商拆单生成材料/加工合同。</RuleHint>
     <div class="toolbar-card">
       <div class="toolbar">
         <div class="tools-left">
@@ -62,6 +62,7 @@
           <template #default="{ row }">
             <div class="table-ops">
               <el-button v-if="row.status === 'DRAFT'" link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
+              <el-button v-if="row.status === 'CONFIRMED'" link type="warning" size="small" @click="doRevert(row)">撤回</el-button>
               <el-button link type="primary" size="small" @click="goView(row)">查看</el-button>
               <el-button v-if="row.approval_status === 'PENDING' && canReview" link type="success" size="small" @click="doApprove(row)">审批</el-button>
               <el-dropdown trigger="click" @command="(cmd: string) => onPrint(cmd, row)">
@@ -231,6 +232,14 @@ function goView(row: any) { router.push({ name: 'OrderView', params: { id: row.i
 async function doApprove(row: any) {
   try { await orderApi.approve(row.id); ElMessage.success('已审批，订单可下单'); load(); }
   catch (e: any) { errToast(e?.response?.data?.msg ?? '审批失败'); }
+}
+// 撤回下单（已下单→草稿，可再编辑；已生成合同起后端会拦截）
+async function doRevert(row: any) {
+  try {
+    await ElMessageBox.confirm(`确认撤回订单「${row.order_no}」？撤回后回到草稿可修改，重新下单需重走审批校验。`, '撤回下单', { type: 'warning' });
+  } catch { return; }
+  try { await orderApi.revert(row.id); ElMessage.success('已撤回为草稿'); load(); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? '撤回失败'); }
 }
 async function batchRemove() {
   try { await ElMessageBox.confirm(`确认删除选中的 ${selected.value.length} 条记录?此操作不可恢复。`, "批量删除", { type: "warning" }); } catch { return; }

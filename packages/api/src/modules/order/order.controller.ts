@@ -80,6 +80,13 @@ export class OrderController {
     return this.service.approveOrder(id, req.user.id);
   }
 
+  @Patch(':id/revert')
+  @Roles(UserRole.ADMIN, UserRole.BUSINESS)
+  @ApiOperation({ summary: '撤回下单（已下单→草稿，可再编辑；已生成合同起不可撤回）' })
+  revert(@Param('id', ParseIntPipe) id: number) {
+    return this.service.revertToDraft(id);
+  }
+
   @Post(':id/shipments')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
   @ApiOperation({ summary: '添加出货记录' })

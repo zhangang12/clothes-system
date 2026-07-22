@@ -119,7 +119,7 @@
           <span class="hint">含损金额 = 人民币单价 × 报价耗用 × (1 + 损耗%)；美金单价 = 人民币单价 / 汇率</span>
         </div>
         <div class="table-scroll">
-          <el-table :data="form.items" size="small" border @selection-change="(v: any[]) => selItems = v">
+          <el-table :data="form.items" size="small" border v-keynav @selection-change="(v: any[]) => selItems = v">
             <el-table-column type="selection" width="38" />
             <el-table-column label="品名" min-width="150" fixed>
               <template #default="{ row }">
@@ -139,6 +139,12 @@
             <el-table-column label="损耗%" width="80"><template #default="{ row }"><el-input v-model="row.lossRate" size="small" /></template></el-table-column>
             <el-table-column label="含损金额" width="110"><template #default="{ row }"><span class="calc">{{ lossAmt(row) }}</span></template></el-table-column>
             <el-table-column label="备注" min-width="100"><template #default="{ row }"><el-input v-model="row.remark" size="small" /></template></el-table-column>
+            <el-table-column v-if="!readonly" label="排序" width="76" align="center" fixed="right">
+              <template #default="{ $index }">
+                <el-button link size="small" :disabled="$index === 0" @click="moveRow(form.items, $index, -1)">↑</el-button>
+                <el-button link size="small" :disabled="$index === form.items.length - 1" @click="moveRow(form.items, $index, 1)">↓</el-button>
+              </template>
+            </el-table-column>
           </el-table>
         </div>
       </section-block>
@@ -149,7 +155,7 @@
           <el-button size="small" :icon="Plus" @click="addFee">添加行</el-button>
           <el-button size="small" :icon="Minus" :disabled="!selFees.length" @click="delFees">删除</el-button>
         </div>
-        <el-table :data="form.fees" size="small" border style="max-width:640px" @selection-change="(v: any[]) => selFees = v">
+        <el-table :data="form.fees" size="small" border v-keynav style="max-width:640px" @selection-change="(v: any[]) => selFees = v">
           <el-table-column type="selection" width="38" />
           <el-table-column label="费用名称" min-width="140"><template #default="{ row }"><el-input v-model="row.feeName" size="small" /></template></el-table-column>
           <el-table-column label="人民币单价" width="120"><template #default="{ row }"><el-input v-model="row.rmbPrice" size="small" class="hl-input" /></template></el-table-column>
@@ -238,9 +244,9 @@ const authStore = useAuthStore();
 const form = reactive<any>({
   quoteNo: '', inquiryDate: new Date().toISOString().slice(0, 10), sampleId: undefined,
   middlemanId: undefined, buyerId: undefined, buyerNo: '', styleNo: '', middlemanContact: '',
-  // 新建默认值（设计稿字典默认：英国 / T/T 30天 / FOB 上海；编辑载入会覆盖）
-  currency: 'USD', exchangeRate: 7, tradeCountry: '英国', settlementMethod: 'T/T 30天', priceTerms: 'FOB 上海',
-  salesperson: authStore.realName || '', profitRate: 0, quoteQty: '', totalRemark: '', status: '',
+  // 新建默认值（设计稿字典默认：英国 / T/T 30天 / FOB 上海；汇率/利润率按用户反馈默认 6.5 / 10%；编辑载入会覆盖）
+  currency: 'USD', exchangeRate: 6.5, tradeCountry: '英国', settlementMethod: 'T/T 30天', priceTerms: 'FOB 上海',
+  salesperson: authStore.realName || '', profitRate: 10, quoteQty: '', totalRemark: '', status: '',
   image1: '', image2: '',
   items: [emptyItem()], fees: DEFAULT_FEES.map((n) => emptyFee(n)),
 });
@@ -283,6 +289,13 @@ function addItem() { form.items.push(emptyItem()); }
 function delItems() { form.items = form.items.filter((r: any) => !selItems.value.includes(r)); if (!form.items.length) form.items.push(emptyItem()); }
 function addFee() { form.fees.push(emptyFee()); }
 function delFees() { form.fees = form.fees.filter((r: any) => !selFees.value.includes(r)); }
+// 行上下调序（用户反馈：材料顺序写好后需要可调整；sort_order 按数组顺序落库）
+function moveRow(list: any[], i: number, dir: -1 | 1) {
+  const j = i + dir;
+  if (j < 0 || j >= list.length) return;
+  const [r] = list.splice(i, 1);
+  list.splice(j, 0, r);
+}
 // 切换中间商：直接覆盖带出价格条款/结汇方式/贸易国别（客户档案是权威来源）；联系人清空并重载选项
 function onMiddleman(id: number) {
   const m = middlemen.value.find((x) => x.id === id);

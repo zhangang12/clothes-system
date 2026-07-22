@@ -111,9 +111,9 @@
       <div v-if="editable" class="line-btns">
         <el-button size="small" @click="addLine">＋ 添加行</el-button>
         <el-button size="small" :disabled="!selectedLines.length" @click="removeSelectedLines">— 删除</el-button>
-        <el-button size="small" type="primary" plain @click="importDialogVisible = true">📥 从订单带入</el-button>
+        <el-button size="small" type="primary" plain @click="openImportDialog">📥 从订单带入</el-button>
       </div>
-      <el-table :data="form.materials" border size="small" @selection-change="(v: any[]) => (selectedLines = v)">
+      <el-table :data="form.materials" border size="small" v-keynav @selection-change="(v: any[]) => (selectedLines = v)">
         <el-table-column v-if="editable" type="selection" width="40" />
         <el-table-column type="index" label="#" width="44" />
         <template v-if="!isProcess">
@@ -213,10 +213,10 @@
     </div>
 
     <!-- 选订单款号带入 -->
-    <el-dialog v-model="importDialogVisible" :title="isProcess ? '选订单款号带入（款式/数量/交期）' : '选订单款号带入（材料明细 · 采购量含损耗）'" width="560px">
+    <el-dialog v-model="importDialogVisible" :title="isProcess ? '选订单款号带入（款式/数量/交期）' : '选订单款号带入（勾选材料 · 默认 单耗×订单件数）'" :width="isProcess ? '560px' : '820px'">
       <el-form label-width="90px">
         <el-form-item label="关联订单">
-          <el-select v-model="importOrderId" filterable style="width:100%">
+          <el-select v-model="importOrderId" filterable style="width:100%" @change="loadImportMaterials">
             <el-option v-for="o in orders" :key="o.id" :label="`${o.order_no} · ${o.style_no || ''}`" :value="o.id" />
           </el-select>
         </el-form-item>
@@ -226,10 +226,29 @@
             <el-radio value="append">追加到现有明细</el-radio>
           </el-radio-group>
         </el-form-item>
+        <!-- 材料合同：勾选要带入的材料（用户反馈：不要全部带出）；数量默认 单耗×订单件数，可改 -->
+        <el-form-item v-if="!isProcess" label="选择材料" v-loading="importing">
+          <div style="width:100%">
+            <el-table v-if="importMaterials.length" :data="importMaterials" size="small" border max-height="320"
+              @selection-change="(v: any[]) => (importChecked = v)">
+              <el-table-column type="selection" width="40" />
+              <el-table-column prop="item_name" label="品名" min-width="120" />
+              <el-table-column prop="spec" label="规格" min-width="110"><template #default="{ row }">{{ row.spec || '—' }}</template></el-table-column>
+              <el-table-column prop="color" label="颜色" width="80"><template #default="{ row }">{{ row.color || '—' }}</template></el-table-column>
+              <el-table-column prop="unit" label="单位" width="60" />
+              <el-table-column label="单耗" width="80" align="right"><template #default="{ row }">{{ row.net_usage }}</template></el-table-column>
+              <el-table-column label="带入数量" width="120">
+                <template #default="{ row }"><el-input-number v-model="row.qty" :min="0" :precision="2" size="small" :controls="false" style="width:100%" /></template>
+              </el-table-column>
+            </el-table>
+            <p v-else class="muted" style="margin:0">{{ importOrderId ? '该订单无用料核算记录' : '选择订单后列出可带入的材料' }}</p>
+            <p v-if="importMaterials.length" class="muted" style="margin:6px 0 0">数量默认 = 单耗 × 订单件数（{{ importOrderQty }} 件），可直接改；已勾 {{ importChecked.length }} 行</p>
+          </div>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="importDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="importing" @click="doImport">带入</el-button>
+        <el-button type="primary" :loading="importing" @click="doImport">{{ isProcess ? '带入' : `带入 ${importChecked.length} 行` }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -429,17 +448,47 @@ function removeSelectedLines() {
   selectedLines.value = [];
 }
 
-// 从订单带入（设计稿：材料=用料核算采购量含损耗；加工=款式/大货数/交期−10天）
+// 从订单带入（材料=勾选带入,数量默认 单耗×订单件数(用户反馈)；加工=款式/大货数/交期−10天）
 const importDialogVisible = ref(false);
 const importing = ref(false);
 const importOrderId = ref<number | undefined>(undefined);
 const importMode = ref<'replace' | 'append'>('replace');
+const importMaterials = ref<any[]>([]); // 订单材料候选（勾选+数量可改）
+const importChecked = ref<any[]>([]);
+const importOrderQty = ref(0);
 function minusDays(d: string | null | undefined, days: number): string {
   if (!d) return '';
   const t = new Date(String(d).slice(0, 10));
   if (isNaN(t.getTime())) return '';
   t.setDate(t.getDate() - days);
   return t.toISOString().slice(0, 10);
+}
+// 打开带入对话框：预填当前关联订单并列出材料候选（候选随订单切换重载）
+function openImportDialog() {
+  importOrderId.value = form.order_id ?? importOrderId.value;
+  importDialogVisible.value = true;
+  loadImportMaterials();
+}
+// 选订单后列出材料候选：默认数量 = 单耗(net_usage) × 订单件数(qty_total)，默认不勾选（反馈：不要全部带出）
+async function loadImportMaterials() {
+  importMaterials.value = []; importChecked.value = []; importOrderQty.value = 0;
+  if (!importOrderId.value || isProcess.value) return;
+  importing.value = true;
+  try {
+    const res: any = await orderApi.get(importOrderId.value);
+    const od = res.data ?? res;
+    const orderQty = +od.qty_total || 0;
+    importOrderQty.value = orderQty;
+    importMaterials.value = (od.materials ?? []).map((m: any) => ({
+      raw: m,
+      item_name: m.item_name,
+      spec: [m.width, m.composition].filter(Boolean).join(' / '),
+      color: m.color || '', unit: m.unit || '',
+      net_usage: +m.net_usage || 0,
+      qty: +((+m.net_usage || 0) * orderQty).toFixed(2),
+    }));
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? '加载订单材料失败'); }
+  finally { importing.value = false; }
 }
 async function doImport() {
   if (!importOrderId.value) { ElMessage.warning('请选择订单'); return; }
@@ -455,19 +504,19 @@ async function doImport() {
       if (!form.delivery_deadline) form.delivery_deadline = dd;
       lines = [{ item_name: od.style_name || '加工费', style_no: od.style_no || '', unit: '件', qty: +od.qty_total || 0, unit_price: undefined, delivery_date: dd, qty_source: '大货数' }];
     } else {
+      if (!importChecked.value.length) { ElMessage.warning('请至少勾选 1 行材料'); return; }
       const dd = minusDays(od.delivery_date, 45);
-      lines = (od.materials ?? []).map((m: any) => ({
-        item_name: m.item_name,
-        spec: [m.width, m.composition].filter(Boolean).join(' / '),
-        color: m.color || '', size: '', style_no: od.style_no || '',
-        unit: m.unit || '', qty: +(m.final_purchase ?? m.total_purchase) || 0,
-        unit_price: +m.unit_price || 0, delivery_date: dd, photo_url: '', qty_source: '采购量含损耗',
+      lines = importChecked.value.map((c: any) => ({
+        item_name: c.item_name,
+        spec: c.spec,
+        color: c.color || '', size: '', style_no: od.style_no || '',
+        unit: c.unit || '', qty: +c.qty || 0,
+        unit_price: +c.raw?.unit_price || 0, delivery_date: dd, photo_url: '', qty_source: '单耗×件数',
       }));
-      if (!lines.length) { ElMessage.warning('该订单无用料核算记录，无可带入的材料'); return; }
     }
     form.materials = importMode.value === 'replace' ? lines : [...form.materials, ...lines];
     importDialogVisible.value = false;
-    ElMessage.success(`已带入 ${lines.length} 行（数量来源：${isProcess.value ? '大货数' : '采购量含损耗'}，可微调、不回写订单）`);
+    ElMessage.success(`已带入 ${lines.length} 行（数量来源：${isProcess.value ? '大货数' : '单耗×件数'}，可微调、不回写订单）`);
   } catch (e: any) { errToast(e?.response?.data?.msg ?? '带入失败'); }
   finally { importing.value = false; }
 }

@@ -7,6 +7,7 @@ import 'element-plus/dist/index.css';
 import './styles/theme.css';
 import RuleHint from './components/RuleHint.vue';
 import DocLinks from './components/DocLinks.vue';
+import { vKeynav } from './utils/tableKeynav';
 import App from './App.vue';
 import router from './router';
 
@@ -18,6 +19,8 @@ for (const [key, component] of Object.entries(ElementPlusIcons)) {
 }
 app.component('RuleHint', RuleHint);
 app.component('DocLinks', DocLinks);
+// 表格键盘导航指令（材料清单等单元格 ↑↓←→ 移动）
+app.directive('keynav', vKeynav);
 
 app
   .use(createPinia())

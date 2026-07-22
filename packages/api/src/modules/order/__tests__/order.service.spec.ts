@@ -33,6 +33,7 @@ const mockOrderRepo = {
   save: jest.fn().mockImplementation((v) => Promise.resolve({ ...v, id: v.id ?? 1 })),
   findOne: jest.fn(),
   findAndCount: jest.fn().mockResolvedValue([[], 0]),
+  count: jest.fn().mockResolvedValue(0),
 };
 const mockMatrixRepo = {
   create: jest.fn().mockImplementation((v) => v),
@@ -49,7 +50,7 @@ const mockShipmentRepo = {
   save: jest.fn().mockImplementation((v) => Promise.resolve({ ...v, id: 1 })),
   find: jest.fn().mockResolvedValue([]),
 };
-const mockQuoteRepo = { findOne: jest.fn() };
+const mockQuoteRepo = { findOne: jest.fn(), update: jest.fn() };
 const mockQuoteItemRepo = { find: jest.fn().mockResolvedValue([]) };
 const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn().mockResolvedValue(1), expire: jest.fn() };
 const mockDataSource = {
@@ -276,5 +277,43 @@ describe('OrderService', () => {
     await service.updateMatrix(1, JSON.parse(JSON.stringify(md)));
     expect(order.content_updated_at).toBeNull();
     expect(manager.save).not.toHaveBeenCalled();
+  });
+
+  // UT-ORD-17: 撤回下单——已下单→草稿且清审批（用户反馈：已下单需要能改）
+  it('UT-ORD-17 revertToDraft transitions CONFIRMED→DRAFT and clears approval', async () => {
+    const order = makeOrder({ status: OrderStatus.CONFIRMED, approval_status: ApprovalStatus.APPROVED, approved_by: 9, approved_at: new Date() });
+    mockOrderRepo.findOne.mockResolvedValue(order);
+    await service.revertToDraft(1);
+    // 断言实体被就地改写（不断言 save 返回值：既有用例的 save mockResolvedValue 会跨用例残留）
+    expect(order.status).toBe(OrderStatus.DRAFT);
+    expect(order.approval_status).toBe(ApprovalStatus.NONE);
+    expect(order.approved_by).toBeNull();
+    expect(order.approved_at).toBeNull();
+    expect(mockOrderRepo.save).toHaveBeenCalledWith(order);
+  });
+
+  // UT-ORD-18: 撤回守卫——草稿/已生成合同均拒绝（后者提示先处理下游合同）
+  it('UT-ORD-18 revertToDraft rejects DRAFT and CONTRACTED', async () => {
+    mockOrderRepo.findOne.mockResolvedValue(makeOrder({ status: OrderStatus.DRAFT }));
+    await expect(service.revertToDraft(1)).rejects.toThrow('本就是草稿');
+    mockOrderRepo.findOne.mockResolvedValue(makeOrder({ status: OrderStatus.CONTRACTED }));
+    await expect(service.revertToDraft(1)).rejects.toThrow('已生成合同的订单不可撤回');
+    expect(mockOrderRepo.save).not.toHaveBeenCalled();
+  });
+
+  // UT-ORD-19: 删除引用报价的草稿订单——报价无其它订单引用时解锁（已成单→已报价）
+  it('UT-ORD-19 remove unlocks quote when no other orders reference it', async () => {
+    mockOrderRepo.findOne.mockResolvedValue(makeOrder({ status: OrderStatus.DRAFT, quote_id: 7 }));
+    mockOrderRepo.count.mockResolvedValue(0);
+    await service.remove(1);
+    expect(mockQuoteRepo.update).toHaveBeenCalledWith({ id: 7, status: 'ORDERED' }, { status: 'QUOTED' });
+  });
+
+  // UT-ORD-20: 删除草稿订单但报价仍被其它订单引用——报价保持已成单不动
+  it('UT-ORD-20 remove keeps quote ORDERED when other orders still reference it', async () => {
+    mockOrderRepo.findOne.mockResolvedValue(makeOrder({ status: OrderStatus.DRAFT, quote_id: 7 }));
+    mockOrderRepo.count.mockResolvedValue(1);
+    await service.remove(1);
+    expect(mockQuoteRepo.update).not.toHaveBeenCalled();
   });
 });

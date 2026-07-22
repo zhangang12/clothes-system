@@ -11,6 +11,7 @@
         <el-button v-if="!readonly" type="primary" :icon="Check" :loading="saving" @click="save">保存</el-button>
         <el-button v-if="!readonly && editId" :icon="Download" @click="importDialog = true">从报价导入</el-button>
         <el-button v-if="!readonly && editId && form.status !== 'DONE'" type="success" :icon="Promotion" @click="advance">推进状态</el-button>
+        <el-button v-if="editId && form.status === 'CONFIRMED'" type="warning" :icon="RefreshLeft" @click="revert">撤回下单</el-button>
         <el-dropdown v-if="editId" trigger="click" @command="onPrintOrder">
           <el-button :icon="Printer">打印<el-icon><ArrowDown /></el-icon></el-button>
           <template #dropdown>
@@ -98,7 +99,7 @@
           <span class="hint">一个 PO = 一列（目的地/收货人作列头）；TOTAL QTY = 该款·色·码跨 PO 合计</span>
         </div>
         <div class="table-scroll">
-          <el-table :data="form.matrix.rows" size="small" border show-summary :summary-method="matrixSummary" @selection-change="(v: any[]) => selSizes = v">
+          <el-table :data="form.matrix.rows" size="small" border show-summary v-keynav :summary-method="matrixSummary" @selection-change="(v: any[]) => selSizes = v">
             <el-table-column v-if="!readonly" type="selection" width="38" />
             <el-table-column label="款号" min-width="120"><template #default="{ row }"><el-input v-model="row.style_no" size="small" :disabled="readonly" /></template></el-table-column>
             <el-table-column label="颜色" width="110"><template #default="{ row }"><DictSelect v-model="row.color" type="color" size="small" placeholder="字典选" :disabled="readonly" /></template></el-table-column>
@@ -156,7 +157,7 @@
           <span class="hint">采购量 = 大货总数 × 单件耗用 × (1+损耗%)；个/条向上取整；最终采购量偏离>±10%需确认</span>
         </div>
         <div class="table-scroll">
-          <el-table :data="form.materials" size="small" border @selection-change="(v: any[]) => selMats = v">
+          <el-table :data="form.materials" size="small" border v-keynav @selection-change="(v: any[]) => selMats = v">
             <el-table-column type="expand" width="30">
               <template #default="{ row }">
                 <div class="split-preview">
@@ -262,7 +263,7 @@ import { ref, reactive, computed, onMounted, h } from 'vue';
 import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
-import { Back, Check, Plus, Minus, Download, Promotion, ArrowDown, Printer } from '@element-plus/icons-vue';
+import { Back, Check, Plus, Minus, Download, Promotion, ArrowDown, Printer, RefreshLeft } from '@element-plus/icons-vue';
 import { orderApi } from '@/api/order';
 import DictSelect from '@/components/DictSelect.vue';
 import { printOrder } from '@/utils/orderPrint';
@@ -715,6 +716,15 @@ async function advance() {
   if (!editId.value) return;
   try { await orderApi.advance(editId.value); ElMessage.success('状态已推进'); load(); }
   catch (e: any) { errToast(e?.response?.data?.msg ?? '推进失败'); }
+}
+// 撤回下单（已下单→草稿，可再编辑；已生成合同起不可撤回——后端拦截）
+async function revert() {
+  if (!editId.value) return;
+  try {
+    await ElMessageBox.confirm('撤回后订单回到草稿可修改，重新下单需重走审批校验。确认撤回？', '撤回下单', { type: 'warning' });
+  } catch { return; }
+  try { await orderApi.revert(editId.value); ElMessage.success('已撤回为草稿，可直接修改'); load(); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? '撤回失败'); }
 }
 function goBack() { router.push({ name: 'Orders' }); }
 // 关联单据不阻塞主表单:不 await,拉回来再渲染 chip

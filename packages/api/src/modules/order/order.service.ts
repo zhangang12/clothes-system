@@ -383,6 +383,25 @@ export class OrderService {
     return this.orderRepo.save(order);
   }
 
+  // 已下单撤回（用户反馈：已下单订单需要能改）——已下单→草稿，可再编辑；已生成合同起不可撤回
+  async revertToDraft(id: number): Promise<OrderMain> {
+    const order = await this.orderRepo.findOne({ where: { id, deleted: 0 } });
+    if (!order) throw new NotFoundException(`订单 #${id} 不存在`);
+    if (order.status !== OrderStatus.CONFIRMED) {
+      throw new BadRequestException(
+        order.status === OrderStatus.DRAFT
+          ? '订单本就是草稿，可直接编辑'
+          : '已生成合同的订单不可撤回——请先处理下游合同后再操作',
+      );
+    }
+    order.status = OrderStatus.DRAFT;
+    // 撤回后可改金额/数量，重新下单须重走阈值审批（与「审批后改金额清审批」同一口径）
+    order.approval_status = ApprovalStatus.NONE;
+    order.approved_by = null;
+    order.approved_at = null;
+    return this.orderRepo.save(order);
+  }
+
   async addShipment(id: number, dto: AddShipmentDto, createdBy: number): Promise<OrderShipment> {
     const order = await this.orderRepo.findOne({ where: { id, deleted: 0 } });
     if (!order) throw new NotFoundException(`订单 #${id} 不存在`);
@@ -465,6 +484,13 @@ export class OrderService {
     }
     order.deleted = 1;
     await this.orderRepo.save(order);
+    // 删除引用报价的草稿订单：若该报价已无其它订单引用，解锁报价（已成单→已报价）使其可再编辑/转单
+    if (order.quote_id) {
+      const others = await this.orderRepo.count({ where: { quote_id: order.quote_id, deleted: 0 } });
+      if (!others) {
+        await this.quoteRepo.update({ id: order.quote_id, status: QuoteStatus.ORDERED }, { status: QuoteStatus.QUOTED });
+      }
+    }
   }
 
   static calcPurchase = calcPurchase;

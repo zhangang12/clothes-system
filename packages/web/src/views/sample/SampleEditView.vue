@@ -107,10 +107,11 @@
         <div v-if="!readonly && !patternmaker" class="subtable-ops">
           <el-button size="small" :icon="Plus" @click="addMaterial">添加行</el-button>
           <el-button size="small" :icon="Minus" :disabled="!selMaterials.length" @click="removeMaterials">删除</el-button>
-          <span class="hint">品名每款单独录入；「实际耗用」「拉链长度」由版师填</span>
+          <el-button size="small" @click="openSheetImport">📥 表格导入</el-button>
+          <span class="hint">品名每款单独录入；「实际耗用」「拉链长度」由版师填；支持上传工艺单电子表格（.xlsx/.csv）</span>
         </div>
         <div class="table-scroll">
-          <el-table :data="form.materials" size="small" border @selection-change="(v: any[]) => selMaterials = v">
+          <el-table :data="form.materials" size="small" border v-keynav @selection-change="(v: any[]) => selMaterials = v">
             <el-table-column type="selection" width="38" />
             <el-table-column label="品名" min-width="130" fixed><template #default="{ row }"><el-input v-model="row.itemName" size="small" :disabled="bizDisabled" /></template></el-table-column>
             <el-table-column label="安排日期" width="130"><template #default="{ row }"><el-date-picker v-model="row.arrangeDate" type="date" value-format="YYYY-MM-DD" size="small" style="width:100%" :disabled="bizDisabled" /></template></el-table-column>
@@ -199,6 +200,49 @@
         <el-empty v-else description="暂无变更记录" :image-size="60" />
       </section-block>
     </el-form>
+
+    <!-- 材料电子表格导入（用户反馈：工艺单 xlsx/csv 直接导入，不定格式靠列映射） -->
+    <el-dialog v-model="sheetDialog" title="📥 材料电子表格导入" width="760px" @closed="resetSheetImport">
+      <div class="sheet-import">
+        <div class="sheet-upload">
+          <el-button size="small" type="primary" plain @click="sheetFileInput?.click()">选择文件（.xlsx / .csv）</el-button>
+          <input ref="sheetFileInput" type="file" accept=".xlsx,.csv,.txt" style="display:none" @change="onSheetFile" />
+          <span v-if="sheetFileName" class="muted">{{ sheetFileName }} · 共 {{ sheetRows.length }} 行</span>
+        </div>
+        <template v-if="sheetRows.length">
+          <div class="sheet-mapping">
+            <span v-for="f in sheetFields" :key="f.key" class="map-item">
+              <label>{{ f.label }}{{ f.required ? ' *' : '' }}</label>
+              <el-select v-model="sheetMapping[f.key]" size="small" style="width:130px">
+                <el-option label="（不导入）" :value="-1" />
+                <el-option v-for="c in sheetCols" :key="c.i" :label="c.label" :value="c.i" />
+              </el-select>
+            </span>
+            <el-checkbox v-model="sheetHeader" size="small" style="margin-left:8px">首行是表头（不导入）</el-checkbox>
+          </div>
+          <el-table :data="sheetPreviewRows" size="small" border max-height="300">
+            <el-table-column type="index" label="#" width="44" />
+            <el-table-column prop="itemName" label="品名" min-width="140" />
+            <el-table-column prop="qty" label="单耗/数量" width="90" />
+            <el-table-column prop="part" label="部位/位置" min-width="120" />
+            <el-table-column prop="colors" label="颜色" width="90" />
+            <el-table-column prop="remark" label="备注" min-width="100" />
+          </el-table>
+          <div class="sheet-foot">
+            <el-radio-group v-model="sheetMode" size="small">
+              <el-radio value="append">追加到现有明细</el-radio>
+              <el-radio value="replace">替换现有明细</el-radio>
+            </el-radio-group>
+            <span class="muted">将导入 {{ sheetPreviewRows.length }} 行（品名为空的行自动跳过；分区标题行请改映射或导入后删除）</span>
+          </div>
+        </template>
+        <el-empty v-else description="选择工艺单/材料表文件后自动解析预览" :image-size="60" />
+      </div>
+      <template #footer>
+        <el-button @click="sheetDialog = false">取消</el-button>
+        <el-button type="primary" :disabled="!sheetPreviewRows.length" @click="confirmSheetImport">导入 {{ sheetPreviewRows.length }} 行</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -219,6 +263,7 @@ import FileUpload from '@/components/FileUpload.vue';
 import type { DocLink } from '@/components/DocLinks.vue'; // 仅取类型:组件已全局注册
 import { printSample } from '@/utils/samplePrint';
 import { exportSampleExcel } from '@/utils/sampleExcel';
+import { parseSheetFile, guessMapping, rowsToMaterials, MATERIAL_FIELDS } from '@/utils/sheetImport';
 import { SAMPLE_CATEGORIES, SAMPLE_STATUS_LABEL, QUOTE_STATUS_LABEL, UserRole } from '@i9/types';
 
 const SectionBlock = (props: { title: string; badge?: string }, { slots }: any) =>
@@ -299,6 +344,62 @@ function addMaterial() { form.materials.push(emptyMaterial()); }
 function removeMaterials() {
   form.materials = form.materials.filter((m: any) => !selMaterials.value.includes(m));
   if (!form.materials.length) form.materials.push(emptyMaterial());
+}
+
+// ── 材料电子表格导入（用户反馈：工艺单 xlsx/csv 直接导入；不定格式靠列映射自适应） ──
+const sheetDialog = ref(false);
+const sheetFileInput = ref<HTMLInputElement>();
+const sheetFileName = ref('');
+const sheetRows = ref<string[][]>([]);
+const sheetHeader = ref(true);
+const sheetMode = ref<'append' | 'replace'>('append');
+const sheetFields = MATERIAL_FIELDS;
+const sheetMapping = reactive<Record<string, number>>({ itemName: -1, qty: -1, part: -1, colors: -1, remark: -1 });
+// 列选项取首行单元格做标签，便于人工核对列映射
+const sheetCols = computed(() =>
+  (sheetRows.value[0] ?? []).map((c, i) => ({ i, label: `列${i + 1}${c ? ' · ' + String(c).slice(0, 8) : ''}` })));
+const sheetActiveMapping = computed(() => {
+  const m: Record<string, number> = {};
+  for (const k of Object.keys(sheetMapping)) if (sheetMapping[k] >= 0) m[k] = sheetMapping[k];
+  return m;
+});
+const sheetPreviewRows = computed(() =>
+  rowsToMaterials(sheetRows.value.slice(sheetHeader.value ? 1 : 0), sheetActiveMapping.value).slice(0, 200));
+function openSheetImport() { sheetDialog.value = true; }
+function resetSheetImport() {
+  sheetFileName.value = ''; sheetRows.value = []; sheetHeader.value = true; sheetMode.value = 'append';
+  Object.keys(sheetMapping).forEach((k) => { sheetMapping[k] = -1; });
+  if (sheetFileInput.value) sheetFileInput.value.value = '';
+}
+async function onSheetFile(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  try {
+    const rows = await parseSheetFile(file);
+    if (!rows.length) { ElMessage.warning('文件为空或未读到内容'); return; }
+    sheetFileName.value = file.name;
+    sheetRows.value = rows;
+    const { mapping, hasHeader } = guessMapping(rows);
+    Object.keys(sheetMapping).forEach((k) => { sheetMapping[k] = mapping[k] ?? -1; });
+    sheetHeader.value = hasHeader;
+    if (!hasHeader) sheetMapping.itemName = 0; // 无表头兜底：第 1 列当品名
+    ElMessage.success(`已解析 ${rows.length} 行，请核对列映射`);
+  } catch (err: any) { errToast(err?.message ?? '文件解析失败'); }
+}
+function confirmSheetImport() {
+  const rows = sheetPreviewRows.value;
+  if (!rows.length) { ElMessage.warning('没有可导入的材料行（请检查列映射与品名列）'); return; }
+  const mapped = rows.map((r) => ({ ...emptyMaterial(), ...r }));
+  if (sheetMode.value === 'replace') {
+    form.materials = mapped;
+  } else {
+    // 追加：滤掉现存完全空白行，免得空行夹在中间
+    const kept = form.materials.filter((m: any) => Object.entries(m).some(([k, v]) => k !== 'supplierId' && v !== '' && v != null));
+    form.materials = [...kept, ...mapped];
+  }
+  if (!form.materials.length) form.materials = [emptyMaterial()];
+  sheetDialog.value = false;
+  ElMessage.success(`已导入 ${rows.length} 行材料`);
 }
 // 行级生成采购(样衣稿🟠按钮 B方案):打样材料→无合同对账单,直接进对账付款
 async function doPurchase(row: any) {
@@ -579,4 +680,11 @@ onMounted(async () => { await loadRefs(); await load(); });
 .subtable-ops .hint { margin-left: auto; }
 .mat-photo { display: flex; align-items: center; gap: 4px; }
 .mat-thumb { width: 32px; height: 26px; border-radius: 3px; border: 1px solid var(--el-border-color); }
+.sheet-import { display: flex; flex-direction: column; gap: 12px; }
+.sheet-upload { display: flex; align-items: center; gap: 10px; }
+.sheet-mapping { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 10px; padding: 10px; background: var(--el-fill-color-light); border-radius: 8px; }
+.map-item { display: flex; flex-direction: column; gap: 2px; }
+.map-item label { font-size: 12px; color: var(--el-text-color-secondary); }
+.sheet-foot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.muted { color: var(--el-text-color-secondary); font-size: 13px; }
 </style>

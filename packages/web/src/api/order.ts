@@ -15,6 +15,9 @@ export const orderApi = {
     http.patch<unknown, { data: any }>(`/orders/${id}/advance`),
   approve: (id: number) =>
     http.patch<unknown, { data: any }>(`/orders/${id}/approve`),
+  // 撤回下单（已下单→草稿，可再编辑；已生成合同起不可撤回）
+  revert: (id: number) =>
+    http.patch<unknown, { data: any }>(`/orders/${id}/revert`),
   addShipment: (id: number, dto: Record<string, unknown>) =>
     http.post<unknown, { data: any }>(`/orders/${id}/shipments`, dto),
   updateMatrix: (id: number, matrix_data: Record<string, unknown>) =>
