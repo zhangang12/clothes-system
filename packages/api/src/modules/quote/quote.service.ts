@@ -13,9 +13,10 @@ import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.se
 import { CustomerService } from '../customer/customer.service';
 import { ChangeLogService } from '../../common/changelog/change-log.service';
 import { OrderService } from '../order/order.service';
+import { OrderMain } from '../order/order-main.entity';
 import { CreateOrderDto } from '../order/dto/create-order.dto';
 import { SysConfigService } from '../../common/config/sys-config.service';
-import { QuoteStatus, SampleStatus, DEFAULT_QUOTE_FEES, ApprovalStatus, APPROVAL_THRESHOLD_KEYS } from '@i9/types';
+import { QuoteStatus, SampleStatus, DEFAULT_QUOTE_FEES, ApprovalStatus, APPROVAL_THRESHOLD_KEYS, OrderStatus } from '@i9/types';
 import { CreateQuoteDto, CreateQuoteItemDto, CreateQuoteFeeDto } from './dto/create-quote.dto';
 import { QueryQuoteDto } from './dto/query-quote.dto';
 
@@ -234,7 +235,7 @@ export class QuoteService {
       throw new BadRequestException('只有草稿/客户调整状态的报价单可以编辑');
     }
     const map: Array<[keyof CreateQuoteDto, keyof Quotation]> = [
-      ['inquiryDate', 'inquiry_date'], ['sampleId', 'sample_id'], ['buyerId', 'buyer_id'],
+      ['inquiryDate', 'inquiry_date'], ['sampleId', 'sample_id'],
       ['styleNo', 'style_no'], ['middlemanContact', 'middleman_contact'], ['currency', 'currency'],
       ['exchangeRate', 'exchange_rate'], ['tradeCountry', 'trade_country'],
       ['settlementMethod', 'settlement_method'], ['priceTerms', 'price_terms'], ['salesperson', 'salesperson'],
@@ -244,6 +245,27 @@ export class QuoteService {
     // 改值留痕(P2#21):汇率/利润率/数量 原值→新值
     const before = { exchange_rate: quote.exchange_rate, profit_rate: quote.profit_rate, quote_qty: quote.quote_qty };
     for (const [k, col] of map) if (dto[k] !== undefined) (quote as any)[col] = dto[k];
+    // 客户变更联动刷新名称/编号快照（用户反馈：编辑页改了最终客户，列表仍显示旧名称——buyer_name 是快照列）
+    if (dto.middlemanId !== undefined) {
+      quote.customer_id = dto.middlemanId as any;
+      if (dto.middlemanId) {
+        const m = await this.customerRepo.findOne({ where: { id: dto.middlemanId, deleted: 0 } });
+        if (!m) throw new BadRequestException(`中间商客户 #${dto.middlemanId} 不存在`);
+        quote.middleman_name = m.name;
+      }
+    }
+    if (dto.buyerId !== undefined) {
+      quote.buyer_id = (dto.buyerId ?? null) as any;
+      if (dto.buyerId) {
+        const b = await this.customerRepo.findOne({ where: { id: dto.buyerId, deleted: 0 } });
+        if (!b) throw new BadRequestException(`最终买家客户 #${dto.buyerId} 不存在`);
+        quote.buyer_name = b.name;
+        quote.buyer_no = b.customer_no;
+      } else {
+        quote.buyer_name = null as any;
+        quote.buyer_no = null as any;
+      }
+    }
     await this.changeLog.record('QUOTE', id, (Object.keys(before) as Array<keyof typeof before>)
       .map((k) => ({ field: k, old: before[k], new: (quote as any)[k] })));
     // 编辑会重算金额:清除已有审批状态,避免「审批通过后改高金额再提交」绕过阈值校验
@@ -395,6 +417,36 @@ export class QuoteService {
     }
     quote.status = QuoteStatus.ADJUSTING;
     return this.quoteRepo.save(quote);
+  }
+
+  // 撤回调整（用户反馈）：已报价→客户调整；已成单→关联订单全为草稿时随报价一并软删后回客户调整；
+  // 有已下单/已生成合同等非草稿订单则报出单号拦截（可先在订单管理中「撤回」回草稿后再来）。重新发出须重走阈值审批。
+  async revert(id: number, user?: { id: number; role?: string }): Promise<Quotation> {
+    const quote = await this.quoteRepo.findOne({ where: { id, deleted: 0 } });
+    if (!quote) throw new NotFoundException(`报价单 #${id} 不存在`);
+    await this.assertVisible(quote, user);
+    if (quote.status === QuoteStatus.QUOTED) {
+      quote.status = QuoteStatus.ADJUSTING;
+      quote.approval_status = ApprovalStatus.NONE;
+      return this.quoteRepo.save(quote);
+    }
+    if (quote.status !== QuoteStatus.ORDERED) {
+      throw new BadRequestException('只有已报价/已成单状态可撤回调整');
+    }
+    const orderRepo = this.dataSource.getRepository(OrderMain);
+    const orders = await orderRepo.find({ where: { quote_id: id, deleted: 0 } });
+    const nonDraft = orders.filter((o) => o.status !== OrderStatus.DRAFT);
+    if (nonDraft.length) {
+      throw new BadRequestException(
+        `关联订单 ${nonDraft.map((o) => o.order_no).join('、')} 已下单或已生成合同——请先在订单管理中「撤回」回草稿后再撤回报价`,
+      );
+    }
+    return this.dataSource.transaction(async (manager) => {
+      for (const o of orders) await manager.update(OrderMain, { id: o.id }, { deleted: 1 });
+      quote.status = QuoteStatus.ADJUSTING;
+      quote.approval_status = ApprovalStatus.NONE;
+      return manager.save(Quotation, quote);
+    });
   }
 
   // 转销售合同：已报价/客户调整 → 已成单；关联样衣自动置已成单（B1）；并自动生成订单草稿（含报价明细导入）

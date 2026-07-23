@@ -48,7 +48,13 @@ const mockOrderService = {
 };
 const mockNumbering = { next: jest.fn() };
 const mockConfig = { getNumber: jest.fn().mockResolvedValue(0) };
-const mockDataSource = { transaction: jest.fn((cb: any) => cb({})), query: jest.fn() };
+const mockOrderRepo = { find: jest.fn().mockResolvedValue([]) };
+const mockTxManager = { update: jest.fn(), save: jest.fn((_: any, v: any) => Promise.resolve(v)) };
+const mockDataSource = {
+  transaction: jest.fn((cb: any) => cb(mockTxManager)),
+  query: jest.fn(),
+  getRepository: jest.fn().mockReturnValue(mockOrderRepo),
+};
 
 // 非授权业务员：机密可见集仅客户 1/2/3
 const BIZ_USER = { id: 7, role: 'BUSINESS' };
@@ -119,6 +125,77 @@ describe('报价机密行级安全 (H4/H6)', () => {
       mockQuoteRepo.findOne.mockResolvedValue(quote);
       await service.remove(7, BIZ_USER);
       expect(mockQuoteRepo.save).toHaveBeenCalledWith(expect.objectContaining({ deleted: 1 }));
+    });
+  });
+
+  describe('客户变更快照联动刷新（用户反馈：改最终客户列表不更新）', () => {
+    it('UT-QUO-UP-01: update 改 buyerId → buyer_name/buyer_no 快照同步刷新', async () => {
+      const quote = { id: 8, customer_id: 1, buyer_id: 2, buyer_name: '旧买家', buyer_no: 'OLD', status: QuoteStatus.DRAFT, deleted: 0 };
+      mockQuoteRepo.findOne.mockResolvedValue(quote);
+      mockCustomerRepo.findOne.mockResolvedValue({ id: 3, name: '新买家', customer_no: 'NEW001' });
+      mockTxManager.save.mockImplementation((_: any, v: any) => Promise.resolve(v));
+      await service.update(8, { buyerId: 3 } as any, BIZ_USER);
+      expect(quote.buyer_id).toBe(3);
+      expect(quote.buyer_name).toBe('新买家');
+      expect(quote.buyer_no).toBe('NEW001');
+    });
+
+    it('UT-QUO-UP-02: update 改 middlemanId → customer_id/middleman_name 同步刷新', async () => {
+      const quote = { id: 9, customer_id: 1, middleman_name: '旧中间商', buyer_id: null, status: QuoteStatus.DRAFT, deleted: 0 };
+      mockQuoteRepo.findOne.mockResolvedValue(quote);
+      mockCustomerRepo.findOne.mockResolvedValue({ id: 2, name: '新中间商' });
+      await service.update(9, { middlemanId: 2 } as any, BIZ_USER);
+      expect(quote.customer_id).toBe(2);
+      expect(quote.middleman_name).toBe('新中间商');
+    });
+
+    it('UT-QUO-UP-03: update 清空 buyerId → 快照一并清空', async () => {
+      const quote = { id: 10, customer_id: 1, buyer_id: 2, buyer_name: '买家', buyer_no: 'B1', status: QuoteStatus.DRAFT, deleted: 0 };
+      mockQuoteRepo.findOne.mockResolvedValue(quote);
+      await service.update(10, { buyerId: null } as any, BIZ_USER);
+      expect(quote.buyer_id).toBeNull();
+      expect(quote.buyer_name).toBeNull();
+      expect(quote.buyer_no).toBeNull();
+    });
+  });
+
+  describe('撤回调整 revert（用户反馈：报价需要撤回调整）', () => {
+    it('UT-QUO-RV-01: 已报价 → 客户调整，并清审批状态（重新发出须重走阈值审批）', async () => {
+      const quote = { id: 11, customer_id: 1, buyer_id: null, status: QuoteStatus.QUOTED, deleted: 0, approval_status: 'APPROVED' };
+      mockQuoteRepo.findOne.mockResolvedValue(quote);
+      await service.revert(11, BIZ_USER);
+      // 断言实体被就地改写（save mock 无返回值实现）
+      expect(quote.status).toBe(QuoteStatus.ADJUSTING);
+      expect(quote.approval_status).toBe('NONE');
+      expect(mockQuoteRepo.save).toHaveBeenCalledWith(quote);
+    });
+
+    it('UT-QUO-RV-02: 已成单 + 关联订单全为草稿 → 草稿单随报价一并软删，报价回客户调整', async () => {
+      const quote = { id: 12, customer_id: 1, buyer_id: null, status: QuoteStatus.ORDERED, deleted: 0, approval_status: 'NONE' };
+      mockQuoteRepo.findOne.mockResolvedValue(quote);
+      mockOrderRepo.find.mockResolvedValue([
+        { id: 21, order_no: 'O-1', status: 'DRAFT' },
+        { id: 22, order_no: 'O-2', status: 'DRAFT' },
+      ]);
+      const r = await service.revert(12, BIZ_USER);
+      expect(mockTxManager.update).toHaveBeenCalledTimes(2);
+      expect(mockTxManager.update).toHaveBeenCalledWith(expect.anything(), { id: 21 }, { deleted: 1 });
+      expect(mockTxManager.update).toHaveBeenCalledWith(expect.anything(), { id: 22 }, { deleted: 1 });
+      expect(r.status).toBe(QuoteStatus.ADJUSTING);
+    });
+
+    it('UT-QUO-RV-03: 已成单 + 存在非草稿订单 → 报出单号拦截，不动任何数据', async () => {
+      const quote = { id: 13, customer_id: 1, buyer_id: null, status: QuoteStatus.ORDERED, deleted: 0 };
+      mockQuoteRepo.findOne.mockResolvedValue(quote);
+      mockOrderRepo.find.mockResolvedValue([{ id: 23, order_no: 'O-20260723-009', status: 'CONFIRMED' }]);
+      await expect(service.revert(13, BIZ_USER)).rejects.toThrow('O-20260723-009');
+      expect(mockTxManager.update).not.toHaveBeenCalled();
+      expect(mockTxManager.save).not.toHaveBeenCalled();
+    });
+
+    it('UT-QUO-RV-04: 草稿状态不可撤回（只能已报价/已成单）', async () => {
+      mockQuoteRepo.findOne.mockResolvedValue({ id: 14, customer_id: 1, buyer_id: null, status: QuoteStatus.DRAFT, deleted: 0 });
+      await expect(service.revert(14, BIZ_USER)).rejects.toThrow('只有已报价/已成单状态可撤回调整');
     });
   });
 });

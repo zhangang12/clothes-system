@@ -82,6 +82,13 @@ export class QuoteController {
     return this.service.adjust(id, req.user);
   }
 
+  @Patch(':id/revert')
+  @Roles(UserRole.ADMIN, UserRole.BUSINESS)
+  @ApiOperation({ summary: '撤回调整（已报价/已成单→客户调整；已成单须关联订单全为草稿，草稿单随报价一并软删）' })
+  revert(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.service.revert(id, req.user);
+  }
+
   @Patch(':id/to-contract')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
   @ApiOperation({ summary: '转销售合同（已报价/客户调整→已成单，关联样衣置已成单，自动生成订单草稿）' })

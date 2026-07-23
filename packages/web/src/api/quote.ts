@@ -18,6 +18,9 @@ export const quoteApi = {
     http.patch<unknown, { data: Quotation }>(`/quotes/${id}/approve`),
   adjust: (id: number) =>
     http.patch<unknown, { data: Quotation }>(`/quotes/${id}/adjust`),
+  // 撤回调整（已报价/已成单→客户调整；已成单须关联订单全草稿，草稿单随报价一并软删）
+  revert: (id: number) =>
+    http.patch<unknown, { data: Quotation }>(`/quotes/${id}/revert`),
   // 报价历史迁移导入(P3#43)
   importBatch: (rows: any[]) =>
     http.post<unknown, any>('/quotes/import', { rows }),

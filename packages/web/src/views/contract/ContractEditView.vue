@@ -237,12 +237,25 @@
               <el-table-column prop="color" label="颜色" width="80"><template #default="{ row }">{{ row.color || '—' }}</template></el-table-column>
               <el-table-column prop="unit" label="单位" width="60" />
               <el-table-column label="单耗" width="80" align="right"><template #default="{ row }">{{ row.net_usage }}</template></el-table-column>
-              <el-table-column label="带入数量" width="120">
-                <template #default="{ row }"><el-input-number v-model="row.qty" :min="0" :precision="2" size="small" :controls="false" style="width:100%" /></template>
+              <el-table-column label="拆分" width="80" align="center">
+                <template #default="{ row }">
+                  <el-tag v-if="row.split_mode === 'BY_SIZE'" size="small" type="warning">按尺码</el-tag>
+                  <el-tag v-else-if="row.split_mode === 'BY_COLOR'" size="small" type="warning">按颜色</el-tag>
+                  <span v-else class="muted">不拆</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="带入数量" min-width="150">
+                <template #default="{ row }">
+                  <!-- 分色/分码材料：按订单尺码矩阵拆行（合同要分尺寸），显示拆行预览不可手改 -->
+                  <div v-if="splitLinesOf(row.raw).length">
+                    <el-tag v-for="l in splitLinesOf(row.raw)" :key="l.key" size="small" style="margin:1px 2px">{{ l.key }}: {{ l.qty }}</el-tag>
+                  </div>
+                  <el-input-number v-else v-model="row.qty" :min="0" :precision="2" size="small" :controls="false" style="width:100%" />
+                </template>
               </el-table-column>
             </el-table>
             <p v-else class="muted" style="margin:0">{{ importOrderId ? '该订单无用料核算记录' : '选择订单后列出可带入的材料' }}</p>
-            <p v-if="importMaterials.length" class="muted" style="margin:6px 0 0">数量默认 = 单耗 × 订单件数（{{ importOrderQty }} 件），可直接改；已勾 {{ importChecked.length }} 行</p>
+            <p v-if="importMaterials.length" class="muted" style="margin:6px 0 0">数量默认 = 单耗 × 订单件数（{{ importOrderQty }} 件），可直接改；标记 按尺码/按颜色 的材料按订单尺码矩阵自动拆行；已勾 {{ importChecked.length }} 行</p>
           </div>
         </el-form-item>
       </el-form>
@@ -456,6 +469,32 @@ const importMode = ref<'replace' | 'append'>('replace');
 const importMaterials = ref<any[]>([]); // 订单材料候选（勾选+数量可改）
 const importChecked = ref<any[]>([]);
 const importOrderQty = ref(0);
+const importMatrixRows = ref<any[]>([]); // 订单尺码矩阵行（分色/分码拆行用）
+const INT_UNITS = ['个', '条', '只', '件', '粒', '套', '对', 'pcs', 'PCS', 'PC'];
+// 与后端 contract.service expandMaterialLines 同一公式：某色(码)该料量=该色(码)件数×单件耗用×(1+损耗率)，整数类单位向上取整
+function splitLinesOf(m: any): Array<{ key: string; qty: number; dim: 'color' | 'size' }> {
+  const mode = m?.split_mode;
+  if ((mode !== 'BY_COLOR' && mode !== 'BY_SIZE') || !importMatrixRows.value.length) return [];
+  const dim = mode === 'BY_COLOR' ? 'color' : 'size';
+  const groups = new Map<string, number>();
+  for (const r of importMatrixRows.value) {
+    const key = String(r?.[dim] ?? '').trim();
+    const qty = Array.isArray(r?.qtys) ? r.qtys.reduce((s: number, n: any) => s + (+n || 0), 0) : +r?.qty || 0;
+    if (!key || !qty) continue;
+    groups.set(key, (groups.get(key) ?? 0) + qty);
+  }
+  if (!groups.size) return [];
+  const per = +m.net_usage || 0;
+  const loss = 1 + (+m.loss_rate || 0) / 100;
+  const totalGroupQty = [...groups.values()].reduce((a, b) => a + b, 0);
+  const fallbackBase = +(m.final_purchase ?? m.total_purchase) || 0;
+  const round = m.round_up === 1 || (m.round_up == null && INT_UNITS.includes(m.unit ?? ''));
+  return [...groups].map(([key, groupQty]) => {
+    let qty = per > 0 ? groupQty * per * loss : (totalGroupQty ? (fallbackBase * groupQty) / totalGroupQty : 0);
+    qty = round ? Math.ceil(qty) : +qty.toFixed(2);
+    return { key, qty, dim: dim as 'color' | 'size' };
+  });
+}
 function minusDays(d: string | null | undefined, days: number): string {
   if (!d) return '';
   const t = new Date(String(d).slice(0, 10));
@@ -479,12 +518,14 @@ async function loadImportMaterials() {
     const od = res.data ?? res;
     const orderQty = +od.qty_total || 0;
     importOrderQty.value = orderQty;
+    importMatrixRows.value = od.matrix?.matrix_data?.rows ?? [];
     importMaterials.value = (od.materials ?? []).map((m: any) => ({
       raw: m,
       item_name: m.item_name,
       spec: [m.width, m.composition].filter(Boolean).join(' / '),
       color: m.color || '', unit: m.unit || '',
       net_usage: +m.net_usage || 0,
+      split_mode: m.split_mode || 'NONE',
       qty: +((+m.net_usage || 0) * orderQty).toFixed(2),
     }));
   } catch (e: any) { errToast(e?.response?.data?.msg ?? '加载订单材料失败'); }
@@ -506,13 +547,29 @@ async function doImport() {
     } else {
       if (!importChecked.value.length) { ElMessage.warning('请至少勾选 1 行材料'); return; }
       const dd = minusDays(od.delivery_date, 45);
-      lines = importChecked.value.map((c: any) => ({
-        item_name: c.item_name,
-        spec: c.spec,
-        color: c.color || '', size: '', style_no: od.style_no || '',
-        unit: c.unit || '', qty: +c.qty || 0,
-        unit_price: +c.raw?.unit_price || 0, delivery_date: dd, photo_url: '', qty_source: '单耗×件数',
-      }));
+      for (const c of importChecked.value) {
+        const splits = splitLinesOf(c.raw);
+        if (splits.length) {
+          // 分色/分码材料：按订单尺码矩阵拆行（合同要分尺寸）——与后端 generateFromOrder 同公式
+          for (const l of splits) {
+            lines.push({
+              item_name: c.item_name, spec: c.spec,
+              color: l.dim === 'color' ? l.key : (c.color || ''), size: l.dim === 'size' ? l.key : '',
+              style_no: od.style_no || '', unit: c.unit || '', qty: l.qty,
+              unit_price: +c.raw?.unit_price || 0, delivery_date: dd, photo_url: '',
+              qty_source: l.dim === 'color' ? '采购量·分色' : '采购量·分码',
+            });
+          }
+        } else {
+          lines.push({
+            item_name: c.item_name,
+            spec: c.spec,
+            color: c.color || '', size: '', style_no: od.style_no || '',
+            unit: c.unit || '', qty: +c.qty || 0,
+            unit_price: +c.raw?.unit_price || 0, delivery_date: dd, photo_url: '', qty_source: '单耗×件数',
+          });
+        }
+      }
     }
     form.materials = importMode.value === 'replace' ? lines : [...form.materials, ...lines];
     importDialogVisible.value = false;

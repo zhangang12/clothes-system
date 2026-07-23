@@ -86,7 +86,7 @@
             <el-button link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
             <el-button link size="small" @click="goView(row)">查看</el-button>
             <el-button v-if="canEdit && ['DRAFT', 'ADJUSTING'].includes(row.status)" link type="warning" size="small" @click="doSubmit(row)">发出</el-button>
-            <el-button v-if="canEdit && row.status === 'QUOTED'" link size="small" @click="doAdjust(row)">客户调整</el-button>
+            <el-button v-if="canEdit && ['QUOTED', 'ORDERED'].includes(row.status)" link type="warning" size="small" @click="doRevert(row)">撤回调整</el-button>
             <el-button link size="small" @click="copyRow(row)">复制</el-button>
             <el-button link size="small" :icon="Printer" @click="printRow(row)">打印/PDF</el-button>
             <el-button link size="small" @click="exportRow(row)">导出Excel</el-button>
@@ -238,9 +238,22 @@ async function doSubmit(row: any) {
     if (String(msg).includes('审批')) { ElMessage.warning(msg); load(); } else ElMessage.error(msg);
   }
 }
-async function doAdjust(row: any) {
-  try { await quoteApi.adjust(row.id); ElMessage.success('已进入客户调整'); load(); }
-  catch (e: any) { errToast(e?.response?.data?.msg ?? '操作失败'); }
+// 撤回调整（用户反馈）：已报价直接回客户调整；已成单须关联订单全为草稿，草稿单随报价一并删除（后端拦截非草稿并报出单号）
+async function doRevert(row: any) {
+  if (row.status === 'ORDERED') {
+    try {
+      await ElMessageBox.confirm(
+        `报价「${row.quote_no}」已成单。撤回报价将一并删除其关联的草稿订单（已下单/已生成合同的订单会被后端拦截并报出单号），确认撤回？`,
+        '撤回调整', { type: 'warning' },
+      );
+    } catch { return; }
+  } else {
+    try {
+      await ElMessageBox.confirm(`确认把报价「${row.quote_no}」撤回为可调整状态？撤回后可修改并重新发出。`, '撤回调整', { type: 'warning' });
+    } catch { return; }
+  }
+  try { await quoteApi.revert(row.id); ElMessage.success('已撤回为可调整状态'); load(); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? '撤回失败'); }
 }
 async function doApprove(row: any) {
   try { await quoteApi.approve(row.id); ElMessage.success('已审批，报价可发出'); load(); }
