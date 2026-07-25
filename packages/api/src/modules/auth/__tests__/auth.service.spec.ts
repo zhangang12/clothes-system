@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing';
-import { UnauthorizedException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { AuthService } from '../auth.service';
@@ -191,37 +191,37 @@ describe('AuthService', () => {
     });
   });
 
-  describe('账号管理·主管(SUPERVISOR)越权防线', () => {
+  describe('账号管理·主管(SUPERVISOR)与 ADMIN 同权（2026-07-22 用户拍板）', () => {
     const SUP = { id: 50, role: 'SUPERVISOR' };
 
-    it('UT-AUTH-21: 主管可建 5 种非管理角色（含新角色 SHIPPING）', async () => {
+    it('UT-AUTH-21: 主管可建任意角色（含 SHIPPING/ADMIN/SUPERVISOR）', async () => {
       mockUserRepo.findOne.mockResolvedValue(null);
       mockUserRepo.save.mockResolvedValue({ id: 8 });
       await service.createUser({ username: 'ship1', real_name: '船务', role: 'SHIPPING', password: 'pass1234' }, SUP);
       expect(mockUserRepo.save).toHaveBeenCalledWith(expect.objectContaining({ role: 'SHIPPING' }));
+      await service.createUser({ username: 'adm1', real_name: '管', role: 'ADMIN', password: 'pass1234' }, SUP);
+      expect(mockUserRepo.save).toHaveBeenCalledWith(expect.objectContaining({ role: 'ADMIN' }));
     });
 
-    it('UT-AUTH-22: 主管建 ADMIN / SUPERVISOR 被拒（防提权）', async () => {
-      await expect(service.createUser({ username: 'x1', real_name: 'x', role: 'ADMIN', password: 'pass1234' }, SUP))
-        .rejects.toThrow(ForbiddenException);
-      await expect(service.createUser({ username: 'x2', real_name: 'x', role: 'SUPERVISOR', password: 'pass1234' }, SUP))
-        .rejects.toThrow(ForbiddenException);
-      expect(mockUserRepo.save).not.toHaveBeenCalled();
-    });
-
-    it('UT-AUTH-23: 主管不能编辑/重置 ADMIN、SUPERVISOR 账号', async () => {
+    it('UT-AUTH-22: 主管可编辑/重置 ADMIN、SUPERVISOR 账号', async () => {
       mockUserRepo.findOne.mockResolvedValue({ id: 1, role: 'ADMIN', status: 1 });
-      await expect(service.updateUser(1, { real_name: '改名' }, SUP)).rejects.toThrow(ForbiddenException);
-      await expect(service.resetUserPassword(1, 'new12345', SUP)).rejects.toThrow(ForbiddenException);
-      mockUserRepo.findOne.mockResolvedValue({ id: 2, role: 'SUPERVISOR', status: 1 });
-      await expect(service.updateUser(2, { status: 0 }, SUP)).rejects.toThrow(ForbiddenException);
-      expect(mockUserRepo.update).not.toHaveBeenCalled();
+      await service.updateUser(1, { real_name: '改名' }, SUP);
+      expect(mockUserRepo.update).toHaveBeenCalledWith(1, { real_name: '改名' });
+      await service.resetUserPassword(1, 'new12345', SUP);
+      expect(mockUserRepo.update).toHaveBeenCalledWith(1, { password: 'hashed:new12345' });
     });
 
-    it('UT-AUTH-24: 主管不能把他人提成管理角色', async () => {
+    it('UT-AUTH-23: 主管可把他人提成管理角色', async () => {
       mockUserRepo.findOne.mockResolvedValue({ id: 3, role: 'BUSINESS', status: 1 });
-      await expect(service.updateUser(3, { role: 'ADMIN' as any }, SUP)).rejects.toThrow(ForbiddenException);
-      await expect(service.updateUser(3, { role: 'SUPERVISOR' as any }, SUP)).rejects.toThrow(ForbiddenException);
+      await service.updateUser(3, { role: 'ADMIN' as any }, SUP);
+      expect(mockUserRepo.update).toHaveBeenCalledWith(3, { role: 'ADMIN' });
+    });
+
+    it('UT-AUTH-24: 最后管理员保护对主管同样生效', async () => {
+      mockUserRepo.findOne.mockResolvedValue({ id: 1, role: 'ADMIN', status: 1 });
+      mockUserRepo.count.mockResolvedValue(1);
+      await expect(service.updateUser(1, { status: 0 }, SUP)).rejects.toThrow(BadRequestException);
+      expect(mockUserRepo.update).not.toHaveBeenCalled();
     });
 
     it('UT-AUTH-25: 主管可正常管理非管理角色账号', async () => {
@@ -234,10 +234,12 @@ describe('AuthService', () => {
   });
 
   describe('账号级菜单权限 menu_keys', () => {
-    it('UT-AUTH-26: ADMIN 角色强制存 NULL（管理员恒全菜单，防锁死）', async () => {
+    it('UT-AUTH-26: 管理级角色（ADMIN/SUPERVISOR）强制存 NULL（恒全菜单，防锁死）', async () => {
       mockUserRepo.findOne.mockResolvedValue(null);
       mockUserRepo.save.mockResolvedValue({ id: 9 });
       await service.createUser({ username: 'a1', real_name: 'x', role: 'ADMIN', password: 'pass1234', menuKeys: ['orders'] }, { role: 'ADMIN' });
+      expect(mockUserRepo.save).toHaveBeenCalledWith(expect.objectContaining({ menu_keys: null }));
+      await service.createUser({ username: 's1', real_name: 'x', role: 'SUPERVISOR', password: 'pass1234', menuKeys: ['orders'] }, { role: 'ADMIN' });
       expect(mockUserRepo.save).toHaveBeenCalledWith(expect.objectContaining({ menu_keys: null }));
     });
 

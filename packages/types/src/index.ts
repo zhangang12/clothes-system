@@ -28,16 +28,20 @@ export enum UserRole {
   BUSINESS = 'BUSINESS',
   FINANCE = 'FINANCE',
   PATTERNMAKER = 'PATTERNMAKER',
-  SUPERVISOR = 'SUPERVISOR',     // 业务主管（对账单二级复核；可管账号但限指派非管理角色）
+  SUPERVISOR = 'SUPERVISOR',     // 业务主管（2026-07-22 用户拍板：权限视同 ADMIN，见 isAdminRole）
   SAMPLE_MAKER = 'SAMPLE_MAKER', // 打样间
   SHIPPING = 'SHIPPING',         // 船务（出货相关：订单/合同/对账）
 }
+
+/** 管理级角色判定：SUPERVISOR 与 ADMIN 权限相同（鉴权/可见性/前端按钮统一走此口径） */
+export const isAdminRole = (role?: string | null): boolean =>
+  role === UserRole.ADMIN || role === UserRole.SUPERVISOR;
 
 // ---------- 菜单权限（账号级；未配置按角色默认，配置后按配置，ADMIN 恒全量） ----------
 export interface MenuDef {
   key: string;
   label: string;
-  /** 管理员专属项（账号管理对 SUPERVISOR 额外放行，见 ROLE_DEFAULT_MENUS） */
+  /** 管理员专属项（SUPERVISOR 权限视同 ADMIN，默认同样可见） */
   adminOnly?: boolean;
 }
 
@@ -68,7 +72,7 @@ const BIZ_MENUS = ALL_MENUS.filter((k) => !MENU_REGISTRY.find((m) => m.key === k
 // 各岗位默认可见菜单（用户拍板「按岗位收窄」；版师/打样维持历史口径）
 export const ROLE_DEFAULT_MENUS: Record<UserRole, string[]> = {
   [UserRole.ADMIN]: ALL_MENUS,
-  [UserRole.SUPERVISOR]: [...BIZ_MENUS, 'accounts'],
+  [UserRole.SUPERVISOR]: ALL_MENUS, // 主管权限视同 ADMIN
   [UserRole.BUSINESS]: BIZ_MENUS,
   [UserRole.FINANCE]: ['dashboard', 'reconciliations', 'payments', 'settlements', 'export-invoices', 'reports'],
   [UserRole.PATTERNMAKER]: ['dashboard', 'factories', 'customers', 'samples', 'orders', 'contracts', 'reconciliations', 'payments', 'settlements', 'export-invoices'],
@@ -76,9 +80,9 @@ export const ROLE_DEFAULT_MENUS: Record<UserRole, string[]> = {
   [UserRole.SHIPPING]: ['dashboard', 'orders', 'contracts', 'reconciliations'],
 };
 
-/** 解析某账号最终可见菜单：ADMIN 恒全量；menuKeys 为 null/undefined 用角色默认；否则用配置 */
+/** 解析某账号最终可见菜单：管理级角色（ADMIN/SUPERVISOR）恒全量；menuKeys 为 null/undefined 用角色默认；否则用配置 */
 export function resolveMenuKeys(role: UserRole | string, menuKeys?: string[] | null): string[] {
-  if (role === UserRole.ADMIN) return ALL_MENUS;
+  if (isAdminRole(role)) return ALL_MENUS;
   if (menuKeys == null) return ROLE_DEFAULT_MENUS[role as UserRole] ?? ['dashboard'];
   return menuKeys.filter((k) => ALL_MENUS.includes(k));
 }

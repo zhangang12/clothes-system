@@ -14,7 +14,7 @@ const INTERNAL_ROLES = [
   UserRole.PATTERNMAKER, UserRole.SUPERVISOR, UserRole.SAMPLE_MAKER, UserRole.SHIPPING,
 ];
 
-// 账号管理：管理员 + 主管（主管在 service 层受限——只能指派非管理角色、不能碰 ADMIN/SUPERVISOR 账号）
+// 账号管理：管理员 + 主管（SUPERVISOR 权限视同 ADMIN，2026-07-22 用户拍板，见 RolesGuard）
 const ACCOUNT_MANAGERS = [UserRole.ADMIN, UserRole.SUPERVISOR];
 
 @ApiTags('认证')

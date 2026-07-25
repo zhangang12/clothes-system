@@ -1,9 +1,9 @@
-import { Injectable, UnauthorizedException, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
-import { UserRole, MENU_REGISTRY } from '@i9/types';
+import { MENU_REGISTRY, isAdminRole } from '@i9/types';
 import { SysUser } from './sys-user.entity';
 import { SupplierAccount } from './supplier-account.entity';
 import { Factory } from '../factory/factory.entity';
@@ -16,15 +16,12 @@ export interface JwtPayload {
   factory_id?: number;
 }
 
-// 账号管理的越权防线（用户拍板：主管可管账号但限指派 5 种非管理角色，不能碰 ADMIN/SUPERVISOR 账号）
-const ADMIN_TIER: string[] = [UserRole.ADMIN, UserRole.SUPERVISOR];
-const SUPERVISOR_ASSIGNABLE: string[] = [
-  UserRole.BUSINESS, UserRole.FINANCE, UserRole.PATTERNMAKER, UserRole.SAMPLE_MAKER, UserRole.SHIPPING,
-];
+// 账号管理端点 @Roles(ADMIN, SUPERVISOR)；SUPERVISOR 权限视同 ADMIN（2026-07-22 用户拍板），
+// 早前「主管限指派 5 种角色/不能碰管理账号」的防线已随该决策移除。
 const MENU_KEYS = MENU_REGISTRY.map((m) => m.key);
-/** 非法 key 过滤 + ADMIN 角色强制 NULL（管理员恒全菜单，防误配把管理员锁死） */
+/** 非法 key 过滤 + 管理级角色强制 NULL（恒全量菜单，防误配把自己锁死） */
 function normMenuKeys(role: string, menuKeys?: string[] | null): string[] | null {
-  if (role === UserRole.ADMIN || menuKeys == null) return null;
+  if (isAdminRole(role) || menuKeys == null) return null;
   return menuKeys.filter((k) => MENU_KEYS.includes(k));
 }
 
@@ -124,9 +121,6 @@ export class AuthService {
     dto: { username: string; real_name: string; role: string; password: string; menuKeys?: string[] | null },
     acting: { role?: string },
   ) {
-    if (acting.role === UserRole.SUPERVISOR && !SUPERVISOR_ASSIGNABLE.includes(dto.role)) {
-      throw new ForbiddenException('主管只能指派 业务员/版师/船务/财务/打样间 角色');
-    }
     const exists = await this.userRepo.findOne({ where: { username: dto.username } });
     if (exists) throw new BadRequestException(`用户名「${dto.username}」已存在`);
     const u = await this.userRepo.save(this.userRepo.create({
@@ -144,13 +138,6 @@ export class AuthService {
   ) {
     const u = await this.userRepo.findOne({ where: { id } });
     if (!u) throw new NotFoundException('用户不存在');
-    // 主管防线：不能碰管理角色账号、不能把任何人提成管理角色
-    if (acting.role === UserRole.SUPERVISOR) {
-      if (ADMIN_TIER.includes(u.role)) throw new ForbiddenException('无权修改管理员/主管账号');
-      if (dto.role && !SUPERVISOR_ASSIGNABLE.includes(dto.role)) {
-        throw new ForbiddenException('主管只能指派 业务员/版师/船务/财务/打样间 角色');
-      }
-    }
     // 兜底：不允许把最后一个启用的管理员降权/停用，避免自锁系统
     const demotingAdmin = u.role === 'ADMIN' && ((dto.role && dto.role !== 'ADMIN') || dto.status === 0);
     if (demotingAdmin) {
@@ -171,9 +158,6 @@ export class AuthService {
   async resetUserPassword(id: number, newPwd: string, acting: { role?: string }) {
     const u = await this.userRepo.findOne({ where: { id } });
     if (!u) throw new NotFoundException('用户不存在');
-    if (acting.role === UserRole.SUPERVISOR && ADMIN_TIER.includes(u.role)) {
-      throw new ForbiddenException('无权重置管理员/主管账号密码');
-    }
     await this.userRepo.update(id, { password: await bcrypt.hash(newPwd, 10) });
     return { ok: true };
   }

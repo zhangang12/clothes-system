@@ -105,6 +105,16 @@ describe('auth store', () => {
 
       expect(store.hasRole(UserRole.ADMIN)).toBe(false);
     });
+
+    it('SUPERVISOR 视同 ADMIN（2026-07-22 用户拍板）', () => {
+      const store = useAuthStore();
+      store.setAuth({ access_token: 'tok', role: UserRole.SUPERVISOR, real_name: 'Sup' });
+
+      expect(store.hasRole(UserRole.ADMIN)).toBe(true);
+      expect(store.hasRole(UserRole.ADMIN, UserRole.FINANCE)).toBe(true);
+      // 但不反向冒充其它业务角色
+      expect(store.hasRole(UserRole.FINANCE)).toBe(false);
+    });
   });
 
   // --------------------------------------------------------------- isLoggedIn
@@ -164,13 +174,13 @@ describe('auth store', () => {
       expect(store.canMenu('accounts')).toBe(false);
     });
 
-    it('主管默认菜单含账号管理、不含管理员专属项', () => {
+    it('主管恒全量（视同 ADMIN，含 adminOnly 项，无视 menuKeys 配置）', () => {
       const store = useAuthStore();
-      store.setAuth({ access_token: 't', role: UserRole.SUPERVISOR, real_name: '主' });
+      store.setAuth({ access_token: 't', role: UserRole.SUPERVISOR, real_name: '主', menu_keys: ['orders'] });
       expect(store.canMenu('accounts')).toBe(true);
-      expect(store.canMenu('feedbacks')).toBe(false);
-      expect(store.canMenu('error-logs')).toBe(false);
-      expect(store.canMenu('dicts')).toBe(false);
+      expect(store.canMenu('feedbacks')).toBe(true);
+      expect(store.canMenu('error-logs')).toBe(true);
+      expect(store.canMenu('dicts')).toBe(true);
     });
 
     it('财务默认仅财务相关菜单', () => {

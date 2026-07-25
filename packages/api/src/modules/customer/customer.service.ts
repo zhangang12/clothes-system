@@ -11,7 +11,7 @@ import { CustomerExpress } from './customer-express.entity';
 import { OrderMain } from '../order/order-main.entity';
 import { Quotation } from '../quote/quotation.entity';
 import { SampleGarment } from '../sample/sample-garment.entity';
-import { OrderStatus, CustomerType } from '@i9/types';
+import { OrderStatus, CustomerType, isAdminRole } from '@i9/types';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { QueryCustomerDto } from './dto/query-customer.dto';
@@ -33,9 +33,9 @@ export class CustomerService {
 
   // ===== 客户机密授权（设计稿 01 v1.3：客户属机密单据，行级可见=创建人/被授权人/管理员）=====
 
-  // 该用户可见的客户 id 集合；ADMIN（或未传 user 的内部调用）返回 null=不限
+  // 该用户可见的客户 id 集合；管理级角色 ADMIN/SUPERVISOR（或未传 user 的内部调用）返回 null=不限
   async visibleCustomerIds(user?: { id: number; role?: string }): Promise<number[] | null> {
-    if (!user || user.role === 'ADMIN') return null;
+    if (!user || isAdminRole(user.role)) return null;
     const today = new Date().toISOString().slice(0, 10);
     const [allGrants, own] = await Promise.all([
       this.grantRepo.find({ where: { user_id: user.id } }),
@@ -56,7 +56,7 @@ export class CustomerService {
   }
 
   private async assertEditable(entity: Customer, user?: { id: number; role?: string }): Promise<void> {
-    if (!user || user.role === 'ADMIN' || +entity.created_by === +user.id) return;
+    if (!user || isAdminRole(user.role) || +entity.created_by === +user.id) return;
     const grant = await this.grantRepo.findOne({ where: { customer_id: entity.id, user_id: user.id } });
     const expired = grant?.expire_at && String(grant.expire_at).slice(0, 10) < new Date().toISOString().slice(0, 10);
     if (!grant || expired) throw new NotFoundException(`客户 #${entity.id} 不存在`); // 不可见/授权已过期
@@ -330,7 +330,8 @@ export class CustomerService {
     });
   }
 
-  async toggleStatus(id: number): Promise<Customer> {
+  async toggleStatus(id: number, user?: { id: number; role?: string }): Promise<Customer> {
+    await this.assertVisible(id, user);
     const entity = await this.repo.findOne({ where: { id, deleted: 0 } });
     if (!entity) throw new NotFoundException(`客户 #${id} 不存在`);
     if (entity.status === 1) {
@@ -346,7 +347,8 @@ export class CustomerService {
   }
 
   // ★ v1.3 删除规则（C3）：被任何下游单据（样衣/报价/合同=订单）引用则阻止删除
-  async remove(id: number): Promise<void> {
+  async remove(id: number, user?: { id: number; role?: string }): Promise<void> {
+    await this.assertVisible(id, user);
     const entity = await this.repo.findOne({ where: { id, deleted: 0 } });
     if (!entity) throw new NotFoundException(`客户 #${id} 不存在`);
     const [samples, quotes, orders, sampleBuyerRefs, quoteBuyerRefs, orderBuyerRefs] = await Promise.all([

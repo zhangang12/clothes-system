@@ -5,7 +5,6 @@
       <el-tab-pane label="内部用户" name="users">
         <div class="toolbar">
           <el-button type="primary" :icon="Plus" @click="openCreate">新建用户</el-button>
-          <span v-if="!isAdminActor" class="muted">主管可管理账号，但只能指派 业务员/版师/船务/财务/打样间 角色</span>
         </div>
         <el-table :data="users" v-loading="loadingU" border stripe>
           <el-table-column prop="id" label="ID" width="60" align="center" />
@@ -16,7 +15,7 @@
           </el-table-column>
           <el-table-column label="菜单权限" min-width="130">
             <template #default="{ row }">
-              <span v-if="row.role === 'ADMIN'" class="muted">全部菜单</span>
+              <span v-if="isAdminRole(row.role)" class="muted">全部菜单</span>
               <el-tag v-else-if="row.menu_keys" size="small" type="warning">自定义 {{ row.menu_keys.length }} 项</el-tag>
               <span v-else class="muted">角色默认</span>
             </template>
@@ -32,13 +31,10 @@
           <el-table-column label="操作" width="230" fixed="right">
             <template #default="{ row }">
               <div class="table-ops">
-                <template v-if="canTouchRow(row)">
-                  <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
-                  <el-button link type="primary" size="small" @click="openReset('user', row)">重置密码</el-button>
-                  <el-button v-if="+row.status" link type="danger" size="small" @click="toggleUser(row, 0)">停用</el-button>
-                  <el-button v-else link type="success" size="small" @click="toggleUser(row, 1)">启用</el-button>
-                </template>
-                <span v-else class="muted">仅管理员可管</span>
+                <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
+                <el-button link type="primary" size="small" @click="openReset('user', row)">重置密码</el-button>
+                <el-button v-if="+row.status" link type="danger" size="small" @click="toggleUser(row, 0)">停用</el-button>
+                <el-button v-else link type="success" size="small" @click="toggleUser(row, 1)">启用</el-button>
               </div>
             </template>
           </el-table-column>
@@ -91,9 +87,9 @@
           <el-input v-model="form.password" type="password" show-password placeholder="≥8 位，含字母和数字" />
         </el-form-item>
 
-        <!-- 账号级菜单权限：ADMIN 恒全菜单无需配置；其余角色默认按岗位，可自定义收敛 -->
-        <el-form-item v-if="form.role === 'ADMIN'" label="菜单权限">
-          <span class="muted">管理员可见全部菜单，无需配置</span>
+        <!-- 账号级菜单权限：管理级角色（ADMIN/SUPERVISOR）恒全菜单无需配置；其余角色默认按岗位，可自定义收敛 -->
+        <el-form-item v-if="isAdminRole(form.role)" label="菜单权限">
+          <span class="muted">管理员/主管可见全部菜单，无需配置</span>
         </el-form-item>
         <el-form-item v-else label="菜单权限">
           <div class="menu-conf">
@@ -140,16 +136,12 @@ import { computed, reactive, ref, onMounted } from 'vue';
 import { Plus } from '@element-plus/icons-vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { UserRole, MENU_REGISTRY, ROLE_DEFAULT_MENUS } from '@i9/types';
+import { UserRole, MENU_REGISTRY, ROLE_DEFAULT_MENUS, isAdminRole } from '@i9/types';
 import { authApi } from '../../api/auth';
-import { useAuthStore } from '../../stores/auth';
 
 const STRONG = /^(?=.*[A-Za-z])(?=.*\d).{8,64}$/;
-const auth = useAuthStore();
-// 本页仅 ADMIN/SUPERVISOR 可达（路由 meta.menu=accounts + 后端 @Roles 双保险）
-const isAdminActor = computed(() => auth.hasRole(UserRole.ADMIN));
-// 主管防线（与服务端一致）：不能碰 ADMIN/SUPERVISOR 账号
-const canTouchRow = (row: any) => isAdminActor.value || !['ADMIN', 'SUPERVISOR'].includes(row.role);
+// 本页仅 ADMIN/SUPERVISOR 可达（路由 meta.menu=accounts + 后端 @Roles 双保险）；
+// SUPERVISOR 权限视同 ADMIN（2026-07-22 用户拍板），页内不再区分操作者
 
 const tab = ref('users');
 const users = ref<any[]>([]);
@@ -163,10 +155,7 @@ const ALL_ROLES = [
   { value: 'SUPERVISOR', label: '主管' }, { value: 'SAMPLE_MAKER', label: '打样间' },
   { value: 'SHIPPING', label: '船务' },
 ];
-// 主管只能指派 5 种非管理角色（服务端同样拦截，这里是第一道 UX 防线）
-const SUPERVISOR_ASSIGNABLE = ['BUSINESS', 'FINANCE', 'PATTERNMAKER', 'SAMPLE_MAKER', 'SHIPPING'];
-const roleOptions = computed(() =>
-  isAdminActor.value ? ALL_ROLES : ALL_ROLES.filter((r) => SUPERVISOR_ASSIGNABLE.includes(r.value)));
+const roleOptions = ALL_ROLES; // SUPERVISOR 权限视同 ADMIN，可指派任意角色
 const roleCn = (r: string) => ALL_ROLES.find((x) => x.value === r)?.label ?? r;
 const fmt = (d: string) => (d ? new Date(d).toLocaleString('zh-CN') : '');
 
@@ -197,9 +186,8 @@ const rules: FormRules = {
 // ── 菜单权限配置 ──
 const menuMode = ref<'default' | 'custom'>('default');
 const checkedMenus = ref<string[]>([]);
-// 可分配的菜单：adminOnly 项不开放给普通角色；「账号管理」仅目标为主管时可配（与后端口径一致）
-const selectableMenus = computed(() =>
-  MENU_REGISTRY.filter((m) => !m.adminOnly || (m.key === 'accounts' && form.role === 'SUPERVISOR')));
+// 可分配的菜单：adminOnly 项不开放自定义（管理级角色恒全量、服务端强制存 NULL，无需配置）
+const selectableMenus = computed(() => MENU_REGISTRY.filter((m) => !m.adminOnly));
 const defaultMenuCount = computed(() =>
   (ROLE_DEFAULT_MENUS[form.role as UserRole] ?? ['dashboard']).length);
 function toggleMenu(key: string) {
@@ -223,8 +211,8 @@ function resetForm() {
 }
 async function submitForm() {
   if (!(await formRef.value?.validate().catch(() => false))) return;
-  // ADMIN 恒全菜单（服务端强制存 NULL）；其余按配置：默认=null / 自定义=勾选的 key
-  const menuKeys = form.role === 'ADMIN' ? null : (menuMode.value === 'custom' ? [...checkedMenus.value] : null);
+  // 管理级角色（ADMIN/SUPERVISOR）恒全菜单（服务端强制存 NULL）；其余按配置：默认=null / 自定义=勾选的 key
+  const menuKeys = isAdminRole(form.role) ? null : (menuMode.value === 'custom' ? [...checkedMenus.value] : null);
   saving.value = true;
   try {
     if (editRow.value) {

@@ -58,7 +58,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'dicts', name: 'DictManage', component: () => import('../views/dict/DictManageView.vue'), meta: { title: '字典维护', menu: 'dicts' } },
       { path: 'feedbacks', name: 'Feedbacks', component: () => import('../views/feedback/FeedbackListView.vue'), meta: { admin: true, title: '反馈管理' } },
       { path: 'error-logs', name: 'ErrorLogs', component: () => import('../views/system/ErrorLogListView.vue'), meta: { admin: true, title: '系统报错' } },
-      // 账号管理对 ADMIN+SUPERVISOR 放行（主管在服务端受限：只能指派非管理角色）；走菜单权限口径
+      // 账号管理对 ADMIN+SUPERVISOR 放行（SUPERVISOR 权限视同 ADMIN）；走菜单权限口径
       { path: 'accounts', name: 'Accounts', component: () => import('../views/system/AccountManageView.vue'), meta: { title: '账号管理', menu: 'accounts' } },
     ],
   },

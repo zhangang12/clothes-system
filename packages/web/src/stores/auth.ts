@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import { UserRole, resolveMenuKeys } from '@i9/types';
+import { UserRole, resolveMenuKeys, isAdminRole } from '@i9/types';
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(localStorage.getItem('token'));
@@ -37,11 +37,13 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('menuKeys');
   }
 
+  // SUPERVISOR 权限视同 ADMIN（2026-07-22 用户拍板）：hasRole(ADMIN) 对主管同样为真
   function hasRole(...roles: UserRole[]) {
-    return role.value !== null && roles.includes(role.value);
+    if (role.value === null) return false;
+    return roles.includes(role.value) || (roles.includes(UserRole.ADMIN) && isAdminRole(role.value));
   }
 
-  /** 侧栏/路由统一口径：ADMIN 恒全量；未配置按角色默认；配置后按配置 */
+  /** 侧栏/路由统一口径：管理级角色（ADMIN/SUPERVISOR）恒全量；未配置按角色默认；配置后按配置 */
   function canMenu(key: string) {
     if (!role.value) return false;
     return resolveMenuKeys(role.value, menuKeys.value).includes(key);
