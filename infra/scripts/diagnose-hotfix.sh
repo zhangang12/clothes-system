@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# 防呆：被 sh/dash 误调时自动用 bash 重跑（同 deploy.sh）
+[ -z "${BASH_VERSION:-}" ] && exec bash "$0" "$@"
 # diagnose-hotfix.sh — 排查 hotfix-schema.sql 在存量库执行失败
 #
 # 用法（服务器上）：bash infra/scripts/diagnose-hotfix.sh

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# 防呆：被 sh/dash 误调时自动用 bash 重跑（本脚本用了 process substitution `source <(...)` 等
+# bash 专有语法；部分 web 终端/AI 面板默认用 sh 解释脚本，会在 101 行附近报
+# "syntax error near unexpected token `('"）
+[ -z "${BASH_VERSION:-}" ] && exec bash "$0" "$@"
 # =============================================================================
 # I9 服装制造管理系统 — 一键部署（每次发版只跑这一条）
 # 用法：bash infra/scripts/deploy.sh [--skip-pull] [--skip-backup]
