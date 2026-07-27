@@ -8,7 +8,7 @@
 
 ## 一句话现状（最后更新 2026-07-27）
 
-> 最新：**表单本地草稿功能已完成并真机验证（待发版）**——解决用户「填了半天数据保存报错/误关页面就白填」：新 `utils/formDraft.ts`（输入防抖 800ms 自动写 localStorage、按路由分 key、打开页面检测到草稿弹窗询问恢复/丢弃、保存成功清除并停止写回防复活、卸载兜底写一次、hooks 支持合同 form+terms 双对象），已接入**样衣/报价/订单/合同**四张大单编辑页。web vitest **180**（+9：防抖落盘/恢复/丢弃/清除/key 隔离/卸载兜底/保存后不复活/多对象 hooks）、vue-tsc 0 错；**Playwright 真机冒烟 6/6**：输入→自动落盘→刷新→弹恢复窗→两字段回填→保存成功草稿清除。纯前端零接口零 schema。详见「最近变更」首条。
+> 最新：**表单本地草稿功能已发版上线（commit `bad8469`，ecs+GitHub 均已推送，health 全绿）**——解决用户「填了半天数据保存报错/误关页面就白填」：新 `utils/formDraft.ts`（输入防抖 800ms 自动写 localStorage、按路由分 key、打开页面检测到草稿弹窗询问恢复/丢弃、保存成功清除并停止写回防复活、卸载兜底写一次、hooks 支持合同 form+terms 双对象），已接入**样衣/报价/订单/合同**四张大单编辑页。web vitest **180**（+9）、vue-tsc 0 错；**Playwright 真机冒烟 6/6**：输入→自动落盘→刷新→弹恢复窗→两字段回填→保存成功草稿清除。纯前端零接口零 schema。详见「最近变更」首条。
 
 > 前一条：**7-27 导出件 1 条生产报错 + 9 条用户反馈全部修复（commit `b819503` 已推 GitHub；⚠️发版卡在 hotfix 步）**——报错：`PUT /samples/:id` 500 `Incorrect decimal value: '' for column 'qty'`（17 次，材料行数值空串直写 DECIMAL，`buildMaterials` 统一 num 归一 qty/refPrice/actualUsage/supplierId/sortOrder）。反馈落地：①中间商全链可空（样衣新建/编辑 + 客户表单「买家必须关联中间商」前后端校验一并放宽，直接客户选最终买家即可，后端 `middlemanId ?? customerId ?? buyerId`）；②材料「复制行」按钮（勾选整行复制）；③材料表格导入大补强：映射字段 5→15（补门幅/成份/供应商/参考价等，门幅导不进来的根因）、表头前 5 行自动识别（Grace「共 16 行暂无数据」根因：首行是大标题）、xlsx 多工作表自动挑最像材料表的一张、.xls 给「另存为 .xlsx」明确提示；④字典下拉占位提示可手填（原本就支持回车创建，用户没发现）。daisy 的「附件在线预览」经核实 PDF/xlsx/图片本就能预览，只有 .xls 老格式受技术限制只能下载（已提示）。api jest 326 / web vitest 171（+4）/ 双 tsc 全绿；本机无真库未跑 deep-test。**发版状况：服务器执行 hotfix-schema.sql 失败（该文件自 7-20 未变、上次发版成功，原因待查；失败点在换静态+重启之前，生产仍在旧版无损）。已推 `infra/scripts/diagnose-hotfix.sh` 排查脚本 + deploy.sh 失败时露出真实 SQL 报错（此前被 >/dev/null 吞掉）。**详见「最近变更」首条。
 
