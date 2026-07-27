@@ -107,7 +107,9 @@ CALL _i9_modify_col('quotation','status',"ENUM('DRAFT','SENT','CONFIRMED','TO_CO
 CALL _i9_run_if_col('quotation','status',"UPDATE quotation SET status='QUOTED' WHERE status='SENT'");
 CALL _i9_run_if_col('quotation','status',"UPDATE quotation SET status='ORDERED' WHERE status IN ('CONFIRMED','TO_CONTRACT')");
 
-CALL _i9_modify_col('sample_garment','status',"ENUM('PENDING','PATTERN','CONFIRMED','REJECTED','SAMPLING','SHIPPED','RETURNED','RECONCILED','DONE','ORDERED') NOT NULL DEFAULT 'PENDING'");
+-- 注意：并集必须包含 HEAD 全部现行值——ABANDONED(废弃)漏掉后，库里一旦有废弃样衣，本句就报
+-- ERROR 1265 Data truncated（2026-07-27 发版失败实证，diagnose-hotfix.sh 抓到）
+CALL _i9_modify_col('sample_garment','status',"ENUM('PENDING','PATTERN','CONFIRMED','REJECTED','SAMPLING','SHIPPED','RETURNED','RECONCILED','DONE','ORDERED','ABANDONED') NOT NULL DEFAULT 'PENDING'");
 CALL _i9_run_if_col('sample_garment','status',"UPDATE sample_garment SET status='SAMPLING' WHERE status='PATTERN'");
 CALL _i9_run_if_col('sample_garment','status',"UPDATE sample_garment SET status='DONE' WHERE status='CONFIRMED'");
 CALL _i9_run_if_col('sample_garment','status',"UPDATE sample_garment SET status='RETURNED' WHERE status='REJECTED'");
