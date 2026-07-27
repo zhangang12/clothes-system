@@ -32,6 +32,7 @@ const PRINT_STYLE = `
   th { background:#f2f4f7; }
   .totals { margin-top:10px; text-align:right; font-size:13px; }
   .tip { margin-top:14px; font-size:10px; color:#999; }
+  .sub td { background:#faf8f2; color:#666; font-size:11px; text-align:left; }
 `;
 
 function matrixTable(matrix: any): string {
@@ -53,9 +54,18 @@ function materialTable(materials: any[], mode: OrderPrintMode): string {
   if (!materials?.length) return '<div class="tip">（无用料核算记录）</div>';
   const withCost = mode === 'internal';
   const withSupplier = mode === 'internal';
+  const cols = 8 + (withSupplier ? 1 : 0) + (withCost ? 2 : 0);
   const head = `<tr><th style="width:32px">#</th><th>品名</th><th>部位</th><th>颜色</th>${withSupplier ? '<th>供应商</th>' : ''}<th>单位</th><th>单件耗用</th><th>损耗%</th><th>采购量</th>${withCost ? '<th>单价</th><th>预算</th>' : ''}</tr>`;
+  // 分码材料带出各码尺寸（拉链/织带按码不同尺寸，工厂按码裁料）
+  const sizeSpecsRow = (m: any): string => {
+    if (m.split_mode !== 'BY_SIZE' || !m.size_specs) return '';
+    const parts = Object.entries(m.size_specs).filter(([, v]) => String(v ?? '').trim());
+    if (!parts.length) return '';
+    return `<tr class="sub"><td></td><td colspan="${cols - 1}">各码尺寸：${parts.map(([k, v]) => `${esc(k)}=${esc(String(v))}`).join(' / ')}</td></tr>`;
+  };
   const body = materials.map((m, i) =>
-    `<tr><td>${i + 1}</td><td>${esc(m.item_name)}</td><td>${esc(m.part) || '—'}</td><td>${esc(m.color) || '—'}</td>${withSupplier ? `<td>${esc(m.supplier) || '—'}</td>` : ''}<td>${esc(m.unit) || '—'}</td><td>${n4(m.net_usage)}</td><td>${m.loss_rate ?? '—'}</td><td>${m.final_purchase ?? m.total_purchase ?? '—'}</td>${withCost ? `<td>${n4(m.unit_price)}</td><td>${n2(m.budget)}</td>` : ''}</tr>`,
+    `<tr><td>${i + 1}</td><td>${esc(m.item_name)}</td><td>${esc(m.part) || '—'}</td><td>${esc(m.color) || '—'}</td>${withSupplier ? `<td>${esc(m.supplier) || '—'}</td>` : ''}<td>${esc(m.unit) || '—'}</td><td>${n4(m.net_usage)}</td><td>${m.loss_rate ?? '—'}</td><td>${m.final_purchase ?? m.total_purchase ?? '—'}</td>${withCost ? `<td>${n4(m.unit_price)}</td><td>${n2(m.budget)}</td>` : ''}</tr>`
+    + sizeSpecsRow(m),
   ).join('');
   return `<table><thead>${head}</thead><tbody>${body}</tbody></table>`;
 }

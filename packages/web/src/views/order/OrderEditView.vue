@@ -162,12 +162,19 @@
               <template #default="{ row }">
                 <div class="split-preview">
                   <template v-if="row.splitMode !== 'NONE'">
-                    <div class="split-title">分{{ row.splitMode === 'BY_COLOR' ? '色' : '码' }}出量（{{ row.splitMode === 'BY_COLOR' ? '某色该料量=该色数量' : '某码该料量=该码数量' }}×单件耗用×(1+损耗率)；生成材料合同时按此分行）</div>
-                    <el-table :data="splitPreview(row)" size="small" border style="max-width:560px">
-                      <el-table-column prop="key" :label="row.splitMode === 'BY_COLOR' ? '颜色' : '尺码'" width="120" />
-                      <el-table-column prop="groupQty" label="件数" width="100" align="right" />
-                      <el-table-column prop="qty" label="该料采购量" width="130" align="right" />
-                      <el-table-column prop="formula" label="公式" min-width="200" />
+                    <div class="split-title">分{{ row.splitMode === 'BY_COLOR' ? '色' : '码' }}出量（{{ row.splitMode === 'BY_COLOR' ? '某色该料量=该色数量' : '某码该料量=该码数量' }}×单件耗用×(1+损耗率)；生成材料合同时按此分行）{{ row.splitMode === 'BY_SIZE' ? '；「尺寸」列按码填（拉链/织带等），不填与门幅一致' : '' }}</div>
+                    <el-table :data="splitPreview(row)" size="small" border style="max-width:760px">
+                      <el-table-column prop="key" :label="row.splitMode === 'BY_COLOR' ? '颜色' : '尺码'" width="100" />
+                      <el-table-column prop="groupQty" label="件数" width="90" align="right" />
+                      <el-table-column prop="qty" label="该料采购量" width="120" align="right" />
+                      <el-table-column prop="formula" label="公式" min-width="180" />
+                      <!-- 各码尺寸（用户反馈：拉链/织带按码不同尺寸）——占位=材料行门幅/尺寸，不填即与通用一致 -->
+                      <el-table-column v-if="row.splitMode === 'BY_SIZE'" label="尺寸" width="120">
+                        <template #default="{ row: srow }">
+                          <el-input v-if="!readonly" v-model="row.sizeSpecs[srow.key]" size="small" :placeholder="row.width || '同门幅'" />
+                          <span v-else>{{ row.sizeSpecs?.[srow.key] || row.width || '—' }}</span>
+                        </template>
+                      </el-table-column>
                     </el-table>
                     <div v-if="!splitPreview(row).length" class="hint">尺码数量搭配暂无{{ row.splitMode === 'BY_COLOR' ? '颜色' : '尺码' }}数据，先在上方矩阵填写</div>
                   </template>
@@ -338,7 +345,7 @@ const INT_UNITS = ['个', '条', '只', '件', '粒', '套', '对', 'pcs', 'PCS'
 // 尺码数量搭配矩阵（设计稿 03：行=款·色·尺码，列=各 PO（PO号/目的地/收货人），格=数量）
 const emptyPo = () => ({ po_no: '', destination: '', consignee: '' });
 const emptyMatrixRow = (poCount: number) => ({ style_no: '', color: '', article: '', size: '', qtys: Array(poCount).fill('') });
-const emptyMat = () => ({ itemName: '', part: '', width: '', color: '', composition: '', supplier: '', unit: '', unitPrice: '', netUsage: '', lossRate: 3, splitMode: 'NONE', finalPurchase: '', roundUp: null, remark: '' });
+const emptyMat = () => ({ itemName: '', part: '', width: '', color: '', composition: '', supplier: '', unit: '', unitPrice: '', netUsage: '', lossRate: 3, splitMode: 'NONE', finalPurchase: '', roundUp: null, remark: '', sizeSpecs: {} as Record<string, string> });
 const form = reactive<any>({
   orderNo: '', quoteId: undefined, customerPo: '', styleNo: '', unitPrice: '', currency: 'USD',
   deliveryDate: '', commissionRate: 0, factoryId: undefined, middlemanName: '', buyerName: '',
@@ -567,6 +574,7 @@ async function load() {
       itemName: m.item_name, part: m.part, width: m.width, color: m.color, composition: m.composition,
       supplier: m.supplier, unit: m.unit, unitPrice: m.unit_price ?? '', netUsage: m.net_usage, lossRate: m.loss_rate, splitMode: m.split_mode ?? 'NONE',
       finalPurchase: m.final_purchase ?? '', roundUp: m.round_up ?? null, remark: m.remark,
+      sizeSpecs: m.size_specs ?? {},
     })) : [emptyMat()],
   });
 }
@@ -592,6 +600,7 @@ function buildDto() {
       item_name: m.itemName, part: m.part, width: m.width, color: m.color, composition: m.composition,
       supplier: m.supplier, unit: m.unit, unit_price: num(m.unitPrice), net_usage: num(m.netUsage), loss_rate: num(m.lossRate) ?? 3,
       split_mode: m.splitMode, final_purchase: num(m.finalPurchase),
+      size_specs: m.splitMode === 'BY_SIZE' && m.sizeSpecs && Object.values(m.sizeSpecs).some((v: any) => String(v ?? '').trim()) ? m.sizeSpecs : undefined,
       round_up: m.roundUp === 1 || m.roundUp === 0 ? m.roundUp : undefined, sort_order: i,
     })),
   };

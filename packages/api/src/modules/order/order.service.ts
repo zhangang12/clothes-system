@@ -64,6 +64,7 @@ export class OrderService {
         order_id: orderId, quote_item_id: m.quote_item_id, item_name: m.item_name,
         part: m.part, width: m.width, color: m.color, composition: m.composition, supplier: m.supplier,
         split_mode: m.split_mode ?? 'NONE', unit: m.unit, net_usage: m.net_usage, loss_rate: lossRate,
+        size_specs: m.size_specs ?? null, // 各码尺寸（仅 BY_SIZE，拉链/织带按码不同尺寸）
         loss_usage: perUnit, qty: qtyTotal, total_purchase: total, final_purchase: finalPurchase,
         round_up: m.round_up ?? null, unit_price: m.unit_price, budget, sort_order: m.sort_order ?? idx,
       });

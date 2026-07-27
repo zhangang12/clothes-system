@@ -119,10 +119,12 @@ export class ContractService {
             ? groupQty * per * loss
             : (totalGroupQty ? (fallbackBase * groupQty) / totalGroupQty : 0);
           qty = round ? Math.ceil(qty) : +qty.toFixed(2);
+          // 各码尺寸（拉链/织带按码不同尺寸）：size 列写 S(50) 直观带出，工厂按码裁料
+          const dim = mode === 'BY_SIZE' ? (om.size_specs?.[key] || '').trim() : '';
           return {
             ...base,
             color: mode === 'BY_COLOR' ? key : (om.color || undefined),
-            size: mode === 'BY_SIZE' ? key : undefined,
+            size: mode === 'BY_SIZE' ? (dim ? `${key}(${dim})` : key) : undefined,
             qty,
             qty_source: mode === 'BY_COLOR' ? '采购量·分色' : '采购量·分码',
           };

@@ -248,7 +248,7 @@
                 <template #default="{ row }">
                   <!-- 分色/分码材料：按订单尺码矩阵拆行（合同要分尺寸），显示拆行预览不可手改 -->
                   <div v-if="splitLinesOf(row.raw).length">
-                    <el-tag v-for="l in splitLinesOf(row.raw)" :key="l.key" size="small" style="margin:1px 2px">{{ l.key }}: {{ l.qty }}</el-tag>
+                    <el-tag v-for="l in splitLinesOf(row.raw)" :key="l.key" size="small" style="margin:1px 2px">{{ l.key }}{{ l.dim === 'size' && dimOfRaw(row.raw, l.key) ? `(${dimOfRaw(row.raw, l.key)})` : '' }}: {{ l.qty }}</el-tag>
                   </div>
                   <el-input-number v-else v-model="row.qty" :min="0" :precision="2" size="small" :controls="false" style="width:100%" />
                 </template>
@@ -477,6 +477,7 @@ const importChecked = ref<any[]>([]);
 const importOrderQty = ref(0);
 const importMatrixRows = ref<any[]>([]); // 订单尺码矩阵行（分色/分码拆行用）
 const INT_UNITS = ['个', '条', '只', '件', '粒', '套', '对', 'pcs', 'PCS', 'PC'];
+const dimOfRaw = (m: any, key: string) => String(m?.size_specs?.[key] ?? '').trim();
 // 与后端 contract.service expandMaterialLines 同一公式：某色(码)该料量=该色(码)件数×单件耗用×(1+损耗率)，整数类单位向上取整
 function splitLinesOf(m: any): Array<{ key: string; qty: number; dim: 'color' | 'size' }> {
   const mode = m?.split_mode;
@@ -556,11 +557,13 @@ async function doImport() {
       for (const c of importChecked.value) {
         const splits = splitLinesOf(c.raw);
         if (splits.length) {
-          // 分色/分码材料：按订单尺码矩阵拆行（合同要分尺寸）——与后端 generateFromOrder 同公式
+          // 分色/分码材料：按订单尺码矩阵拆行（合同要分尺寸）——与后端 generateFromOrder 同公式；
+          // 各码尺寸(size_specs)以 S(50) 形式带进 size 列，工厂按码裁料
           for (const l of splits) {
+            const dim = l.dim === 'size' ? String(c.raw?.size_specs?.[l.key] ?? '').trim() : '';
             lines.push({
               item_name: c.item_name, spec: c.spec,
-              color: l.dim === 'color' ? l.key : (c.color || ''), size: l.dim === 'size' ? l.key : '',
+              color: l.dim === 'color' ? l.key : (c.color || ''), size: l.dim === 'size' ? (dim ? `${l.key}(${dim})` : l.key) : '',
               style_no: od.style_no || '', unit: c.unit || '', qty: l.qty,
               unit_price: +c.raw?.unit_price || 0, delivery_date: dd, photo_url: '',
               qty_source: l.dim === 'color' ? '采购量·分色' : '采购量·分码',

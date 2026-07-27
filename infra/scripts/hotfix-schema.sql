@@ -587,6 +587,7 @@ CREATE TABLE IF NOT EXISTS `order_material` (
   `composition`    VARCHAR(100)   DEFAULT NULL COMMENT '成份',
   `supplier`       VARCHAR(100)   DEFAULT NULL COMMENT '供应商',
   `split_mode`     VARCHAR(10)    NOT NULL DEFAULT 'NONE' COMMENT '拆分 NONE/BY_SIZE/BY_COLOR',
+  `size_specs`     JSON           DEFAULT NULL COMMENT '各码尺寸(仅BY_SIZE) {"S":"50","M":"52"};空=各码同尺寸',
   `unit`           VARCHAR(20)    DEFAULT NULL,
   `net_usage`      DECIMAL(15,4)  DEFAULT NULL COMMENT '单件耗用',
   `loss_rate`      DECIMAL(6,2)   NOT NULL DEFAULT 3.00 COMMENT '损耗%默认3',
@@ -1774,6 +1775,8 @@ CALL _i9_add_col('order_material','supplier',"VARCHAR(100)   DEFAULT NULL COMMEN
 CALL _i9_sync_col('order_material','supplier',"VARCHAR(100)","VARCHAR(100)   DEFAULT NULL COMMENT '供应商'");
 CALL _i9_add_col('order_material','split_mode',"VARCHAR(10)    NOT NULL DEFAULT 'NONE' COMMENT '拆分 NONE/BY_SIZE/BY_COLOR'");
 CALL _i9_sync_col('order_material','split_mode',"VARCHAR(10)","VARCHAR(10)    NOT NULL DEFAULT 'NONE' COMMENT '拆分 NONE/BY_SIZE/BY_COLOR'");
+CALL _i9_add_col('order_material','size_specs',"JSON           DEFAULT NULL COMMENT '各码尺寸(仅BY_SIZE) {\"S\":\"50\",\"M\":\"52\"};空=各码同尺寸'");
+CALL _i9_sync_col('order_material','size_specs',"JSON","JSON           DEFAULT NULL COMMENT '各码尺寸(仅BY_SIZE) {\"S\":\"50\",\"M\":\"52\"};空=各码同尺寸'");
 CALL _i9_add_col('order_material','unit',"VARCHAR(20)    DEFAULT NULL");
 CALL _i9_sync_col('order_material','unit',"VARCHAR(20)","VARCHAR(20)    DEFAULT NULL");
 CALL _i9_add_col('order_material','net_usage',"DECIMAL(15,4)  DEFAULT NULL COMMENT '单件耗用'");

@@ -505,6 +505,41 @@ describe('ContractService', () => {
     expect(savedLines[0].qty_source).toBe('采购量·分码');
   });
 
+  // UT-CON-24: 分码材料带各码尺寸——size 列写 S(50)，无尺寸码保持纯尺码（用户反馈：拉链按码不同尺寸）
+  it('UT-CON-24 BY_SIZE lines carry per-size specs in size column like S(50)', async () => {
+    mockRedis.eval.mockResolvedValue('HT-20260709-024');
+    mockOrderRepo.findOne.mockResolvedValue({ id: 10, style_no: 'M525', delivery_date: null, deleted: 0 });
+    mockOrderMaterialRepo.find.mockResolvedValue([{
+      item_name: '5#尼龙拉链', unit: '条', unit_price: 1, net_usage: 1, loss_rate: 3,
+      split_mode: 'BY_SIZE', round_up: null, sort_order: 0,
+      size_specs: { S: '50', M: '52', XL: '58×0.8' },
+    }]);
+    mockMatrixRepo.findOne.mockResolvedValue({ matrix_data: { rows: [
+      { style_no: 'M525', color: '黑', size: 'S', qtys: [100] },
+      { style_no: 'M525', color: '黑', size: 'M', qtys: [100] },
+      { style_no: 'M525', color: '黑', size: 'L', qtys: [100] },
+      { style_no: 'M525', color: '黑', size: 'XL', qtys: [100] },
+    ] } });
+    const savedLines: any[] = [];
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb({
+      create: jest.fn().mockImplementation((_: any, v: any) => v),
+      save: jest.fn().mockImplementation((_: any, v: any) => {
+        if (Array.isArray(v)) savedLines.push(...v);
+        return Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 });
+      }),
+      findOne: jest.fn().mockResolvedValue(null),
+      delete: jest.fn(),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+    }));
+    await service.create({ type: ContractType.MATERIAL, factory_id: 5, order_id: 10 } as any, 1);
+    expect(savedLines).toHaveLength(4);
+    expect(savedLines.find((l) => l.size === 'S(50)')).toBeTruthy();
+    expect(savedLines.find((l) => l.size === 'M(52)')).toBeTruthy();
+    expect(savedLines.find((l) => l.size === 'XL(58×0.8)')).toBeTruthy(); // 自由文本原样带
+    expect(savedLines.find((l) => l.size === 'L')).toBeTruthy(); // 无尺寸码回退纯尺码
+    expect(savedLines.every((l) => l.qty === 103)).toBe(true); // 100×1×1.03=103
+  });
+
   // UT-CON-23: 不拆分材料仍单行；矩阵为空时分色材料退回单行（不炸）
   it('UT-CON-23 NONE split or empty matrix falls back to single line', async () => {
     mockRedis.eval.mockResolvedValue('HT-20260709-004');

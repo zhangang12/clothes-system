@@ -32,6 +32,10 @@ export class OrderMaterial {
   @Column({ length: 10, default: 'NONE' })
   split_mode: string; // 拆分 NONE/BY_SIZE/BY_COLOR
 
+  // 各码尺寸（仅 BY_SIZE 材料）：{"S":"50","M":"52"}，拉链/织带等按码不同尺寸；空=各码同尺寸
+  @Column({ type: 'json', nullable: true })
+  size_specs: Record<string, string> | null;
+
   @Column({ length: 20, nullable: true })
   unit: string;
 

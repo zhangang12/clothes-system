@@ -510,6 +510,7 @@ CREATE TABLE IF NOT EXISTS `order_material` (
   `composition`    VARCHAR(100)   DEFAULT NULL COMMENT '成份',
   `supplier`       VARCHAR(100)   DEFAULT NULL COMMENT '供应商',
   `split_mode`     VARCHAR(10)    NOT NULL DEFAULT 'NONE' COMMENT '拆分 NONE/BY_SIZE/BY_COLOR',
+  `size_specs`     JSON           DEFAULT NULL COMMENT '各码尺寸(仅BY_SIZE) {"S":"50","M":"52"};空=各码同尺寸',
   `unit`           VARCHAR(20)    DEFAULT NULL,
   `net_usage`      DECIMAL(15,4)  DEFAULT NULL COMMENT '单件耗用',
   `loss_rate`      DECIMAL(6,2)   NOT NULL DEFAULT 3.00 COMMENT '损耗%默认3',
