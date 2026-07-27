@@ -120,7 +120,13 @@ if command -v docker &>/dev/null && docker ps -a --format '{{.Names}}' 2>/dev/nu
 
   if [[ -f "$HOTFIX_SQL" ]]; then
     log "应用数据库结构升级（幂等 hotfix-schema.sql）..."
-    $MYSQL "$DB_NAME" < "$HOTFIX_SQL" >/dev/null 2>&1 || die "结构升级 SQL 执行失败（数据已备份，可排查后重跑）"
+    # 错误输出留底并露出——失败时直接能看到是哪条语句报的什么错（此前 >/dev/null 2>&1 全吞了，排查全靠猜）
+    SQL_ERR=$(mktemp)
+    if ! $MYSQL "$DB_NAME" < "$HOTFIX_SQL" >"$SQL_ERR" 2>&1; then
+      cat "$SQL_ERR" >&2
+      die "结构升级 SQL 执行失败（数据已备份，可排查后重跑）"
+    fi
+    rm -f "$SQL_ERR"
     # 抽检关键列（缺失即中止，避免带病重启 API）；用 set +e 包裹，避免查询本身失败触发 set -e 静默退出
     set +e
     MISS=$($MYSQL -N -B "$DB_NAME" 2>/dev/null <<SQL
