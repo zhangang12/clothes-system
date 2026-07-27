@@ -204,6 +204,7 @@ import { sampleApi } from '@/api/sample';
 import { companyApi } from '@/api/company';
 import { dictApi } from '@/api/dict';
 import { pasteRowsFromClipboard } from '@/utils/pasteRows';
+import { useFormDraft } from '@/utils/formDraft';
 import { printQuote } from '@/utils/quotePrint';
 import { exportQuoteExcel } from '@/utils/quoteExcel';
 import FileUpload from '@/components/FileUpload.vue';
@@ -250,6 +251,8 @@ const form = reactive<any>({
   image1: '', image2: '',
   items: [emptyItem()], fees: DEFAULT_FEES.map((n) => emptyFee(n)),
 });
+// 本地草稿：输入自动暂存，保存报错/误关页面可恢复；保存成功清除
+const draft = useFormDraft(`quote:${route.fullPath}`, form);
 // 买家编号：随所选最终买家带出（列表里就有 customer_no；编辑载入兜底用 buyer_no 快照）
 const buyerNo = computed(() => buyers.value.find((b) => b.id === form.buyerId)?.customer_no ?? form.buyerNo ?? '');
 // 中间商联系人下拉选项（来自中间商客户档案 contacts；可自填）
@@ -522,6 +525,7 @@ async function save() {
     if (editId.value) {
       await quoteApi.update(editId.value, dto);
       ElMessage.success('更新成功');
+      draft.clear(); // 保存成功清草稿
       router.push({ name: 'Quotes' });
     } else {
       const r: any = await quoteApi.create(dto);
@@ -530,11 +534,13 @@ async function save() {
       if (form.sampleId && !dto.items.length) {
         await quoteApi.importFromSample(newId, form.sampleId);
         ElMessage.success('已自动带入样衣材料');
+        draft.clear();
         await router.push({ name: 'QuoteEdit', params: { id: newId } });
         await load();
         return;
       }
       ElMessage.success('创建成功');
+      draft.clear();
       router.push({ name: 'Quotes' });
     }
   } catch (e: any) {
@@ -606,7 +612,7 @@ async function copy() {
   catch (e: any) { errToast(e?.response?.data?.msg ?? '复制失败'); }
 }
 function goBack() { router.push({ name: 'Quotes' }); }
-onMounted(async () => { await loadRefs(); await load(); });
+onMounted(async () => { await loadRefs(); await load(); await draft.restorePrompt(); });
 </script>
 
 <style scoped>

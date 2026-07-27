@@ -267,6 +267,7 @@ import type { DocLink } from '@/components/DocLinks.vue'; // 仅取类型:组件
 import { printSample } from '@/utils/samplePrint';
 import { exportSampleExcel } from '@/utils/sampleExcel';
 import { parseSheetFile, guessMapping, rowsToMaterials, MATERIAL_FIELDS } from '@/utils/sheetImport';
+import { useFormDraft } from '@/utils/formDraft';
 import { SAMPLE_CATEGORIES, SAMPLE_STATUS_LABEL, QUOTE_STATUS_LABEL, UserRole } from '@i9/types';
 
 const SectionBlock = (props: { title: string; badge?: string }, { slots }: any) =>
@@ -307,6 +308,9 @@ const form = reactive<any>({
   materials: [emptyMaterial()],
   shipRounds: [] as any[],
 });
+
+// 本地草稿：输入自动暂存 localStorage，保存报错/误关页面可恢复；保存成功清除（按路由区分，各单据互不串）
+const draft = useFormDraft(`sample:${route.fullPath}`, form);
 
 const emptyRound = () => ({ size: '', qty: '', shipDate: '', shipNo: '', returnDate: '', laborUnitPrice: '', laborAmount: '', remark: '' });
 
@@ -582,6 +586,7 @@ async function save() {
     let id = editId.value;
     if (id) { await sampleApi.update(id, dto); ElMessage.success('更新成功'); }
     else { const r: any = await sampleApi.create(dto); id = Number((r.data ?? r)?.id); ElMessage.success('创建成功'); }
+    draft.clear(); // 保存成功：清掉本地草稿，避免下次打开误提示恢复
     // 设计稿页面事件:填「材料寄出单号」保存即自动推送版师(待派单 → 打样中)
     const wasPending = editId.value ? form.status === 'PENDING' : true; // 新建后必为待派单
     if (id && form.materialShipNo && wasPending) {
@@ -676,7 +681,7 @@ async function exportExcel() {
 }
 function goBack() { router.push({ name: 'Samples' }); }
 
-onMounted(async () => { await loadRefs(); await load(); });
+onMounted(async () => { await loadRefs(); await load(); await draft.restorePrompt(); });
 </script>
 
 <style scoped>

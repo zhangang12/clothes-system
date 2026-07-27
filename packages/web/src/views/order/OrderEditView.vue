@@ -267,6 +267,7 @@ import { Back, Check, Plus, Minus, Download, Promotion, ArrowDown, Printer, Refr
 import { orderApi } from '@/api/order';
 import DictSelect from '@/components/DictSelect.vue';
 import { printOrder } from '@/utils/orderPrint';
+import { useFormDraft } from '@/utils/formDraft';
 import { contractApi } from '@/api/contract';
 import { quoteApi } from '@/api/quote';
 import { settlementApi } from '@/api/settlement';
@@ -345,6 +346,8 @@ const form = reactive<any>({
   att1: '', att2: '', att3: '', att4: '', att5: '',
   matrix: { pos: [emptyPo()], rows: [emptyMatrixRow(1)] }, materials: [emptyMat()],
 });
+// 本地草稿：输入自动暂存，保存报错/误关页面可恢复；保存成功清除
+const draft = useFormDraft(`order:${route.fullPath}`, form);
 
 const rowTotal = (row: any) => (row.qtys ?? []).reduce((s: number, q: any) => s + (Number(q) || 0), 0);
 const qtyTotal = computed(() => form.matrix.rows.reduce((s: number, r: any) => s + rowTotal(r), 0));
@@ -604,6 +607,7 @@ async function save() {
       if (!form.quoteId) { ElMessage.warning('新建订单建议先关联报价并导入；已按当前信息创建'); }
       await orderApi.create(dto); ElMessage.success('创建成功');
     }
+    draft.clear(); // 保存成功清草稿
     router.push({ name: 'Orders' });
   } catch (e: any) {
     errToast(e?.response?.data?.msg ?? '保存失败（新建订单需先从报价导入带出客户）');
@@ -728,7 +732,7 @@ async function revert() {
 }
 function goBack() { router.push({ name: 'Orders' }); }
 // 关联单据不阻塞主表单:不 await,拉回来再渲染 chip
-onMounted(async () => { await loadRefs(); await load(); void loadDocLinks(); });
+onMounted(async () => { await loadRefs(); await load(); void loadDocLinks(); await draft.restorePrompt(); });
 </script>
 
 <style scoped>

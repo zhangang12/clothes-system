@@ -280,6 +280,7 @@ import type { DocLink } from '@/components/DocLinks.vue';
 import { companyApi } from '@/api/company';
 import { uploadApi } from '@/api/upload';
 import { signedUrl } from '@/utils/secureFile';
+import { useFormDraft } from '@/utils/formDraft';
 import { fmtDateTime } from '@/utils/format';
 import { printContract } from '@/utils/contractPrint';
 import { exportContractExcel } from '@/utils/contractExcel';
@@ -326,6 +327,11 @@ const form = reactive<any>({
   materials: [] as any[],
 });
 const terms = reactive<Record<string, string>>({});
+// 本地草稿（form+terms 双对象）：输入自动暂存，保存报错/误关页面可恢复；保存成功清除
+const draft = useFormDraft(`contract:${route.fullPath}`, form, {
+  snapshot: () => ({ form: JSON.parse(JSON.stringify(form)), terms: { ...terms } }),
+  restore: (d) => { Object.assign(form, d.form ?? {}); Object.assign(terms, d.terms ?? {}); },
+});
 
 const isProcess = computed(() => form.type === 'PROCESS');
 const isSupplement = computed(() => form.type === 'SUPPLEMENT');
@@ -645,12 +651,14 @@ async function save() {
     if (contractId.value) {
       await contractApi.update(contractId.value, buildDto());
       ElMessage.success('保存成功');
+      draft.clear(); // 保存成功清草稿
       await loadDetail(contractId.value);
     } else {
       const dto = { ...buildDto(), type: form.type, order_id: form.order_id, parent_id: form.parent_id };
       const res: any = await contractApi.create(dto);
       const created = res.data ?? res;
       ElMessage.success(`创建成功：${created.contract_no}`);
+      draft.clear();
       // bigint 归一:created.id 经 mysql2 出来可能是字符串,统一成数字,后续 update/loadDocLinks 都按数字走
       contractId.value = Number(created.id);
       router.replace(`/contracts/${contractId.value}/edit`);
@@ -786,6 +794,7 @@ onMounted(async () => {
     // 详情/复制落定后兜底:选中订单不在前 100 条选项里时单拉补入,防回显裸 ID
     await ensureOrderOption();
     if (!form.company_rep) form.company_rep = authStore.realName || '';
+    await draft.restorePrompt(); // 有未保存草稿时询问恢复（数据落定后再弹，防被 load 覆盖）
   } finally { loading.value = false; }
 });
 </script>
