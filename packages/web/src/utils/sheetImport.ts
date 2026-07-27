@@ -8,18 +8,37 @@ export interface SheetField { key: string; label: string; keywords: RegExp; requ
 // 样衣材料可映射的字段（其余字段导入后人工补）
 export const MATERIAL_FIELDS: SheetField[] = [
   { key: 'itemName', label: '品名', keywords: /品名|材料|名称|面料|辅料|面里料|item/i, required: true },
-  { key: 'qty', label: '单耗/数量', keywords: /单耗|数量|用量|耗用|qty/i },
-  { key: 'part', label: '部位/位置', keywords: /位置|部位|part/i },
+  { key: 'arrangeDate', label: '安排日期', keywords: /安排日期|日期|date/i },
+  { key: 'width', label: '门幅', keywords: /门幅|幅宽|宽度|width/i },
   { key: 'colors', label: '颜色', keywords: /颜色|color/i },
+  { key: 'part', label: '部位/位置', keywords: /位置|部位|part/i },
+  { key: 'composition', label: '成份', keywords: /成份|成分|composition/i },
+  { key: 'codeBand', label: '码带', keywords: /码带|织带/i },
+  { key: 'zipperLength', label: '拉链长度', keywords: /拉链长度|拉链长/i },
+  { key: 'puller', label: '拉头', keywords: /拉头/i },
+  { key: 'qty', label: '单耗/数量', keywords: /单耗|数量|用量|qty/i },
+  { key: 'size', label: '尺寸', keywords: /尺寸|尺码|size/i },
+  { key: 'refPrice', label: '参考价格', keywords: /参考价|单价|价格|price/i },
+  { key: 'actualUsage', label: '实际耗用', keywords: /实际耗用|实测耗用|实耗/i },
+  { key: 'supplierName', label: '供应商', keywords: /供应商|厂家|supplier/i },
   { key: 'remark', label: '备注', keywords: /备注|说明|remark/i },
 ];
 
-/** 解析上传文件为行数组（整行空白已剔除） */
+/** 解析上传文件为行数组（整行空白已剔除）。xlsx 多工作表时自动挑「最像材料表」的一张（表头关键词命中最多） */
 export async function parseSheetFile(file: File): Promise<string[][]> {
+  if (/\.xls$/i.test(file.name)) {
+    throw new Error('.xls 是老格式（BIFF），解析不了——请用 Excel/WPS 另存为 .xlsx 后再导入');
+  }
   if (/\.xlsx$/i.test(file.name)) {
     const buf = await file.arrayBuffer();
     const sheets = await parseXlsx(buf);
-    return sheets[0]?.rows ?? [];
+    let best: string[][] = sheets[0]?.rows ?? [];
+    let bestHits = -1;
+    for (const s of sheets) {
+      const hits = guessMapping(s.rows).hits;
+      if (hits > bestHits) { bestHits = hits; best = s.rows; }
+    }
+    return best;
   }
   if (/\.(csv|txt)$/i.test(file.name)) {
     const text = await readText(file);
@@ -60,28 +79,27 @@ function readText(file: File): Promise<string> {
   });
 }
 
-/** 首行疑似表头（任一单元格命中字段关键词）→ 自动推断列映射 */
-export function guessMapping(rows: string[][]): { mapping: Record<string, number>; hasHeader: boolean } {
-  const mapping: Record<string, number> = {};
-  const header = rows[0] ?? [];
-  let hits = 0;
-  for (const f of MATERIAL_FIELDS) {
-    const idx = header.findIndex((cell) => f.keywords.test(String(cell ?? '')));
-    if (idx >= 0 && mapping[f.key] === undefined) { mapping[f.key] = idx; hits++; }
+/** 在前 5 行里找「最像表头」的一行（命中字段关键词最多），据此自动推断列映射。
+ *  兼容工厂工艺单常见的第一行大标题/说明行（用户反馈：表头不在首行时映射全空、导入 0 行） */
+export function guessMapping(rows: string[][]): { mapping: Record<string, number>; hasHeader: boolean; headerRow: number; hits: number } {
+  let best = { mapping: {} as Record<string, number>, headerRow: 0, hits: 0 };
+  const limit = Math.min(rows.length, 5);
+  for (let r = 0; r < limit; r++) {
+    const mapping: Record<string, number> = {};
+    let hits = 0;
+    for (const f of MATERIAL_FIELDS) {
+      const idx = (rows[r] ?? []).findIndex((cell) => f.keywords.test(String(cell ?? '')));
+      if (idx >= 0 && mapping[f.key] === undefined) { mapping[f.key] = idx; hits++; }
+    }
+    if (hits > best.hits) best = { mapping, headerRow: r, hits };
   }
-  return { mapping, hasHeader: hits > 0 };
+  return { mapping: best.mapping, hasHeader: best.hits > 0, headerRow: best.headerRow, hits: best.hits };
 }
 
 /** 原始行 → 材料行（按列映射；品名为空的行跳过——分区标题/空行自然滤掉） */
 export function rowsToMaterials(rows: string[][], mapping: Record<string, number>): any[] {
   const cell = (r: string[], key: string) => (mapping[key] != null ? String(r[mapping[key]] ?? '').trim() : '');
   return rows
-    .map((r) => ({
-      itemName: cell(r, 'itemName'),
-      qty: cell(r, 'qty'),
-      part: cell(r, 'part'),
-      colors: cell(r, 'colors'),
-      remark: cell(r, 'remark'),
-    }))
-    .filter((m) => m.itemName);
+    .map((r) => Object.fromEntries(MATERIAL_FIELDS.map((f) => [f.key, cell(r, f.key)])))
+    .filter((m: any) => m.itemName);
 }

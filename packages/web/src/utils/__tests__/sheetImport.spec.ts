@@ -28,6 +28,30 @@ describe('guessMapping 列映射自动推断', () => {
     expect(mapping.itemName).toBeUndefined();
   });
 
+  it('表头不在首行（首行是大标题）也能识别，headerRow 指向表头行', () => {
+    const rows = [
+      ['CHA273B550 工艺单'],
+      ['品名', '门幅', '颜色', '部位'],
+      ['400消光春亚纺防棉', '145', '01黑色', '大身'],
+    ];
+    const { mapping, hasHeader, headerRow } = guessMapping(rows);
+    expect(hasHeader).toBe(true);
+    expect(headerRow).toBe(1);
+    expect(mapping.itemName).toBe(0);
+    expect(mapping.width).toBe(1);
+    expect(mapping.colors).toBe(2);
+    expect(mapping.part).toBe(3);
+  });
+
+  it('门幅/供应商等扩展字段关键词命中', () => {
+    const { mapping } = guessMapping([['品名', '门幅', '供应商', '参考价', '实际耗用', '安排日期']]);
+    expect(mapping.width).toBe(1);
+    expect(mapping.supplierName).toBe(2);
+    expect(mapping.refPrice).toBe(3);
+    expect(mapping.actualUsage).toBe(4);
+    expect(mapping.arrangeDate).toBe(5);
+  });
+
   it('字段关键词不互相抢列（每个字段各中各的列）', () => {
     for (const f of MATERIAL_FIELDS) {
       const header = MATERIAL_FIELDS.map((x) => x.label);
@@ -49,18 +73,23 @@ describe('rowsToMaterials 行映射', () => {
     ];
     const out = rowsToMaterials(rows, mapping);
     expect(out).toHaveLength(2);
-    expect(out[0]).toEqual({ itemName: '春亚纺', qty: '1.5', part: '大身', colors: '白', remark: '克重200' });
+    expect(out[0]).toMatchObject({ itemName: '春亚纺', qty: '1.5', part: '大身', colors: '白', remark: '克重200' });
     expect(out[1].itemName).toBe('涤丝纺');
   });
 
   it('缺列的行按空串兜底', () => {
     const out = rowsToMaterials([['拉链', '1']], mapping);
-    expect(out[0]).toEqual({ itemName: '拉链', qty: '1', part: '', colors: '', remark: '' });
+    expect(out[0]).toMatchObject({ itemName: '拉链', qty: '1', part: '', colors: '', remark: '' });
   });
 
   it('只映射部分字段时其余字段为空串', () => {
     const out = rowsToMaterials([['面料A', '1.2']], { itemName: 0 });
-    expect(out[0]).toEqual({ itemName: '面料A', qty: '', part: '', colors: '', remark: '' });
+    expect(out[0]).toMatchObject({ itemName: '面料A', qty: '', part: '', colors: '', remark: '', width: '', supplierName: '' });
+  });
+
+  it('门幅/供应商等扩展字段随映射带出', () => {
+    const out = rowsToMaterials([['春亚纺', '145', '绍兴某纺织']], { itemName: 0, width: 1, supplierName: 2 });
+    expect(out[0]).toMatchObject({ itemName: '春亚纺', width: '145', supplierName: '绍兴某纺织' });
   });
 });
 
@@ -74,6 +103,10 @@ describe('parseSheetFile（csv/txt 路径）', () => {
       ['春亚纺', '1.5', '帽子,大身'],
       ['涤丝纺', '2', '里布'],
     ]);
+  });
+
+  it('.xls 老格式给出明确另存提示', async () => {
+    await expect(parseSheetFile(new File(['x'], 'a.xls'))).rejects.toThrow('另存为 .xlsx');
   });
 
   it('不支持的扩展名抛错', async () => {

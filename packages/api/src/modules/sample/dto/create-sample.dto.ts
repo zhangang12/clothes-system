@@ -43,8 +43,8 @@ export class CreateSampleDto {
   @ApiProperty({ description: '样衣类别（7 类多选，逗号分隔，必填）' })
   @IsString() @IsNotEmpty() @MaxLength(100) categories: string;
 
-  @ApiProperty({ description: '中间商客户ID' })
-  @Type(() => Number) @IsInt() middlemanId: number;
+  @ApiPropertyOptional({ description: '中间商客户ID（可空：直接客户无中间商时取最终买家）' })
+  @IsOptional() @Type(() => Number) @IsInt() middlemanId?: number;
 
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() customerId?: number;
 

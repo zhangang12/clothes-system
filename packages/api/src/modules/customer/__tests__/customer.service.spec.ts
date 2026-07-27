@@ -90,11 +90,12 @@ describe('CustomerService', () => {
       expect(result.customer_no).toBe('CM003');
     });
 
-    it('UT-CUS-14: throws when type=BUYER without related middleman (联动校验 D.4)', async () => {
+    it('UT-CUS-14: type=BUYER 无关联中间商也可创建（2026-07-27 用户反馈放宽：直接客户没有中间商）', async () => {
       mockRedis.incr.mockResolvedValue(4);
-      await expect(service.create(
+      const result = await service.create(
         { name: 'H&M', type: CustomerType.BUYER, contacts: CONTACTS } as any, 1,
-      )).rejects.toThrow(BadRequestException);
+      );
+      expect(result.customer_no).toBe('FE004');
     });
 
     it('UT-CUS-15: throws when contacts empty (保存前·联系人非空校验)', async () => {

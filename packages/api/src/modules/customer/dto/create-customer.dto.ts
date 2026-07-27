@@ -44,7 +44,7 @@ export class CreateCustomerDto {
   @ApiProperty({ enum: CustomerType, example: CustomerType.MIDDLEMAN })
   @IsEnum(CustomerType) type: CustomerType;
 
-  @ApiPropertyOptional({ description: '关联中间商客户ID逗号串（type=BUYER 必填）' })
+  @ApiPropertyOptional({ description: '关联中间商客户ID逗号串（可空：直接客户没有中间商）' })
   @IsOptional() @IsString() @MaxLength(200) relatedMiddleman?: string;
 
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) tradeCountry?: string;

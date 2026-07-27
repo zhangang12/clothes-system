@@ -42,8 +42,8 @@
             </el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="中间商" prop="middlemanId" required>
-              <el-select v-model="form.middlemanId" filterable placeholder="选择中间商" style="width:100%" :disabled="bizDisabled">
+            <el-form-item label="中间商" prop="middlemanId">
+              <el-select v-model="form.middlemanId" filterable clearable placeholder="选择中间商（无中间商可空，选最终买家即可）" style="width:100%" :disabled="bizDisabled">
                 <el-option v-for="m in middlemen" :key="m.id" :label="`${m.customer_no} · ${m.name}`" :value="m.id" />
               </el-select>
             </el-form-item>
@@ -106,9 +106,10 @@
       <section-block title="▣ 材料明细" badge="17 字段">
         <div v-if="!readonly && !patternmaker" class="subtable-ops">
           <el-button size="small" :icon="Plus" @click="addMaterial">添加行</el-button>
+          <el-button size="small" :icon="CopyDocument" :disabled="!selMaterials.length" @click="copyMaterials">复制行</el-button>
           <el-button size="small" :icon="Minus" :disabled="!selMaterials.length" @click="removeMaterials">删除</el-button>
           <el-button size="small" @click="openSheetImport">📥 表格导入</el-button>
-          <span class="hint">品名每款单独录入；「实际耗用」「拉链长度」由版师填；支持上传工艺单电子表格（.xlsx/.csv）</span>
+          <span class="hint">勾选后「复制行」整行复制（品名/价格/供应商相同仅部位不同的场景）；品名每款单独录入；「实际耗用」「拉链长度」由版师填；支持上传工艺单电子表格（.xlsx/.csv）</span>
         </div>
         <div class="table-scroll">
           <el-table :data="form.materials" size="small" border v-keynav @selection-change="(v: any[]) => selMaterials = v">
@@ -202,7 +203,7 @@
     </el-form>
 
     <!-- 材料电子表格导入（用户反馈：工艺单 xlsx/csv 直接导入，不定格式靠列映射） -->
-    <el-dialog v-model="sheetDialog" title="📥 材料电子表格导入" width="760px" @closed="resetSheetImport">
+    <el-dialog v-model="sheetDialog" title="📥 材料电子表格导入" width="960px" @closed="resetSheetImport">
       <div class="sheet-import">
         <div class="sheet-upload">
           <el-button size="small" type="primary" plain @click="sheetFileInput?.click()">选择文件（.xlsx / .csv）</el-button>
@@ -218,14 +219,16 @@
                 <el-option v-for="c in sheetCols" :key="c.i" :label="c.label" :value="c.i" />
               </el-select>
             </span>
-            <el-checkbox v-model="sheetHeader" size="small" style="margin-left:8px">首行是表头（不导入）</el-checkbox>
+            <el-checkbox v-model="sheetHeader" size="small" style="margin-left:8px">表头行不导入（已自动识别）</el-checkbox>
           </div>
           <el-table :data="sheetPreviewRows" size="small" border max-height="300">
             <el-table-column type="index" label="#" width="44" />
             <el-table-column prop="itemName" label="品名" min-width="140" />
+            <el-table-column prop="width" label="门幅" width="80" />
             <el-table-column prop="qty" label="单耗/数量" width="90" />
             <el-table-column prop="part" label="部位/位置" min-width="120" />
             <el-table-column prop="colors" label="颜色" width="90" />
+            <el-table-column prop="supplierName" label="供应商" min-width="110" />
             <el-table-column prop="remark" label="备注" min-width="100" />
           </el-table>
           <div class="sheet-foot">
@@ -336,11 +339,20 @@ function removeRounds() {
 }
 const rules: FormRules = {
   styleNo: [{ required: true, message: '请输入客户款号', trigger: 'blur' }],
-  middlemanId: [{ required: true, message: '请选择中间商', trigger: 'change' }],
+  // 中间商可空（直接客户无中间商）：与最终买家二选一即可，保存时在 save() 里兜底拦截
   categories: [{ validator: (_r, _v, cb) => (categoryList.value.length ? cb() : cb(new Error('请选择样衣类别'))), trigger: 'change' }],
 };
 
 function addMaterial() { form.materials.push(emptyMaterial()); }
+// 复制勾选行（用户反馈：面料/辅料品名价格供应商都一样、仅部位不同，不想每行重填）；
+// 复制行不带 id/图片，落在原行正下方，保存时按新行插入
+function copyMaterials() {
+  for (const src of selMaterials.value) {
+    const at = form.materials.indexOf(src);
+    form.materials.splice(at + 1, 0, { ...src, id: undefined, image: '' });
+  }
+  ElMessage.success(`已复制 ${selMaterials.value.length} 行`);
+}
 function removeMaterials() {
   form.materials = form.materials.filter((m: any) => !selMaterials.value.includes(m));
   if (!form.materials.length) form.materials.push(emptyMaterial());
@@ -354,20 +366,24 @@ const sheetRows = ref<string[][]>([]);
 const sheetHeader = ref(true);
 const sheetMode = ref<'append' | 'replace'>('append');
 const sheetFields = MATERIAL_FIELDS;
-const sheetMapping = reactive<Record<string, number>>({ itemName: -1, qty: -1, part: -1, colors: -1, remark: -1 });
-// 列选项取首行单元格做标签，便于人工核对列映射
+const sheetMapping = reactive<Record<string, number>>(
+  Object.fromEntries(MATERIAL_FIELDS.map((f) => [f.key, -1])),
+);
+// 表头所在行（guessMapping 在前 5 行里自动识别，兼容首行是大标题的工艺单）
+const sheetHeaderRow = ref(0);
+// 列选项取表头行单元格做标签，便于人工核对列映射
 const sheetCols = computed(() =>
-  (sheetRows.value[0] ?? []).map((c, i) => ({ i, label: `列${i + 1}${c ? ' · ' + String(c).slice(0, 8) : ''}` })));
+  (sheetRows.value[sheetHeaderRow.value] ?? sheetRows.value[0] ?? []).map((c, i) => ({ i, label: `列${i + 1}${c ? ' · ' + String(c).slice(0, 8) : ''}` })));
 const sheetActiveMapping = computed(() => {
   const m: Record<string, number> = {};
   for (const k of Object.keys(sheetMapping)) if (sheetMapping[k] >= 0) m[k] = sheetMapping[k];
   return m;
 });
 const sheetPreviewRows = computed(() =>
-  rowsToMaterials(sheetRows.value.slice(sheetHeader.value ? 1 : 0), sheetActiveMapping.value).slice(0, 200));
+  rowsToMaterials(sheetRows.value.slice(sheetHeader.value ? sheetHeaderRow.value + 1 : 0), sheetActiveMapping.value).slice(0, 200));
 function openSheetImport() { sheetDialog.value = true; }
 function resetSheetImport() {
-  sheetFileName.value = ''; sheetRows.value = []; sheetHeader.value = true; sheetMode.value = 'append';
+  sheetFileName.value = ''; sheetRows.value = []; sheetHeader.value = true; sheetMode.value = 'append'; sheetHeaderRow.value = 0;
   Object.keys(sheetMapping).forEach((k) => { sheetMapping[k] = -1; });
   if (sheetFileInput.value) sheetFileInput.value.value = '';
 }
@@ -379,7 +395,8 @@ async function onSheetFile(e: Event) {
     if (!rows.length) { ElMessage.warning('文件为空或未读到内容'); return; }
     sheetFileName.value = file.name;
     sheetRows.value = rows;
-    const { mapping, hasHeader } = guessMapping(rows);
+    const { mapping, hasHeader, headerRow } = guessMapping(rows);
+    sheetHeaderRow.value = headerRow;
     Object.keys(sheetMapping).forEach((k) => { sheetMapping[k] = mapping[k] ?? -1; });
     sheetHeader.value = hasHeader;
     if (!hasHeader) sheetMapping.itemName = 0; // 无表头兜底：第 1 列当品名
@@ -527,10 +544,10 @@ async function load() {
 
 function buildDto() {
   return {
-    categories: form.categories, middlemanId: form.middlemanId, styleNo: form.styleNo,
+    categories: form.categories, middlemanId: form.middlemanId ?? null, styleNo: form.styleNo,
     sampleSize: form.sampleSize || undefined,
     sampleQty: form.sampleQty === '' || form.sampleQty === null ? undefined : Number(form.sampleQty),
-    buyerId: form.buyerId, patternmakerId: form.patternmakerId || undefined,
+    buyerId: form.buyerId ?? null, patternmakerId: form.patternmakerId || undefined,
     patternmakerName: form.patternmakerName || undefined, maker: form.maker || undefined,
     shipSampleDate: form.shipSampleDate || undefined, recipient: form.recipient || undefined,
     fileLocation: form.fileLocation || undefined, garmentRemark: form.garmentRemark || undefined,
@@ -557,6 +574,7 @@ function buildRounds() {
 
 async function save() {
   await formRef.value?.validate();
+  if (!form.middlemanId && !form.buyerId) { ElMessage.error('请选择中间商或最终买家（直接客户选最终买家即可）'); return; }
   const dto = buildDto();
   if (!dto.materials.length) { ElMessage.error('材料明细至少 1 行且品名必填'); return; }
   saving.value = true;

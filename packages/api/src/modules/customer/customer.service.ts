@@ -122,15 +122,6 @@ export class CustomerService {
     return e;
   }
 
-  // 联动校验：type=最终买家 时必须关联中间商（设计稿 §2.1 D.4）
-  private validateType(dto: Partial<CreateCustomerDto>, current?: Customer) {
-    const type = dto.type ?? current?.type;
-    const middleman = dto.relatedMiddleman ?? current?.related_middleman;
-    if (type === CustomerType.BUYER && (!middleman || !middleman.trim())) {
-      throw new BadRequestException('客户类型为「最终买家」时必须选择关联中间商');
-    }
-  }
-
   // 保存前·联系人非空校验（设计稿 §2.1 页面事件）
   private assertContacts(contacts?: CreateCustomerDto['contacts']) {
     if (!contacts || contacts.length === 0) {
@@ -168,7 +159,7 @@ export class CustomerService {
   }
 
   async create(dto: CreateCustomerDto, createdBy: number): Promise<Customer> {
-    this.validateType(dto);
+    // 注：原「最终买家必须关联中间商」校验已按 2026-07-27 用户反馈取消（直接客户没有中间商，强制校验导致存不了）
     this.assertContacts(dto.contacts);
     if (dto.name) await this.assertNameUnique(dto.name);
     // 客户编号按类型前缀：中间商 CM- / 最终买家 FE-（设计稿 A8）
@@ -285,7 +276,6 @@ export class CustomerService {
     const entity = await this.repo.findOne({ where: { id, deleted: 0 } });
     if (!entity) throw new NotFoundException(`客户 #${id} 不存在`);
     await this.assertEditable(entity, user); // 机密：仅创建人/有修改授权者/管理员可改
-    this.validateType(dto, entity);
     if (dto.name && dto.name !== entity.name) await this.assertNameUnique(dto.name, id);
     if (dto.contacts !== undefined) this.assertContacts(dto.contacts);
 

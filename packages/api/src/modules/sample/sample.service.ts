@@ -43,12 +43,14 @@ export class SampleService {
   ) {}
 
   private buildMaterials(sampleId: number, materials: CreateSampleDto['materials']): SampleMaterial[] {
+    // 前端表格空值是空串：DATE/DECIMAL/bigint 列遇 '' 直接 500（2026-07-27 报错记录实证 qty），统一归一
+    const num = (v: any) => (v === '' || v == null ? null : v);
     return (materials ?? []).map((m, idx) => this.materialRepo.create({
-      sample_id: sampleId, sort_order: m.sortOrder ?? idx,
+      sample_id: sampleId, sort_order: (m.sortOrder as any) === '' || m.sortOrder == null ? idx : m.sortOrder,
       arrange_date: m.arrangeDate || null, item_name: m.itemName, width: m.width, colors: m.colors,
       part: m.part, composition: m.composition, code_band: m.codeBand, zipper_length: m.zipperLength,
-      puller: m.puller, qty: m.qty, size: m.size, ref_price: m.refPrice, actual_usage: m.actualUsage,
-      supplier_id: m.supplierId, supplier_name: m.supplierName, image: m.image, remark: m.remark,
+      puller: m.puller, qty: num(m.qty), size: m.size, ref_price: num(m.refPrice), actual_usage: num(m.actualUsage),
+      supplier_id: num(m.supplierId), supplier_name: m.supplierName, image: m.image, remark: m.remark,
     }));
   }
 
@@ -89,9 +91,11 @@ export class SampleService {
   }
 
   async create(dto: CreateSampleDto, createdBy: number): Promise<SampleGarment> {
-    const middlemanId = dto.middlemanId ?? dto.customerId;
+    // 中间商可空（用户反馈：直接客户没有中间商）——未选时回落最终买家；两者皆空才拒绝
+    const middlemanId = dto.middlemanId ?? dto.customerId ?? dto.buyerId;
+    if (!middlemanId) throw new BadRequestException('请选择中间商或最终买家（直接客户选最终买家即可）');
     const middleman = await this.customerRepo.findOne({ where: { id: middlemanId, deleted: 0 } });
-    if (!middleman) throw new BadRequestException(`中间商客户 #${middlemanId} 不存在`);
+    if (!middleman) throw new BadRequestException(`客户 #${middlemanId} 不存在`);
 
     // 材料明细至少 1 行且品名必填（设计稿 §A 校验）
     const materials = (dto.materials ?? []).filter((m) => m.itemName || m.supplierId || m.composition);
@@ -216,11 +220,15 @@ export class SampleService {
       throw new BadRequestException('该状态样衣不允许修改基本信息');
     }
     // 中间商/最终买家改动:回填名称/编号快照(编辑态联动,设计稿页面事件)
+    // 中间商可空（直接客户无中间商）：清空时回落最终买家；两者皆空才拒绝
     let mmName: string | undefined;
     if (dto.middlemanId !== undefined) {
-      const mm = await this.customerRepo.findOne({ where: { id: dto.middlemanId, deleted: 0 } });
-      if (!mm) throw new BadRequestException(`中间商客户 #${dto.middlemanId} 不存在`);
+      const effectiveId = dto.middlemanId ?? dto.buyerId ?? null;
+      if (!effectiveId) throw new BadRequestException('请选择中间商或最终买家（直接客户选最终买家即可）');
+      const mm = await this.customerRepo.findOne({ where: { id: effectiveId, deleted: 0 } });
+      if (!mm) throw new BadRequestException(`客户 #${effectiveId} 不存在`);
       mmName = mm.name;
+      if (dto.middlemanId == null) dto.middlemanId = effectiveId; // 落库统一为有效客户 id
     }
     let buyerName: string | null | undefined; let buyerNo: string | null | undefined;
     if (dto.buyerId !== undefined) {

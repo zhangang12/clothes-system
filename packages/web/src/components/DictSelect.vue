@@ -5,7 +5,7 @@
     allow-create
     default-first-option
     clearable
-    :placeholder="placeholder"
+    :placeholder="placeholder ?? '选择或直接输入（回车创建新值）'"
     style="width: 100%"
     :disabled="disabled"
     :size="size"

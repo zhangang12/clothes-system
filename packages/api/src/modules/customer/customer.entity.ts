@@ -18,7 +18,7 @@ export class Customer {
   @Column({ type: 'enum', enum: CustomerType, default: CustomerType.MIDDLEMAN })
   type: CustomerType;
 
-  // 关联中间商（type=BUYER 时必填，存中间商客户ID逗号串）
+  // 关联中间商（可空：直接客户没有中间商；存中间商客户ID逗号串）
   @Column({ length: 200, nullable: true })
   related_middleman: string;
 

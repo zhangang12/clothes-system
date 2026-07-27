@@ -194,10 +194,7 @@ const saving = ref(false);
 const selContacts = ref<any[]>([]); const selBanks = ref<any[]>([]); const selExpress = ref<any[]>([]);
 const rules: FormRules = {
   type: [{ required: true, message: '请选择客户类型', trigger: 'change' }],
-  relatedMiddleman: [{
-    validator: (_r, _v, cb) => (form.type === 'BUYER' && !form.relatedMiddleman ? cb(new Error('最终买家须选关联中间商')) : cb()),
-    trigger: 'change',
-  }],
+  // 关联中间商不再强制（用户反馈：直接客户没有中间商，选不到也无法手填，导致整个客户存不了）
 };
 
 function onTypeChange() { if (form.type !== 'BUYER') form.relatedMiddleman = ''; }
