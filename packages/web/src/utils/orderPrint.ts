@@ -33,6 +33,9 @@ const PRINT_STYLE = `
   .totals { margin-top:10px; text-align:right; font-size:13px; }
   .tip { margin-top:14px; font-size:10px; color:#999; }
   .sub td { background:#faf8f2; color:#666; font-size:11px; text-align:left; }
+  .photos { display:flex; flex-wrap:wrap; gap:10px; margin-top:6px; }
+  .att { text-align:center; } .att img { max-width:230px; max-height:170px; object-fit:cover; border:1px solid #ddd; border-radius:4px; }
+  .att-label { font-size:11px; color:#666; margin-bottom:2px; }
 `;
 
 function matrixTable(matrix: any): string {
@@ -41,7 +44,7 @@ function matrixTable(matrix: any): string {
   if (!rows.length) return '<div class="tip">（未填写数量搭配）</div>';
   // 洗标号/Article：工厂据此区分标类（用户反馈①）。老订单没填过，整列为空时不占版面。
   const withArticle = rows.some((r) => String(r.article ?? '').trim());
-  const head = `<tr><th>款号</th><th>颜色</th>${withArticle ? '<th>洗标号</th>' : ''}<th>尺码</th>${pos.map((p, i) => `<th>${esc(p.po_no || `PO${i + 1}`)}<br><small>${esc(p.destination || '')}</small></th>`).join('')}<th>合计</th></tr>`;
+  const head = `<tr><th>款号</th><th>颜色</th>${withArticle ? '<th>洗标号</th>' : ''}<th>尺码</th>${pos.map((p, i) => `<th>${esc(p.po_no || `PO${i + 1}`)}<br><small>${esc(p.destination || '')}${p.consignee ? ` · ${esc(p.consignee)}` : ''}</small></th>`).join('')}<th>合计</th></tr>`;
   const body = rows.map((r) => {
     const qtys: any[] = r.qtys ?? [];
     const sum = qtys.reduce((s, q) => s + (Number(q) || 0), 0);
@@ -91,6 +94,28 @@ export function printOrder(detail: any, mode: OrderPrintMode): void {
     meta.push(`<div><b>单品单价：</b>${n4(detail.unit_price)}</div>`);
   }
   meta.push(`<div><b>业务员：</b>${esc(detail.salesperson) || '—'}</div>`);
+  meta.push(`<div><b>制单日期：</b>${esc(String(detail.make_date ?? '').slice(0, 10)) || '—'}</div>`);
+  if (mode === 'internal' && detail.commission_rate != null && +detail.commission_rate) {
+    meta.push(`<div><b>佣金率：</b>${esc(detail.commission_rate)}%</div>`);
+  }
+
+  // 附件档案（彩稿/尺寸表/纸板/包装资料/填充量）：图片直接嵌，非图给文件名清单
+  const ATT_LABEL: Array<[string, string]> = [
+    ['att_artwork', '彩稿'], ['att_sizechart', '大货尺寸表'], ['att_board', '大货纸板'],
+    ['att_packing', '包装资料'], ['att_filling', '填充量'],
+  ];
+  const IMG_EXT = /\.(png|jpe?g|webp|gif)$/i;
+  const attImgs: string[] = [];
+  const attFiles: string[] = [];
+  for (const [k, label] of ATT_LABEL) {
+    for (const u of String(detail[k] ?? '').split(',').map((s: string) => s.trim()).filter(Boolean)) {
+      if (IMG_EXT.test(u)) attImgs.push(`<div class="att"><div class="att-label">${label}</div><img src="${esc(u)}" /></div>`);
+      else attFiles.push(`${label}（${esc(u.split('/').pop() || u)}）`);
+    }
+  }
+  const attBlock = attImgs.length || attFiles.length
+    ? `<h3>附件档案</h3><div class="photos">${attImgs.join('')}</div>${attFiles.length ? `<div class="tip">非图片附件（系统内查看）：${attFiles.join('；')}</div>` : ''}`
+    : '';
 
   const totals = showPrice
     ? `<div class="totals">订单总金额：<b>${esc(detail.currency) || ''} ${n2(detail.total_amount)}</b></div>`
@@ -110,6 +135,7 @@ export function printOrder(detail: any, mode: OrderPrintMode): void {
   <h3>数量搭配（色/码/PO）</h3>
   ${matrixTable(detail.matrix?.matrix_data)}
   ${showMaterials ? `<h3>用料核算</h3>${materialTable(detail.materials ?? [], mode)}` : ''}
+  ${attBlock}
   ${totals}
   <div class="tip">${tips[mode]}</div>`;
 

@@ -82,16 +82,18 @@ export function printContract(
       <td class="r">${n2(m.qty)}</td><td class="c">${esc(m.unit)}</td><td class="r">${n2(m.unit_price)}</td>
       <td class="r">${n2(m.amount)}</td><td class="c">${d10(m.delivery_date)}</td></tr>`).join('');
   } else {
+    // 有任一材料照片时带「照片」列（工厂按图备料，设计稿货物明细末列）
+    const withPhoto = mats.some((m) => String(m.photo_url ?? '').trim());
     tableHead = `<tr><th style="width:36px">#</th><th>品名</th><th>规格</th><th style="width:60px">颜色</th><th style="width:56px">尺码/码</th>
       <th style="width:40px">单位</th><th style="width:70px">数量</th><th style="width:70px">单价(元)</th><th style="width:86px">小计(元)</th>
-      <th style="width:92px">款号</th><th style="width:88px">交货期限</th></tr>`;
+      <th style="width:92px">款号</th><th style="width:88px">交货期限</th>${withPhoto ? '<th style="width:70px">照片</th>' : ''}</tr>`;
     rows = mats.map((m, i) => `
       <tr><td class="c">${i + 1}</td><td>${esc(m.item_name)}</td><td>${esc(m.spec)}</td><td class="c">${esc(m.color) || '—'}</td>
       <td class="c">${esc(m.size) || '—'}</td><td class="c">${esc(m.unit)}</td><td class="r">${n2(m.qty)}</td>
       <td class="r">${n2(m.unit_price)}</td><td class="r">${n2(m.amount)}</td><td class="c">${esc(m.style_no) || '—'}</td>
-      <td class="c">${d10(m.delivery_date)}</td></tr>`).join('');
+      <td class="c">${d10(m.delivery_date)}</td>${withPhoto ? `<td class="c">${m.photo_url ? `<img src="${esc(m.photo_url)}" style="max-width:60px;max-height:45px;object-fit:cover" />` : '—'}</td>` : ''}</tr>`).join('');
   }
-  if (!rows) rows = `<tr><td class="c" colspan="12">（无货物明细）</td></tr>`;
+  if (!rows) rows = `<tr><td class="c" colspan="13">（无货物明细）</td></tr>`;
 
   // 价格包含项（加工合同，仅汇入文字不改金额 D4）
   const includes: string[] = Array.isArray(detail.price_includes) ? detail.price_includes : [];

@@ -13,7 +13,7 @@ export class CreateOrderMaterialDto {
 
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) part?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) width?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) color?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) color?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) composition?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) supplier?: string;
   @ApiPropertyOptional({ description: 'NONE/BY_SIZE/BY_COLOR' }) @IsOptional() @IsString() @MaxLength(10) split_mode?: string;

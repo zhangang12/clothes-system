@@ -14,7 +14,7 @@ export class ContractMaterial {
   @Column({ length: 100 })
   item_name: string;
 
-  @Column({ length: 100, nullable: true })
+  @Column({ length: 200, nullable: true })
   spec: string;
 
   @Column({ length: 20, nullable: true })
@@ -33,7 +33,7 @@ export class ContractMaterial {
   qty_source: string; // 数量来源标注：采购量含损耗 / 大货数（设计稿 合同 C3）
 
   // ===== 编辑页扩展列（设计稿 04-合同 v1.3 货物明细）=====
-  @Column({ length: 50, nullable: true })
+  @Column({ length: 200, nullable: true })
   color: string; // 颜色（分色行）
 
   @Column({ length: 30, nullable: true })

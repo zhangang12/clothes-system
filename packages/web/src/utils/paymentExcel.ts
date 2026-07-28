@@ -6,7 +6,7 @@
 // 没挂就不出这张表(而不是出一张空表,避免「明明付过款却显示无记录」的误导)。
 // 业务已确认:全量导出,不脱敏(收款银行/账号照导)。
 
-import { exportDocExcel, d10, n2, sum, type Block } from './docExcel';
+import { exportDocExcel, d10, n2, sum, sensitiveMark, type Block } from './docExcel';
 
 // 付款申请复用 ReconcileType(CONTRACT/NO_CONTRACT/LABOR),列表页只区分「合同/非合同」,这里按枚举全列。
 const typeLabel = (t: unknown): string =>
@@ -50,7 +50,7 @@ export function exportPaymentRequestExcel(detail: any): void {
     ['付款日', d10(detail.slip_uploaded_at)],
     ['收款银行', detail.bank_name],
     ['收款账号', detail.bank_account],
-    ['付款水单', detail.slip_url],
+    ['付款水单', sensitiveMark(detail.slip_url)],
     ['付款人', uid(detail.paid_by)],
     ['提交人', uid(detail.submitted_by)],
     ['提交时间', d10(detail.submitted_at)],
@@ -71,7 +71,7 @@ export function exportPaymentRequestExcel(detail: any): void {
       head: ['#', '付款方式', '付款日期', '本次付款金额', '付款水单', '备注', '登记时间'],
       rows: records.map((r, i) => [
         i + 1, payMethodLabel(r.pay_method), d10(r.pay_date), n2(r.amount),
-        r.slip_url, r.remark, d10(r.created_at),
+        sensitiveMark(r.slip_url), r.remark, d10(r.created_at),
       ]),
       foot: ['合计', '', '', n2(sum(records, (r) => r.amount)), '', '', ''],
     });

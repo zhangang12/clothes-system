@@ -69,7 +69,7 @@
           <el-col :span="8"><el-form-item label="单品单价"><el-input v-model="form.unitPrice" type="number" /></el-form-item></el-col>
           <el-col :span="8">
             <el-form-item label="币种">
-              <el-select v-model="form.currency" style="width:100%"><el-option label="RMB" value="RMB" /><el-option label="USD" value="USD" /></el-select>
+              <DictSelect v-model="form.currency" type="currency" :disabled="readonly" />
             </el-form-item>
           </el-col>
           <el-col :span="8"><el-form-item label="约定交期" prop="deliveryDate" required><el-date-picker v-model="form.deliveryDate" type="date" value-format="YYYY-MM-DD" style="width:100%" /></el-form-item></el-col>
@@ -154,6 +154,13 @@
         <div v-if="!readonly" class="subtable-ops">
           <el-button size="small" :icon="Plus" @click="addMat">添加行</el-button>
           <el-button size="small" :icon="Minus" :disabled="!selMats.length" @click="delMats">删除</el-button>
+          <!-- 批量设置（滑雪服/大货几十行同供应商同单位同损耗场景，对照样衣反馈举一反三） -->
+          <el-select v-model="batchField.supplier" size="small" filterable clearable placeholder="批量:供应商" style="width:170px">
+            <el-option v-for="f in supplierFactories" :key="f.id" :label="f.name" :value="f.name" />
+          </el-select>
+          <el-input v-model="batchField.unit" size="small" placeholder="批量:单位" style="width:90px" />
+          <el-input v-model="batchField.loss" size="small" placeholder="批量:损耗%" style="width:100px" />
+          <el-button size="small" :disabled="!selMats.length || (!batchField.supplier && !batchField.unit && batchField.loss === '')" @click="applyBatchMats">应用到所选{{ selMats.length ? `(${selMats.length})` : '' }}</el-button>
           <span class="hint">采购量 = 大货总数 × 单件耗用 × (1+损耗%)；个/条向上取整；最终采购量偏离>±10%需确认</span>
         </div>
         <div class="table-scroll">
@@ -450,6 +457,16 @@ function delPoCol(pi: number) {
   for (const r of form.matrix.rows) r.qtys.splice(pi, 1);
 }
 function addMat() { form.materials.push(emptyMat()); }
+// 批量设置 供应商/单位/损耗%（几十行同值场景，与样衣批量供应商同款）
+const batchField = reactive({ supplier: '', unit: '', loss: '' });
+function applyBatchMats() {
+  for (const r of selMats.value) {
+    if (batchField.supplier) r.supplier = batchField.supplier;
+    if (batchField.unit) r.unit = batchField.unit;
+    if (batchField.loss !== '') r.lossRate = batchField.loss;
+  }
+  ElMessage.success(`已批量设置 ${selMats.value.length} 行`);
+}
 function delMats() { form.materials = form.materials.filter((r: any) => !selMats.value.includes(r)); if (!form.materials.length) form.materials.push(emptyMat()); }
 
 async function loadRefs() {

@@ -21,8 +21,8 @@ export class QuotationItem {
   @Column({ length: 30, nullable: true })
   width: string; // 门幅
 
-  @Column({ length: 50, nullable: true })
-  color: string; // 颜色
+  @Column({ length: 200, nullable: true })
+  color: string; // 颜色（可逗号串多色组）
 
   @Column({ length: 100, nullable: true })
   supplier: string; // 供应商（PDF 隐藏）

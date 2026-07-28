@@ -3,8 +3,9 @@
 // (含中间商/买家/利润率/供应商),导出件仅供内部流转,勿直接转发客户。
 
 import { exportDocExcel, d10, n2, n4, sum, type Block } from './docExcel';
+import { toDataUrl } from './sampleExcel';
 
-export function exportQuoteExcel(detail: any): void {
+export async function exportQuoteExcel(detail: any): Promise<void> {
   const items: any[] = detail.items ?? [];
   const fees: any[] = detail.fees ?? [];
 
@@ -22,10 +23,14 @@ export function exportQuoteExcel(detail: any): void {
         ['状态', detail.status],
         ['币种', detail.currency],
         ['汇率', n4(detail.exchange_rate)],
+        ['贸易国别', detail.trade_country],
+        ['结汇方式', detail.settlement_method],
+        ['价格条款', detail.price_terms],
         ['数量', detail.quote_qty],
         ['利润率', detail.profit_rate != null ? `${detail.profit_rate}%` : ''],
         ['人民币合计(含利润率)', n2(detail.rmb_total)],
         ['美金合计', n2(detail.usd_total)],
+        ['备注说明', detail.total_remark],
       ],
     },
     {
@@ -53,6 +58,16 @@ export function exportQuoteExcel(detail: any): void {
       ]),
       foot: ['合计', '', '', '', n2(sum(fees, (f) => (Number(f.rmb_price) || 0) * (Number(f.quote_usage ?? 1) || 0)))],
     });
+  }
+
+  // 款图内联（用户反馈：文件导出来照片在里面；image1/2 单图，>2MB/失败退回链接）
+  const imageUrls = [detail.image1, detail.image2].filter(Boolean) as string[];
+  if (imageUrls.length) {
+    const cells = await Promise.all(imageUrls.map(async (u) => {
+      const dataUrl = await toDataUrl(u);
+      return dataUrl ? `<img src="${dataUrl}" style="max-width:220px;max-height:170px" />` : `<a href="${u}">图（未内联）</a>`;
+    }));
+    blocks.push({ kind: 'table', title: '款图/图稿', head: imageUrls.map((_, i) => `图${i + 1}`), rows: [cells] });
   }
 
   exportDocExcel({

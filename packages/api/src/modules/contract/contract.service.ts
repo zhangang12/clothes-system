@@ -524,8 +524,13 @@ export class ContractService {
         'guarantor', 'guarantor_id_photo', 'delivery_deadline', 'style_nos',
         'price_includes', 'vat_rate', 'price_other', 'terms_json',
       ];
+      // NOT NULL 列：el-input-number 清空给 null，裸写会 500(cannot be null)——跳过保持旧值（举一反三 B1/B10）
+      const NON_NULL = new Set<string>(['factory_id', 'currency', 'deposit_ratio', 'mid_ratio', 'final_ratio', 'account_period_days']);
       for (const k of assignable) {
-        if ((dto as any)[k] !== undefined) (contract as any)[k] = (dto as any)[k];
+        const v = (dto as any)[k];
+        if (v === undefined) continue;
+        if (v === null && NON_NULL.has(k)) continue;
+        (contract as any)[k] = v;
       }
 
       if (dto.materials) {

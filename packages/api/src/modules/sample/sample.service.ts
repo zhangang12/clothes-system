@@ -241,7 +241,7 @@ export class SampleService {
       if (dto.categories !== undefined) entity.categories = dto.categories;
       if (dto.styleNo !== undefined) entity.style_no = dto.styleNo;
       if (dto.sampleSize !== undefined) entity.sample_size = dto.sampleSize;
-      if (dto.sampleQty !== undefined) entity.sample_qty = dto.sampleQty as number;
+      if (dto.sampleQty !== undefined) entity.sample_qty = (dto.sampleQty as any) === '' ? null : (dto.sampleQty as number); // '' 须归 NULL（举一反三 B7）
       if (dto.recipient !== undefined) entity.recipient = dto.recipient;
       if (dto.fileLocation !== undefined) entity.file_location = dto.fileLocation;
       if (dto.garmentRemark !== undefined) entity.garment_remark = dto.garmentRemark;
@@ -253,7 +253,7 @@ export class SampleService {
       // 此前静默丢弃的字段(设计稿:业务可改中间商/买家/制版师/制单人员)
       if (dto.middlemanId !== undefined) { entity.customer_id = dto.middlemanId; entity.middleman_name = mmName as string; }
       if (dto.buyerId !== undefined) { entity.buyer_id = dto.buyerId || null; entity.buyer_name = buyerName ?? null; entity.buyer_no = buyerNo ?? null; }
-      if (dto.patternmakerId !== undefined) entity.patternmaker_id = dto.patternmakerId;
+      if (dto.patternmakerId !== undefined) entity.patternmaker_id = (dto.patternmakerId as any) === '' ? null : dto.patternmakerId; // '' 须归 NULL（举一反三 B7）
       if (dto.patternmakerName !== undefined) entity.patternmaker_name = dto.patternmakerName;
       if (dto.maker !== undefined) entity.maker = dto.maker;
       // 寄样多轮:重存子表并把工价汇总回填顶层(供对账/结算),不破下游

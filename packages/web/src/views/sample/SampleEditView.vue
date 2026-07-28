@@ -249,7 +249,7 @@
               <el-radio value="append">追加到现有明细</el-radio>
               <el-radio value="replace">替换现有明细</el-radio>
             </el-radio-group>
-            <span class="muted">将导入 {{ sheetPreviewRows.length }} 行（品名为空的行自动跳过；多列颜色自动合并；分区标题行请改映射或导入后删除）</span>
+            <span class="muted">将导入 {{ sheetPreviewRows.length }} 行（品名为空的行自动跳过；多列颜色自动合并；图片列不导入，请导入后逐个上传；分区标题行请改映射或导入后删除）</span>
           </div>
         </template>
         <el-empty v-else description="选择工艺单/材料表文件后自动解析预览" :image-size="60" />
@@ -440,7 +440,16 @@ async function onSheetFile(e: Event) {
 function confirmSheetImport() {
   const rows = sheetPreviewRows.value;
   if (!rows.length) { ElMessage.warning('没有可导入的材料行（请检查列映射与品名列）'); return; }
-  const mapped = rows.map((r) => ({ ...emptyMaterial(), ...r }));
+  // 供应商按名称匹配工厂库回填 supplierId（否则行内供应商列显示空白，用户以为没导上——举一反三 D2）
+  let matched = 0, unmatched = 0;
+  const mapped = rows.map((r) => {
+    const m: any = { ...emptyMaterial(), ...r };
+    if (m.supplierName) {
+      const f = factories.value.find((x: any) => x.name === m.supplierName);
+      if (f) { m.supplierId = f.id; matched++; } else unmatched++;
+    }
+    return m;
+  });
   if (sheetMode.value === 'replace') {
     form.materials = mapped;
   } else {
@@ -450,7 +459,7 @@ function confirmSheetImport() {
   }
   if (!form.materials.length) form.materials = [emptyMaterial()];
   sheetDialog.value = false;
-  ElMessage.success(`已导入 ${rows.length} 行材料`);
+  ElMessage.success(`已导入 ${rows.length} 行材料${matched ? `，供应商匹配 ${matched} 行` : ''}${unmatched ? `，${unmatched} 行供应商未在工厂库(保留名称)` : ''}`);
 }
 // 行级生成采购(样衣稿🟠按钮 B方案):打样材料→无合同对账单,直接进对账付款
 async function doPurchase(row: any) {

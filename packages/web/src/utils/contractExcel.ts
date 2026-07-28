@@ -2,7 +2,8 @@
 // 材料/加工/补料三类共用一张明细表:加工合同的「货物」也落在 contract_material 上(字段同名),
 // 仅类型相关的字段(增值税/价格包含项 vs 发货地址)按 type 增减。业务已定:全量导出,不脱敏。
 
-import { exportDocExcel, d10, n2, n4, sum, type Block } from './docExcel';
+import { exportDocExcel, d10, n2, n4, sum, sensitiveMark, type Block } from './docExcel';
+import { toDataUrl } from './sampleExcel';
 
 const typeLabel = (t: string): string =>
   ({ MATERIAL: '材料合同', PROCESS: '加工合同', SUPPLEMENT: '补料合同' } as Record<string, string>)[t] ?? t;
@@ -15,7 +16,7 @@ const approvalLabel = (s: string): string =>
 const stampLabel = (s: string): string =>
   ({ ESEAL: '电子章', PAPER: '纸质盖章照片' } as Record<string, string>)[s] ?? '';
 
-export function exportContractExcel(detail: any): void {
+export async function exportContractExcel(detail: any): Promise<void> {
   const isProcess = detail.type === 'PROCESS';
   const mats: any[] = detail.materials ?? [];
   const ships: any[] = detail.shipments ?? [];
@@ -60,7 +61,7 @@ export function exportContractExcel(detail: any): void {
     ['盖章方式', stampLabel(detail.stamp_mode)],
     ['盖章供应商', detail.stamped_by_supplier],
     ['盖章时间', d10(detail.stamped_at)],
-    ['纸质盖章照片', detail.stamp_paper_url],
+    ['纸质盖章照片', sensitiveMark(detail.stamp_paper_url)],
     ['合同量', qs.contractQty],
     ['累计实发', qs.shippedQty ?? detail.shipped_qty],
     ['数量差额', qs.diffQty],
@@ -71,17 +72,26 @@ export function exportContractExcel(detail: any): void {
     ['备注', detail.remark],
   );
 
-  const matRows: unknown[][] = mats.map((m, i) => [
-    i + 1, m.item_name, m.spec, m.color, m.size, m.style_no, m.unit,
-    m.qty, m.qty_source, n4(m.unit_price), n2(m.amount), d10(m.delivery_date), m.remark,
-  ]);
+  // 材料照片（公开上传）：base64 内联缩略图，离线可看；>2MB/失败退回「系统内查看」标注
+  const matRows: unknown[][] = await Promise.all(mats.map(async (m, i) => {
+    let photo = '';
+    if (m.photo_url) {
+      const dataUrl = await toDataUrl(m.photo_url);
+      photo = dataUrl ? `<img src="${dataUrl}" style="max-width:80px;max-height:60px" />` : '图（系统内查看）';
+    }
+    return [
+      i + 1, m.item_name, m.spec, m.color, m.size, m.style_no, m.unit,
+      m.qty, m.qty_source, n4(m.unit_price), n2(m.amount), d10(m.delivery_date),
+      photo, m.remark,
+    ];
+  }));
 
   const blocks: Block[] = [
     { kind: 'kv', title: '合同基本信息', pairs },
     {
       kind: 'table',
       title: isProcess ? '加工明细' : '材料明细',
-      head: ['#', '品名', '规格', '颜色', '尺码', '款号', '单位', '数量', '数量来源', '单价', '小计', '交货期限', '备注'],
+      head: ['#', '品名', '规格', '颜色', '尺码', '款号', '单位', '数量', '数量来源', '单价', '小计', '交货期限', '照片', '备注'],
       rows: matRows,
       foot: ['合计', '', '', '', '', '', '', sum(mats, (m) => m.qty), '', '', n2(sum(mats, (m) => m.amount)), '', ''],
       empty: '（无货物明细）',

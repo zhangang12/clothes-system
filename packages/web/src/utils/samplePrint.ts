@@ -11,6 +11,12 @@ const dash = (v: unknown): string => (v === null || v === undefined || v === '' 
 export function printSample(detail: any): void {
   const cats = String(detail.categories ?? '').split(',').filter(Boolean).join(' · ');
 
+  // 寄样改多轮子表后，单号/日期落在轮次上，旧单值列不再回填：为空时取首轮（与 sampleExcel 同款兜底）
+  const rounds: any[] = detail.shipRounds ?? [];
+  const r1: any = rounds[0] ?? {};
+  const shipDate = detail.ship_sample_date ?? r1.ship_date;
+  const shipNo = detail.material_ship_no ?? r1.ship_no;
+
   const metaBlock = `
   <div class="meta">
     <div><b>客户款号：</b>${dash(detail.style_no)}</div>
@@ -20,7 +26,7 @@ export function printSample(detail: any): void {
     <div><b>制版师：</b>${dash(detail.patternmaker_name)}</div>
     <div><b>制单人：</b>${dash(detail.maker)}</div>
     <div><b>制单日期：</b>${d10(detail.make_date)}</div>
-    <div><b>寄样日期：</b>${d10(detail.ship_sample_date)}</div>
+    <div><b>寄样日期：</b>${d10(shipDate)}</div>
     <div><b>收件人：</b>${dash(detail.recipient)}</div>
     <div><b>样衣编号：</b>${dash(detail.sample_no)}</div>
     <div><b>样衣尺码：</b>${dash(detail.sample_size)}</div>
@@ -50,12 +56,19 @@ export function printSample(detail: any): void {
 
   const trackBlock = `
   <div class="meta">
-    <div><b>材料寄出单号：</b>${dash(detail.material_ship_no)}</div>
-    <div><b>材料寄出日期：</b>${d10(detail.material_ship_date)}</div>
+    <div><b>材料寄出单号：</b>${dash(shipNo)}</div>
+    <div><b>材料寄出日期：</b>${d10(shipDate)}</div>
     <div><b>寄回快递单号：</b>${dash(detail.return_no)}</div>
     <div><b>寄回日期：</b>${d10(detail.return_date)}</div>
     <div><b>件数：</b>${dash(detail.piece_count)}</div>
   </div>`;
+
+  // 多轮寄样明细表（多轮时展开；脱敏：不含工价）
+  const roundsTable = rounds.length > 1
+    ? `<h3>寄样轮次</h3><table><thead><tr><th>轮次</th><th>尺码</th><th>件数</th><th>寄出日期</th><th>寄出单号</th><th>寄回日期</th><th>备注</th></tr></thead><tbody>${
+      rounds.map((r, i) => `<tr><td class="c">${r.round_no ?? i + 1}</td><td class="c">${dash(r.size)}</td><td class="c">${dash(r.qty)}</td><td class="c">${d10(r.ship_date)}</td><td class="c">${dash(r.ship_no)}</td><td class="c">${d10(r.return_date)}</td><td>${dash(r.remark)}</td></tr>`).join('')
+    }</tbody></table>`
+    : '';
 
   const html = `<!doctype html><html lang="zh"><head><meta charset="utf-8">
 <title>样衣制作单-${esc(detail.sample_no)}</title>
@@ -91,6 +104,7 @@ export function printSample(detail: any): void {
 
   <h3>寄样跟踪</h3>
   ${trackBlock}
+  ${roundsTable}
   ${detail.garment_remark ? `<h3>成衣备注</h3><div class="remark">${esc(detail.garment_remark)}</div>` : ''}
   ${photosBlock}
 </body></html>`;

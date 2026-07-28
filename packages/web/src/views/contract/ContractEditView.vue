@@ -709,7 +709,7 @@ async function exportExcel() {
     const detail = res.data ?? res;
     // 详情接口只回 factory_id 不回名字，不补的话导出件里是「工厂#12」
     const f = factories.value.find((x: any) => x.id === detail.factory_id);
-    exportContractExcel({ ...detail, factory_name: f?.name });
+    await exportContractExcel({ ...detail, factory_name: f?.name });
   } catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
 }
 function goSupplement() { router.push(`/contracts/new?type=SUPPLEMENT&parent_id=${contractId.value}&copy_from=${contractId.value}`); }

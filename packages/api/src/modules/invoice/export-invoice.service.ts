@@ -35,7 +35,7 @@ export class ExportInvoiceService {
     return this.dataSource.transaction(async (manager) => {
       const inv = await manager.save(ExportInvoice, manager.create(ExportInvoice, {
         invoice_no: dto.invoice_no,
-        invoice_date: dto.invoice_date ?? null,
+        invoice_date: dto.invoice_date || null, // '' 须归 NULL：'' 写 DATE 列 500（举一反三 B2）
         currency: dto.currency ?? 'USD',
         total_amount: total,
         customer_name: dto.customer_name ?? null,
@@ -103,10 +103,11 @@ export class ExportInvoiceService {
     const inv = await this.repo.findOne({ where: { id, deleted: 0 } });
     if (!inv) throw new NotFoundException(`出口发票 #${id} 不存在`);
     if (!(+dto.amount > 0)) throw new BadRequestException('收汇金额须大于 0');
+    if (!dto.receipt_date) throw new BadRequestException('请选择收汇日期'); // '' 写 DATE NOT NULL 列必 500，前置拦截（举一反三 B9）
     return this.receiptRepo.save(this.receiptRepo.create({
       invoice_id: id,
       amount: r4(+dto.amount),
-      exchange_rate: dto.exchange_rate ?? null,
+      exchange_rate: dto.exchange_rate || null, // '' 须归 NULL（举一反三 B9）
       receipt_date: dto.receipt_date,
       slip_url: dto.slip_url ?? null,
       remark: dto.remark ?? null,

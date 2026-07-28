@@ -15,7 +15,7 @@ export class CreateContractMaterialDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  @MaxLength(100)
+  @MaxLength(200)
   spec?: string;
 
   @ApiPropertyOptional()
@@ -43,7 +43,7 @@ export class CreateContractMaterialDto {
   @ApiPropertyOptional({ description: '颜色（分色行）' })
   @IsOptional()
   @IsString()
-  @MaxLength(50)
+  @MaxLength(200)
   color?: string;
 
   @ApiPropertyOptional({ description: '尺码/码（分码行）' })

@@ -80,9 +80,7 @@
           </el-col>
           <el-col :span="8">
             <el-form-item label="外销币种" prop="currency" required>
-              <el-select v-model="form.currency" placeholder="USD" style="width:100%" @change="onCurrency">
-                <el-option v-for="c in currencies" :key="c" :label="c" :value="c" />
-              </el-select>
+              <GlobalDictSelect v-model="form.currency" type="currency" placeholder="选择或直接输入" @item="onCurrencyItem" />
             </el-form-item>
           </el-col>
           <el-col :span="8"><el-form-item label="汇率" prop="exchangeRate" required><el-input v-model="form.exchangeRate" type="number" /></el-form-item></el-col>
@@ -202,7 +200,7 @@ import { useAuthStore } from '@/stores/auth';
 import { customerApi } from '@/api/customer';
 import { sampleApi } from '@/api/sample';
 import { companyApi } from '@/api/company';
-import { dictApi } from '@/api/dict';
+import GlobalDictSelect from '@/components/DictSelect.vue';
 import { pasteRowsFromClipboard } from '@/utils/pasteRows';
 import { useFormDraft } from '@/utils/formDraft';
 import { printQuote } from '@/utils/quotePrint';
@@ -232,7 +230,6 @@ const readonly = computed(() => !!route.meta.readonly);
 const editId = computed(() => (route.params.id ? Number(route.params.id) : null));
 const modeLabel = computed(() => (readonly.value ? '查看' : editId.value ? '编辑' : '新建'));
 
-const currencies = ['USD', 'EUR', 'GBP', 'JPY', 'CNY'];
 const tradeCountries = TRADE_COUNTRIES, dictPriceTerms = DICT_PRICE_TERMS, dictSettlement = DICT_SETTLEMENT;
 const middlemen = ref<any[]>([]);
 const buyers = ref<any[]>([]);
@@ -342,14 +339,10 @@ async function onSample(id?: number) {
 }
 
 // 切换币种：从 currency 字典带出默认汇率（字典 value=默认汇率）
-async function onCurrency(v: string) {
-  if (!v) return;
-  try {
-    const res: any = await dictApi.list('currency');
-    const hit = ((res.data ?? res) as any[])?.find((d) => d.label === v);
-    const rateVal = Number(hit?.value);
-    if (Number.isFinite(rateVal) && rateVal > 0) form.exchangeRate = rateVal;
-  } catch { /* 字典失败保留原汇率 */ }
+// 币种命中字典项时带出参考汇率（DictSelect 直接给整项，省一次接口）
+function onCurrencyItem(d: any) {
+  const rateVal = Number(d?.value);
+  if (Number.isFinite(rateVal) && rateVal > 0) form.exchangeRate = rateVal;
 }
 
 // Excel 粘贴追加明细（列序：部位/品名/门幅/颜色/供应商/单位/报价耗用/人民币单价/损耗%/备注）
@@ -394,7 +387,7 @@ async function printCurrent() {
 // 导出 Excel(.xls)。取详情而非用 form,保证明细与库一致;与打印不同,导出全量不脱敏
 async function exportExcel() {
   if (!editId.value) return;
-  try { const res: any = await quoteApi.get(editId.value); exportQuoteExcel(res.data ?? res); }
+  try { const res: any = await quoteApi.get(editId.value); await exportQuoteExcel(res.data ?? res); }
   catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
 }
 

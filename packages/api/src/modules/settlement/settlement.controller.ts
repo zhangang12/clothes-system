@@ -115,7 +115,8 @@ export class SettlementController {
   @Roles(UserRole.ADMIN, UserRole.FINANCE)
   @ApiOperation({ summary: '退税到账确认（可按实到金额覆盖，留痕，P3#39）' })
   refundReceived(@Param('id', ParseIntPipe) id: number, @Body('amount') amount: number | undefined, @Request() req: any) {
-    return this.service.refundReceived(id, amount != null ? +amount : undefined, req.user.id);
+    // 留空=按预估入账：'' != null 会被 +'' 静默算成 0（举一反三 B11），须显式排除空串
+    return this.service.refundReceived(id, amount != null && (amount as any) !== '' ? +amount : undefined, req.user.id);
   }
 
   @Patch(':id/confirm')

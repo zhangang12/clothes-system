@@ -296,7 +296,7 @@ async function exportRow(row: any) {
     const res: any = await contractApi.get(row.id);
     const detail = res.data ?? res;
     // 详情接口只回 factory_id 不回名字，不补的话导出件里是「工厂#12」
-    exportContractExcel({ ...detail, factory_name: factoryName(detail.factory_id) });
+    await exportContractExcel({ ...detail, factory_name: factoryName(detail.factory_id) });
   } catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
 }
 async function doPush(row: any) {

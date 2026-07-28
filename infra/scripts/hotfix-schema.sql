@@ -499,7 +499,7 @@ CREATE TABLE IF NOT EXISTS `quotation_item` (
   `part`           VARCHAR(200)   DEFAULT NULL COMMENT '部位',
   `item_name`      VARCHAR(100)   NOT NULL COMMENT '品名',
   `width`          VARCHAR(30)    DEFAULT NULL COMMENT '门幅',
-  `color`          VARCHAR(50)    DEFAULT NULL COMMENT '颜色',
+  `color`          VARCHAR(200)    DEFAULT NULL COMMENT '颜色',
   `supplier`       VARCHAR(100)   DEFAULT NULL COMMENT '供应商(PDF隐藏)',
   `unit`           VARCHAR(20)    DEFAULT NULL COMMENT '计量单位',
   `quote_usage`    DECIMAL(15,4)  DEFAULT NULL COMMENT '报价耗用',
@@ -584,7 +584,7 @@ CREATE TABLE IF NOT EXISTS `order_material` (
   `item_name`      VARCHAR(100)   NOT NULL COMMENT '品名(报价带入,可改)',
   `part`           VARCHAR(200)   DEFAULT NULL COMMENT '部位',
   `width`          VARCHAR(50)    DEFAULT NULL COMMENT '门幅/尺寸',
-  `color`          VARCHAR(100)   DEFAULT NULL COMMENT '颜色',
+  `color`          VARCHAR(200)   DEFAULT NULL COMMENT '颜色',
   `composition`    VARCHAR(100)   DEFAULT NULL COMMENT '成份',
   `supplier`       VARCHAR(100)   DEFAULT NULL COMMENT '供应商',
   `split_mode`     VARCHAR(10)    NOT NULL DEFAULT 'NONE' COMMENT '拆分 NONE/BY_SIZE/BY_COLOR',
@@ -677,13 +677,13 @@ CREATE TABLE IF NOT EXISTS `contract_material` (
   `contract_id`  BIGINT         NOT NULL,
   `sort_order`   INT            NOT NULL DEFAULT 0,
   `item_name`    VARCHAR(100)   NOT NULL COMMENT '材料名称',
-  `spec`         VARCHAR(100)   DEFAULT NULL COMMENT '规格型号',
+  `spec`         VARCHAR(200)   DEFAULT NULL COMMENT '规格型号',
   `unit`         VARCHAR(20)    DEFAULT NULL COMMENT '单位',
   `unit_price`   DECIMAL(15,4)  NOT NULL COMMENT '单价',
   `qty`          DECIMAL(15,4)  NOT NULL COMMENT '数量',
   `amount`       DECIMAL(15,4)  NOT NULL COMMENT '金额=单价×数量',
   `qty_source`   VARCHAR(20)    DEFAULT NULL COMMENT '数量来源:采购量含损耗/大货数',
-  `color`        VARCHAR(50)    DEFAULT NULL COMMENT '颜色(分色行)',
+  `color`        VARCHAR(200)    DEFAULT NULL COMMENT '颜色(分色行)',
   `size`         VARCHAR(30)    DEFAULT NULL COMMENT '尺码/码(分码行)',
   `style_no`     VARCHAR(50)    DEFAULT NULL COMMENT '款号(多款号同表随行标注)',
   `delivery_date` DATE          DEFAULT NULL COMMENT '行交货期限(材料默认=款交期-45天)',
@@ -1644,8 +1644,8 @@ CALL _i9_add_col('quotation_item','item_name',"VARCHAR(100)   NOT NULL COMMENT '
 CALL _i9_sync_col('quotation_item','item_name',"VARCHAR(100)","VARCHAR(100)   NOT NULL COMMENT '品名'");
 CALL _i9_add_col('quotation_item','width',"VARCHAR(30)    DEFAULT NULL COMMENT '门幅'");
 CALL _i9_sync_col('quotation_item','width',"VARCHAR(30)","VARCHAR(30)    DEFAULT NULL COMMENT '门幅'");
-CALL _i9_add_col('quotation_item','color',"VARCHAR(50)    DEFAULT NULL COMMENT '颜色'");
-CALL _i9_sync_col('quotation_item','color',"VARCHAR(50)","VARCHAR(50)    DEFAULT NULL COMMENT '颜色'");
+CALL _i9_add_col('quotation_item','color',"VARCHAR(200)    DEFAULT NULL COMMENT '颜色'");
+CALL _i9_sync_col('quotation_item','color',"VARCHAR(200)","VARCHAR(200)    DEFAULT NULL COMMENT '颜色'");
 CALL _i9_add_col('quotation_item','supplier',"VARCHAR(100)   DEFAULT NULL COMMENT '供应商(PDF隐藏)'");
 CALL _i9_sync_col('quotation_item','supplier',"VARCHAR(100)","VARCHAR(100)   DEFAULT NULL COMMENT '供应商(PDF隐藏)'");
 CALL _i9_add_col('quotation_item','unit',"VARCHAR(20)    DEFAULT NULL COMMENT '计量单位'");
@@ -1770,8 +1770,8 @@ CALL _i9_add_col('order_material','part',"VARCHAR(200)   DEFAULT NULL COMMENT '�
 CALL _i9_sync_col('order_material','part',"VARCHAR(200)","VARCHAR(200)   DEFAULT NULL COMMENT '部位'");
 CALL _i9_add_col('order_material','width',"VARCHAR(50)    DEFAULT NULL COMMENT '门幅/尺寸'");
 CALL _i9_sync_col('order_material','width',"VARCHAR(50)","VARCHAR(50)    DEFAULT NULL COMMENT '门幅/尺寸'");
-CALL _i9_add_col('order_material','color',"VARCHAR(100)   DEFAULT NULL COMMENT '颜色'");
-CALL _i9_sync_col('order_material','color',"VARCHAR(100)","VARCHAR(100)   DEFAULT NULL COMMENT '颜色'");
+CALL _i9_add_col('order_material','color',"VARCHAR(200)   DEFAULT NULL COMMENT '颜色'");
+CALL _i9_sync_col('order_material','color',"VARCHAR(200)","VARCHAR(200)   DEFAULT NULL COMMENT '颜色'");
 CALL _i9_add_col('order_material','composition',"VARCHAR(100)   DEFAULT NULL COMMENT '成份'");
 CALL _i9_sync_col('order_material','composition',"VARCHAR(100)","VARCHAR(100)   DEFAULT NULL COMMENT '成份'");
 CALL _i9_add_col('order_material','supplier',"VARCHAR(100)   DEFAULT NULL COMMENT '供应商'");
@@ -1920,8 +1920,8 @@ CALL _i9_add_col('contract_material','sort_order',"INT            NOT NULL DEFAU
 CALL _i9_sync_col('contract_material','sort_order',"INT","INT            NOT NULL DEFAULT 0");
 CALL _i9_add_col('contract_material','item_name',"VARCHAR(100)   NOT NULL COMMENT '材料名称'");
 CALL _i9_sync_col('contract_material','item_name',"VARCHAR(100)","VARCHAR(100)   NOT NULL COMMENT '材料名称'");
-CALL _i9_add_col('contract_material','spec',"VARCHAR(100)   DEFAULT NULL COMMENT '规格型号'");
-CALL _i9_sync_col('contract_material','spec',"VARCHAR(100)","VARCHAR(100)   DEFAULT NULL COMMENT '规格型号'");
+CALL _i9_add_col('contract_material','spec',"VARCHAR(200)   DEFAULT NULL COMMENT '规格型号'");
+CALL _i9_sync_col('contract_material','spec',"VARCHAR(200)","VARCHAR(200)   DEFAULT NULL COMMENT '规格型号'");
 CALL _i9_add_col('contract_material','unit',"VARCHAR(20)    DEFAULT NULL COMMENT '单位'");
 CALL _i9_sync_col('contract_material','unit',"VARCHAR(20)","VARCHAR(20)    DEFAULT NULL COMMENT '单位'");
 CALL _i9_add_col('contract_material','unit_price',"DECIMAL(15,4)  NOT NULL COMMENT '单价'");
@@ -1932,8 +1932,8 @@ CALL _i9_add_col('contract_material','amount',"DECIMAL(15,4)  NOT NULL COMMENT '
 CALL _i9_sync_col('contract_material','amount',"DECIMAL(15,4)","DECIMAL(15,4)  NOT NULL COMMENT '金额=单价×数量'");
 CALL _i9_add_col('contract_material','qty_source',"VARCHAR(20)    DEFAULT NULL COMMENT '数量来源:采购量含损耗/大货数'");
 CALL _i9_sync_col('contract_material','qty_source',"VARCHAR(20)","VARCHAR(20)    DEFAULT NULL COMMENT '数量来源:采购量含损耗/大货数'");
-CALL _i9_add_col('contract_material','color',"VARCHAR(50)    DEFAULT NULL COMMENT '颜色(分色行)'");
-CALL _i9_sync_col('contract_material','color',"VARCHAR(50)","VARCHAR(50)    DEFAULT NULL COMMENT '颜色(分色行)'");
+CALL _i9_add_col('contract_material','color',"VARCHAR(200)    DEFAULT NULL COMMENT '颜色(分色行)'");
+CALL _i9_sync_col('contract_material','color',"VARCHAR(200)","VARCHAR(200)    DEFAULT NULL COMMENT '颜色(分色行)'");
 CALL _i9_add_col('contract_material','size',"VARCHAR(30)    DEFAULT NULL COMMENT '尺码/码(分码行)'");
 CALL _i9_sync_col('contract_material','size',"VARCHAR(30)","VARCHAR(30)    DEFAULT NULL COMMENT '尺码/码(分码行)'");
 CALL _i9_add_col('contract_material','style_no',"VARCHAR(50)    DEFAULT NULL COMMENT '款号(多款号同表随行标注)'");

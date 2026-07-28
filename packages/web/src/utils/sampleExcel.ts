@@ -11,7 +11,7 @@ const d10 = (v: unknown): string => (v ? String(v).slice(0, 10) : '');
 const val = (v: unknown): string => (v === null || v === undefined ? '' : esc(v));
 
 // 抓图转 base64 data URI（>2MB 或失败返回 null，退回链接）
-async function toDataUrl(url: string): Promise<string | null> {
+export async function toDataUrl(url: string): Promise<string | null> {
   try {
     const res = await fetch(url);
     if (!res.ok) return null;

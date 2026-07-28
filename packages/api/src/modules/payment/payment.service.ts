@@ -176,6 +176,7 @@ export class PaymentService {
     // 水单必填(P3#40/对账E2):付款动作必须留水单凭证
     if (!dto?.slip_url) throw new BadRequestException('请上传银行水单后再登记付款');
     if (!(dto.amount > 0)) throw new BadRequestException('本次付款金额须大于 0');
+    if (!dto.pay_date) throw new BadRequestException('请选择付款日期'); // '' 写 DATE NOT NULL 列必 500，前置拦截（举一反三 B8）
     return this.dataSource.transaction(async (manager) => {
       const pr = await manager.findOne(PaymentRequest, {
         where: { id, deleted: 0 },
@@ -199,7 +200,7 @@ export class PaymentService {
 
       const record = await manager.save(PaymentRecord, manager.create(PaymentRecord, {
         pr_id: id,
-        pay_method: dto.pay_method ?? 'BANK',
+        pay_method: dto.pay_method || 'BANK', // '' 写 ENUM 列 1265（举一反三 B8）
         pay_date: dto.pay_date,
         amount: +(+dto.amount).toFixed(4),
         slip_url: dto.slip_url ?? null,

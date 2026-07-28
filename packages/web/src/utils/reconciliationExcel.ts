@@ -4,7 +4,7 @@
 // 而是「哪张非空就出哪张」——既覆盖全部类型,又不会给合同对账塞两张空表。
 // 业务已确认:全量导出,不脱敏。
 
-import { exportDocExcel, d10, n2, n4, sum, type Block } from './docExcel';
+import { exportDocExcel, d10, n2, n4, sum, sensitiveMark, type Block } from './docExcel';
 
 const typeLabel = (t: unknown): string =>
   ({ CONTRACT: '合同对账', NO_CONTRACT: '非合同对账', LABOR: '工时对账' } as Record<string, string>)[String(t)] ?? String(t ?? '');
@@ -45,7 +45,7 @@ export function exportReconciliationExcel(detail: any): void {
     ['发票号', detail.invoice_no],
     ['发票金额', n2(detail.invoice_amount)],
     ['发票差额', n2(detail.invoice_diff)],
-    ['发票附件', detail.invoice_url],
+    ['发票附件', sensitiveMark(detail.invoice_url)],
     ['确认时间', d10(detail.confirmed_at)],
     ['制单日期', d10(detail.created_at)],
     ['复核批注', detail.review_remark],

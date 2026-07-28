@@ -20,7 +20,7 @@ export class OrderMaterial {
   @Column({ length: 50, nullable: true })
   width: string; // 门幅/尺寸
 
-  @Column({ length: 100, nullable: true })
+  @Column({ length: 200, nullable: true })
   color: string; // 颜色
 
   @Column({ length: 100, nullable: true })

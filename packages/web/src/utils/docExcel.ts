@@ -16,6 +16,9 @@ export const d10 = (v: unknown): string => (v ? String(v).slice(0, 10) : '');
 /** 空值渲染成空单元格而不是 "null"/"undefined" */
 export const val = (v: unknown): string => (v === null || v === undefined ? '' : esc(v));
 
+/** 敏感附件（发票/水单/纸质章等 private/ 目录）导出占位：裸 URL 点开必 403 死链，统一标注引导系统内查看 */
+export const sensitiveMark = (u?: string | null): string => (u ? '🔒 敏感附件·请登录系统内查看' : '');
+
 // 金额:非数字回退空,避免表格里出现 NaN。空值必须先挡掉——Number(null)/Number('') 都是 0,
 // 不挡的话「未填」会导出成 0.00,业务读起来是「金额为零」,含义完全不同。
 const blank = (v: unknown): boolean => v === null || v === undefined || v === '';

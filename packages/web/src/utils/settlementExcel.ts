@@ -3,7 +3,7 @@
 // 枚举一律导中文标签（口径对齐 SettlementListView.vue 的详情弹框），不导裸枚举值——
 // 财务拿到的是核算表不是数据库导出，`DRAFT`/`PAID` 这种值到了表里没人认。
 
-import { exportDocExcel, d10, n2, n4, sum, type Block } from './docExcel';
+import { exportDocExcel, d10, n2, n4, sum, sensitiveMark, type Block } from './docExcel';
 
 const STATUS: Record<string, string> = { DRAFT: '待收汇', CONFIRMED: '已结算' };
 const REFUND: Record<string, string> = { ESTIMATED: '预估', RECEIVED: '已到账' };
@@ -141,7 +141,7 @@ export function exportSettlementExcel(detail: any): void {
         r.exchange_rate != null ? n2(+r.amount * +r.exchange_rate) : '',
         lab(RECEIPT_SRC, r.source),
         r.invoice_no,
-        r.slip_url,
+        sensitiveMark(r.slip_url),
         r.remark,
       ]),
       // 折RMB 合计只累计带汇率的笔（无汇率的笔折算不出，计 0 而不是把美金数混进 RMB 列）

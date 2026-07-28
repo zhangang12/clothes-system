@@ -266,12 +266,12 @@ async function printRow(row: any) {
     if (cachedCompany === null) {
       try { cachedCompany = (await companyApi.getDefault() as any)?.data ?? null; } catch { cachedCompany = undefined; }
     }
-    printQuote(res.data ?? res, cachedCompany || undefined);
+    printQuote(res.data ?? res, cachedCompany || undefined, { withImages: true });
   } catch (e: any) { errToast(e?.message ?? e?.response?.data?.msg ?? '打印失败'); }
 }
 // 导出 Excel(取详情含报价/费用明细;.xls)。与打印不同,导出按业务要求全量不脱敏
 async function exportRow(row: any) {
-  try { const res: any = await quoteApi.get(row.id); exportQuoteExcel(res.data ?? res); }
+  try { const res: any = await quoteApi.get(row.id); await exportQuoteExcel(res.data ?? res); }
   catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
 }
 function copyOne() { copyRow(selected.value[0]); }
@@ -287,7 +287,7 @@ async function batchPrint() {
       const res: any = await quoteApi.get(row.id);
       details.push(res.data ?? res);
     }
-    printQuoteBatch(details, cachedCompany || undefined);
+    printQuoteBatch(details, cachedCompany || undefined, { withImages: true });
   } catch (e: any) { errToast(e?.message ?? e?.response?.data?.msg ?? '批量打印失败'); }
 }
 

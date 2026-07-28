@@ -8,7 +8,7 @@ export class CreateQuoteItemDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) part?: string;
   @ApiProperty({ example: '32S 全棉府绸' }) @IsString() @MaxLength(100) itemName: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(30) width?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) color?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) color?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) supplier?: string;
   @ApiPropertyOptional({ example: '米' }) @IsOptional() @IsString() @MaxLength(20) unit?: string;
   @ApiPropertyOptional({ example: 1.2 }) @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 4 }) @Min(0) quoteUsage?: number;

@@ -53,6 +53,7 @@ const PRINT_STYLE = `
   .imgs { display:flex; gap:10px; margin:8px 0; } .imgs img { max-height:150px; max-width:45%; object-fit:contain; border:1px solid #eee; }
   .totals { margin-top:10px; display:flex; justify-content:flex-end; gap:24px; font-size:13px; }
   .totals b { color:#C04042; font-size:15px; }
+  .remark { margin-top:10px; padding:8px 10px; background:#faf8f2; border:1px solid #eee; line-height:1.7; }
   .foot { margin-top:20px; display:flex; justify-content:space-between; color:#555; }
   .tip { margin-top:6px; font-size:10px; color:#999; }
   @media screen { body { max-width:820px; margin:20px auto; } }
@@ -99,6 +100,9 @@ function buildQuoteBody(detail: any, companyName: string, opts: QuotePrintOpts =
     <div><b>客户款号：</b>${esc(detail.style_no) || '—'}</div>
     <div><b>币种：</b>${esc(detail.currency) || '—'}</div>
     <div><b>汇率：</b>${n4(detail.exchange_rate)}</div>
+    <div><b>贸易国别：</b>${esc(detail.trade_country) || '—'}</div>
+    <div><b>结汇方式：</b>${esc(detail.settlement_method) || '—'}</div>
+    <div><b>价格条款：</b>${esc(detail.price_terms) || '—'}</div>
     ${opts.internal ? `<div><b>利润率：</b>${detail.profit_rate != null ? esc(detail.profit_rate) + '%' : '—'}</div>` : ''}
   </div>
   ${opts.withImages && (detail.image1 || detail.image2) ? `<div class="imgs">${[detail.image1, detail.image2].filter(Boolean).map((u: string) => `<img src="${esc(u)}" alt="款图">`).join('')}</div>` : ''}
@@ -127,6 +131,7 @@ function buildQuoteBody(detail: any, companyName: string, opts: QuotePrintOpts =
     <div>美金合计：<b>$ ${n2(detail.usd_total)}</b></div>
   </div>
 
+  ${detail.total_remark ? `<div class="remark"><b>备注说明：</b>${esc(detail.total_remark)}</div>` : ''}
   <div class="foot">
     <div>业务员：${esc(detail.salesperson) || '＿＿＿＿'}</div>
     <div>报价有效期：${esc(validUntil(detail.inquiry_date))}</div>
@@ -153,11 +158,11 @@ export function printQuote(detail: any, company?: { name?: string }, opts: Quote
 }
 
 // 批量打印：多张报价单一个窗口，页间分页符（page-break-after），一次打印/导出 PDF
-export function printQuoteBatch(details: any[], company?: { name?: string }): void {
+export function printQuoteBatch(details: any[], company?: { name?: string }, opts: QuotePrintOpts = {}): void {
   if (!details.length) return;
   const companyName = company?.name || DEFAULT_COMPANY;
   const body = details
-    .map((d) => buildQuoteBody(d, companyName, {}))
+    .map((d) => buildQuoteBody(d, companyName, opts))
     .join('<div style="page-break-after:always"></div>');
   openPrintWindow(`报价单批量打印(${details.length}张)`, body);
 }

@@ -1,10 +1,11 @@
-import { IsEnum, IsNumber, IsOptional, IsString, IsArray, ValidateNested, Min, IsBoolean } from 'class-validator';
+import { IsEnum, IsNumber, IsOptional, IsString, IsArray, ValidateNested, Min, IsBoolean, MaxLength } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ReconcileType, ReconcileSubType } from '@i9/types';
 
 // 无合同空白对账单·费用明细行（补充确认v1.1）
 export class CreateExpenseLineDto {
   @IsString()
+  @MaxLength(200) // 对齐列宽：此前无限制，超长直接 500（举一反三 A2）
   expense_name: string; // 费用项目/事由
 
   @IsNumber() @Min(0)
