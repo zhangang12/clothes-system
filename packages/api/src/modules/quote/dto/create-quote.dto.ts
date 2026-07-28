@@ -5,7 +5,7 @@ import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateQuoteItemDto {
-  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) part?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) part?: string;
   @ApiProperty({ example: '32S 全棉府绸' }) @IsString() @MaxLength(100) itemName: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(30) width?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) color?: string;

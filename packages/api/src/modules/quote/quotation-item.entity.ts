@@ -12,7 +12,7 @@ export class QuotationItem {
   @Column({ type: 'int', default: 0 })
   sort_order: number;
 
-  @Column({ length: 50, nullable: true })
+  @Column({ length: 200, nullable: true })
   part: string; // 部位
 
   @Column({ length: 100 })

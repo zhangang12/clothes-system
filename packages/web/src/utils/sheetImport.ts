@@ -17,6 +17,7 @@ export const MATERIAL_FIELDS: SheetField[] = [
   { key: 'zipperLength', label: '拉链长度', keywords: /拉链长度|拉链长/i },
   { key: 'puller', label: '拉头', keywords: /拉头/i },
   { key: 'qty', label: '单耗/数量', keywords: /单耗|数量|用量|qty/i },
+  { key: 'gramWeight', label: '克重', keywords: /克重|平方克|gsm/i },
   { key: 'size', label: '尺寸', keywords: /尺寸|尺码|size/i },
   { key: 'refPrice', label: '参考价格', keywords: /参考价|单价|价格|price/i },
   { key: 'actualUsage', label: '实际耗用', keywords: /实际耗用|实测耗用|实耗/i },
@@ -96,10 +97,20 @@ export function guessMapping(rows: string[][]): { mapping: Record<string, number
   return { mapping: best.mapping, hasHeader: best.hits > 0, headerRow: best.headerRow, hits: best.hits };
 }
 
-/** 原始行 → 材料行（按列映射；品名为空的行跳过——分区标题/空行自然滤掉） */
-export function rowsToMaterials(rows: string[][], mapping: Record<string, number>): any[] {
+/** 原始行 → 材料行（按列映射；品名为空的行跳过——分区标题/空行自然滤掉）
+ *  extraColorCols：除已映射颜色列外，其它「颜色」列号——一款多组颜色（颜色一/颜色二）合并导入，去重后逗号相连 */
+export function rowsToMaterials(rows: string[][], mapping: Record<string, number>, extraColorCols: number[] = []): any[] {
   const cell = (r: string[], key: string) => (mapping[key] != null ? String(r[mapping[key]] ?? '').trim() : '');
   return rows
-    .map((r) => Object.fromEntries(MATERIAL_FIELDS.map((f) => [f.key, cell(r, f.key)])))
+    .map((r) => {
+      const out: any = Object.fromEntries(MATERIAL_FIELDS.map((f) => [f.key, cell(r, f.key)]));
+      if (extraColorCols.length) {
+        out.colors = [out.colors, ...extraColorCols.map((i) => String(r[i] ?? '').trim())]
+          .filter(Boolean)
+          .filter((v, idx, arr) => arr.indexOf(v) === idx) // 去重（两组同色的行不重复拼接）
+          .join('，');
+      }
+      return out;
+    })
     .filter((m: any) => m.itemName);
 }

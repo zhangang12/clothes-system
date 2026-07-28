@@ -11,7 +11,7 @@ export class CreateOrderMaterialDto {
   @MaxLength(100)
   item_name: string;
 
-  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) part?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) part?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) width?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) color?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) composition?: string;

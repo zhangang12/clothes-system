@@ -24,8 +24,8 @@ export class SampleMaterial {
   @Column({ length: 200, nullable: true })
   colors: string; // 颜色（动态多列，逗号分隔）
 
-  @Column({ length: 50, nullable: true })
-  part: string; // 部位
+  @Column({ length: 200, nullable: true })
+  part: string; // 部位（多部位拼接可长）
 
   @Column({ length: 100, nullable: true })
   composition: string; // 成份
@@ -41,6 +41,9 @@ export class SampleMaterial {
 
   @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
   qty: number; // 数量
+
+  @Column({ length: 30, nullable: true })
+  gram_weight: string; // 克重（如 350gsm）
 
   @Column({ length: 50, nullable: true })
   size: string; // 尺寸(长×宽)

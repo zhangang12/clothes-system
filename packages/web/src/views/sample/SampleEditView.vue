@@ -109,6 +109,11 @@
           <el-button size="small" :icon="CopyDocument" :disabled="!selMaterials.length" @click="copyMaterials">复制行</el-button>
           <el-button size="small" :icon="Minus" :disabled="!selMaterials.length" @click="removeMaterials">删除</el-button>
           <el-button size="small" @click="openSheetImport">📥 表格导入</el-button>
+          <!-- 批量设置供应商（勾选行一次性设置，滑雪服材料多行同一供应商场景） -->
+          <el-select v-model="batchSupplierId" size="small" filterable clearable placeholder="批量设置供应商" style="width:200px">
+            <el-option v-for="f in factories" :key="f.id" :label="f.name" :value="f.id" />
+          </el-select>
+          <el-button size="small" :disabled="!batchSupplierId || !selMaterials.length" @click="applyBatchSupplier">应用到所选{{ selMaterials.length ? `(${selMaterials.length})` : '' }}</el-button>
           <span class="hint">勾选后「复制行」整行复制（品名/价格/供应商相同仅部位不同的场景）；品名每款单独录入；「实际耗用」「拉链长度」由版师填；支持上传工艺单电子表格（.xlsx/.csv）</span>
         </div>
         <div class="table-scroll">
@@ -124,6 +129,7 @@
             <el-table-column label="拉链长度" width="100"><template #default="{ row }"><el-input v-model="row.zipperLength" size="small" :disabled="!pmEnabled && bizDisabled" /></template></el-table-column>
             <el-table-column label="拉头" width="80"><template #default="{ row }"><el-input v-model="row.puller" size="small" :disabled="bizDisabled" /></template></el-table-column>
             <el-table-column label="数量" width="90"><template #default="{ row }"><el-input v-model="row.qty" size="small" :disabled="bizDisabled" /></template></el-table-column>
+            <el-table-column label="克重" width="90"><template #default="{ row }"><el-input v-model="row.gramWeight" size="small" :disabled="bizDisabled" placeholder="如350gsm" /></template></el-table-column>
             <el-table-column label="尺寸" width="110"><template #default="{ row }"><el-input v-model="row.size" size="small" :disabled="bizDisabled" /></template></el-table-column>
             <!-- 参考价格属敏感字段:版师视图隐藏(对外/版师脱敏) -->
             <el-table-column v-if="!patternmaker" label="参考价格" width="100"><template #default="{ row }"><el-input v-model="row.refPrice" size="small" :disabled="bizDisabled" /></template></el-table-column>
@@ -153,6 +159,12 @@
               </template>
             </el-table-column>
             <el-table-column label="备注" min-width="110"><template #default="{ row }"><el-input v-model="row.remark" size="small" :disabled="bizDisabled" /></template></el-table-column>
+            <el-table-column v-if="!readonly && !patternmaker" label="排序" width="76" align="center" fixed="right">
+              <template #default="{ $index }">
+                <el-button link size="small" :disabled="$index === 0" @click="moveRow(form.materials, $index, -1)">↑</el-button>
+                <el-button link size="small" :disabled="$index === form.materials.length - 1" @click="moveRow(form.materials, $index, 1)">↓</el-button>
+              </template>
+            </el-table-column>
           </el-table>
         </div>
       </section-block>
@@ -226,8 +238,9 @@
             <el-table-column prop="itemName" label="品名" min-width="140" />
             <el-table-column prop="width" label="门幅" width="80" />
             <el-table-column prop="qty" label="单耗/数量" width="90" />
+            <el-table-column prop="gramWeight" label="克重" width="80" />
             <el-table-column prop="part" label="部位/位置" min-width="120" />
-            <el-table-column prop="colors" label="颜色" width="90" />
+            <el-table-column prop="colors" label="颜色" min-width="110" />
             <el-table-column prop="supplierName" label="供应商" min-width="110" />
             <el-table-column prop="remark" label="备注" min-width="100" />
           </el-table>
@@ -236,7 +249,7 @@
               <el-radio value="append">追加到现有明细</el-radio>
               <el-radio value="replace">替换现有明细</el-radio>
             </el-radio-group>
-            <span class="muted">将导入 {{ sheetPreviewRows.length }} 行（品名为空的行自动跳过；分区标题行请改映射或导入后删除）</span>
+            <span class="muted">将导入 {{ sheetPreviewRows.length }} 行（品名为空的行自动跳过；多列颜色自动合并；分区标题行请改映射或导入后删除）</span>
           </div>
         </template>
         <el-empty v-else description="选择工艺单/材料表文件后自动解析预览" :image-size="60" />
@@ -298,7 +311,7 @@ const versions = ref<any[]>([]);
 const pmUsers = ref<any[]>([]);       // 制版师用户(role=PATTERNMAKER)
 const pmLoadFailed = ref(false);      // 加载失败降级为文本输入
 
-const emptyMaterial = () => ({ itemName: '', arrangeDate: '', width: '', colors: '', part: '', composition: '', codeBand: '', zipperLength: '', puller: '', qty: '', size: '', refPrice: '', actualUsage: '', supplierId: undefined, supplierName: '', image: '', remark: '' });
+const emptyMaterial = () => ({ itemName: '', arrangeDate: '', width: '', colors: '', part: '', composition: '', codeBand: '', zipperLength: '', puller: '', qty: '', gramWeight: '', size: '', refPrice: '', actualUsage: '', supplierId: undefined, supplierName: '', image: '', remark: '' });
 const form = reactive<any>({
   sampleNo: '', categories: '', middlemanId: undefined, styleNo: '', sampleSize: '', sampleQty: '', buyerId: undefined,
   patternmakerId: undefined, patternmakerName: '', maker: authStore.realName || '', makeDate: new Date().toISOString().slice(0, 10),
@@ -348,6 +361,13 @@ const rules: FormRules = {
 };
 
 function addMaterial() { form.materials.push(emptyMaterial()); }
+// 行上下调序（用户反馈：辅料行要能移到面料行下面；sort_order 按数组顺序落库）
+function moveRow(list: any[], i: number, dir: -1 | 1) {
+  const j = i + dir;
+  if (j < 0 || j >= list.length) return;
+  const [r] = list.splice(i, 1);
+  list.splice(j, 0, r);
+}
 // 复制勾选行（用户反馈：面料/辅料品名价格供应商都一样、仅部位不同，不想每行重填）；
 // 复制行不带 id/图片，落在原行正下方，保存时按新行插入
 function copyMaterials() {
@@ -383,8 +403,18 @@ const sheetActiveMapping = computed(() => {
   for (const k of Object.keys(sheetMapping)) if (sheetMapping[k] >= 0) m[k] = sheetMapping[k];
   return m;
 });
+// 一款多组颜色（颜色一/颜色二两列）：除已映射颜色列外，其它颜色列自动合并导入（用户反馈：两组色只能导一组）
+const sheetExtraColorCols = computed(() => {
+  const colorsField = MATERIAL_FIELDS.find((f) => f.key === 'colors');
+  if (!colorsField) return [];
+  const headerRow = sheetRows.value[sheetHeaderRow.value] ?? [];
+  return headerRow
+    .map((c, i) => ({ c, i }))
+    .filter(({ c, i }) => colorsField.keywords.test(String(c ?? '')) && i !== sheetActiveMapping.value.colors)
+    .map(({ i }) => i);
+});
 const sheetPreviewRows = computed(() =>
-  rowsToMaterials(sheetRows.value.slice(sheetHeader.value ? sheetHeaderRow.value + 1 : 0), sheetActiveMapping.value).slice(0, 200));
+  rowsToMaterials(sheetRows.value.slice(sheetHeader.value ? sheetHeaderRow.value + 1 : 0), sheetActiveMapping.value, sheetExtraColorCols.value).slice(0, 200));
 function openSheetImport() { sheetDialog.value = true; }
 function resetSheetImport() {
   sheetFileName.value = ''; sheetRows.value = []; sheetHeader.value = true; sheetMode.value = 'append'; sheetHeaderRow.value = 0;
@@ -444,6 +474,16 @@ async function doPurchase(row: any) {
 }
 
 function onSupplier(row: any, id: number) { row.supplierName = factories.value.find((f) => f.id === id)?.name ?? ''; }
+// 批量设置供应商（用户反馈：滑雪服材料几十行都是同一供应商，一行行选太慢）
+const batchSupplierId = ref<number | undefined>(undefined);
+function applyBatchSupplier() {
+  if (!batchSupplierId.value || !selMaterials.value.length) return;
+  for (const row of selMaterials.value) {
+    row.supplierId = batchSupplierId.value;
+    onSupplier(row, batchSupplierId.value);
+  }
+  ElMessage.success(`已为所选 ${selMaterials.value.length} 行设置供应商`);
+}
 function onPatternmaker(id?: number) {
   const u = pmUsers.value.find((x) => x.id === id);
   form.patternmakerName = u ? (u.real_name || u.username) : '';
@@ -526,7 +566,7 @@ async function load() {
     materials: d.materials?.length ? d.materials.map((m: any) => ({
       id: m.id, itemName: m.item_name, arrangeDate: m.arrange_date ?? '', image: m.image ?? '', width: m.width, colors: m.colors, part: m.part,
       composition: m.composition, codeBand: m.code_band, zipperLength: m.zipper_length, puller: m.puller,
-      qty: m.qty, size: m.size, refPrice: m.ref_price, actualUsage: m.actual_usage,
+      qty: m.qty, gramWeight: m.gram_weight ?? '', size: m.size, refPrice: m.ref_price, actualUsage: m.actual_usage,
       supplierId: m.supplier_id ?? undefined, supplierName: m.supplier_name, remark: m.remark,
     })) : [emptyMaterial()],
     // 寄样多轮(后端已把存量单值合成第一轮)
@@ -676,7 +716,7 @@ async function print() {
 // 导出 Excel(基本信息+材料明细,.xls)
 async function exportExcel() {
   if (!editId.value) return;
-  try { const res: any = await sampleApi.get(editId.value); exportSampleExcel(res.data ?? res); }
+  try { const res: any = await sampleApi.get(editId.value); await exportSampleExcel(res.data ?? res); }
   catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
 }
 function goBack() { router.push({ name: 'Samples' }); }

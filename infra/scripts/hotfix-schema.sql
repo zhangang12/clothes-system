@@ -401,12 +401,13 @@ CREATE TABLE IF NOT EXISTS `sample_material` (
   `item_name`     VARCHAR(100)  DEFAULT NULL COMMENT '品名',
   `width`         VARCHAR(30)   DEFAULT NULL COMMENT '门幅',
   `colors`        VARCHAR(200)  DEFAULT NULL COMMENT '颜色(动态多列,逗号分隔)',
-  `part`          VARCHAR(50)   DEFAULT NULL COMMENT '部位',
+  `part`          VARCHAR(200)  DEFAULT NULL COMMENT '部位(多部位拼接可长)',
   `composition`   VARCHAR(100)  DEFAULT NULL COMMENT '成份',
   `code_band`     VARCHAR(50)   DEFAULT NULL COMMENT '码带',
   `zipper_length` VARCHAR(30)   DEFAULT NULL COMMENT '拉链长度(版师)',
   `puller`        VARCHAR(30)   DEFAULT NULL COMMENT '拉头',
   `qty`           DECIMAL(12,2) DEFAULT NULL COMMENT '数量',
+  `gram_weight`   VARCHAR(30)   DEFAULT NULL COMMENT '克重(如350gsm)',
   `size`          VARCHAR(50)   DEFAULT NULL COMMENT '尺寸(长×宽)',
   `ref_price`     DECIMAL(12,2) DEFAULT NULL COMMENT '参考价格',
   `actual_usage`  DECIMAL(12,4) DEFAULT NULL COMMENT '实际耗用(版师)',
@@ -495,7 +496,7 @@ CREATE TABLE IF NOT EXISTS `quotation_item` (
   `id`             BIGINT         NOT NULL AUTO_INCREMENT,
   `quote_id`       BIGINT         NOT NULL,
   `sort_order`     INT            NOT NULL DEFAULT 0,
-  `part`           VARCHAR(50)    DEFAULT NULL COMMENT '部位',
+  `part`           VARCHAR(200)   DEFAULT NULL COMMENT '部位',
   `item_name`      VARCHAR(100)   NOT NULL COMMENT '品名',
   `width`          VARCHAR(30)    DEFAULT NULL COMMENT '门幅',
   `color`          VARCHAR(50)    DEFAULT NULL COMMENT '颜色',
@@ -581,7 +582,7 @@ CREATE TABLE IF NOT EXISTS `order_material` (
   `order_id`       BIGINT         NOT NULL,
   `quote_item_id`  BIGINT         DEFAULT NULL COMMENT '来源报价明细',
   `item_name`      VARCHAR(100)   NOT NULL COMMENT '品名(报价带入,可改)',
-  `part`           VARCHAR(50)    DEFAULT NULL COMMENT '部位',
+  `part`           VARCHAR(200)   DEFAULT NULL COMMENT '部位',
   `width`          VARCHAR(50)    DEFAULT NULL COMMENT '门幅/尺寸',
   `color`          VARCHAR(100)   DEFAULT NULL COMMENT '颜色',
   `composition`    VARCHAR(100)   DEFAULT NULL COMMENT '成份',
@@ -1491,8 +1492,8 @@ CALL _i9_add_col('sample_material','width',"VARCHAR(30)   DEFAULT NULL COMMENT '
 CALL _i9_sync_col('sample_material','width',"VARCHAR(30)","VARCHAR(30)   DEFAULT NULL COMMENT '门幅'");
 CALL _i9_add_col('sample_material','colors',"VARCHAR(200)  DEFAULT NULL COMMENT '颜色(动态多列,逗号分隔)'");
 CALL _i9_sync_col('sample_material','colors',"VARCHAR(200)","VARCHAR(200)  DEFAULT NULL COMMENT '颜色(动态多列,逗号分隔)'");
-CALL _i9_add_col('sample_material','part',"VARCHAR(50)   DEFAULT NULL COMMENT '部位'");
-CALL _i9_sync_col('sample_material','part',"VARCHAR(50)","VARCHAR(50)   DEFAULT NULL COMMENT '部位'");
+CALL _i9_add_col('sample_material','part',"VARCHAR(200)  DEFAULT NULL COMMENT '部位(多部位拼接可长)'");
+CALL _i9_sync_col('sample_material','part',"VARCHAR(200)","VARCHAR(200)  DEFAULT NULL COMMENT '部位(多部位拼接可长)'");
 CALL _i9_add_col('sample_material','composition',"VARCHAR(100)  DEFAULT NULL COMMENT '成份'");
 CALL _i9_sync_col('sample_material','composition',"VARCHAR(100)","VARCHAR(100)  DEFAULT NULL COMMENT '成份'");
 CALL _i9_add_col('sample_material','code_band',"VARCHAR(50)   DEFAULT NULL COMMENT '码带'");
@@ -1503,6 +1504,8 @@ CALL _i9_add_col('sample_material','puller',"VARCHAR(30)   DEFAULT NULL COMMENT 
 CALL _i9_sync_col('sample_material','puller',"VARCHAR(30)","VARCHAR(30)   DEFAULT NULL COMMENT '拉头'");
 CALL _i9_add_col('sample_material','qty',"DECIMAL(12,2) DEFAULT NULL COMMENT '数量'");
 CALL _i9_sync_col('sample_material','qty',"DECIMAL(12,2)","DECIMAL(12,2) DEFAULT NULL COMMENT '数量'");
+CALL _i9_add_col('sample_material','gram_weight',"VARCHAR(30)   DEFAULT NULL COMMENT '克重(如350gsm)'");
+CALL _i9_sync_col('sample_material','gram_weight',"VARCHAR(30)","VARCHAR(30)   DEFAULT NULL COMMENT '克重(如350gsm)'");
 CALL _i9_add_col('sample_material','size',"VARCHAR(50)   DEFAULT NULL COMMENT '尺寸(长×宽)'");
 CALL _i9_sync_col('sample_material','size',"VARCHAR(50)","VARCHAR(50)   DEFAULT NULL COMMENT '尺寸(长×宽)'");
 CALL _i9_add_col('sample_material','ref_price',"DECIMAL(12,2) DEFAULT NULL COMMENT '参考价格'");
@@ -1635,8 +1638,8 @@ CALL _i9_add_col('quotation_item','quote_id',"BIGINT         NOT NULL");
 CALL _i9_sync_col('quotation_item','quote_id',"BIGINT","BIGINT         NOT NULL");
 CALL _i9_add_col('quotation_item','sort_order',"INT            NOT NULL DEFAULT 0");
 CALL _i9_sync_col('quotation_item','sort_order',"INT","INT            NOT NULL DEFAULT 0");
-CALL _i9_add_col('quotation_item','part',"VARCHAR(50)    DEFAULT NULL COMMENT '部位'");
-CALL _i9_sync_col('quotation_item','part',"VARCHAR(50)","VARCHAR(50)    DEFAULT NULL COMMENT '部位'");
+CALL _i9_add_col('quotation_item','part',"VARCHAR(200)   DEFAULT NULL COMMENT '部位'");
+CALL _i9_sync_col('quotation_item','part',"VARCHAR(200)","VARCHAR(200)   DEFAULT NULL COMMENT '部位'");
 CALL _i9_add_col('quotation_item','item_name',"VARCHAR(100)   NOT NULL COMMENT '品名'");
 CALL _i9_sync_col('quotation_item','item_name',"VARCHAR(100)","VARCHAR(100)   NOT NULL COMMENT '品名'");
 CALL _i9_add_col('quotation_item','width',"VARCHAR(30)    DEFAULT NULL COMMENT '门幅'");
@@ -1763,8 +1766,8 @@ CALL _i9_add_col('order_material','quote_item_id',"BIGINT         DEFAULT NULL C
 CALL _i9_sync_col('order_material','quote_item_id',"BIGINT","BIGINT         DEFAULT NULL COMMENT '来源报价明细'");
 CALL _i9_add_col('order_material','item_name',"VARCHAR(100)   NOT NULL COMMENT '品名(报价带入,可改)'");
 CALL _i9_sync_col('order_material','item_name',"VARCHAR(100)","VARCHAR(100)   NOT NULL COMMENT '品名(报价带入,可改)'");
-CALL _i9_add_col('order_material','part',"VARCHAR(50)    DEFAULT NULL COMMENT '部位'");
-CALL _i9_sync_col('order_material','part',"VARCHAR(50)","VARCHAR(50)    DEFAULT NULL COMMENT '部位'");
+CALL _i9_add_col('order_material','part',"VARCHAR(200)   DEFAULT NULL COMMENT '部位'");
+CALL _i9_sync_col('order_material','part',"VARCHAR(200)","VARCHAR(200)   DEFAULT NULL COMMENT '部位'");
 CALL _i9_add_col('order_material','width',"VARCHAR(50)    DEFAULT NULL COMMENT '门幅/尺寸'");
 CALL _i9_sync_col('order_material','width',"VARCHAR(50)","VARCHAR(50)    DEFAULT NULL COMMENT '门幅/尺寸'");
 CALL _i9_add_col('order_material','color',"VARCHAR(100)   DEFAULT NULL COMMENT '颜色'");

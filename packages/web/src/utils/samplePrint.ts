@@ -23,19 +23,30 @@ export function printSample(detail: any): void {
     <div><b>寄样日期：</b>${d10(detail.ship_sample_date)}</div>
     <div><b>收件人：</b>${dash(detail.recipient)}</div>
     <div><b>样衣编号：</b>${dash(detail.sample_no)}</div>
+    <div><b>样衣尺码：</b>${dash(detail.sample_size)}</div>
+    <div><b>样衣数量：</b>${detail.sample_qty != null && detail.sample_qty !== '' ? esc(detail.sample_qty) + ' 件' : '—'}</div>
   </div>`;
 
   // 材料明细（脱敏：不含参考价格）
   const mats: any[] = detail.materials ?? [];
   const tableHead = `<tr><th style="width:32px">#</th><th>品名</th><th style="width:64px">门幅</th>
     <th style="width:90px">颜色</th><th style="width:64px">部位</th><th style="width:90px">成份</th>
-    <th style="width:60px">码带</th><th style="width:56px">数量</th><th style="width:80px">尺寸</th><th>备注</th></tr>`;
+    <th style="width:60px">码带</th><th style="width:56px">数量</th><th style="width:64px">克重</th><th style="width:80px">尺寸</th><th>备注</th></tr>`;
   let rows = mats.map((m, i) => `
     <tr><td class="c">${i + 1}</td><td>${dash(m.item_name)}</td><td class="c">${dash(m.width)}</td>
     <td class="c">${dash(m.colors)}</td><td class="c">${dash(m.part)}</td><td class="c">${dash(m.composition)}</td>
-    <td class="c">${dash(m.code_band)}</td><td class="r">${dash(m.qty)}</td><td class="c">${dash(m.size)}</td>
+    <td class="c">${dash(m.code_band)}</td><td class="r">${dash(m.qty)}</td><td class="c">${dash(m.gram_weight)}</td><td class="c">${dash(m.size)}</td>
     <td>${dash(m.remark)}</td></tr>`).join('');
-  if (!rows) rows = `<tr><td class="c" colspan="10">（无材料明细）</td></tr>`;
+  if (!rows) rows = `<tr><td class="c" colspan="11">（无材料明细）</td></tr>`;
+
+  // 样衣照片/图稿（用户反馈：打印时直接显示在底部；image1/2/3 每槽可多图，逗号分隔）
+  const photoUrls = [detail.image1, detail.image2, detail.image3]
+    .flatMap((u) => String(u ?? '').split(','))
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const photosBlock = photoUrls.length
+    ? `<h3>样衣照片/图稿</h3><div class="photos">${photoUrls.map((u) => `<img src="${esc(u)}" alt="样衣图" />`).join('')}</div>`
+    : '';
 
   const trackBlock = `
   <div class="meta">
@@ -63,6 +74,8 @@ export function printSample(detail: any): void {
   th { background:#f2f5f8; color:#1E3A5F; font-weight:600; }
   td.c { text-align:center; } td.r { text-align:right; }
   .remark { margin-top:8px; line-height:1.7; }
+  .photos { display:flex; flex-wrap:wrap; gap:8px; }
+  .photos img { max-width:250px; max-height:190px; object-fit:cover; border:1px solid #ddd; border-radius:4px; }
   @media screen { body { max-width:820px; margin:20px auto; } }
 </style></head><body onload="window.print()">
   <div class="head">
@@ -79,6 +92,7 @@ export function printSample(detail: any): void {
   <h3>寄样跟踪</h3>
   ${trackBlock}
   ${detail.garment_remark ? `<h3>成衣备注</h3><div class="remark">${esc(detail.garment_remark)}</div>` : ''}
+  ${photosBlock}
 </body></html>`;
 
   const win = window.open('', '_blank', 'width=900,height=1000');

@@ -53,7 +53,7 @@
           </el-col>
           <el-col :span="8">
             <el-form-item label="联系人电话">
-              <el-input v-model="mainContactPhone" readonly placeholder="自动取联系人首行" />
+              <el-input v-model="mainContactPhone" placeholder="自动取联系人首行，可直接填写" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -65,7 +65,7 @@
           </el-col>
           <el-col :span="8">
             <el-form-item label="所在城市">
-              <el-select v-model="form.city" clearable filterable placeholder="请选择" style="width:100%">
+              <el-select v-model="form.city" clearable filterable allow-create default-first-option placeholder="请选择或直接输入（县市可手填）" style="width:100%">
                 <el-option v-for="c in cityOptions" :key="c" :label="c" :value="c" />
               </el-select>
             </el-form-item>
@@ -202,7 +202,14 @@ const form = reactive<any>({
 
 const cityOptions = computed(() => PROVINCE_CITIES[form.province] ?? []);
 const mainContactName = computed(() => form.contacts[0]?.name ?? '');
-const mainContactPhone = computed(() => form.contacts[0]?.phone || form.contacts[0]?.mobile || '');
+// 联系人电话：默认取联系人首行（只读派生），但可直接填写（写回首行联系人，无联系人自动补一行）
+const mainContactPhone = computed({
+  get: () => form.contacts[0]?.phone || form.contacts[0]?.mobile || '',
+  set: (v: string) => {
+    if (!form.contacts.length) form.contacts.push(emptyContact());
+    form.contacts[0].phone = v;
+  },
+});
 
 const formRef = ref<FormInstance>();
 const saving = ref(false);

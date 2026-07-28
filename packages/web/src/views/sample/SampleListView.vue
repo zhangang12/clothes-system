@@ -213,7 +213,7 @@ async function printRow(row: any) {
 }
 // 导出 Excel(取详情含材料明细;.xls)
 async function exportRow(row: any) {
-  try { const res: any = await sampleApi.get(row.id); exportSampleExcel(res.data ?? res); }
+  try { const res: any = await sampleApi.get(row.id); await exportSampleExcel(res.data ?? res); }
   catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
 }
 

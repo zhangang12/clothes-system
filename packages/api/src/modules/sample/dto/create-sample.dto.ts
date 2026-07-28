@@ -11,12 +11,13 @@ export class SampleMaterialDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) itemName?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(30) width?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) colors?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) part?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) part?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) composition?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) codeBand?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(30) zipperLength?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(30) puller?: string;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() qty?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(30) gramWeight?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) size?: string;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() refPrice?: number;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() actualUsage?: number;

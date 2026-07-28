@@ -49,7 +49,7 @@ export class SampleService {
       sample_id: sampleId, sort_order: (m.sortOrder as any) === '' || m.sortOrder == null ? idx : m.sortOrder,
       arrange_date: m.arrangeDate || null, item_name: m.itemName, width: m.width, colors: m.colors,
       part: m.part, composition: m.composition, code_band: m.codeBand, zipper_length: m.zipperLength,
-      puller: m.puller, qty: num(m.qty), size: m.size, ref_price: num(m.refPrice), actual_usage: num(m.actualUsage),
+      puller: m.puller, qty: num(m.qty), gram_weight: m.gramWeight || null, size: m.size, ref_price: num(m.refPrice), actual_usage: num(m.actualUsage),
       supplier_id: num(m.supplierId), supplier_name: m.supplierName, image: m.image, remark: m.remark,
     }));
   }

@@ -14,8 +14,8 @@ export class OrderMaterial {
   @Column({ length: 100 })
   item_name: string; // 品名（报价带入，可改）
 
-  @Column({ length: 50, nullable: true })
-  part: string; // 部位
+  @Column({ length: 200, nullable: true })
+  part: string; // 部位（多部位拼接可长）
 
   @Column({ length: 50, nullable: true })
   width: string; // 门幅/尺寸

@@ -1,6 +1,8 @@
 // 样衣导出 Excel —— 无第三方依赖(项目零新增依赖约定):生成 Excel 可直接打开的 HTML 工作表(.xls),
 // 含「基本信息 + 材料明细」两张表。中文用 UTF-8 BOM/meta 防乱码;单元格 mso-number-format 强制文本,
 // 避免款号(如 I27.230.03929)被 Excel 当数字截断。
+// 样衣照片/图稿按用户反馈嵌在文件底部:抓图转 base64 内联(导出件自包含离线可看);
+// 单图 >2MB 或抓取失败退回可点链接,不让整个导出失败。
 
 const BOM = String.fromCharCode(0xfeff); // UTF-8 BOM,保证 Excel 以 UTF-8 打开、中文不乱码
 const esc = (v: unknown): string =>
@@ -8,7 +10,23 @@ const esc = (v: unknown): string =>
 const d10 = (v: unknown): string => (v ? String(v).slice(0, 10) : '');
 const val = (v: unknown): string => (v === null || v === undefined ? '' : esc(v));
 
-export function exportSampleExcel(detail: any): void {
+// 抓图转 base64 data URI（>2MB 或失败返回 null，退回链接）
+async function toDataUrl(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    if (blob.size > 2 * 1024 * 1024) return null;
+    return await new Promise<string | null>((resolve) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result ?? ''));
+      r.onerror = () => resolve(null);
+      r.readAsDataURL(blob);
+    });
+  } catch { return null; }
+}
+
+export async function exportSampleExcel(detail: any): Promise<void> {
   const cats = String(detail.categories ?? '').split(',').filter(Boolean).join(' / ');
   const mats: any[] = detail.materials ?? [];
   const rounds: any[] = detail.shipRounds ?? [];
@@ -45,14 +63,30 @@ export function exportSampleExcel(detail: any): void {
   </table>`
     : '';
 
-  const matHead = `<tr>${['#', '品名', '门幅', '颜色', '部位', '成份', '码带', '拉链长度', '数量', '尺寸', '实际耗用', '供应商', '备注']
+  const matHead = `<tr>${['#', '品名', '门幅', '颜色', '部位', '成份', '码带', '拉链长度', '数量', '克重', '尺寸', '实际耗用', '供应商', '备注']
     .map((h) => `<th>${h}</th>`).join('')}</tr>`;
   const matRows = mats.length
     ? mats.map((m, i) => `<tr><td>${i + 1}</td><td>${val(m.item_name)}</td><td>${val(m.width)}</td>`
       + `<td>${val(m.colors)}</td><td>${val(m.part)}</td><td>${val(m.composition)}</td><td>${val(m.code_band)}</td>`
-      + `<td>${val(m.zipper_length)}</td><td>${val(m.qty)}</td><td>${val(m.size)}</td><td>${val(m.actual_usage)}</td>`
+      + `<td>${val(m.zipper_length)}</td><td>${val(m.qty)}</td><td>${val(m.gram_weight)}</td><td>${val(m.size)}</td><td>${val(m.actual_usage)}</td>`
       + `<td>${val(m.supplier_name)}</td><td>${val(m.remark)}</td></tr>`).join('')
-    : '<tr><td colspan="13">（无材料明细）</td></tr>';
+    : '<tr><td colspan="14">（无材料明细）</td></tr>';
+
+  // 样衣照片/图稿（image1/2/3 每槽可多图，逗号分隔）：base64 内联进文件，离线可看；失败退回链接
+  const photoUrls = [detail.image1, detail.image2, detail.image3]
+    .flatMap((u) => String(u ?? '').split(','))
+    .map((s) => s.trim())
+    .filter(Boolean);
+  let photosBlock = '';
+  if (photoUrls.length) {
+    const cells = await Promise.all(photoUrls.map(async (u) => {
+      const dataUrl = await toDataUrl(u);
+      return dataUrl
+        ? `<img src="${dataUrl}" style="max-width:220px;max-height:170px" />`
+        : `<a href="${esc(u)}">图（未内联）</a>`;
+    }));
+    photosBlock = `<br/><table><tr><td colspan="6" class="title">样衣照片/图稿</td></tr><tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr></table>`;
+  }
 
   const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
 <head><meta charset="utf-8">
@@ -74,6 +108,7 @@ export function exportSampleExcel(detail: any): void {
   ${roundTable}
   <br/>
   <table>${matHead}${matRows}</table>
+  ${photosBlock}
 </body></html>`;
 
   const blob = new Blob([BOM + html], { type: 'application/vnd.ms-excel;charset=utf-8' });
