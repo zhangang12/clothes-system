@@ -136,6 +136,7 @@ import { useAuthStore } from '@/stores/auth';
 import { UserRole, FACTORY_TYPE_LABEL } from '@i9/types';
 import type { Factory } from '@i9/types';
 import CsvImportDialog from '@/components/CsvImportDialog.vue';
+import { PROVINCE_CITIES } from '@/constants/regions';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -218,11 +219,32 @@ function parseFactoryRow(c: Record<string, string>) {
   if (!contactName) return { row: null, error: '联系人姓名必填' };
   return {
     row: {
-      name, type, province: c['所在省份'] || undefined, city: c['所在城市'] || undefined,
+      name, type, province: normProvince(c['所在省份']) || undefined, city: normCity(c['所在城市']) || undefined,
       address: c['详细地址'] || undefined, businessScope: c['业务范围'] || undefined,
       contacts: [{ name: contactName, mobile: c['联系人手机'] || undefined }],
     },
   };
+}
+
+// 省市后缀归一（举一反三·用户反馈数据是「广东省/东莞市」全称）：列表驱动匹配，不写死后缀规则
+// （吉林市/吉林省并存，盲删后缀会错杀——先精确匹配，再试去「省/市/壮族自治区/回族自治区/维吾尔自治区/自治区」）
+const REGION_SUFFIX = /(省|市|壮族自治区|回族自治区|维吾尔自治区|自治区)$/;
+function normProvince(v: string): string {
+  const s = (v ?? '').trim();
+  if (!s) return '';
+  if (PROVINCE_CITIES[s]) return s;
+  const stripped = s.replace(REGION_SUFFIX, '');
+  if (PROVINCE_CITIES[stripped]) return stripped;
+  return s; // 匹配不上保留原值（编辑页省份下拉 allow-create 可挂）
+}
+function normCity(v: string): string {
+  const s = (v ?? '').trim();
+  if (!s) return '';
+  const all = Object.values(PROVINCE_CITIES).flat();
+  if (all.includes(s)) return s;
+  const stripped = s.replace(/市$/, '');
+  if (all.includes(stripped)) return stripped;
+  return s;
 }
 const submitImport = (rows: any[]) => factoryApi.importBatch(rows);
 function exportCsv() {

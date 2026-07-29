@@ -140,6 +140,7 @@ import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search, Plus, Download, Delete, CopyDocument, ArrowDown, Printer, DocumentAdd } from '@element-plus/icons-vue';
+import { parseTableText, rowsPositional } from '@/utils/parseTable';
 import { printQuote, printQuoteBatch } from '@/utils/quotePrint';
 import { exportQuoteExcel } from '@/utils/quoteExcel';
 import { companyApi } from '@/api/company';
@@ -156,13 +157,12 @@ const importText = ref('');
 const importing = ref(false);
 const importResult = ref<any>(null);
 async function doImport() {
-  const rows = importText.value.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
-    const c = l.split(/\t|,/).map((x) => x.trim());
-    return {
-      customer_name: c[0], style_no: c[1], inquiry_date: c[2], currency: c[3], exchange_rate: c[4],
-      quote_qty: c[5], rmb_total: c[6], usd_total: c[7], salesperson: c[8], remark: c[9],
-    };
-  });
+  // 解析走 parseTableText：Tab/逗号自适应+引号安全（旧 split(/\t|,/) 遇名称含逗号即错列）；
+  // 首行像表头（含 客户/款号/金额 等词）自动跳过
+  const rows = rowsPositional(parseTableText(importText.value), (c) => ({
+    customer_name: c[0], style_no: c[1], inquiry_date: c[2], currency: c[3], exchange_rate: c[4],
+    quote_qty: c[5], rmb_total: c[6], usd_total: c[7], salesperson: c[8], remark: c[9],
+  }), /客户|款号|金额|询价|业务员/);
   importing.value = true;
   try {
     const res: any = await quoteApi.importBatch(rows);

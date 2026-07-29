@@ -126,6 +126,7 @@ import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search, Plus, Download, Delete, ArrowDown, Upload } from '@element-plus/icons-vue';
+import { parseTableText, rowsPositional } from '@/utils/parseTable';
 import { orderApi } from '@/api/order';
 import { contractApi } from '@/api/contract';
 import { printOrder } from '@/utils/orderPrint';
@@ -167,13 +168,12 @@ const importText = ref('');
 const importing = ref(false);
 const importResult = ref<any>(null);
 async function doImport() {
-  const rows = importText.value.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
-    const c = l.split(/\t|,/).map((x) => x.trim());
-    return {
-      external_no: c[0], customer_name: c[1], customer_po: c[2], style_no: c[3], style_name: c[4],
-      qty_total: c[5], currency: c[6], unit_price: c[7], delivery_date: c[8], status: c[9],
-    };
-  });
+  // 解析走 parseTableText：Tab/逗号自适应+引号安全（旧 split(/\t|,/) 遇名称含逗号即错列）；
+  // 首行像表头自动跳过
+  const rows = rowsPositional(parseTableText(importText.value), (c) => ({
+    external_no: c[0], customer_name: c[1], customer_po: c[2], style_no: c[3], style_name: c[4],
+    qty_total: c[5], currency: c[6], unit_price: c[7], delivery_date: c[8], status: c[9],
+  }), /单号|客户|款号|PO|金额|单价/);
   importing.value = true;
   try {
     const res: any = await orderApi.importBatch(rows);

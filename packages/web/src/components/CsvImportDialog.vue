@@ -68,6 +68,8 @@
 import { ref, computed } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Download, Upload } from '@element-plus/icons-vue';
+// 表格文本解析收口到 utils/parseTable（引号包裹/内嵌换行安全；Excel 直接粘贴 Tab 分隔也认）
+import { parseTableText } from '@/utils/parseTable';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -115,26 +117,8 @@ function onFile(opt: any) {
   reader.onload = () => { rawText.value = String(reader.result || ''); };
   reader.readAsText(opt.file, 'utf-8');
 }
-// 简易 CSV/TSV 解析（Excel 直接粘贴是 Tab 分隔；支持双引号包裹的逗号/换行）
-function parseCsv(text: string): string[][] {
-  const sep = text.includes('\t') ? '\t' : ',';
-  const rows: string[][] = []; let cur: string[] = []; let field = ''; let inQ = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (inQ) {
-      if (c === '"' && text[i + 1] === '"') { field += '"'; i++; }
-      else if (c === '"') inQ = false;
-      else field += c;
-    } else if (c === '"') inQ = true;
-    else if (c === sep) { cur.push(field); field = ''; }
-    else if (c === '\n') { cur.push(field); rows.push(cur); cur = []; field = ''; }
-    else if (c !== '\r') field += c;
-  }
-  if (field.length || cur.length) { cur.push(field); rows.push(cur); }
-  return rows.filter((r) => r.some((x) => x.trim() !== ''));
-}
 function parse() {
-  const grid = parseCsv(rawText.value.trim());
+  const grid = parseTableText(rawText.value.trim());
   if (grid.length < 2) { ElMessage.warning('至少需要表头 + 1 行数据'); return; }
   const headers = grid[0].map((h) => h.trim());
   parsed.value = grid.slice(1).map((cells) => {
