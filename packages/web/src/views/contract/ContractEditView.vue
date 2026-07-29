@@ -86,7 +86,17 @@
           <el-col :span="6"><el-form-item label="中期%"><el-input-number v-model="form.mid_ratio" :min="0" :max="100" :precision="2" style="width:100%" /></el-form-item></el-col>
           <el-col :span="6"><el-form-item label="尾款%"><el-input-number v-model="form.final_ratio" :min="0" :max="100" :precision="2" style="width:100%" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="账期(天)"><el-input-number v-model="form.account_period_days" :min="0" style="width:100%" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="最后发货日"><el-date-picker v-model="form.last_ship_date" type="date" value-format="YYYY-MM-DD" style="width:100%" /></el-form-item></el-col>
+          <el-col :span="8">
+            <el-form-item>
+              <template #label>
+                最后发货日
+                <el-tooltip content="整单出货截止日（成衣/货物最迟出厂日期）；与每行「交货期限」是两个字段：交货期限=该行材料应交日期（默认订单交期−45天，通常更早）" placement="top">
+                  <el-icon style="margin-left:2px;vertical-align:-2px"><InfoFilled /></el-icon>
+                </el-tooltip>
+              </template>
+              <el-date-picker v-model="form.last_ship_date" type="date" value-format="YYYY-MM-DD" style="width:100%" />
+            </el-form-item>
+          </el-col>
           <el-col :span="8"><el-form-item label="备注"><el-input v-model="form.remark" :disabled="false" /></el-form-item></el-col>
         </el-row>
         <div class="ratio-hint" :class="{ bad: ratioSum !== 100 }">定金+中期+尾款 = {{ ratioSum }}%（须=100%）</div>
@@ -272,6 +282,7 @@ import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import { InfoFilled } from '@element-plus/icons-vue';
 import { contractApi } from '@/api/contract';
 import { factoryApi } from '@/api/factory';
 import { orderApi } from '@/api/order';

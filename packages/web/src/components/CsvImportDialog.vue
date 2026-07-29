@@ -7,7 +7,7 @@
 
     <!-- Step 0: template -->
     <div v-if="step === 0" class="pane">
-      <p class="muted">请按固定模板准备数据（Excel 另存为 CSV，UTF-8）。列顺序：</p>
+      <p class="muted">请按固定模板准备数据（支持 .xlsx / CSV / 直接粘贴 Excel 表格）。列顺序：</p>
       <div class="headers">{{ templateHeaders.join(' , ') }}</div>
       <el-button type="primary" :icon="Download" @click="downloadTemplate">下载 CSV 模板</el-button>
       <el-button @click="step = 1">已备好数据，下一步</el-button>
@@ -15,10 +15,10 @@
 
     <!-- Step 1: upload/paste -->
     <div v-else-if="step === 1" class="pane">
-      <el-upload action="#" :show-file-list="false" accept=".csv,text/csv" :http-request="onFile">
-        <el-button :icon="Upload" type="primary">上传 CSV 文件</el-button>
+      <el-upload action="#" :show-file-list="false" accept=".csv,.xlsx,text/csv" :http-request="onFile">
+        <el-button :icon="Upload" type="primary">上传 CSV / xlsx 文件</el-button>
       </el-upload>
-      <p class="muted" style="margin:10px 0 4px">或直接粘贴 CSV 文本：</p>
+      <p class="muted" style="margin:10px 0 4px">或直接粘贴 CSV / Excel 表格文本（Tab 分隔也认）：</p>
       <el-input v-model="rawText" type="textarea" :rows="6" placeholder="第一行为表头，与模板一致" />
       <div style="margin-top:10px">
         <el-button @click="step = 0">上一步</el-button>
@@ -92,12 +92,32 @@ function downloadTemplate() {
   URL.revokeObjectURL(url);
 }
 function onFile(opt: any) {
+  const name: string = opt.file?.name ?? '';
+  if (/\.xls$/i.test(name)) {
+    ElMessage.error('.xls 是老格式（BIFF）解析不了——请用 Excel/WPS 另存为 .xlsx 或 CSV 后再导入');
+    return;
+  }
+  if (/\.xlsx$/i.test(name)) {
+    // xlsx 直接解析（此前只认文本，上传 xlsx 二进制会解析成全空行——用户反馈）
+    opt.file.arrayBuffer().then(async (buf: ArrayBuffer) => {
+      try {
+        const { parseXlsx } = await import('@/utils/sheetPreview');
+        const sheets = await parseXlsx(buf);
+        const rows = sheets[0]?.rows ?? [];
+        if (!rows.length) { ElMessage.warning('未读到任何工作表数据'); return; }
+        rawText.value = rows.map((r) => r.map((c) => (/[",\n\t]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join('\t')).join('\n');
+        ElMessage.success(`已解析 ${rows.length} 行，点击「解析并校验」继续`);
+      } catch (e: any) { ElMessage.error(e?.message ?? 'xlsx 解析失败'); }
+    });
+    return;
+  }
   const reader = new FileReader();
-  reader.onload = () => { rawText.value = String(reader.result || ''); step.value = 1; };
+  reader.onload = () => { rawText.value = String(reader.result || ''); };
   reader.readAsText(opt.file, 'utf-8');
 }
-// 简易 CSV 解析（支持双引号包裹的逗号/换行）
+// 简易 CSV/TSV 解析（Excel 直接粘贴是 Tab 分隔；支持双引号包裹的逗号/换行）
 function parseCsv(text: string): string[][] {
+  const sep = text.includes('\t') ? '\t' : ',';
   const rows: string[][] = []; let cur: string[] = []; let field = ''; let inQ = false;
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
@@ -106,7 +126,7 @@ function parseCsv(text: string): string[][] {
       else if (c === '"') inQ = false;
       else field += c;
     } else if (c === '"') inQ = true;
-    else if (c === ',') { cur.push(field); field = ''; }
+    else if (c === sep) { cur.push(field); field = ''; }
     else if (c === '\n') { cur.push(field); rows.push(cur); cur = []; field = ''; }
     else if (c !== '\r') field += c;
   }

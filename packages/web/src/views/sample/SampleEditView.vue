@@ -28,7 +28,7 @@
     <!-- 关联单据快速跳转:下游·由本样衣生成的报价单(反查见 loadRelatedQuotes;版师视图不查,报价对版师不可见) -->
     <DocLinks :links="docLinks" />
 
-    <RuleHint>品名<b>文本录入、不从库导入</b>;颜色可点「加颜色列」动态扩列;<b>参考价格对版师脱敏</b>;实际耗用/拉链长度/工时由版师在工作台填写;填「材料寄出单号」即自动推送版师转打样中。</RuleHint>
+    <RuleHint>品名<b>文本录入、不从库导入</b>;颜色按<b>色组分列</b>,「＋色组」可加列;<b>参考价格对版师脱敏</b>;实际耗用/拉链长度/工时由版师在工作台填写;填「材料寄出单号」即自动推送版师转打样中。</RuleHint>
     <el-form ref="formRef" :model="form" :rules="rules" label-width="104px" class="form-body">
       <!-- 基本信息 -->
       <section-block title="▣ 基本信息" badge="16 字段">
@@ -122,7 +122,20 @@
             <el-table-column label="品名" min-width="130" fixed><template #default="{ row }"><el-input v-model="row.itemName" size="small" :disabled="bizDisabled" /></template></el-table-column>
             <el-table-column label="安排日期" width="130"><template #default="{ row }"><el-date-picker v-model="row.arrangeDate" type="date" value-format="YYYY-MM-DD" size="small" style="width:100%" :disabled="bizDisabled" /></template></el-table-column>
             <el-table-column label="门幅" width="90"><template #default="{ row }"><el-input v-model="row.width" size="small" :disabled="bizDisabled" /></template></el-table-column>
-            <el-table-column label="颜色" width="120"><template #default="{ row }"><el-input v-model="row.colors" size="small" :disabled="bizDisabled" placeholder="逗号分隔" /></template></el-table-column>
+            <el-table-column label="颜色（色组）" min-width="180">
+              <template #default="{ row }">
+                <!-- 色组动态多列（用户反馈：一款四五个色组要分开看/分开录；存储仍逗号串,UI 按组分列） -->
+                <div class="color-groups">
+                  <span v-for="(g, gi) in row.colorGroups" :key="gi" class="cg-item">
+                    <el-input :model-value="g" size="small" :disabled="bizDisabled" :placeholder="`色组${gi + 1}`"
+                      @update:model-value="(v: string) => setColorGroup(row, gi, v)" />
+                    <el-button v-if="!bizDisabled && row.colorGroups.length > 1" link size="small" class="cg-x" @click="removeColorGroup(row, gi)">✕</el-button>
+                  </span>
+                  <el-button v-if="!bizDisabled" link size="small" class="cg-add" @click="addColorGroup(row)">＋色组</el-button>
+                  <span v-if="!row.colorGroups.length && bizDisabled" class="muted">—</span>
+                </div>
+              </template>
+            </el-table-column>
             <el-table-column label="部位" width="100"><template #default="{ row }"><el-input v-model="row.part" size="small" :disabled="bizDisabled" /></template></el-table-column>
             <el-table-column label="成份" width="120"><template #default="{ row }"><el-input v-model="row.composition" size="small" :disabled="bizDisabled" /></template></el-table-column>
             <el-table-column label="码带" width="90"><template #default="{ row }"><el-input v-model="row.codeBand" size="small" :disabled="bizDisabled" /></template></el-table-column>
@@ -311,7 +324,13 @@ const versions = ref<any[]>([]);
 const pmUsers = ref<any[]>([]);       // 制版师用户(role=PATTERNMAKER)
 const pmLoadFailed = ref(false);      // 加载失败降级为文本输入
 
-const emptyMaterial = () => ({ itemName: '', arrangeDate: '', width: '', colors: '', part: '', composition: '', codeBand: '', zipperLength: '', puller: '', qty: '', gramWeight: '', size: '', refPrice: '', actualUsage: '', supplierId: undefined, supplierName: '', image: '', remark: '' });
+const emptyMaterial = () => ({ itemName: '', arrangeDate: '', width: '', colors: '', colorGroups: [] as string[], part: '', composition: '', codeBand: '', zipperLength: '', puller: '', qty: '', gramWeight: '', size: '', refPrice: '', actualUsage: '', supplierId: undefined, supplierName: '', image: '', remark: '' });
+// 色组分列（用户反馈：四五个色组要分开录/分开看）：colorGroups 数组是编辑源,colors 逗号串同步存储
+const splitColors = (s: any): string[] => String(s ?? '').split(/[，,]/).map((x) => x.trim()).filter(Boolean);
+function syncColors(row: any) { row.colors = row.colorGroups.map((s: string) => s.trim()).filter(Boolean).join('，'); }
+function setColorGroup(row: any, i: number, v: string) { row.colorGroups[i] = v; syncColors(row); }
+function addColorGroup(row: any) { row.colorGroups.push(''); }
+function removeColorGroup(row: any, i: number) { row.colorGroups.splice(i, 1); syncColors(row); }
 const form = reactive<any>({
   sampleNo: '', categories: '', middlemanId: undefined, styleNo: '', sampleSize: '', sampleQty: '', buyerId: undefined,
   patternmakerId: undefined, patternmakerName: '', maker: authStore.realName || '', makeDate: new Date().toISOString().slice(0, 10),
@@ -373,7 +392,7 @@ function moveRow(list: any[], i: number, dir: -1 | 1) {
 function copyMaterials() {
   for (const src of selMaterials.value) {
     const at = form.materials.indexOf(src);
-    form.materials.splice(at + 1, 0, { ...src, id: undefined, image: '' });
+    form.materials.splice(at + 1, 0, { ...src, id: undefined, image: '', colorGroups: [...(src.colorGroups ?? [])] });
   }
   ElMessage.success(`已复制 ${selMaterials.value.length} 行`);
 }
@@ -444,6 +463,7 @@ function confirmSheetImport() {
   let matched = 0, unmatched = 0;
   const mapped = rows.map((r) => {
     const m: any = { ...emptyMaterial(), ...r };
+    m.colorGroups = splitColors(m.colors); // 导入的逗号串颜色回分列展示（色组一/二分开看）
     if (m.supplierName) {
       const f = factories.value.find((x: any) => x.name === m.supplierName);
       if (f) { m.supplierId = f.id; matched++; } else unmatched++;
@@ -573,7 +593,7 @@ async function load() {
     returnNo: d.return_no ?? '', returnDate: d.return_date ?? '', pieceCount: d.piece_count ?? '',
     laborUnitPrice: d.labor_unit_price ?? '', laborAmount: d.labor_amount ?? '', status: d.status,
     materials: d.materials?.length ? d.materials.map((m: any) => ({
-      id: m.id, itemName: m.item_name, arrangeDate: m.arrange_date ?? '', image: m.image ?? '', width: m.width, colors: m.colors, part: m.part,
+      id: m.id, itemName: m.item_name, arrangeDate: m.arrange_date ?? '', image: m.image ?? '', width: m.width, colors: m.colors, colorGroups: splitColors(m.colors), part: m.part,
       composition: m.composition, codeBand: m.code_band, zipperLength: m.zipper_length, puller: m.puller,
       qty: m.qty, gramWeight: m.gram_weight ?? '', size: m.size, refPrice: m.ref_price, actualUsage: m.actual_usage,
       supplierId: m.supplier_id ?? undefined, supplierName: m.supplier_name, remark: m.remark,
@@ -606,7 +626,11 @@ function buildDto() {
     fileLocation: form.fileLocation || undefined, garmentRemark: form.garmentRemark || undefined,
     feedbackAttachments: form.feedbackAttachments ?? '',
     image1: form.image1 || undefined, image2: form.image2 || undefined, image3: form.image3 || undefined,
-    materials: form.materials.filter((m: any) => m.itemName).map((m: any, i: number) => ({ ...m, sortOrder: i })),
+    materials: form.materials.filter((m: any) => m.itemName).map((m: any, i: number) => {
+      // colorGroups 是编辑态辅助数组，不能进 DTO（whitelist 会 400）；colors 逗号串已在编辑时同步
+      const { colorGroups, ...rest } = m;
+      return { ...rest, sortOrder: i };
+    }),
     shipRounds: buildRounds(),
   };
 }
@@ -759,4 +783,9 @@ onMounted(async () => { await loadRefs(); await load(); await draft.restorePromp
 .map-item label { font-size: 12px; color: var(--el-text-color-secondary); }
 .sheet-foot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
 .muted { color: var(--el-text-color-secondary); font-size: 13px; }
+.color-groups { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.cg-item { display: inline-flex; align-items: center; }
+.cg-item .el-input { width: 92px; }
+.cg-x { padding: 0 1px; color: var(--el-color-danger); }
+.cg-add { white-space: nowrap; }
 </style>
