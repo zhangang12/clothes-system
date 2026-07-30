@@ -98,7 +98,8 @@ export function guessMapping(rows: string[][]): { mapping: Record<string, number
 }
 
 /** 原始行 → 材料行（按列映射；品名为空的行跳过——分区标题/空行自然滤掉）
- *  extraColorCols：除已映射颜色列外，其它「颜色」列号——一款多组颜色（颜色一/颜色二）合并导入，去重后逗号相连 */
+ *  extraColorCols：除已映射颜色列外，其它「颜色」列号——一款多组颜色（颜色一/颜色二…），
+ *  每列各成一个色组按序拼接（用户反馈：按源列结构分开，同值也不合并——她的表就是两列结构） */
 export function rowsToMaterials(rows: string[][], mapping: Record<string, number>, extraColorCols: number[] = []): any[] {
   const cell = (r: string[], key: string) => (mapping[key] != null ? String(r[mapping[key]] ?? '').trim() : '');
   return rows
@@ -107,7 +108,6 @@ export function rowsToMaterials(rows: string[][], mapping: Record<string, number
       if (extraColorCols.length) {
         out.colors = [out.colors, ...extraColorCols.map((i) => String(r[i] ?? '').trim())]
           .filter(Boolean)
-          .filter((v, idx, arr) => arr.indexOf(v) === idx) // 去重（两组同色的行不重复拼接）
           .join('，');
       }
       return out;

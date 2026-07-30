@@ -113,3 +113,27 @@ describe('parseSheetFile（csv/txt 路径）', () => {
     await expect(parseSheetFile(new File(['x'], 'a.docx'))).rejects.toThrow('仅支持');
   });
 });
+
+describe('rowsToMaterials extraColorCols（多组颜色按源列分列，用户反馈 7-30）', () => {
+  const mapping = { itemName: 0, colors: 1, part: 3 };
+
+  it('颜色二列各自成色组按序拼接，不合并不去重', () => {
+    const rows = [
+      ['150D小牛津', '62 Olive橄榄绿色', '01 Black 黑色', '大身'],
+      ['撞色面料2', '10 White 增白色', '10 White 增白色', '拼块'], // 两组同值也保留两列结构
+    ];
+    const out = rowsToMaterials(rows, mapping, [2]);
+    expect(out[0].colors).toBe('62 Olive橄榄绿色，01 Black 黑色');
+    expect(out[1].colors).toBe('10 White 增白色，10 White 增白色');
+  });
+
+  it('颜色二列为空的行不悬空拼接', () => {
+    const out = rowsToMaterials([['面料A', '黑色', '', '大身']], mapping, [2]);
+    expect(out[0].colors).toBe('黑色');
+  });
+
+  it('未映射颜色列时 extraColorCols 也能独立成色组', () => {
+    const out = rowsToMaterials([['面料A', '', '黑色', '大身']], { itemName: 0, part: 3 }, [1, 2]);
+    expect(out[0].colors).toBe('黑色');
+  });
+});

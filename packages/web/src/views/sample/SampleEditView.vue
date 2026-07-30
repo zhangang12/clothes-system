@@ -253,7 +253,10 @@
             <el-table-column prop="qty" label="单耗/数量" width="90" />
             <el-table-column prop="gramWeight" label="克重" width="80" />
             <el-table-column prop="part" label="部位/位置" min-width="120" />
-            <el-table-column prop="colors" label="颜色" min-width="110" />
+            <!-- 色组分列预览（用户反馈：颜色一/颜色二不要合并显示） -->
+            <el-table-column v-for="gi in sheetMaxColorGroups" :key="gi" :label="`色组${gi}`" min-width="100">
+              <template #default="{ row }">{{ splitColors(row.colors)[gi - 1] ?? '' }}</template>
+            </el-table-column>
             <el-table-column prop="supplierName" label="供应商" min-width="110" />
             <el-table-column prop="remark" label="备注" min-width="100" />
           </el-table>
@@ -434,6 +437,9 @@ const sheetExtraColorCols = computed(() => {
 });
 const sheetPreviewRows = computed(() =>
   rowsToMaterials(sheetRows.value.slice(sheetHeader.value ? sheetHeaderRow.value + 1 : 0), sheetActiveMapping.value, sheetExtraColorCols.value).slice(0, 200));
+// 预览的色组列数（取各行最大组数，分列展示不合并）
+const sheetMaxColorGroups = computed(() =>
+  Math.max(1, ...sheetPreviewRows.value.map((r) => splitColors(r.colors).length)));
 function openSheetImport() { sheetDialog.value = true; }
 function resetSheetImport() {
   sheetFileName.value = ''; sheetRows.value = []; sheetHeader.value = true; sheetMode.value = 'append'; sheetHeaderRow.value = 0;
