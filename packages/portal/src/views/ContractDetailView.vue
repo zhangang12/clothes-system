@@ -168,6 +168,14 @@
 
     <!-- Action Buttons -->
     <div class="action-area">
+      <!-- 打印合同：电脑登录门户可直出 A4 纸质件，盖章后拍照回传下方「纸质盖章照片」-->
+      <van-button
+        type="default" plain block round size="large"
+        icon="printer" style="margin-bottom: 10px;"
+        @click="doPrint"
+      >
+        打印合同（纸质盖章用）
+      </van-button>
       <div v-if="contract.portal_status === 'PUSHED'" class="terms-agree">
         <van-checkbox v-model="agreedTerms" shape="square" icon-size="18px">
           我已阅读并同意合同条款
@@ -380,6 +388,7 @@ import { useRoute } from 'vue-router';
 import { showConfirmDialog, showSuccessToast } from 'vant';
 import { portalContractApi } from '../api/contract';
 import { uploadApi } from '../api/upload';
+import { printContract } from '../utils/contractPrint';
 
 const route = useRoute();
 const contract = ref<any>({});
@@ -497,6 +506,15 @@ function logActionLabel(action: string) {
 function openAtt(urls: string) {
   const first = (urls || '').split(',')[0];
   if (first) window.open(first, '_blank');
+}
+
+// 打印合同：A4 版式新窗口 + 浏览器打印（电脑登录直出纸质件；数据=详情接口返回的合同+本厂+本司主体）
+function doPrint() {
+  try {
+    printContract(contract.value, contract.value.factory, contract.value.company);
+  } catch (e: any) {
+    showConfirmDialog({ title: '提示', message: e?.message ?? '无法打开打印窗口', showCancelButton: false });
+  }
 }
 
 async function load() {

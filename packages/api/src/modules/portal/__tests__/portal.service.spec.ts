@@ -14,6 +14,8 @@ import { ReconciliationShipment } from '../../reconciliation/reconciliation-ship
 import { PaymentRequest } from '../../payment/payment-request.entity';
 import { OrderMaterial } from '../../order/order-material.entity';
 import { OrderSizeMatrix } from '../../order/order-size-matrix.entity';
+import { Factory } from '../../factory/factory.entity';
+import { CompanyProfile } from '../../company/company-profile.entity';
 import { NumberingService } from '../../../common/services/numbering.service';
 import { ContractPortalStatus } from '@i9/types';
 
@@ -102,6 +104,8 @@ describe('PortalService', () => {
         { provide: getRepositoryToken(Reconciliation), useValue: reconcileRepo },
         { provide: getRepositoryToken(ReconciliationShipment), useValue: makeRepo() },
         { provide: getRepositoryToken(PaymentRequest), useValue: makeRepo() },
+        { provide: getRepositoryToken(Factory), useValue: makeRepo() },
+        { provide: getRepositoryToken(CompanyProfile), useValue: makeRepo() },
         { provide: NumberingService, useValue: { nextWithSegment: jest.fn().mockResolvedValue('DZ-K-001'), next: jest.fn().mockResolvedValue('PR-20260709-001') } },
         { provide: DataSource, useValue: { transaction: jest.fn().mockImplementation((cb: any) => cb(mockManager)) } },
       ],

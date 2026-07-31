@@ -14,10 +14,12 @@ import { PaymentRequest } from '../payment/payment-request.entity';
 import { OrderMain } from '../order/order-main.entity';
 import { OrderMaterial } from '../order/order-material.entity';
 import { OrderSizeMatrix } from '../order/order-size-matrix.entity';
+import { Factory } from '../factory/factory.entity';
+import { CompanyProfile } from '../company/company-profile.entity';
 
 @Module({
   imports: [TypeOrmModule.forFeature([
-    SupplierAccount, Contract, ContractMaterial, ContractShipment, ContractShipmentItem, ContractPortalLog, OrderMain, OrderMaterial, OrderSizeMatrix, Reconciliation, ReconciliationShipment, PaymentRequest,
+    SupplierAccount, Contract, ContractMaterial, ContractShipment, ContractShipmentItem, ContractPortalLog, OrderMain, OrderMaterial, OrderSizeMatrix, Reconciliation, ReconciliationShipment, PaymentRequest, Factory, CompanyProfile,
   ])],
   controllers: [PortalController],
   providers: [PortalService],

@@ -12,6 +12,8 @@ import { OrderSizeMatrix } from '../order/order-size-matrix.entity';
 import { Reconciliation, ReconciliationStatus } from '../reconciliation/reconciliation.entity';
 import { ReconciliationShipment } from '../reconciliation/reconciliation-shipment.entity';
 import { PaymentRequest } from '../payment/payment-request.entity';
+import { Factory } from '../factory/factory.entity';
+import { CompanyProfile } from '../company/company-profile.entity';
 import { ContractPortalStatus, ContractType, ReconcileType, PaymentApprovalStatus } from '@i9/types';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { UploadInvoiceDto } from './dto/upload-invoice.dto';
@@ -37,6 +39,8 @@ export class PortalService {
     @InjectRepository(OrderSizeMatrix) private readonly matrixRepo: Repository<OrderSizeMatrix>,
     @InjectRepository(Reconciliation) private readonly reconcileRepo: Repository<Reconciliation>,
     @InjectRepository(PaymentRequest) private readonly prRepo: Repository<PaymentRequest>,
+    @InjectRepository(Factory) private readonly factoryRepo: Repository<Factory>,
+    @InjectRepository(CompanyProfile) private readonly companyRepo: Repository<CompanyProfile>,
     private readonly numbering: NumberingService,
     private readonly dataSource: DataSource,
   ) {}
@@ -114,7 +118,19 @@ export class PortalService {
       });
       (shipments as any[]).forEach((b) => { (b as any).items = byShip.get(+b.id) ?? []; });
     }
-    return { ...contract, materials, logs, shipments, reconciliations, orderDetail };
+    // 门户打印合同：落款甲乙方信息（工厂=本账号所属工厂，本司=默认主体；只取打印所需字段）
+    const [factory, company] = await Promise.all([
+      this.factoryRepo.findOne({
+        where: { id: factoryId, deleted: 0 },
+        select: ['id', 'name', 'address', 'contact_name', 'contact_phone', 'seal_url'],
+      }),
+      this.companyRepo.findOne({
+        where: { deleted: 0 },
+        select: ['id', 'name', 'address', 'phone', 'legal_rep', 'bank_name', 'bank_account', 'seal_url'],
+        order: { is_default: 'DESC', id: 'ASC' },
+      }),
+    ]);
+    return { ...contract, materials, logs, shipments, reconciliations, orderDetail, factory, company };
   }
 
   async stamp(id: number, supplierAccount: string, factoryId: number, agreed = false, paperUrl?: string): Promise<Contract> {

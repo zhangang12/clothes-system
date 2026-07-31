@@ -90,7 +90,7 @@
       </section-block>
 
       <!-- 联系人明细表 -->
-      <section-block title="▸ 明细表：联系人" badge="4 列">
+      <section-block title="▸ 明细表：联系人" badge="7 列">
         <div v-if="!readonly" class="subtable-ops">
           <el-button size="small" :icon="Plus" @click="addContact">新增行</el-button>
           <el-button size="small" :icon="Minus" :disabled="!selectedContacts.length" @click="removeContacts">删除</el-button>
@@ -101,6 +101,15 @@
           <el-table-column type="index" label="#" width="44" />
           <el-table-column label="姓名" min-width="110">
             <template #default="{ row }"><el-input v-model="row.name" size="small" /></template>
+          </el-table-column>
+          <el-table-column label="部门" width="120">
+            <template #default="{ row }"><el-input v-model="row.department" size="small" /></template>
+          </el-table-column>
+          <el-table-column label="职务" width="120">
+            <template #default="{ row }"><el-input v-model="row.title" size="small" /></template>
+          </el-table-column>
+          <el-table-column label="电话号码" width="150">
+            <template #default="{ row }"><el-input v-model="row.phone" size="small" placeholder="座机" /></template>
           </el-table-column>
           <el-table-column label="手机号码" width="140">
             <template #default="{ row }"><el-input v-model="row.mobile" size="small" /></template>
