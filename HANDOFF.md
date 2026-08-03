@@ -53,7 +53,7 @@
 大项⑤**客户机密授权体系**也已完成(设计稿01 v1.3:客户属机密单据):新表 customer_grant(客户×用户,查看/修改两级);行级可见=创建人+被授权人+管理员,覆盖 列表/详情(未授权404防探测)/下拉(下游选客户同样不可见);新建自动为创建人登记权限;批量授权(多客户×多用户,仅管理员,POST /customers/grants)+单客户授权清单/撤销;GET /auth/users 选人端点(仅管理员);web 列表🔒机密列+批量授权对话框+行级「授权」管理。真栈E2E 8步:未授权不可见→授权仅查看(改名403)→升级可改→撤销复隐→非管理员授权被拒→自建自见✓。
 **报价行级过滤已补齐**(设计稿「非授权用户在报价中不可见该客户」):quote findAll/findOne 对非管理员按可见客户集过滤——中间商(customer_id)或最终买家(buyer_id)任一指向不可见客户即整单隐藏,详情 404 防探测;真栈E2E:未授权(列表隐/详情404)→授权可见→admin全量✓。合同列表不含客户列(天然不泄露);订单/样衣列表仅显示中间商名称快照(不含联系方式/条款等核心机密),如需彻底遮蔽可按 quote 同法接入(已知边界)。
 **审计清单至此全部完成**——所有设计稿大项(合同编辑页/订单矩阵/门户对账/付款分批/客户机密+报价行级)均已交付并真栈验证。
-**基建待办三连清(2026-07-10)**:①Redis 硬单点消除——sys_sequence DB 兜底发号(挂了降速不阻断/恢复自动追平切回,真栈杀 Redis 实测五号连续无重号);②GitHub Actions 合并即发版 workflow 模板就位于 infra/ci/deploy.yml(**待用户**:复制到 .github/workflows/ 提交——当前 PAT 无 workflow scope,需网页端建;并配 DEPLOY_SSH_HOST/USER/KEY secrets);③backup.sh 补上传文件打包(uploads_*.tar.gz)。剩余基建:migration 体系(gen-column-sync 已等效缓解)/deep-test CI 门禁/异地备份+HTTPS+告警(需服务器侧凭据与操作)。
+**基建待办三连清(2026-07-10)**:①Redis 硬单点消除——sys_sequence DB 兜底发号(挂了降速不阻断/恢复自动追平切回,真栈杀 Redis 实测五号连续无重号);②GitHub Actions 合并即发版 workflow 模板就位于 infra/ci/deploy.yml(~~待用户复制到 .github/workflows/ 并配 secrets~~ **2026-08-03 用户拍板不做,模板仅留档**);③backup.sh 补上传文件打包(uploads_*.tar.gz)。剩余基建:migration 体系(gen-column-sync 已等效缓解)/deep-test CI 门禁/异地备份+HTTPS+告警(需服务器侧凭据与操作)。
 
 ## 系统当前活动状态
 
@@ -69,7 +69,7 @@
 
 0. **🟠 deep-test.sh 脚本适配**（恢复红线二门禁）：2026-07-20 真库运行暴露脚本与现行代码脱节（硬编码 supplier1 账号、fixture 缺 categories 必填字段、订单手动推进自旧提交 3077f42 被禁、P3 起自动开通门户账号、FINANCE 审批、假 PNG 被 magic-bytes 拦截等），需逐集群适配：fixture 补 categories、门户改现场开通账号、报价授权对齐 customer_grant、对账传 contract_id、订单断言适配下游事件、上传改真 PNG。适配完成前 deep-test 结果不可作发版门禁。
 1. **🟠 测试基建**：merge-ship 的 UI 真实路径补 Playwright 用例（当前自动化零覆盖）；portal 包建立 vitest 基建；L9 彻底化需上传台账表（schema 变更，评估后排期）。
-2. 🟡 用户操作·启用合并即发版：把 `infra/ci/deploy.yml` 复制为 `.github/workflows/deploy.yml`（网页端建，当前 PAT 无 workflow scope）+ 配 `DEPLOY_SSH_HOST/USER/KEY` secrets。
+2. ~~🟡 用户操作·启用合并即发版~~ **用户拍板：不做（2026-08-03）**，从待办移除、别再提。模板 `infra/ci/deploy.yml` 留在仓库里（不删，日后想启用照它走即可），但**不再视为待办**。**须知其后果**：发版继续走开发机 `deploy-local.sh`，而它只 `git push ecs main`（SSH 直推服务器）、**不推 GitHub**——所以**每次发完版都要单独 `git push origin main`**，否则 GitHub 持续落后（8-03 一天内连续三次发版都落后过）。这是既定工作方式、不是疏忽，接手的人照做即可。
 3. 🟡 剩余基建：正式 migration 体系（`gen-column-sync.py` 已等效缓解）；`deep-test.sh` CI 门禁；异地备份推送（OSS/rclone）+ HTTPS + 告警（需服务器侧凭据）。
 4. ~~🟡 **AUTO 段只补列、不补索引**（2026-08-03 真库 diff 实证）：生产库缺 5 个 `init.sql` 里有的索引~~ **已解决（2026-08-03，待发版）**：`gen-column-sync.py` 加索引同步段，AUTO 段现生成 77 条 `_i9_add_index`/`_i9_add_unique`；认不出的约束行改为报错退出防复发。服务器临时库已验（升级前正缺那 5 个 → 升级后索引 diff 空 → 幂等 ✓）。详见「最近变更」首条。
 5. 🟡 **`_i9_sync_col` 只比类型、看不见可空性/默认值漂移**（2026-08-03 索引验证顺带发现）：`customer.grade` 生产是 `NOT NULL DEFAULT 'B'`、HEAD `init.sql` 是 `DEFAULT NULL`，因两边 `COLUMN_TYPE` 同为 `enum('A','B','C')` 而被跳过。当前**不报错**（DTO 里 `grade` 是 `@IsOptional()`，不传就走库里默认值 `'B'`）；风险仅在显式传 `grade: null` 时会撞 `Column 'grade' cannot be null`。修法是让 `_i9_sync_col` 也比 `IS_NULLABLE`/`COLUMN_DEFAULT`，但那会让存量库上一批列开始被 MODIFY，**需先在临时库跑一遍看影响面**再定，别顺手改。
@@ -83,6 +83,7 @@
 - 币种/汇率主数据字典 **不做**；本司主体档案 **做**；出口发票子模块 + 多汇率收汇 **不做**（需求未写）。
 - 字段级角色脱敏 **按推荐走**；⑧大货生产 / ⑨船务资料模块 **暂缓**。
 - 验收审计：**小+中项全做（14 项）、大项缓做**——已完成。
+- **GitHub Actions「合并即发版」不做（2026-08-03）**：模板 `infra/ci/deploy.yml` 留档但不启用，已从「立即待办」移除。发版维持「开发机 `deploy-local.sh`」一条路；因其只推 `ecs` 不推 GitHub，**每次发版后单独 `git push origin main`** 属既定流程、不是遗漏。
 
 ## 如何接手工作（速查）
 

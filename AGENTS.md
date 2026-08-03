@@ -83,7 +83,7 @@ macOS 本地免 Docker 全栈（原生 MySQL8+Redis+API:3001+web+portal，装在
 - 首次装机：`bash infra/scripts/setup.sh`；回滚：`rollback.sh <commit>`（只回代码，结构只增不减）；体检：`health.sh`；备份：`backup.sh`（含 uploads 打包）；清库：`clean-db.sh`（交付前清业务数据）。
 - 运维脚本全在 `infra/scripts/`。已知坑（勿回退）：探活别用 `curl -f`（`/api/v1` 无根路由返回 404）；Redis 探活用 `redis-cli --no-auth-warning`；systemd 判定用 `systemctl cat`。
 - 环境变量模板 `.env.example` → 复制为 `.env.production`：`DB_* / REDIS_* / JWT_SECRET(≥32位) / UPLOAD_ROOT(默认/data/uploads) / WEB_ORIGIN / PORTAL_ORIGIN`。生产强制要求 `WEB_ORIGIN`。上传文件须挂持久卷。
-- CI：`infra/ci/deploy.yml` 是 GitHub Actions 合并即发版模板（merge main → SSH 跑 deploy+health），待用户复制为 `.github/workflows/deploy.yml` 并配 `DEPLOY_SSH_HOST/USER/KEY` secrets。
+- CI：`infra/ci/deploy.yml` 是 GitHub Actions 合并即发版模板，**用户已拍板不启用（2026-08-03）**——模板留档参考，别再建议接入。发版一律走开发机 `deploy-local.sh`；它只推 `ecs` 不推 GitHub，**每次发版后需单独 `git push origin main`**。
 
 ## 七、代码组织与开发约定
 
