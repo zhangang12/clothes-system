@@ -88,7 +88,7 @@
 
 - **先读**：本文件 →`CLAUDE.md`（红线）→`docs/项目记忆.md`（全貌）。
 - **开发分支**：`claude/code-pull-7brvqy`；同时推 `main`。
-- **推送凭据**（2026-08-03 更正）：GitHub 用 **PAT**（账号密码 2021 起已不收）。本机 `.env.local` **实际并不存在**（此前文档说凭据在那儿，照着找会扑空）；`credential.helper=osxkeychain` 但钥匙串里没有 github.com 条目，SSH 也没配公钥（`ssh -T git@github.com` → publickey denied）。所以 `git push origin main` 会交互式要用户名+PAT，输一次后 keychain 会记住。**凭据切勿入库、勿写进任何文档、勿拼进 URL**（会进 shell 历史与进程表）。注意：`deploy-local.sh` 只 `git push ecs main`（SSH，走服务器），**不推 GitHub**——发完版 GitHub 仍会落后，需另行手动推。
+- **推送凭据**（2026-08-03 更正并复核）：GitHub 用 **PAT**（账号密码 2021 起已不收）。文档原写「凭据在 `.env.local`」是错的——该文件被 `.gitignore` 忽略、从未随仓库分发，**开发机上根本不存在**，照着找会扑空。实际走 `credential.helper=osxkeychain`：**钥匙串现已存有条目**（`srvr=github.com` / `acct=zhangang12`，2026-08-03 由用户手动 push 一次后写入），因此 `git push origin main` 现在可非交互直接推。换机器/PAT 过期后需再交互输一次；SSH 未配公钥（`ssh -T git@github.com` → publickey denied），想免密可另配 SSH key 并改 remote。**凭据切勿入库、勿写进任何文档、勿拼进 URL**（会进 shell 历史与进程表）。注意：`deploy-local.sh` 只 `git push ecs main`（SSH，走服务器），**不推 GitHub**——每次发完版仍需单独 `git push origin main`，否则 GitHub 持续落后（8-03 连续三次发版都落后过）。
 - **发版**：`bash infra/scripts/deploy.sh`（一条命令）。回滚：`rollback.sh <commit>`。体检：`health.sh`。
 - **回滚会在服务器上重新构建**（必需：服务器 dist 正是要滚掉的那版，跳过构建等于没回滚）。脚本已带内存 preflight，不够时中止并给「开发机构建 + rsync」的替代路径。
 - **真机测**（改了 DB/集成必做）：容器内 `apt-get install -y mariadb-server redis-server` 起隔离实例 → HEAD `init.sql` 建库 → `NODE_ENV=production` 起 `node dist/main.js` → `bash infra/scripts/deep-test.sh`（应 0 失败）。
