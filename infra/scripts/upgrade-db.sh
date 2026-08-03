@@ -92,7 +92,7 @@ log "结构校验通过 ✓（关键表/列均已就位）"
 if systemctl cat "${SERVICE}.service" &>/dev/null; then
   log "重启 API 服务 ($SERVICE)..."
   systemctl restart "$SERVICE" || warn "重启 $SERVICE 失败，请手动 systemctl restart $SERVICE"
-elif command -v pm2 &>/dev/null && pm2 list 2>/dev/null | grep -q "$SERVICE"; then
+elif command -v pm2 &>/dev/null && [[ "$(pm2 list 2>/dev/null || true)" == *"$SERVICE"* ]]; then
   log "检测到 pm2 托管，重启 API ($SERVICE)..."
   pm2 restart "$SERVICE" || warn "pm2 restart $SERVICE 失败，请手动重启"
 else

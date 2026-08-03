@@ -39,7 +39,10 @@ DB_NAME=${DB_NAME:-i9_clothes}
 [[ -n "${MYSQL_ROOT_PASSWORD:-}" ]] || die "MYSQL_ROOT_PASSWORD 未在 $ENV_FILE 设置"
 
 # ── 容器就绪 ──
-docker ps --format '{{.Names}}' | grep -q "^${MYSQL_CONTAINER}$" || die "MySQL 容器 ${MYSQL_CONTAINER} 未运行"
+# 不用 `docker ps | grep -q`：pipefail 下 grep 命中即退出会让 docker 吃 SIGPIPE、
+# 管道返回 141 判成「没这容器」→ 这里会误 die（见 CLAUDE.md「运维脚本的坑」）。
+_RUNNING=$(docker ps --format '{{.Names}}' 2>/dev/null || true)
+[[ $'\n'"$_RUNNING"$'\n' == *$'\n'"${MYSQL_CONTAINER}"$'\n'* ]] || die "MySQL 容器 ${MYSQL_CONTAINER} 未运行"
 MYSQL="docker exec -i ${MYSQL_CONTAINER} mysql -uroot -p${MYSQL_ROOT_PASSWORD} --default-character-set=utf8mb4 -N"
 
 # 保留表（系统/参考数据）

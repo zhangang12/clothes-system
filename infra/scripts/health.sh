@@ -31,11 +31,20 @@ check() {
 
 overall=$OK
 
+# `cmd | grep -q` 在 set -o pipefail 下有竞态：grep 一命中就退出，写入方吃 SIGPIPE，
+# 整条管道返回 141 被判成「没匹配到」。先落变量再纯 bash 匹配，没有管道就没有竞态。
+# （deploy.sh 里同款写法曾能静默跳过整个数据库结构升级，见 CLAUDE.md「运维脚本的坑」。）
+has_line() {  # $1=待查行(精确整行)  $2=多行文本
+  [[ $'\n'"$2"$'\n' == *$'\n'"$1"$'\n'* ]]
+}
+
 # ── nginx ─────────────────────────────────────────────────────
-if curl -sf -o /dev/null -w "%{http_code}" http://127.0.0.1/ 2>/dev/null | grep -qE '^[23]'; then
+# 不用 curl -f：这里靠 %{http_code} 自己判，-f 只会让 curl 在 4xx 时非零退出反而干扰
+NGINX_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1/ 2>/dev/null || echo 000)
+if [[ "$NGINX_CODE" =~ ^[23] ]]; then
   check "nginx" $OK "port 80 responding"
 else
-  check "nginx" $FAIL "port 80 not responding"; overall=$FAIL
+  check "nginx" $FAIL "port 80 not responding (HTTP $NGINX_CODE)"; overall=$FAIL
 fi
 
 # ── API ───────────────────────────────────────────────────────
@@ -58,7 +67,7 @@ fi
 # ── Redis ─────────────────────────────────────────────────────
 # 区分「没起」/「密码不一致」/「无响应」；兼容 Docker 容器 与 本机原生 redis 两种部署
 source <(grep -E '^(REDIS_PASSWORD|REDIS_PORT)=' "$ENV_FILE" 2>/dev/null || echo "REDIS_PASSWORD=")
-if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^i9_redis$'; then
+if has_line 'i9_redis' "$(docker ps --format '{{.Names}}' 2>/dev/null || true)"; then
   # 容器部署：--no-auth-warning 抑制 -a 告警，PONG 走 stdout
   RPING=$(docker exec i9_redis redis-cli -a "${REDIS_PASSWORD:-}" --no-auth-warning ping 2>/dev/null || true)
 elif command -v redis-cli &>/dev/null; then
