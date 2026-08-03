@@ -152,7 +152,7 @@ UPDATE contract_material cm
  WHERE cm.order_material_id IS NULL;
 
 -- ▼▼ AUTO-GENERATED COLUMN SYNC(gen-column-sync.py 生成,勿手改)▼▼
--- 目的:任意历史版本存量库 → HEAD 结构。①缺整表补表 ②缺列按 HEAD 定义补列(均幂等)。
+-- 目的:任意历史版本存量库 → HEAD 结构。①缺整表补表 ②缺列按 HEAD 定义补列 ③缺索引补索引(均幂等)。
 -- 注意:NOT NULL 无默认列由 MySQL DDL 隐式默认值填充存量行(数值0/字符串空),优于缺列 500。
 
 CREATE TABLE IF NOT EXISTS `sys_user` (
@@ -2544,6 +2544,174 @@ CALL _i9_add_col('error_log','created_at',"DATETIME      NOT NULL DEFAULT CURREN
 CALL _i9_sync_col('error_log','created_at',"DATETIME","DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP");
 CALL _i9_add_col('error_log','updated_at',"DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
 CALL _i9_sync_col('error_log','updated_at',"DATETIME","DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+
+-- —— 索引补齐(init.sql 里 KEY→_i9_add_index / UNIQUE KEY→_i9_add_unique;索引已存在则跳过) ——
+-- 判重只看索引名:同名但列不同的老索引不会被重建(保守,不动存量);同列不同名会多出一条冗余索引(无害)。
+-- 唯一索引若因存量重复值加不上,_i9_add_unique 的 CONTINUE HANDLER 只告警不中断发版。
+-- sys_user
+CALL _i9_add_unique('sys_user','uk_username','`username`');
+
+-- sys_dict
+CALL _i9_add_index('sys_dict','idx_type','`type`');
+
+-- supplier_account
+CALL _i9_add_unique('supplier_account','uk_account','`account`');
+
+-- factory
+CALL _i9_add_unique('factory','uk_factory_no','`factory_no`');
+CALL _i9_add_index('factory','idx_type','`type`');
+CALL _i9_add_index('factory','idx_status','`status`,`deleted`');
+
+-- factory_contact
+CALL _i9_add_index('factory_contact','idx_factory','`factory_id`');
+
+-- customer
+CALL _i9_add_unique('customer','uk_customer_no','`customer_no`');
+CALL _i9_add_index('customer','idx_type','`type`');
+CALL _i9_add_index('customer','idx_grade','`grade`');
+CALL _i9_add_index('customer','idx_status','`status`,`deleted`');
+
+-- customer_contact
+CALL _i9_add_index('customer_contact','idx_customer','`customer_id`');
+
+-- customer_bank
+CALL _i9_add_index('customer_bank','idx_customer','`customer_id`');
+
+-- customer_express
+CALL _i9_add_index('customer_express','idx_customer','`customer_id`');
+
+-- customer_grant
+CALL _i9_add_unique('customer_grant','uk_cust_user','`customer_id`,`user_id`');
+CALL _i9_add_index('customer_grant','idx_user','`user_id`');
+
+-- sample_garment
+CALL _i9_add_unique('sample_garment','uk_sample_no','`sample_no`');
+CALL _i9_add_index('sample_garment','idx_customer','`customer_id`');
+CALL _i9_add_index('sample_garment','idx_patternmaker','`patternmaker_id`');
+CALL _i9_add_index('sample_garment','idx_status','`status`,`deleted`');
+
+-- sample_material
+CALL _i9_add_index('sample_material','idx_sample','`sample_id`');
+
+-- sample_ship_round
+CALL _i9_add_index('sample_ship_round','idx_sample','`sample_id`');
+
+-- sample_version
+CALL _i9_add_index('sample_version','idx_sample_version','`sample_id`,`version`');
+
+-- quotation
+CALL _i9_add_unique('quotation','uk_quote_no','`quote_no`');
+CALL _i9_add_index('quotation','idx_customer','`customer_id`');
+CALL _i9_add_index('quotation','idx_status','`status`,`deleted`');
+
+-- quotation_item
+CALL _i9_add_index('quotation_item','idx_quote','`quote_id`');
+
+-- quotation_fee
+CALL _i9_add_index('quotation_fee','idx_quote','`quote_id`');
+
+-- order_main
+CALL _i9_add_unique('order_main','uk_order_no','`order_no`');
+CALL _i9_add_index('order_main','idx_customer','`customer_id`');
+CALL _i9_add_index('order_main','idx_status','`status`,`deleted`');
+
+-- order_size_matrix
+CALL _i9_add_unique('order_size_matrix','uk_order','`order_id`');
+
+-- order_material
+CALL _i9_add_index('order_material','idx_order','`order_id`');
+
+-- order_shipment
+CALL _i9_add_index('order_shipment','idx_order','`order_id`');
+
+-- contract
+CALL _i9_add_unique('contract','uk_contract_no','`contract_no`');
+CALL _i9_add_index('contract','idx_factory','`factory_id`');
+CALL _i9_add_index('contract','idx_order','`order_id`');
+CALL _i9_add_index('contract','idx_portal_status','`portal_status`');
+
+-- contract_material
+CALL _i9_add_index('contract_material','idx_contract','`contract_id`');
+CALL _i9_add_index('contract_material','idx_order_material','`order_material_id`');
+
+-- contract_shipment
+CALL _i9_add_index('contract_shipment','idx_contract','`contract_id`');
+
+-- contract_shipment_item
+CALL _i9_add_index('contract_shipment_item','idx_shipment','`shipment_id`');
+
+-- contract_portal_log
+CALL _i9_add_index('contract_portal_log','idx_contract','`contract_id`');
+
+-- reconciliation
+CALL _i9_add_unique('reconciliation','uk_reconcile_no','`reconcile_no`');
+CALL _i9_add_unique('reconciliation','uk_invoice_no','`invoice_no`');
+CALL _i9_add_index('reconciliation','idx_contract','`contract_id`');
+CALL _i9_add_index('reconciliation','idx_factory','`factory_id`');
+CALL _i9_add_index('reconciliation','idx_style_no','`style_no`');
+CALL _i9_add_index('reconciliation','idx_patternmaker','`patternmaker_id`');
+CALL _i9_add_index('reconciliation','idx_status','`status`,`deleted`');
+
+-- reconciliation_shipment
+CALL _i9_add_index('reconciliation_shipment','idx_reconcile','`reconcile_id`');
+
+-- reconciliation_expense_item
+CALL _i9_add_index('reconciliation_expense_item','idx_reconcile','`reconcile_id`');
+
+-- reconciliation_labor_item
+CALL _i9_add_index('reconciliation_labor_item','idx_reconcile','`reconcile_id`');
+CALL _i9_add_index('reconciliation_labor_item','idx_sample','`sample_id`');
+
+-- prepayment
+CALL _i9_add_index('prepayment','idx_factory','`factory_id`');
+
+-- payment_request
+CALL _i9_add_unique('payment_request','uk_pr_no','`pr_no`');
+CALL _i9_add_index('payment_request','idx_reconcile','`reconcile_id`');
+CALL _i9_add_index('payment_request','idx_factory','`factory_id`');
+CALL _i9_add_index('payment_request','idx_approval_status','`approval_status`,`deleted`');
+
+-- payment_record
+CALL _i9_add_index('payment_record','idx_pr','`pr_id`');
+
+-- settlement
+CALL _i9_add_unique('settlement','uk_settlement_no','`settlement_no`');
+CALL _i9_add_index('settlement','idx_order','`order_id`');
+CALL _i9_add_index('settlement','idx_status','`status`,`deleted`');
+CALL _i9_add_index('settlement','idx_style_no','`style_no`');
+
+-- settlement_cost
+CALL _i9_add_index('settlement_cost','idx_settlement','`settlement_id`');
+
+-- settlement_receipt
+CALL _i9_add_index('settlement_receipt','idx_settlement','`settlement_id`');
+
+-- export_invoice
+CALL _i9_add_unique('export_invoice','uk_invoice_no','`invoice_no`');
+
+-- export_invoice_item
+CALL _i9_add_index('export_invoice_item','idx_invoice','`invoice_id`');
+CALL _i9_add_index('export_invoice_item','idx_order','`order_id`');
+
+-- invoice_receipt
+CALL _i9_add_index('invoice_receipt','idx_invoice','`invoice_id`');
+
+-- change_log
+CALL _i9_add_index('change_log','idx_biz','`biz_type`,`biz_id`');
+
+-- sys_config
+CALL _i9_add_unique('sys_config','uk_cfg_key','`cfg_key`');
+
+-- company_profile
+CALL _i9_add_index('company_profile','idx_default','`is_default`,`deleted`');
+
+-- feedback
+CALL _i9_add_index('feedback','idx_status','`status`,`deleted`');
+CALL _i9_add_index('feedback','idx_user','`user_id`,`deleted`');
+
+-- error_log
+CALL _i9_add_unique('error_log','uk_fingerprint','`fingerprint`');
+CALL _i9_add_index('error_log','idx_status','`status`,`last_seen`');
 
 -- ▲▲ AUTO-GENERATED COLUMN SYNC ▲▲
 

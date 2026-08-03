@@ -50,6 +50,17 @@ if ! $SKIP_TESTS; then
 fi
 
 # ── ④ 推代码（服务器留一份源码，便于回滚/查证）────────────────
+# 【必须在 push 之前读】服务器 receive.denyCurrentBranch=updateInstead，push 一到
+# 工作树当场就更新到新 commit；等 deploy.sh（--skip-pull）再去读 HEAD 已经是新版本了，
+# 于是失败时打印的回滚命令会把你送回出问题的那一版（8-03 实证：上一版==当前版）。
+SRV_PREV=$(ssh "$REMOTE" "git -C $APP_DIR rev-parse --short HEAD" 2>/dev/null | tr -d '[:space:]' || true)
+[[ "$SRV_PREV" =~ ^[0-9a-f]{6,40}$ ]] || SRV_PREV=""
+if [[ -n "$SRV_PREV" ]]; then
+  log "服务器当前版本：$SRV_PREV（本次失败时的回滚目标）"
+else
+  warn "未取到服务器当前版本——deploy.sh 将自行推断回滚目标（上次成功部署记录 / reflog）"
+fi
+
 log "推送代码到服务器..."
 git push ecs main 2>&1 | tail -1
 
@@ -62,8 +73,8 @@ done
 # ── ⑥ 服务器只做：备份 → 结构升级 → 换静态 → 重启 → 体检 ──────
 log "服务器执行部署（跳过构建）..."
 # shellcheck disable=SC2029
-ssh "$REMOTE" "cd $APP_DIR && bash infra/scripts/deploy.sh --skip-pull --skip-build ${PASS_THRU[*]:-}"
+ssh "$REMOTE" "cd $APP_DIR && PREV_COMMIT=$SRV_PREV bash infra/scripts/deploy.sh --skip-pull --skip-build ${PASS_THRU[*]:-}"
 
 log "健康检查..."
 ssh "$REMOTE" "cd $APP_DIR && bash infra/scripts/health.sh"
-log "===== 发版完成 commit=$COMMIT ====="
+log "===== 发版完成 commit=$COMMIT (上一版 ${SRV_PREV:-?}) ====="

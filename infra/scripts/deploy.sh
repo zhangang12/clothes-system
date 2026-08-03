@@ -17,13 +17,16 @@ set -euo pipefail
 
 APP_DIR=${APP_DIR:-/opt/i9/clothes-system}
 ENV_FILE=${ENV_FILE:-$APP_DIR/.env.production}
-WEB_ROOT=/var/www/web
-PORTAL_ROOT=/var/www/portal
+WEB_ROOT=${WEB_ROOT:-/var/www/web}
+PORTAL_ROOT=${PORTAL_ROOT:-/var/www/portal}
 SERVICE=i9-api
 MYSQL_CONTAINER=${MYSQL_CONTAINER:-i9_mysql}
 REDIS_CONTAINER=${REDIS_CONTAINER:-i9_redis}
 HOTFIX_SQL="$APP_DIR/infra/scripts/hotfix-schema.sql"
-LOG_FILE=/var/log/i9/deploy.log
+LOG_FILE=${LOG_FILE:-/var/log/i9/deploy.log}
+# 「上一个完整跑完部署的 commit」落盘处：失败时的回滚目标首选它（见 resolve_prev_commit）
+STATE_DIR=${STATE_DIR:-/var/lib/i9}
+LAST_DEPLOYED_FILE="$STATE_DIR/last-deployed-commit"
 
 SKIP_PULL=false; SKIP_BACKUP=false; SKIP_BUILD=false
 for a in "$@"; do
@@ -36,21 +39,76 @@ for a in "$@"; do
 done
 
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'; NC='\033[0m'
-PREV_COMMIT=""
+PREV_COMMIT_ENV=${PREV_COMMIT:-}   # 调用方（deploy-local.sh）在 git push 之前读到的服务器 HEAD
+PREV_COMMIT=""                     # 解析结果见 resolve_prev_commit
+DIED=false
 log()  { echo -e "${GREEN}[DEPLOY $(date '+%H:%M:%S')]${NC} $*" | tee -a "$LOG_FILE"; }
 warn() { echo -e "${YELLOW}[WARN]${NC}  $*" | tee -a "$LOG_FILE"; }
+# 回滚提示：只在「确实拿到了一个不等于当前版本的 commit」时才打印命令，
+# 否则老老实实说不知道——打一条把你送回出问题那一版的命令，比不打更糟。
+rollback_hint() {
+  local cur; cur=$(git -C "$APP_DIR" rev-parse --short HEAD 2>/dev/null || true)
+  if [[ -n "$PREV_COMMIT" && "$PREV_COMMIT" != "$cur" ]]; then
+    echo -e "${YELLOW}如需回滚上一版：bash $APP_DIR/infra/scripts/rollback.sh $PREV_COMMIT${NC}" | tee -a "$LOG_FILE"
+  else
+    echo -e "${YELLOW}未能确定发版前的 commit（当前 ${cur:-?}）——请先 git -C $APP_DIR log --oneline -10 挑目标，再 bash $APP_DIR/infra/scripts/rollback.sh <commit>${NC}" | tee -a "$LOG_FILE"
+  fi
+}
 die()  {
+  DIED=true
   echo -e "${RED}[ERROR]${NC} $*" | tee -a "$LOG_FILE"
-  [[ -n "$PREV_COMMIT" ]] && echo -e "${YELLOW}如需回滚上一版：bash $APP_DIR/infra/scripts/rollback.sh $PREV_COMMIT${NC}" | tee -a "$LOG_FILE"
+  rollback_hint
   exit 1
 }
+# 没包 die 的命令（pnpm/rsync/systemctl…）失败时被 set -e 直接掐掉，此前连一行回滚提示都没有。
+# ERR 兜底，保证「任一步失败都留下回滚路径」这句话是真的。
+trap 'rc=$?; $DIED || { echo -e "${RED}[ERROR]${NC} 部署在第 ${LINENO} 行中断（exit=${rc}）" | tee -a "$LOG_FILE"; rollback_hint; }; exit $rc' ERR
 
+# 发版前「线上真正在跑」的 commit —— 失败时的回滚目标。
+# 【2026-08-03 修】原来直接取当前 HEAD，但默认发版路径是开发机 deploy-local.sh：
+#   它先 git push ecs main（服务器 receive.denyCurrentBranch=updateInstead，工作树当场
+#   被更新到新 commit），之后才 ssh 调本脚本（--skip-pull）——此时 HEAD 已经是新版本。
+#   实证：8-03 两次发版日志都打「部署成功 commit=54ca4c7 (上一版 54ca4c7)」，上一版==当前版；
+#   一旦中途失败，照提示回滚就是回到出问题的那一版，等于没有回滚路径。
+# 取值优先级（越靠前越可信）：
+#   ① $LAST_DEPLOYED_FILE：上次**完整跑完**部署的版本，唯一能证明「这版真上过线」。
+#      上次发版中途失败时它仍指向最后一个好版本（传入值和 HEAD 都会指向失败的那一版）。
+#   ② 调用方传入的 PREV_COMMIT：deploy-local.sh 在 push 之前读的服务器 HEAD（首次部署时的兜底）。
+#   ③ 本脚本自己拉码（未 --skip-pull，如服务器直接发版 / CI）：拉之前的 HEAD 就是上一版。
+#   ④ --skip-pull 且无人告知：HEAD 已被 push/checkout 换掉，退到 reflog 上一条。
+resolve_prev_commit() {
+  local cur v cands
+  cur=$(git rev-parse --short HEAD 2>/dev/null || true)
+  cands=("$(cat "$LAST_DEPLOYED_FILE" 2>/dev/null || true)" "$PREV_COMMIT_ENV")
+  if $SKIP_PULL; then
+    cands+=("$(git rev-parse --short 'HEAD@{1}' 2>/dev/null || true)")  # 被 push/checkout 换掉之前那条
+  else
+    cands+=("$cur")                                                     # 拉码之前的 HEAD = 上一版
+  fi
+  for v in "${cands[@]}"; do
+    v=$(echo "$v" | tr -d '[:space:]')
+    [[ -n "$v" ]] || continue
+    # 记录过期/传错（commit 在本仓库不存在）就跳过——别打一条根本跑不通的回滚命令
+    v=$(git rev-parse --short --verify "${v}^{commit}" 2>/dev/null || true)
+    [[ -n "$v" ]] || continue
+    # --skip-pull 下代码已是新版：候选等于当前 HEAD 说明它就是「出问题的这一版」，没有回滚价值，继续往下找
+    if $SKIP_PULL && [[ "$v" == "$cur" ]]; then continue; fi
+    echo "$v"; return 0
+  done
+  return 1
+}
+
+mkdir -p "$(dirname "$LOG_FILE")"   # 先建日志目录：die() 要往 $LOG_FILE 里 tee，早于它就 die 会写不进去
 [[ -f "$ENV_FILE" ]] || die "环境变量文件不存在：$ENV_FILE"
-mkdir -p /var/log/i9
 echo "" >> "$LOG_FILE"
 log "===== 开始一键部署 ====="
 cd "$APP_DIR"
-PREV_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "")
+PREV_COMMIT=$(resolve_prev_commit || true)
+if [[ -n "$PREV_COMMIT" ]]; then
+  log "发版前版本：$PREV_COMMIT（失败即按此回滚）"
+else
+  warn "未能确定发版前版本——失败时需自行 git log 挑回滚目标"
+fi
 
 # ── ① 拉取最新代码（GitHub 国内网络不稳，失败自动重试）──────────
 if ! $SKIP_PULL; then
@@ -92,7 +150,18 @@ fi
 # ── ③ 数据库结构：自动备份 + 幂等升级（在 API 重启之前！）──────
 # hotfix-schema.sql 幂等：已存在的表/列自动跳过，没动 schema 时是无害 no-op。
 mysql_up() { docker exec "$MYSQL_CONTAINER" mysqladmin ping -h localhost --silent 2>/dev/null; }
-if command -v docker &>/dev/null && docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "^${MYSQL_CONTAINER}$"; then
+# 【2026-08-03 修】原来是 `docker ps ... | grep -q "^name$"`：grep 命中就立刻退出，docker 若还没
+# 写完就吃 SIGPIPE，`set -o pipefail` 下整条管道返回 141 → 判成「没有这台容器」→ **静默跳过整个
+# 结构升级**，然后照常重启 API = 红线一最怕的「发版后 Unknown column 全线报错」，还只留一条 warn。
+# （本次沙箱验证里真踩到过一次，容器名后面还有别的容器时更容易中。）先把输出落进变量再纯 bash 匹配，
+# 没有管道就没有 SIGPIPE。
+has_container() {  # $1=容器名；$2=--all 时连未运行的也算
+  local names
+  if [[ "${2:-}" == "--all" ]]; then names=$(docker ps -a --format '{{.Names}}' 2>/dev/null || true)
+  else                                names=$(docker ps    --format '{{.Names}}' 2>/dev/null || true); fi
+  [[ $'\n'"$names"$'\n' == *$'\n'"$1"$'\n'* ]]
+}
+if command -v docker &>/dev/null && has_container "$MYSQL_CONTAINER" --all; then
   if ! mysql_up; then
     log "MySQL 容器未运行，尝试启动..."
     docker start "$MYSQL_CONTAINER" >/dev/null 2>&1 || true
@@ -159,8 +228,8 @@ rsync -a --delete packages/web/dist/    "$WEB_ROOT/"
 rsync -a --delete packages/portal/dist/ "$PORTAL_ROOT/"
 
 # ── ⑤ 保证 Redis 就绪（单号生成依赖，停机会导致新建单据失败）────
-if command -v docker &>/dev/null && docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "^${REDIS_CONTAINER}$"; then
-  if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${REDIS_CONTAINER}$"; then
+if command -v docker &>/dev/null && has_container "$REDIS_CONTAINER" --all; then
+  if ! has_container "$REDIS_CONTAINER"; then
     log "Redis 容器未运行，尝试启动..."
     docker start "$REDIS_CONTAINER" >/dev/null 2>&1 || warn "启动 $REDIS_CONTAINER 失败，请手动检查（新建单据会受影响）"
   fi
@@ -195,5 +264,9 @@ else
 fi
 
 COMMIT=$(git rev-parse --short HEAD)
+# 落盘「这一版完整跑完了部署」——下次失败时的回滚目标就取它（resolve_prev_commit ①）
+if ! { mkdir -p "$STATE_DIR" && printf '%s\n' "$COMMIT" > "$LAST_DEPLOYED_FILE"; } 2>/dev/null; then
+  warn "无法写入 $LAST_DEPLOYED_FILE——下次失败时的回滚提示只能退回 reflog 推断"
+fi
 log "===== 部署成功  commit=${COMMIT} (上一版 ${PREV_COMMIT:-?}) ====="
 log "建议随手体检：bash $APP_DIR/infra/scripts/health.sh"

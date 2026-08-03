@@ -15,7 +15,7 @@
 任何新增/修改 **实体（entity）、列、表、枚举值** 的改动，除了同步 `init.sql`，**必须同时提供存量库升级**，否则发版后接口大面积 `Unknown column` / `Table doesn't exist`（合同/对账/结算/工厂等全线报错）。
 
 **怎么做**
-1. 改 `init.sql`（供全新装机）后，**跑 `python3 infra/scripts/gen-column-sync.py`** 重新生成 `hotfix-schema.sql` 的 AUTO 段——它从 HEAD `init.sql` 生成「全表 CREATE TABLE IF NOT EXISTS + 逐列补齐 + 类型不一致才 MODIFY」，**任意历史版本的存量库跑一遍即补到 HEAD**（2026-07-09 生产事故教训：手工维护 delta 清单必漏——当时 8 张表大面积 `Unknown column`，其中 7 列根本不在手工清单里）。枚举**值语义重命名**（如 SHIPPED→DONE）无法自动生成，须在 AUTO 段之前的「枚举语义迁移」手工块里：先 MODIFY 为旧∪新并集 → UPDATE 映射旧值 → AUTO 段自动收敛到 HEAD 定义。
+1. 改 `init.sql`（供全新装机）后，**跑 `python3 infra/scripts/gen-column-sync.py`** 重新生成 `hotfix-schema.sql` 的 AUTO 段——它从 HEAD `init.sql` 生成「全表 CREATE TABLE IF NOT EXISTS + 逐列补齐 + 类型不一致才 MODIFY + 索引补齐（`KEY`→`_i9_add_index` / `UNIQUE KEY`→`_i9_add_unique`）」，**任意历史版本的存量库跑一遍即补到 HEAD**（2026-07-09 生产事故教训：手工维护 delta 清单必漏——当时 8 张表大面积 `Unknown column`，其中 7 列根本不在手工清单里）。**索引段是 2026-08-03 补的**：此前 AUTO 段只补列不补索引，`init.sql` 里声明的索引对存量库永远补不上（真库 diff 实证生产缺 5 个）；现在生成器遇到**认不出的约束行会直接报错退出**（前缀长度 / `DESC` / `FULLTEXT` / 外键等 `ADD INDEX` 表达不了的形式），宁可发版前失败也不再静默丢弃——**看到这个报错别把行删掉了事**，要么扩 `INDEX_RE`，要么在手工段自行补该约束。枚举**值语义重命名**（如 SHIPPED→DONE）无法自动生成，须在 AUTO 段之前的「枚举语义迁移」手工块里：先 MODIFY 为旧∪新并集 → UPDATE 映射旧值 → AUTO 段自动收敛到 HEAD 定义。
 2. **发版就一条命令 `bash infra/scripts/deploy.sh`**：它已把"升级前备份 → 应用幂等 `hotfix-schema.sql` → 校验关键列 → 再重启 API"**内置**在 API 重启之前，无需再手动区分"有没有动 schema"。（`upgrade-db.sh` 保留作单独/应急的结构升级工具。）
 3. **本地必须用真 MySQL/MariaDB 实测**：加载"旧结构"→应用升级→与全新 `init.sql` 结构做**完整性 diff（应为空）**→**二次执行验证幂等**。（本仓库容器可 `apt-get install mariadb-server` 起一个隔离实例验证。）
 4. 待办（尚未做）：引入正式 migration 体系（全新装机走 init.sql，存量升级走 migration），并把 `deep-test.sh` 真机门禁接入部署——**连真库没跑通不许发版**。
@@ -35,12 +35,14 @@
 
 ## 🚀 发版（登服务器后一条命令）
 - **发版**：`cd /opt/i9/clothes-system && bash infra/scripts/deploy.sh`。内部顺序：拉 `main` → 构建四包 → **升级前整库备份 + 幂等结构升级（`hotfix-schema.sql`）+ 校验关键列**（都在 API 重启【之前】）→ 保证 MySQL/Redis 就绪（停了自动 `docker start`）→ 重启 `i9-api` → 健康检查 + 残留报错自检 → reload nginx。**不再区分"有没有动 schema"**；任一步失败会打印 `rollback.sh <上一版commit>`。
+- **「上一版」是怎么定的**（2026-08-03 修）：优先取 `/var/lib/i9/last-deployed-commit`——**跑完整条部署才落盘**，所以上次发版半路失败时它仍指着最后一个真上过线的版本；拿不到再依次退到「`deploy-local.sh` 在 `git push` **之前**传进来的服务器 HEAD → 本脚本自己拉码前的 HEAD → `HEAD@{1}`」，都没有就明说「未能确定」让你自己 `git log` 挑。**别拿当前 HEAD 当上一版**：默认发版路径是 `deploy-local.sh` 先 push、后 ssh 调 `deploy.sh --skip-pull`，服务器 `receive.denyCurrentBranch=updateInstead` 会在 push 那一刻就把工作树换成新 commit（8-03 实证：日志里"上一版"和当前版一模一样，回滚等于回到出问题的那一版）。
 - 开关：`--skip-pull`（代码已就位）、`--skip-backup`（急，跳过备份）。
 - **首次装机**（仅一次）：`bash infra/scripts/setup.sh`；随后改 `.env.production` 域名、`certbot` 配 HTTPS、crontab 加每日 `backup.sh`。
 - **回滚**：`bash infra/scripts/rollback.sh <commit>`（只回代码；幂等结构升级只增不减，不回退列）。
 - **验收**：`bash infra/scripts/health.sh` 全绿 + 新建一张测试单据（能出单号=Redis 通）。
 
 ## 🛠 运维脚本的坑（已修，勿回退）
+- **`set -o pipefail` 下别用 `cmd | grep -q`**（2026-08-03 修，`deploy.sh` 容器探测）：`grep -q` 一命中就退出，写入方（`docker ps`）还没写完就吃 **SIGPIPE**，管道返回 141 → `if` 判成假。`deploy.sh` 里这一句的后果是**静默跳过整个数据库结构升级**、然后照常重启 API——正是红线一最怕的「发版后 Unknown column 全线报错」，且只留一条 warn。改法：先 `names=$(docker ps --format ...)` 落进变量，再用纯 bash `[[ $'\n'"$names"$'\n' == *$'\n'"$1"$'\n'* ]]` 匹配（`has_container()`），没有管道就没有竞态。**同类写法在别的脚本里见到也照改。**
 - **探活别用 `curl -f`**：`/api/v1` 无根路由，正常返回 404；`-f` 会让 curl 非零退出触发 `|| echo 000` 拼出 `404000`。用 `curl -s`，接受 `2xx/3xx/4xx` 视为存活。
 - **Redis 探活**用 `redis-cli --no-auth-warning`，并区分「容器未运行 / 密码不一致（WRONGPASS/NOAUTH）/ 无响应」。
   - 故障①「密码不一致」：`✗ redis` 多为 **`.env.production` 的 `REDIS_PASSWORD` 与运行中容器不一致**。修复：`docker compose --env-file .env.production up -d redis` 重建后 `health.sh` 复核。
