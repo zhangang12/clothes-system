@@ -316,4 +316,59 @@ describe('OrderService', () => {
     await service.remove(1);
     expect(mockQuoteRepo.update).not.toHaveBeenCalled();
   });
+
+  // UT-ORD-21: 行级「已生成合同」标记（用户反馈 2026-08-03）——有合同行的材料 contracted=true 并带合同号
+  it('UT-ORD-21 findOne flags materials that already have a contract', async () => {
+    mockOrderRepo.findOne.mockResolvedValue(makeOrder());
+    mockMaterialRepo.find.mockResolvedValueOnce([
+      { id: 11, item_name: '面料A' }, { id: 12, item_name: '辅料B' },
+    ]);
+    // 分色展开成多行合同明细 → 同一订单材料出现多次，只应折算成一条合同
+    mockDataSource.query.mockResolvedValueOnce([
+      { omid: 11, contract_id: 5, contract_no: 'HT-20260803-001' },
+    ]);
+    const res: any = await service.findOne(1);
+    expect(res.materials[0]).toMatchObject({
+      id: 11, contracted: true, contracts: [{ id: 5, contract_no: 'HT-20260803-001' }],
+    });
+    expect(res.materials[1]).toMatchObject({ id: 12, contracted: false, contracts: [] });
+  });
+
+  // UT-ORD-22: 编辑订单必须保住材料行 ID——否则合同侧 order_material_id 悬空、「已订」标记全丢
+  it('UT-ORD-22 update keeps existing material row ids and only deletes dropped rows', async () => {
+    mockOrderRepo.findOne.mockResolvedValue(makeOrder({ status: OrderStatus.DRAFT }));
+    const manager = {
+      find: jest.fn().mockResolvedValue([{ id: 11 }, { id: 12 }]),
+      delete: jest.fn().mockResolvedValue({}),
+      create: jest.fn().mockImplementation((_, v) => v),
+      save: jest.fn().mockImplementation((_, v) => Promise.resolve(v)),
+      findOne: jest.fn().mockResolvedValue(null),
+    };
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await service.update(1, {
+      materials: [{ id: 11, item_name: '面料A' }, { item_name: '新增料C' }],
+    } as any);
+    const saved = manager.save.mock.calls.find((c) => Array.isArray(c[1]))?.[1];
+    expect(saved[0]).toMatchObject({ id: 11, item_name: '面料A' }); // 原地更新，ID 不变
+    expect(saved[1].id).toBeUndefined();                            // 新增行不带 ID
+    // 12 号行本次没提交 → 只删它，不再整表删
+    expect(manager.delete).toHaveBeenCalledWith(OrderMaterial, expect.objectContaining({ order_id: 1 }));
+    expect(manager.delete.mock.calls[0][1].id).toBeDefined();
+  });
+
+  // UT-ORD-23: 越权守卫——传别的订单的材料行 ID，当新增行处理，不得把那行改绑过来
+  it('UT-ORD-23 update treats foreign material ids as new rows', async () => {
+    mockOrderRepo.findOne.mockResolvedValue(makeOrder({ status: OrderStatus.DRAFT }));
+    const manager = {
+      find: jest.fn().mockResolvedValue([{ id: 11 }]),
+      delete: jest.fn().mockResolvedValue({}),
+      create: jest.fn().mockImplementation((_, v) => v),
+      save: jest.fn().mockImplementation((_, v) => Promise.resolve(v)),
+      findOne: jest.fn().mockResolvedValue(null),
+    };
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await service.update(1, { materials: [{ id: 999, item_name: '别单的料' }] } as any);
+    const saved = manager.save.mock.calls.find((c) => Array.isArray(c[1]))?.[1];
+    expect(saved[0].id).toBeUndefined();
+  });
 });

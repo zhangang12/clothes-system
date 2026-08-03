@@ -488,7 +488,7 @@ const currentStep = computed(() => {
 });
 
 function typeLabel(t: string) {
-  return ({ MATERIAL: '面料合同', PROCESS: '加工合同', SUPPLEMENT: '补料合同' } as Record<string, string>)[t] ?? t;
+  return ({ MATERIAL: '材料合同', PROCESS: '加工合同', SUPPLEMENT: '补料合同' } as Record<string, string>)[t] ?? t;
 }
 
 // 门户状态标签（设计稿：待盖章/待发货/待对账/待开票/已完成）

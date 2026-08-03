@@ -685,4 +685,58 @@ describe('ContractService', () => {
       materials: [{ item_name: '面料', unit_price: 10, qty: 5 }],
     } as any, 1)).rejects.toThrow(BadRequestException);
   });
+
+  // ── 订单↔合同行级关联（用户反馈 2026-08-03：订单里标出哪些材料已生成合同）──
+
+  // UT-CON-33: 从订单生成的合同明细带上 order_material_id；分色展开的多行都指回同一条订单材料
+  it('UT-CON-33 lines generated from an order carry order_material_id (split lines share it)', async () => {
+    mockRedis.eval.mockResolvedValue('HT-20260803-001');
+    mockOrderRepo.findOne.mockResolvedValue({ id: 10, style_no: 'M525', delivery_date: null, deleted: 0 });
+    mockOrderMaterialRepo.find.mockResolvedValue([
+      { id: 77, item_name: '主面料', unit: '米', unit_price: 8, split_mode: 'BY_COLOR', net_usage: 1, loss_rate: 0, sort_order: 0 },
+    ]);
+    mockMatrixRepo.findOne.mockResolvedValue({
+      matrix_data: { rows: [{ color: '藏青', qtys: [100] }, { color: '米白', qtys: [50] }] },
+    });
+    const savedLines: any[] = [];
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb({
+      create: jest.fn().mockImplementation((_: any, v: any) => v),
+      save: jest.fn().mockImplementation((_: any, v: any) => {
+        if (Array.isArray(v)) savedLines.push(...v);
+        return Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 });
+      }),
+      findOne: jest.fn().mockResolvedValue(null),
+      delete: jest.fn(),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+    }));
+    await service.create({ type: ContractType.MATERIAL, factory_id: 5, order_id: 10 } as any, 1);
+    expect(savedLines).toHaveLength(2);
+    expect(savedLines.every((l) => l.order_material_id === 77)).toBe(true);
+  });
+
+  // UT-CON-34: 合同明细是「删了重建」，编辑后必须接力 order_material_id，否则订单侧标记被冲掉
+  it('UT-CON-34 update carries order_material_id over from the replaced lines', async () => {
+    const contract = makeContract({ id: 3, approval_status: 'NONE' });
+    mockRepo.findOne.mockResolvedValue(contract);
+    const savedLines: any[] = [];
+    const manager = {
+      find: jest.fn().mockResolvedValue([
+        { item_name: '主面料', color: '藏青', size: null, qty: 100, order_material_id: 77 },
+      ]),
+      create: jest.fn().mockImplementation((_: any, v: any) => v),
+      save: jest.fn().mockImplementation((_: any, v: any) => {
+        if (Array.isArray(v)) savedLines.push(...v);
+        return Promise.resolve(Array.isArray(v) ? v : { ...v, id: 3 });
+      }),
+      delete: jest.fn().mockResolvedValue({}),
+      findOne: jest.fn().mockResolvedValue(null),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+      query: jest.fn().mockResolvedValue([]),
+    };
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+    await service.update(3, {
+      materials: [{ item_name: '主面料', color: '藏青', unit_price: 8, qty: 120 }],
+    } as any);
+    expect(savedLines[0]).toMatchObject({ item_name: '主面料', qty: 120, order_material_id: 77 });
+  });
 });

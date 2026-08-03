@@ -164,7 +164,7 @@
           <span class="hint">采购量 = 大货总数 × 单件耗用 × (1+损耗%)；个/条向上取整；最终采购量偏离>±10%需确认</span>
         </div>
         <div class="table-scroll">
-          <el-table :data="form.materials" size="small" border v-keynav @selection-change="(v: any[]) => selMats = v">
+          <el-table :data="form.materials" size="small" border v-keynav :row-class-name="matRowClass" @selection-change="(v: any[]) => selMats = v">
             <el-table-column type="expand" width="30">
               <template #default="{ row }">
                 <div class="split-preview">
@@ -190,7 +190,18 @@
               </template>
             </el-table-column>
             <el-table-column type="selection" width="38" />
-            <el-table-column label="品名" min-width="130" fixed><template #default="{ row }"><el-input v-model="row.itemName" size="small" /></template></el-table-column>
+            <el-table-column label="品名" min-width="130" fixed>
+              <template #default="{ row }">
+                <div class="mat-name">
+                  <el-input v-model="row.itemName" size="small" />
+                  <!-- 已生成合同的料标出来，未标 = 还没订（用户反馈 2026-08-03）；
+                       底色之外再给标签，不单靠颜色传达信息 -->
+                  <el-tooltip v-if="row.contracted" :content="`已生成合同：${(row.contracts || []).map((c: any) => c.contract_no).join('、') || '—'}`" placement="top">
+                    <el-tag type="success" size="small" effect="light" class="mat-tag">已订</el-tag>
+                  </el-tooltip>
+                </div>
+              </template>
+            </el-table-column>
             <el-table-column label="部位" width="90"><template #default="{ row }"><el-input v-model="row.part" size="small" /></template></el-table-column>
             <el-table-column label="门幅/尺寸" width="100"><template #default="{ row }"><el-input v-model="row.width" size="small" /></template></el-table-column>
             <el-table-column label="颜色" width="90"><template #default="{ row }"><el-input v-model="row.color" size="small" /></template></el-table-column>
@@ -352,7 +363,7 @@ const INT_UNITS = ['个', '条', '只', '件', '粒', '套', '对', 'pcs', 'PCS'
 // 尺码数量搭配矩阵（设计稿 03：行=款·色·尺码，列=各 PO（PO号/目的地/收货人），格=数量）
 const emptyPo = () => ({ po_no: '', destination: '', consignee: '' });
 const emptyMatrixRow = (poCount: number) => ({ style_no: '', color: '', article: '', size: '', qtys: Array(poCount).fill('') });
-const emptyMat = () => ({ itemName: '', part: '', width: '', color: '', composition: '', supplier: '', unit: '', unitPrice: '', netUsage: '', lossRate: 3, splitMode: 'NONE', finalPurchase: '', roundUp: null, remark: '', sizeSpecs: {} as Record<string, string> });
+const emptyMat = () => ({ id: undefined as number | undefined, itemName: '', part: '', width: '', color: '', composition: '', supplier: '', unit: '', unitPrice: '', netUsage: '', lossRate: 3, splitMode: 'NONE', finalPurchase: '', roundUp: null, remark: '', sizeSpecs: {} as Record<string, string>, contracted: false, contracts: [] as Array<{ id: number; contract_no: string }> });
 const form = reactive<any>({
   orderNo: '', quoteId: undefined, customerPo: '', styleNo: '', unitPrice: '', currency: 'USD',
   deliveryDate: '', commissionRate: 0, factoryId: undefined, middlemanName: '', buyerName: '',
@@ -457,6 +468,8 @@ function delPoCol(pi: number) {
   for (const r of form.matrix.rows) r.qtys.splice(pi, 1);
 }
 function addMat() { form.materials.push(emptyMat()); }
+// 已生成合同的材料行上浅绿底（未标 = 还没订）；标签在品名列，色弱用户不靠底色也能分辨
+function matRowClass({ row }: { row: any }) { return row.contracted ? 'mat-contracted' : ''; }
 // 批量设置 供应商/单位/损耗%（几十行同值场景，与样衣批量供应商同款）
 const batchField = reactive({ supplier: '', unit: '', loss: '' });
 function applyBatchMats() {
@@ -588,10 +601,14 @@ async function load() {
     att1: d.att_artwork ?? '', att2: d.att_sizechart ?? '', att3: d.att_board ?? '', att4: d.att_packing ?? '', att5: d.att_filling ?? '',
     matrix,
     materials: d.materials?.length ? d.materials.map((m: any) => ({
+      // id 必须原样带回（保存时回传）：后端据此原地更新而非重建行，
+      // 合同侧 contract_material.order_material_id 才不会悬空、「已订」标记才不会丢
+      id: m.id,
       itemName: m.item_name, part: m.part, width: m.width, color: m.color, composition: m.composition,
       supplier: m.supplier, unit: m.unit, unitPrice: m.unit_price ?? '', netUsage: m.net_usage, lossRate: m.loss_rate, splitMode: m.split_mode ?? 'NONE',
       finalPurchase: m.final_purchase ?? '', roundUp: m.round_up ?? null, remark: m.remark,
       sizeSpecs: m.size_specs ?? {},
+      contracted: !!m.contracted, contracts: m.contracts ?? [],
     })) : [emptyMat()],
   });
 }
@@ -614,6 +631,7 @@ function buildDto() {
         .map((r: any) => ({ style_no: r.style_no, color: r.color, article: r.article, size: r.size, qtys: r.qtys.map((q: any) => Number(q) || 0) })),
     },
     materials: form.materials.filter((m: any) => m.itemName).map((m: any, i: number) => ({
+      id: m.id ?? undefined,
       item_name: m.itemName, part: m.part, width: m.width, color: m.color, composition: m.composition,
       supplier: m.supplier, unit: m.unit, unit_price: num(m.unitPrice), net_usage: num(m.netUsage), loss_rate: num(m.lossRate) ?? 3,
       split_mode: m.splitMode, final_purchase: num(m.finalPurchase),
@@ -774,6 +792,12 @@ onMounted(async () => { await loadRefs(); await load(); void loadDocLinks(); awa
 .calc { color: #C04042; font-weight: 600; }
 .total-input :deep(.el-input__wrapper) { background: #EAF6F3; font-weight: 700; }
 :deep(.dev-warn .el-input__wrapper) { box-shadow: 0 0 0 1px #C04042 inset; }
+/* 已生成合同的材料行（用户反馈 2026-08-03）：浅绿底 + 品名列「已订」标签，未标 = 还没订 */
+:deep(.el-table .mat-contracted > td.el-table__cell) { background: #EAF6F3; }
+:deep(.el-table .mat-contracted:hover > td.el-table__cell) { background: #DCEFE9; }
+.mat-name { display: flex; align-items: center; gap: 6px; }
+.mat-name .el-input { flex: 1; min-width: 0; }
+.mat-tag { flex: none; }
 :deep(.section-block) { border: 1px solid var(--el-border-color-light); border-radius: 6px; overflow: hidden; }
 :deep(.section-head) { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: #F5EDDC; border-bottom: 1px solid var(--el-border-color-light); }
 :deep(.section-title) { font-weight: 600; color: #1E3A5F; }

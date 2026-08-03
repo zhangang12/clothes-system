@@ -615,8 +615,10 @@ CREATE TABLE IF NOT EXISTS `contract_material` (
   `delivery_date` DATE          DEFAULT NULL COMMENT '行交货期限(材料默认=款交期-45天)',
   `photo_url`    VARCHAR(500)   DEFAULT NULL COMMENT '材料照片URL',
   `remark`       VARCHAR(200)   DEFAULT NULL,
+  `order_material_id` BIGINT    DEFAULT NULL COMMENT '来源订单材料行ID(订单编辑页标记「已生成合同」用;手工建的合同为NULL)',
   PRIMARY KEY (`id`),
-  KEY `idx_contract` (`contract_id`)
+  KEY `idx_contract` (`contract_id`),
+  KEY `idx_order_material` (`order_material_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='合同材料明细（盖章前可改，盖章后冻结）';
 
 CREATE TABLE IF NOT EXISTS `contract_shipment` (

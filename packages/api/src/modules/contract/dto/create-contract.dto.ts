@@ -40,6 +40,13 @@ export class CreateContractMaterialDto {
   @Min(0)
   sort_order?: number;
 
+  @ApiPropertyOptional({ description: '来源订单材料行ID（按供应商拆单生成时自动带入，订单侧据此标记已生成合同）' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  order_material_id?: number;
+
   @ApiPropertyOptional({ description: '颜色（分色行）' })
   @IsOptional()
   @IsString()

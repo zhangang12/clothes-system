@@ -50,4 +50,9 @@ export class ContractMaterial {
 
   @Column({ length: 200, nullable: true })
   remark: string;
+
+  // 来源订单材料行：由「按供应商拆单」生成合同时写入，供订单编辑页精确标出哪几行已生成合同。
+  // 手工新建/手工改过明细的合同行为 null（订单侧即显示未标记）。
+  @Column({ type: 'bigint', nullable: true })
+  order_material_id: number | null;
 }

@@ -13,7 +13,7 @@
             <template #prefix><el-icon><Search /></el-icon></template>
           </el-input>
           <el-select v-model="query.type" clearable placeholder="全部类型" style="width:130px" @change="load">
-            <el-option label="面料合同" value="MATERIAL" /><el-option label="加工合同" value="PROCESS" /><el-option label="补料合同" value="SUPPLEMENT" />
+            <el-option label="材料合同" value="MATERIAL" /><el-option label="加工合同" value="PROCESS" /><el-option label="补料合同" value="SUPPLEMENT" />
           </el-select>
           <el-select v-model="query.portal_status" clearable placeholder="门户状态" style="width:120px" @change="load">
             <el-option v-for="s in portalStatuses" :key="s.v" :label="s.l" :value="s.v" />
@@ -215,7 +215,7 @@ function isOverdue(row: any): boolean {
   return !isNaN(due.getTime()) && due < new Date() && row.portal_status !== 'RECONCILED';
 }
 const portalStatuses = [{ v: 'DRAFT', l: '草稿' }, { v: 'PUSHED', l: '已推送' }, { v: 'STAMPED', l: '已盖章' }, { v: 'SHIPPING', l: '出货中' }, { v: 'RECONCILED', l: '已对账' }, { v: 'COMPLETED', l: '已完成' }];
-const typeLabel = (t: string) => ({ MATERIAL: '面料合同', PROCESS: '加工合同', SUPPLEMENT: '补料合同' } as any)[t] ?? t;
+const typeLabel = (t: string) => ({ MATERIAL: '材料合同', PROCESS: '加工合同', SUPPLEMENT: '补料合同' } as any)[t] ?? t;
 const portalLabel = (s: string) => ({ DRAFT: '草稿', PUSHED: '已推送', STAMPED: '已盖章', SHIPPING: '出货中', RECONCILED: '已对账', COMPLETED: '已完成' } as any)[s] ?? s;
 const portalTagType = (s: string): any => ({ DRAFT: 'info', PUSHED: 'warning', STAMPED: 'primary', SHIPPING: 'success', RECONCILED: 'success', COMPLETED: 'success' } as any)[s] ?? 'info';
 const actionLabel = (a: string) => ({ PUSH: '推送门户', RECALL: '撤销推送', STAMP: '供应商盖章', SHIP: '发货', SHIP_DONE: '发货完成', WITHDRAW_SHIP: '撤回发货批次', INVOICE: '上传发票', RECONCILE: '对账' } as any)[a] ?? a;

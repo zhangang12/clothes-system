@@ -93,6 +93,9 @@ export class ContractService {
       unit_price: +om.unit_price || 0,
       style_no: styleNo || undefined,
       delivery_date: deliveryDate || undefined,
+      // 行级溯源：一条订单材料可能分色/分码展开成多条合同行，它们都指回同一条订单材料，
+      // 订单编辑页据此精确标出「这一行已生成合同」（用户反馈 2026-08-03）
+      order_material_id: om.id,
     };
     const mode = om.split_mode;
     if ((mode === 'BY_COLOR' || mode === 'BY_SIZE') && matrixRows?.length) {
@@ -347,6 +350,7 @@ export class ContractService {
         amount: +(mi.unit_price * mi.qty).toFixed(4),
         qty_source: mi.qty_source ?? null,
         remark: mi.remark,
+        order_material_id: mi.order_material_id ?? null,
       }));
       await m.save(ContractMaterial, materials);
 
@@ -540,6 +544,12 @@ export class ContractService {
         const oldQty = +oldRows.reduce((sum, r) => sum + +r.qty, 0).toFixed(4);
         const newQty = +dto.materials.reduce((sum, m) => sum + +m.qty, 0).toFixed(4);
         const oldAmount = +contract.total_amount;
+        // 明细是「整表删了重建」，若不接力 order_material_id，编辑一次合同就把订单侧的
+        // 「已生成合同」标记冲没了。按 品名|颜色|尺码 从旧行接力（前端不回传该字段）。
+        const srcKey = (r: { item_name?: string; color?: string | null; size?: string | null }) =>
+          `${r.item_name ?? ''}|${r.color ?? ''}|${r.size ?? ''}`;
+        const prevSrc = new Map<string, number | null>();
+        for (const r of oldRows) if (r.order_material_id != null) prevSrc.set(srcKey(r), r.order_material_id);
         await manager.delete(ContractMaterial, { contract_id: id });
         const rows = dto.materials.map((m, idx) => manager.create(ContractMaterial, {
           contract_id: id,
@@ -557,6 +567,7 @@ export class ContractService {
           amount: +(m.unit_price * m.qty).toFixed(4),
           qty_source: m.qty_source ?? null,
           remark: m.remark,
+          order_material_id: m.order_material_id ?? prevSrc.get(srcKey(m)) ?? null,
         }));
         await manager.save(ContractMaterial, rows);
         const newTotal = +rows.reduce((s, r) => s + +r.amount, 0).toFixed(4);

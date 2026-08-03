@@ -2,7 +2,7 @@ import {
   Injectable, NotFoundException, BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, Like, DataSource } from 'typeorm';
+import { Repository, FindOptionsWhere, Like, DataSource, Not, In } from 'typeorm';
 import { OrderMain } from './order-main.entity';
 import { OrderSizeMatrix } from './order-size-matrix.entity';
 import { OrderMaterial } from './order-material.entity';
@@ -61,6 +61,8 @@ export class OrderService {
       const finalPurchase = m.final_purchase ?? total;
       const budget = m.unit_price ? +(finalPurchase * m.unit_price).toFixed(4) : null;
       return this.materialRepo.create({
+        // 带 id 即原地更新（保住行 ID，合同侧 contract_material.order_material_id 才不会悬空）
+        ...(m.id ? { id: m.id } : {}),
         order_id: orderId, quote_item_id: m.quote_item_id, item_name: m.item_name,
         part: m.part, width: m.width, color: m.color, composition: m.composition, supplier: m.supplier,
         split_mode: m.split_mode ?? 'NONE', unit: m.unit, net_usage: m.net_usage, loss_rate: lossRate,
@@ -175,7 +177,32 @@ export class OrderService {
         usage_estimated = mats.length > 0 && mats.some((m) => m.actual_usage == null);
       }
     }
-    return { ...order, matrix, materials, shipments, source_quote_changed, usage_estimated, quote_no };
+    // 行级「已生成合同」标记（用户反馈 2026-08-03）：订单编辑页据此给材料行上底色 + 「已订」标签，
+    // 未标记 = 这条料还没下单。走 contract_material.order_material_id 精确到行，不靠品名猜。
+    const linked: Array<{ omid: string | number; contract_id: string | number; contract_no: string }> =
+      await this.dataSource.query(
+        `SELECT cm.order_material_id AS omid, c.id AS contract_id, c.contract_no AS contract_no
+           FROM contract_material cm
+           JOIN contract c ON c.id = cm.contract_id
+          WHERE c.order_id = ? AND c.deleted = 0 AND cm.order_material_id IS NOT NULL
+          GROUP BY cm.order_material_id, c.id, c.contract_no`,
+        [id],
+      );
+    const byMaterial = new Map<string, Array<{ id: number; contract_no: string }>>();
+    for (const r of linked) {
+      const key = String(r.omid);
+      if (!byMaterial.has(key)) byMaterial.set(key, []);
+      byMaterial.get(key)!.push({ id: +r.contract_id, contract_no: r.contract_no });
+    }
+    const materialsWithFlag = materials.map((m) => {
+      const contracts = byMaterial.get(String(m.id)) ?? [];
+      return { ...m, contracted: contracts.length > 0, contracts };
+    });
+
+    return {
+      ...order, matrix, materials: materialsWithFlag, shipments,
+      source_quote_changed, usage_estimated, quote_no,
+    };
   }
 
   async update(id: number, dto: Partial<CreateOrderDto>): Promise<OrderMain> {
@@ -203,8 +230,17 @@ export class OrderService {
     return this.dataSource.transaction(async (manager) => {
       await manager.save(OrderMain, order);
       if (dto.materials !== undefined) {
-        await manager.delete(OrderMaterial, { order_id: id });
-        await manager.save(OrderMaterial, this.buildMaterials(id, order.qty_total, dto.materials));
+        // 只删「本次提交里已不存在的行」，其余带 id 原地更新——必须保住 order_material.id：
+        // 此前是整表 delete+重插，每存一次订单行 ID 全变，合同侧 contract_material.order_material_id
+        // 立刻悬空、订单里的「已订」标记全丢（草稿单生成合同后仍可编辑，这条路径是真实存在的）。
+        const existing = await manager.find(OrderMaterial, { where: { order_id: id } });
+        const own = new Set(existing.map((r) => String(r.id)));
+        // 越权守卫：只认属于本订单的行 ID，其余一律当新增行，杜绝把别单的材料行改绑过来
+        const incoming = dto.materials.map((m) => (m.id && own.has(String(m.id)) ? m : { ...m, id: undefined }));
+        const rows = this.buildMaterials(id, order.qty_total, incoming);
+        const keep = rows.map((r) => r.id).filter((v): v is number => v != null);
+        await manager.delete(OrderMaterial, keep.length ? { order_id: id, id: Not(In(keep)) } : { order_id: id });
+        await manager.save(OrderMaterial, rows);
       }
       // 尺码数量搭配矩阵（修复：此前编辑从不落库——只有 create 存，编辑改矩阵会静默丢失）
       if (dto.matrix_data !== undefined) {

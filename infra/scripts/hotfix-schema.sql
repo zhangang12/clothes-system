@@ -135,6 +135,22 @@ SET @sql := IF(@has_uk > 0,
   'SELECT 1');
 PREPARE _s FROM @sql; EXECUTE _s; DEALLOCATE PREPARE _s;
 
+-- ── 订单↔合同「材料行级」关联(用户反馈 2026-08-03:订单里标出哪些材料已生成合同)────
+-- 列本身 AUTO 段也会补,但索引与存量回填必须在列存在之后跑,故在此显式先补列(幂等,与 AUTO 不冲突)。
+CALL _i9_add_col('contract_material','order_material_id',"BIGINT DEFAULT NULL COMMENT '来源订单材料行ID(订单编辑页标记「已生成合同」用;手工建的合同为NULL)'");
+CALL _i9_add_index('contract_material','idx_order_material','`order_material_id`');
+-- 存量回填:新代码在生成合同时直接写入本列,但历史合同没有。按「同订单 + 同品名 + 合同供应商=订单材料供应商」
+-- 反推(合同本就按供应商拆单,该三元组在正常数据下唯一)。多行同值时取 MIN(id) 保证确定性;
+-- 只填 NULL 行 → 幂等,可随每次发版重放;匹配不上的(如挂「待定供应商」占位工厂)保持 NULL,前端即显示未标记。
+UPDATE contract_material cm
+  JOIN contract c ON c.id = cm.contract_id AND c.deleted = 0 AND c.order_id IS NOT NULL
+  JOIN factory  f ON f.id = c.factory_id
+  JOIN (SELECT order_id, item_name, supplier, MIN(id) AS om_id
+          FROM order_material GROUP BY order_id, item_name, supplier) om
+    ON om.order_id = c.order_id AND om.item_name = cm.item_name AND om.supplier = f.name
+   SET cm.order_material_id = om.om_id
+ WHERE cm.order_material_id IS NULL;
+
 -- ▼▼ AUTO-GENERATED COLUMN SYNC(gen-column-sync.py 生成,勿手改)▼▼
 -- 目的:任意历史版本存量库 → HEAD 结构。①缺整表补表 ②缺列按 HEAD 定义补列(均幂等)。
 -- 注意:NOT NULL 无默认列由 MySQL DDL 隐式默认值填充存量行(数值0/字符串空),优于缺列 500。
@@ -689,8 +705,10 @@ CREATE TABLE IF NOT EXISTS `contract_material` (
   `delivery_date` DATE          DEFAULT NULL COMMENT '行交货期限(材料默认=款交期-45天)',
   `photo_url`    VARCHAR(500)   DEFAULT NULL COMMENT '材料照片URL',
   `remark`       VARCHAR(200)   DEFAULT NULL,
+  `order_material_id` BIGINT    DEFAULT NULL COMMENT '来源订单材料行ID(订单编辑页标记「已生成合同」用;手工建的合同为NULL)',
   PRIMARY KEY (`id`),
-  KEY `idx_contract` (`contract_id`)
+  KEY `idx_contract` (`contract_id`),
+  KEY `idx_order_material` (`order_material_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='合同材料明细（盖章前可改，盖章后冻结）';
 
 CREATE TABLE IF NOT EXISTS `contract_shipment` (
@@ -1944,6 +1962,8 @@ CALL _i9_add_col('contract_material','photo_url',"VARCHAR(500)   DEFAULT NULL CO
 CALL _i9_sync_col('contract_material','photo_url',"VARCHAR(500)","VARCHAR(500)   DEFAULT NULL COMMENT '材料照片URL'");
 CALL _i9_add_col('contract_material','remark',"VARCHAR(200)   DEFAULT NULL");
 CALL _i9_sync_col('contract_material','remark',"VARCHAR(200)","VARCHAR(200)   DEFAULT NULL");
+CALL _i9_add_col('contract_material','order_material_id',"BIGINT    DEFAULT NULL COMMENT '来源订单材料行ID(订单编辑页标记「已生成合同」用;手工建的合同为NULL)'");
+CALL _i9_sync_col('contract_material','order_material_id',"BIGINT","BIGINT    DEFAULT NULL COMMENT '来源订单材料行ID(订单编辑页标记「已生成合同」用;手工建的合同为NULL)'");
 
 -- contract_shipment
 CALL _i9_add_col('contract_shipment','contract_id',"BIGINT         NOT NULL");

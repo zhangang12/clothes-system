@@ -6,6 +6,13 @@ import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateOrderMaterialDto {
+  @ApiPropertyOptional({ description: '已有行ID：编辑时回传则原地更新，行ID保持不变（合同侧行级关联依赖它）；不传=新增行' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  id?: number;
+
   @ApiProperty()
   @IsString()
   @MaxLength(100)
