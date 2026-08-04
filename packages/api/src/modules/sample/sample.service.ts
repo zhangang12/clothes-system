@@ -302,6 +302,38 @@ export class SampleService {
     if (!factoryId) throw new BadRequestException('该行供应商未落工厂库,请先在行内从工厂库选择供应商');
 
     const amount = +(qty * price).toFixed(4);
+
+    // ── 重复生成软守卫（2026-08-04 反馈举一反三）────────────────────────────
+    // 此前这里零查重：每次调用无条件发号 + 插一张 DRAFT 对账单。前端会话守卫只挡同一次
+    // 会话的连点，隔天/换人再点照样多一张；重复单描述金额供应商完全一样，混进复核队列后
+    // 很难分辨，而 settlement 的 classify() 按 /打样|样品|样衣/ 归桶，会把打样费重复计入、歪掉毛利。
+    //
+    // 去重键用行标识 [行#id] 而不是 description 整串：材料明细里「仅部位不同的复制行」
+    // 品名/数量/单价全同，描述逐字节相同，整串匹配会把第二行的合法采购挡掉。
+    // 用 style_no 收范围走 idx_style_no——description 是无索引 TEXT，裸查会全表扫。
+    //
+    // 【如实定性：这是软守卫，不是幂等】① 查重与插入不在同一事务，真并发仍可穿透；
+    // ② sample.service 的 update 是删表重插，每存一次样衣材料行 id 全换、守卫随之失效。
+    // 做耐久幂等要给对账单加来源列（sample_material_id），那要动 schema、撞红线一，另行排期。
+    // 当前形态是刻意向安全方向失效——宁可漏挡，绝不误挡。
+    const rowTag = `[行#${materialId}]`;
+    const dup = await this.dataSource.getRepository(Reconciliation).findOne({
+      where: {
+        type: ReconcileType.NO_CONTRACT,
+        sub_type: 'EXPENSE',
+        style_no: sample.style_no ?? IsNull(),
+        description: Like(`%${rowTag}%`),
+        deleted: 0,
+      } as any,
+      select: ['id', 'reconcile_no'] as any,
+    });
+    if (dup) {
+      throw new BadRequestException(
+        `该材料行已生成过对账单 ${(dup as any).reconcile_no}，请勿重复生成`
+        + `（如需重建请先删除原有草稿对账单）`,
+      );
+    }
+
     const reconcile_no = await this.numbering.nextWithSegment(NUM_PREFIX.RECONCILIATION, sample.style_no || sample.sample_no || 'YY');
     const rec = await this.dataSource.transaction(async (manager) => {
       const saved = await manager.save(Reconciliation, manager.create(Reconciliation, {
@@ -312,7 +344,9 @@ export class SampleService {
         factory_id: factoryId,
         total_amount: amount,
         status: ReconciliationStatus.DRAFT,
-        description: `打样材料采购 · ${sample.sample_no} · ${material.item_name} × ${qty} @ ${price}`,
+        // 「打样材料」这个前缀一个字都不能动：settlement.service 的 classify() 靠
+        // /打样|样品|样衣/ 归桶。末尾的 [行#id] 是上面软守卫的去重键。
+        description: `打样材料采购 · ${sample.sample_no} · ${material.item_name} × ${qty} @ ${price} ${rowTag}`,
         created_by: userId,
         deleted: 0,
       } as any) as any);

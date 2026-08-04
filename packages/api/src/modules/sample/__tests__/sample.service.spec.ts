@@ -24,6 +24,7 @@ const mockRepo = {
 const mockMaterialRepo = {
   create: jest.fn().mockImplementation((v) => v),
   find: jest.fn().mockResolvedValue([]),
+  findOne: jest.fn().mockResolvedValue(null),   // purchaseMaterial 按 materialId 取材料行
   update: jest.fn().mockResolvedValue({}),
 };
 const mockVersionRepo = { create: jest.fn().mockImplementation((v) => v), save: jest.fn().mockResolvedValue({}), find: jest.fn().mockResolvedValue([]) };
@@ -201,6 +202,49 @@ describe('SampleService', () => {
       mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.PENDING, deleted: 0 });
       mockQuoteRepo.find.mockResolvedValue([{ quote_no: 'Q-20260710-001' }]);
       await expect(service.remove(1)).rejects.toThrow('已被报价单 Q-20260710-001 引用，无法删除');
+    });
+  });
+
+  // ── 行级生成采购：重复生成软守卫（2026-08-04 举一反三）──────────────────
+  describe('purchaseMaterial 重复生成守卫', () => {
+    const SAMPLE = { id: 1, sample_no: 'S-20260805-001', style_no: 'K-100', version: 1, deleted: 0 };
+    // 关键：这两行「仅部位不同」——品名/数量/单价逐字段相同，description 会逐字节一样。
+    // 去重键若用 description 整串匹配，第二行的合法采购会被误挡。
+    const ROW_A = { id: 11, sample_id: 1, item_name: '主面料', qty: 10, ref_price: 8, supplier_id: 7 };
+    const ROW_B = { id: 12, sample_id: 1, item_name: '主面料', qty: 10, ref_price: 8, supplier_id: 7 };
+
+    function setup(dupFor: string | null) {
+      mockRepo.findOne.mockResolvedValue(SAMPLE);
+      const reconRepo = { findOne: jest.fn().mockImplementation(({ where }: any) => {
+        // 模拟 Like('%[行#N]%')：只有查的那一行标识命中才返回已存在的单
+        const pat = String(where?.description?.value ?? where?.description ?? '');
+        return Promise.resolve(dupFor && pat.includes(dupFor) ? { id: 99, reconcile_no: 'DZ-K-100-0007' } : null);
+      }) };
+      mockDataSource.getRepository.mockImplementation((e: any) => (e?.name === 'Factory' ? mockSysUserRepo : reconRepo));
+      return reconRepo;
+    }
+
+    it('UT-SAM-P1: 首次生成成功，描述带上行标识 [行#id]', async () => {
+      setup(null);
+      mockMaterialRepo.findOne.mockResolvedValue(ROW_A);
+      mockRedis.eval.mockResolvedValue('DZ-K-100-0001');
+      await service.purchaseMaterial(1, 11, 1);
+      const saved = mockManager.save.mock.calls.find((c: any) => String(c[1]?.description ?? '').includes('打样材料采购'));
+      expect(saved[1].description).toContain('[行#11]');
+      expect(saved[1].description).toContain('打样材料'); // settlement classify 靠这个前缀归桶，不能丢
+    });
+
+    it('UT-SAM-P2: 同一行二次生成 → 400 并报出已存在的单号，而不是再插一张', async () => {
+      setup('[行#11]');
+      mockMaterialRepo.findOne.mockResolvedValue(ROW_A);
+      await expect(service.purchaseMaterial(1, 11, 1)).rejects.toThrow('DZ-K-100-0007');
+    });
+
+    it('UT-SAM-P3: 仅部位不同的复制行(描述逐字节相同)必须都能生成——防误挡回归锚点', async () => {
+      setup('[行#11]');                       // 只有 11 号行已生成过
+      mockMaterialRepo.findOne.mockResolvedValue(ROW_B);   // 现在采 12 号行
+      mockRedis.eval.mockResolvedValue('DZ-K-100-0002');
+      await expect(service.purchaseMaterial(1, 12, 1)).resolves.toBeDefined();
     });
   });
 });
