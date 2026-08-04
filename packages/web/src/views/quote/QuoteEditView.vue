@@ -15,7 +15,7 @@
         <el-button v-if="!readonly && editId && ['DRAFT', 'ADJUSTING'].includes(form.status)" type="warning" @click="submitQuote">发出报价</el-button>
         <el-button v-if="!readonly && editId && form.status === 'QUOTED'" plain @click="adjustQuote">客户调整</el-button>
         <el-button v-if="!readonly && editId && ['QUOTED', 'ADJUSTING'].includes(form.status)" type="success" :icon="Promotion" @click="toContract">转销售合同</el-button>
-        <el-button v-if="editId" :icon="CopyDocument" @click="copy">复制</el-button>
+        <el-button v-if="editId" :icon="CopyDocument" :loading="copying" @click="copy">复制</el-button>
       </div>
     </div>
 
@@ -212,6 +212,7 @@ import type { DocLink } from '@/components/DocLinks.vue'; // 仅取类型:组件
 import { QUOTE_STATUS_LABEL } from '@i9/types';
 import { TRADE_COUNTRIES, DICT_PRICE_TERMS, DICT_SETTLEMENT } from '@/constants/regions';
 import { fxPriceLabel } from '@/utils/currency';
+import { num, checkNumericCells, type NumCol } from '@/utils/numGuard';
 
 const SectionBlock = (props: { title: string; badge?: string }, { slots }: any) =>
   h('div', { class: 'section-block' }, [
@@ -253,6 +254,7 @@ const form = reactive<any>({
 });
 // 本地草稿：输入自动暂存，保存报错/误关页面可恢复；保存成功清除
 const draft = useFormDraft(`quote:${route.fullPath}`, form);
+const copying = ref(false);   // 复制的 in-flight 守卫
 // 买家编号：随所选最终买家带出（列表里就有 customer_no；编辑载入兜底用 buyer_no 快照）
 const buyerNo = computed(() => buyers.value.find((b) => b.id === form.buyerId)?.customer_no ?? form.buyerNo ?? '');
 // 中间商联系人下拉选项（来自中间商客户档案 contacts；可自填）
@@ -507,8 +509,17 @@ async function load() {
   void loadSampleNo(); // 不 await:关联单据反查不该拖住主表单
 }
 
+// 报价明细/费用的数值列自检，理由同订单：非数字 → NaN → null，静默丢值
+const QUOTE_ITEM_NUM_COLS: NumCol[] = [
+  ['quoteUsage', '报价耗用'], ['rmbPrice', '人民币单价'], ['lossRate', '损耗%'],
+];
+const QUOTE_FEE_NUM_COLS: NumCol[] = [['rmbPrice', '人民币单价'], ['quoteUsage', '报价耗用']];
+function checkQuoteNumbers(): string | null {
+  return checkNumericCells(form.items.filter((i: any) => i.itemName), QUOTE_ITEM_NUM_COLS, '报价明细')
+    ?? checkNumericCells(form.fees.filter((f: any) => f.feeName), QUOTE_FEE_NUM_COLS, '费用明细');
+}
+
 function buildDto() {
-  const num = (v: any) => (v === '' || v == null ? undefined : Number(v));
   return {
     inquiryDate: form.inquiryDate || undefined, sampleId: form.sampleId, middlemanId: form.middlemanId,
     buyerId: form.buyerId, styleNo: form.styleNo || undefined, middlemanContact: form.middlemanContact || undefined,
@@ -527,11 +538,16 @@ function buildDto() {
 }
 
 async function save() {
-  await formRef.value?.validate();
+  // 防连点：必须在任何 await 之前早退（saving 原本置位在 validate() 之后，有窗口）
+  if (saving.value) return;
+  saving.value = true;
+  try { await formRef.value?.validate(); } catch { saving.value = false; return; }
+  // 数值列自检：非数字会变 NaN → 序列化成 null → 静默丢值，必须拦在提交前
+  const numErr = checkQuoteNumbers();
+  if (numErr) { ElMessage.error(numErr); saving.value = false; return; }
   const dto = buildDto();
   // 明细可空的唯一例外：已关联样衣 → 创建后自动从样衣带入材料
-  if (!dto.items.length && !(form.sampleId && !editId.value)) { ElMessage.error('报价明细至少 1 行且品名必填'); return; }
-  saving.value = true;
+  if (!dto.items.length && !(form.sampleId && !editId.value)) { ElMessage.error('报价明细至少 1 行且品名必填'); saving.value = false; return; }
   try {
     if (editId.value) {
       await quoteApi.update(editId.value, dto);
@@ -619,8 +635,12 @@ async function copy() {
     if (action !== 'cancel') return;
     withItems = false;
   }
+  // 防连点：确认框只挡同一次操作，关掉后再点仍会再建一条（后端 copy 无幂等）
+  if (copying.value) return;
+  copying.value = true;
   try { const r: any = await quoteApi.copy(editId.value, withItems); ElMessage.success('已复制'); await router.push({ name: 'QuoteEdit', params: { id: (r.data ?? r).id } }); await load(); }
   catch (e: any) { errToast(e?.response?.data?.msg ?? '复制失败'); }
+  finally { copying.value = false; }
 }
 function goBack() { router.push({ name: 'Quotes' }); }
 onMounted(async () => { await loadRefs(); await load(); await draft.restorePrompt(); });

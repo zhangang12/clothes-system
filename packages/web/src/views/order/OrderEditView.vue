@@ -292,6 +292,7 @@ import { Back, Check, Plus, Minus, Download, Promotion, ArrowDown, Printer, Refr
 import { orderApi } from '@/api/order';
 import DictSelect from '@/components/DictSelect.vue';
 import { printOrder } from '@/utils/orderPrint';
+import { num, checkNumericCells, type NumCol } from '@/utils/numGuard';
 import { useFormDraft } from '@/utils/formDraft';
 import { contractApi } from '@/api/contract';
 import { quoteApi } from '@/api/quote';
@@ -613,8 +614,16 @@ async function load() {
   });
 }
 
+// 用料核算数值列的提交前自检：非数字会变 NaN → JSON 序列化成 null → 静默丢值，
+// 采购量直接按 0 算（比报错更糟：用户完全不知道数据没进去）。
+const ORDER_MAT_NUM_COLS: NumCol[] = [
+  ['unitPrice', '单价(元)'], ['netUsage', '单件耗用'], ['lossRate', '损耗%'], ['finalPurchase', '最终采购量'],
+];
+function checkOrderNumbers(): string | null {
+  return checkNumericCells(form.materials.filter((m: any) => m.itemName), ORDER_MAT_NUM_COLS, '材料明细');
+}
+
 function buildDto() {
-  const num = (v: any) => (v === '' || v == null ? undefined : Number(v));
   const q = quotes.value.find((x) => x.id === form.quoteId);
   return {
     quote_id: form.quoteId, customer_id: q?.customer_id ?? form.customerId ?? 0,
@@ -642,9 +651,14 @@ function buildDto() {
 }
 
 async function save() {
-  await formRef.value?.validate();
-  const dto = buildDto();
+  // 防连点：必须在任何 await 之前早退（saving 原本置位在 validate() 之后，有窗口）
+  if (saving.value) return;
   saving.value = true;
+  try { await formRef.value?.validate(); } catch { saving.value = false; return; }
+  // 数值列自检：非数字会变 NaN → 序列化成 null → 静默丢值（采购量按 0 算），必须拦在提交前
+  const numErr = checkOrderNumbers();
+  if (numErr) { ElMessage.error(numErr); saving.value = false; return; }
+  const dto = buildDto();
   try {
     if (editId.value) { await orderApi.update(editId.value, dto); ElMessage.success('更新成功'); }
     else {

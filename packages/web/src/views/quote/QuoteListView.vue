@@ -11,7 +11,7 @@
           <el-button plain :icon="Printer" :disabled="!selected.length" @click="batchPrint">
             批量打印{{ selected.length ? `(${selected.length})` : '' }}
           </el-button>
-          <el-button v-if="canEdit" plain :icon="CopyDocument" :disabled="selected.length !== 1" @click="copyOne">复制</el-button>
+          <el-button v-if="canEdit" plain :icon="CopyDocument" :loading="copying" :disabled="copying || selected.length !== 1" @click="copyOne">复制</el-button>
           <el-button v-if="canEdit" type="danger" plain :icon="Delete" :disabled="!selected.length" @click="batchRemove">
             删除{{ selected.length ? `(${selected.length})` : '' }}
           </el-button>
@@ -70,8 +70,9 @@
         <el-table-column prop="style_no" label="客户款号" min-width="120"><template #default="{ row }">{{ row.style_no || '-' }}</template></el-table-column>
         <el-table-column prop="inquiry_date" label="询价日期" width="110"><template #default="{ row }">{{ row.inquiry_date || '-' }}</template></el-table-column>
         <el-table-column label="数量" width="80" align="right"><template #default="{ row }">{{ row.quote_qty ?? '-' }}</template></el-table-column>
-        <el-table-column label="美金总计" width="120" align="right">
-          <template #default="{ row }">{{ row.usd_total != null ? `$ ${Number(row.usd_total).toLocaleString()}` : '-' }}</template>
+        <!-- 外销总计跟随单据币种，不再写死「美金」与 $（2026-08-04 反馈 #13 同类） -->
+        <el-table-column label="外销总计" width="130" align="right">
+          <template #default="{ row }">{{ row.usd_total != null ? `${currencySymbol(row.currency)} ${Number(row.usd_total).toLocaleString()}` : '-' }}</template>
         </el-table-column>
         <el-table-column label="状态" width="120">
           <template #default="{ row }">
@@ -148,6 +149,7 @@ import { quoteApi } from '@/api/quote';
 import { sampleApi } from '@/api/sample';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole, QUOTE_STATUS_LABEL } from '@i9/types';
+import { currencySymbol } from '@/utils/currency';
 
 const router = useRouter();
 
@@ -182,6 +184,7 @@ const loading = ref(false);
 const list = ref<any[]>([]);
 const total = ref(0);
 const selected = ref<any[]>([]);
+const copying = ref(false);   // 复制的 in-flight 守卫（后端 copy 无幂等，点几次建几条）
 const showAdvanced = ref(false);
 const query = reactive({
   page: 1, size: 20, keyword: '', status: undefined as string | undefined,
@@ -227,8 +230,12 @@ async function copyRow(row: any) {
     if (action !== 'cancel') return;
     withItems = false;
   }
+  // 防连点：确认框只挡住同一次操作，弹窗关掉后再点一次仍会再建一条（后端 copy 无幂等）
+  if (copying.value) return;
+  copying.value = true;
   try { await quoteApi.copy(row.id, withItems); ElMessage.success('已复制为新报价（草稿）'); load(); }
   catch (e: any) { errToast(e?.response?.data?.msg ?? '复制失败'); }
+  finally { copying.value = false; }
 }
 // 发出报价 / 客户调整（此前 UI 缺状态流转入口，草稿无法走到已报价）
 async function doSubmit(row: any) {
