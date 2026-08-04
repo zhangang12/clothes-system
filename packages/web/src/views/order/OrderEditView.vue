@@ -102,18 +102,18 @@
           <el-table :data="form.matrix.rows" size="small" border show-summary v-keynav :summary-method="matrixSummary" @selection-change="(v: any[]) => selSizes = v">
             <el-table-column v-if="!readonly" type="selection" width="38" />
             <el-table-column label="款号" min-width="120"><template #default="{ row }"><el-input v-model="row.style_no" size="small" :disabled="readonly" /></template></el-table-column>
-            <el-table-column label="颜色" width="110"><template #default="{ row }"><DictSelect v-model="row.color" type="color" size="small" placeholder="字典选" :disabled="readonly" /></template></el-table-column>
+            <el-table-column label="颜色" width="110"><template #default="{ row }"><DictSelect v-model="row.color" type="color" size="small" placeholder="选或填" :disabled="readonly" /></template></el-table-column>
             <!-- 洗标号/Article：工厂据此区分标类（用户反馈①）。跟着颜色走，同色通常同一洗标号 -->
             <el-table-column label="洗标号/Article" width="130">
               <template #default="{ row }"><el-input v-model="row.article" size="small" placeholder="洗标号" :disabled="readonly" /></template>
             </el-table-column>
-            <el-table-column label="尺码" width="100"><template #default="{ row }"><DictSelect v-model="row.size" type="size" size="small" placeholder="字典选" :disabled="readonly" /></template></el-table-column>
+            <el-table-column label="尺码" width="100"><template #default="{ row }"><DictSelect v-model="row.size" type="size" size="small" placeholder="选或填" :disabled="readonly" /></template></el-table-column>
             <el-table-column v-for="(p, pi) in form.matrix.pos" :key="pi" :min-width="130" align="center">
               <template #header>
                 <div class="po-head">
                   <el-input v-model="p.po_no" size="small" placeholder="PO号" :disabled="readonly" />
-                  <DictSelect v-model="p.destination" type="destination" size="small" placeholder="目的地(台账可选)" :disabled="readonly" />
-                  <DictSelect v-model="p.consignee" type="consignee" size="small" placeholder="收货人(台账可选)" :disabled="readonly" />
+                  <DictSelect v-model="p.destination" type="destination" size="small" placeholder="目的地·选或填" :disabled="readonly" />
+                  <DictSelect v-model="p.consignee" type="consignee" size="small" placeholder="收货人·选或填" :disabled="readonly" />
                   <el-button v-if="!readonly && form.matrix.pos.length > 1" link type="danger" size="small" @click="delPoCol(pi)">删列</el-button>
                 </div>
               </template>
@@ -626,7 +626,9 @@ function checkOrderNumbers(): string | null {
 function buildDto() {
   const q = quotes.value.find((x) => x.id === form.quoteId);
   return {
-    quote_id: form.quoteId, customer_id: q?.customer_id ?? form.customerId ?? 0,
+    // 别把 `?? 0` 加回来：0 不是任何客户的 ID，等于把「没填客户」伪装成合法值送进
+    // NOT NULL 列，后端只能回一句看不懂的 400。缺失时就让它是 undefined，由 save() 前置拦下并给中文提示。
+    quote_id: form.quoteId, customer_id: q?.customer_id ?? form.customerId,
     customer_po: form.customerPo, style_no: form.styleNo,
     unit_price: num(form.unitPrice), currency: form.currency, delivery_date: form.deliveryDate || undefined,
     commission_rate: num(form.commissionRate) ?? 0, factory_id: form.factoryId, salesperson: form.salesperson || undefined,
@@ -659,10 +661,17 @@ async function save() {
   const numErr = checkOrderNumbers();
   if (numErr) { ElMessage.error(numErr); saving.value = false; return; }
   const dto = buildDto();
+  // 客户缺失就地拦下并说人话。此前 buildDto 用 `?? 0` 兜底送出一个不存在的客户 ID，
+  // 用户只会看到后端一句英文 400，完全不知道是"没关联报价"。
+  if (!editId.value && !dto.customer_id) {
+    ElMessage.error('请先选择「关联报价单」——订单的客户/中间商由报价带出，不挂报价无法建单');
+    saving.value = false; return;
+  }
   try {
     if (editId.value) { await orderApi.update(editId.value, dto); ElMessage.success('更新成功'); }
     else {
-      if (!form.quoteId) { ElMessage.warning('新建订单建议先关联报价并导入；已按当前信息创建'); }
+      // 原来这里写「建议先关联报价…已按当前信息创建」，两句都是错的：订单的客户来自报价，
+      // 不挂报价就没有 customer_id，后端 NOT NULL 必然 400，根本没有"已创建"。改成如实拦下。
       await orderApi.create(dto); ElMessage.success('创建成功');
     }
     draft.clear(); // 保存成功清草稿
