@@ -193,7 +193,7 @@ describe('PaymentListView', () => {
     expect(wrapper.findAll('button').find((b) => b.text() === '驳回')).toBeUndefined();
   });
 
-  it('shows "标记付款" for APPROVED request as ADMIN', async () => {
+  it('shows "付款" for APPROVED request as ADMIN', async () => {
     mockPRList.mockResolvedValue({ data: [makePR({ approval_status: 'APPROVED' })], total: 1 });
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
@@ -201,7 +201,7 @@ describe('PaymentListView', () => {
     expect(wrapper.findAll('button').find((b) => b.text() === '付款')).toBeTruthy();
   });
 
-  it('shows "标记付款" for APPROVED request as FINANCE', async () => {
+  it('shows "付款" for APPROVED request as FINANCE', async () => {
     mockPRList.mockResolvedValue({ data: [makePR({ approval_status: 'APPROVED' })], total: 1 });
     const wrapper = mountView(UserRole.FINANCE);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
@@ -209,12 +209,30 @@ describe('PaymentListView', () => {
     expect(wrapper.findAll('button').find((b) => b.text() === '付款')).toBeTruthy();
   });
 
-  it('hides "标记付款" for APPROVED request as BUSINESS', async () => {
+  it('hides "付款" for APPROVED request as BUSINESS', async () => {
     mockPRList.mockResolvedValue({ data: [makePR({ approval_status: 'APPROVED' })], total: 1 });
     const wrapper = mountView(UserRole.BUSINESS);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
 
-    expect(wrapper.findAll('button').find((b) => b.text() === '标记付款')).toBeUndefined();
+    // 组件里的文案是「付款」不是「标记付款」；写错文案会让这条 toBeUndefined 恒真、等于没测
+    expect(wrapper.findAll('button').find((b) => b.text() === '付款')).toBeUndefined();
+  });
+
+  // ── 建单入口的角色门（2026-08-04 反馈 #12）────────────────────────────
+  // 后端 POST /payments/requests 是 @Roles(ADMIN, FINANCE, BUSINESS)，注释写明
+  // 「业务可发起无合同付款」，而前端曾按 canEdit(仅 ADMIN/FINANCE) 关掉入口。
+  it('BUSINESS 能看到「新建付款申请」——后端本就允许业务发起无合同付款', async () => {
+    mockPRList.mockResolvedValue({ data: [makePR()], total: 1 });
+    const wrapper = mountView(UserRole.BUSINESS);
+    await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
+    expect(wrapper.findAll('button').find((b) => b.text() === '新建付款申请')).toBeTruthy();
+  });
+
+  it('BUSINESS 仍看不到「创建预付款」——那个端点是 ADMIN/FINANCE，放出来只会 403', async () => {
+    mockPRList.mockResolvedValue({ data: [makePR()], total: 1 });
+    const wrapper = mountView(UserRole.BUSINESS);
+    await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
+    expect(wrapper.findAll('button').find((b) => b.text() === '创建预付款')).toBeUndefined();
   });
 
   it('shows no transition-action buttons for PAID request', async () => {
@@ -222,7 +240,7 @@ describe('PaymentListView', () => {
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
 
-    for (const text of ['提交', '批准', '驳回', '标记付款', '删除']) {
+    for (const text of ['提交', '批准', '驳回', '付款', '删除']) {   // 同上：文案是「付款」
       expect(wrapper.findAll('button').find((b) => b.text() === text)).toBeUndefined();
     }
   });

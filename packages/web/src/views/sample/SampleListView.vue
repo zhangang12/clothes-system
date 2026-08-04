@@ -1,6 +1,6 @@
 <template>
   <div class="list-page">
-    <RuleHint>样衣是全流程第一环;<b>已被客户报价引用的样衣不可删除</b>,可改为「废弃」(下游保留快照);行内「生成采购」为该材料行生成打样对账单;填材料寄出单号即自动推送版师。</RuleHint>
+    <RuleHint>样衣是全流程第一环;<b>「废弃」=留档改状态,行仍留在列表</b>(下游保留快照);<b>「删除」=移出列表</b>,仅待派单且未被报价引用的可删、管理员操作;行内「生成采购」为该材料行生成打样对账单;填材料寄出单号即自动推送版师。</RuleHint>
     <div class="toolbar-card">
       <div class="toolbar">
         <div class="tools-left">
@@ -207,9 +207,20 @@ async function copyOne() {
 }
 async function batchRemove() {
   try { await ElMessageBox.confirm(`确认删除选中的 ${selected.value.length} 条记录?此操作不可恢复。`, "批量删除", { type: "warning" }); } catch { return; }
-  let ok = 0, fail = 0;
-  for (const row of selected.value) { try { await sampleApi.remove(row.id); ok++; } catch { fail++; } }
-  ElMessage[fail ? 'warning' : 'success'](`删除完成：成功 ${ok} 条${fail ? `，拦截 ${fail} 条(仅待派单/未被引用可删)` : ''}`);
+  let ok = 0;
+  const reasons: string[] = [];   // 别把后端 msg 吞掉：用户只看到「拦截 N 条」不知道为什么删不掉
+  for (const row of selected.value) {
+    try { await sampleApi.remove(row.id); ok++; }
+    catch (e: any) {
+      const msg = e?.response?.data?.msg ?? '未知原因';
+      reasons.push(`${row.sample_no ?? row.id}：${msg}`);
+    }
+  }
+  if (!reasons.length) ElMessage.success(`删除完成：成功 ${ok} 条`);
+  else {
+    ElMessageBox.alert(reasons.join('<br>'), `删除完成：成功 ${ok} 条，拦截 ${reasons.length} 条`,
+      { dangerouslyUseHTMLString: true, confirmButtonText: '知道了' });
+  }
   load();
 }
 // 打印/PDF(取详情含材料明细;对外脱敏,不含参考价格)

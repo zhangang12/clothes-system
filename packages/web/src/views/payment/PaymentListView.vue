@@ -122,7 +122,7 @@
 
         <div class="table-toolbar">
           <span></span>
-          <el-button v-if="canEdit" type="primary" :icon="Plus" @click="openCreatePR">新建付款申请</el-button>
+          <el-button v-if="canCreatePR" type="primary" :icon="Plus" @click="openCreatePR">新建付款申请</el-button>
         </div>
 
         <el-table :data="prList" v-loading="prLoading" border stripe>
@@ -396,6 +396,12 @@ import { UserRole } from '@i9/types';
 const authStore = useAuthStore();
 const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
 const canEdit = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.FINANCE));
+// 「新建付款申请」单独放行 BUSINESS：后端 POST /payments/requests 是
+// @Roles(ADMIN, FINANCE, BUSINESS)，注释写明「业务可发起无合同付款」，
+// 前端却按 canEdit 关了入口 → 业务能进页面、能看列表，就是建不了单。
+// 注意别把 BUSINESS 塞进 canEdit 本体：创建预付款/提交/付款三个按钮后端都是
+// ADMIN/FINANCE，那样等于一次放出三条必 403 的路径。
+const canCreatePR = computed(() => canEdit.value || authStore.hasRole(UserRole.BUSINESS));
 
 const route = useRoute();
 const router = useRouter();
@@ -648,7 +654,9 @@ function resetPRForm() {
 // 选择工厂后自动提示是否存在可用预付款余额（付款申请设计稿：存在预付时提示冲抵）
 watch(() => prForm.factory_id, async (fid) => {
   prPrepayBalance.value = 0;
-  if (!createPRVisible.value || !fid) return;
+  // getBalance 是 @Roles(ADMIN, FINANCE)：BUSINESS 调用会被全局拦截器弹「需要权限」红字，
+  // 本地 catch 拦不住它，所以这里直接早退（业务本就用不到预付冲抵）
+  if (!createPRVisible.value || !fid || !canEdit.value) return;
   try {
     const res: any = await prepaymentApi.getBalance(fid);
     prPrepayBalance.value = +(res?.data ?? res ?? 0) || 0;
