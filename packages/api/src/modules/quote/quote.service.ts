@@ -88,14 +88,20 @@ export class QuoteService {
   }
 
   async create(dto: CreateQuoteDto, createdBy: number): Promise<Quotation> {
-    const middlemanId = dto.middlemanId ?? dto.customerId;
+    // 中间商可空（2026-08-04 反馈，同客户资料 #05）：直接客户没有中间商。
+    // 但 quotation.customer_id 是 NOT NULL，单子总得挂客户 → 按 中间商 → 客户 → 最终买家 依次兜底
+    // （与 2026-07-27 订单/样衣「中间商全链可空」同口径）。三者全无才拒绝。
+    const middlemanId = dto.middlemanId ?? dto.customerId ?? dto.buyerId;
+    if (!middlemanId) throw new BadRequestException('中间商与最终买家至少填一个');
     const middleman = await this.customerRepo.findOne({ where: { id: middlemanId, deleted: 0 } });
-    if (!middleman) throw new BadRequestException(`中间商客户 #${middlemanId} 不存在`);
+    if (!middleman) throw new BadRequestException(`客户 #${middlemanId} 不存在`);
     let buyerName: string | undefined; let buyerNo: string | undefined;
     if (dto.buyerId) {
       const buyer = await this.customerRepo.findOne({ where: { id: dto.buyerId, deleted: 0 } });
       buyerName = buyer?.name; buyerNo = buyer?.customer_no;
     }
+    // 没有中间商时不要把买家名写进 middleman_name（列表「中间商」列会显示成买家，误导）
+    const middlemanName = (dto.middlemanId ?? dto.customerId) ? middleman.name : undefined;
     const quote_no = await this.numbering.next(NUM_PREFIX.QUOTATION);
     const rate = dto.exchangeRate ?? 1;
     // 费用明细新建自动带 6 行
@@ -106,7 +112,7 @@ export class QuoteService {
     return this.dataSource.transaction(async (manager) => {
       const quote = await manager.save(Quotation, manager.create(Quotation, {
         quote_no, inquiry_date: dto.inquiryDate ?? today(), sample_id: dto.sampleId,
-        customer_id: middlemanId, middleman_name: middleman.name,
+        customer_id: middlemanId, middleman_name: middlemanName,
         buyer_id: dto.buyerId, buyer_name: buyerName, buyer_no: buyerNo,
         style_no: dto.styleNo, middleman_contact: dto.middlemanContact,
         currency: dto.currency ?? 'USD', exchange_rate: rate,

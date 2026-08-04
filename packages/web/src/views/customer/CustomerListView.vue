@@ -238,7 +238,9 @@ function parseCustomerRow(c: Record<string, string>) {
   const contactName = c['联系人姓名'];
   if (!type) return { row: null, error: `客户类型无效(需 中间商/最终买家)` };
   if (!contactName) return { row: null, error: '联系人姓名必填' };
-  if (type === 'BUYER') return { row: null, error: '最终买家需在编辑页选关联中间商，暂不支持导入' };
+  // 「最终买家必须关联中间商」这条规则 2026-07-27 已按用户反馈取消（直接客户没有中间商，
+  // 后端 customer.service 与 UT-CUS-14 都已放宽），前端导入却还拿它整行拒收 → 最终买家一直导不进来。
+  // 关联中间商本就可空、且导入模板里没有该列，导进来后需要时再去编辑页补即可。
   return {
     row: {
       name: c['客户名称'] || undefined, type, grade: GRADE_BY_LABEL[c['信用等级']] || undefined,

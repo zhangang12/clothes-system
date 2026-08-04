@@ -136,4 +136,24 @@ describe('rowsToMaterials extraColorCols（多组颜色按源列分列，用户�
     const out = rowsToMaterials([['面料A', '', '黑色', '大身']], { itemName: 0, part: 3 }, [1, 2]);
     expect(out[0].colors).toBe('黑色');
   });
+
+  // ── 色组以「源列」为边界（2026-08-04 Nina 反馈）──────────────────
+  // 这两条守着一个很容易被下次"修复"弄反的边界：
+  // 跨列 = 多个色组（Helen 7-29/7-30 要的）；列内 = 一个色组，内部逗号不是分隔符（Nina 要的）。
+  it('单元格内部的逗号不构成色组边界——一列就是一个色组', () => {
+    const out = rowsToMaterials([['5号尼龙开口', '拉头古银，齿和码带黑色', '', '门禁']], mapping, [2]);
+    expect(out[0].colorGroups).toEqual(['拉头古银，齿和码带黑色']);
+    expect(out[0].colorGroups).toHaveLength(1); // 不是 ['拉头古银','齿和码带黑色']
+  });
+
+  it('半角逗号同样不拆——中英文标点都只是内容', () => {
+    const out = rowsToMaterials([['织带', 'A,B', '', '袖口']], mapping, [2]);
+    expect(out[0].colorGroups).toEqual(['A,B']);
+  });
+
+  it('跨列仍各自成组，且 colors 逗号串照旧生成（落库格式不变）', () => {
+    const out = rowsToMaterials([['面料A', '黑色', '白色', '大身']], mapping, [2]);
+    expect(out[0].colorGroups).toEqual(['黑色', '白色']);
+    expect(out[0].colors).toBe('黑色，白色');
+  });
 });

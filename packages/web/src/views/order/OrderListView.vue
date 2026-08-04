@@ -42,7 +42,9 @@
         <el-table-column prop="customer_po" label="客户PO" min-width="130"><template #default="{ row }">{{ row.customer_po || '-' }}</template></el-table-column>
         <el-table-column label="中间商/买家" min-width="150"><template #default="{ row }">{{ [row.middleman_name, row.buyer_name].filter(Boolean).join(' / ') || '-' }}</template></el-table-column>
         <el-table-column label="大货总数" width="90" align="right"><template #default="{ row }">{{ row.qty_total ?? 0 }}</template></el-table-column>
-        <el-table-column label="单品单价" width="100" align="right"><template #default="{ row }">{{ row.unit_price != null ? `${row.currency === 'RMB' ? '¥' : '$'}${row.unit_price}` : '-' }}</template></el-table-column>
+        <!-- 别写回 `currency === 'RMB' ? '¥' : '$'`：币种字典发的是 **CNY**，'RMB' 永远不命中，
+             人民币订单会一律显示成 $（2026-08-04 反馈 #13 的同类回归）。统一走 currencySymbol()。 -->
+        <el-table-column label="单品单价" width="100" align="right"><template #default="{ row }">{{ row.unit_price != null ? `${currencySymbol(row.currency)}${row.unit_price}` : '-' }}</template></el-table-column>
         <el-table-column prop="delivery_date" label="约定交期" width="110"><template #default="{ row }">{{ row.delivery_date || '-' }}</template></el-table-column>
         <el-table-column label="总金额" width="120" align="right">
           <template #default="{ row }">
@@ -132,6 +134,7 @@ import { contractApi } from '@/api/contract';
 import { printOrder } from '@/utils/orderPrint';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole, ORDER_STATUS_LABEL } from '@i9/types';
+import { currencySymbol } from '@/utils/currency';
 
 const router = useRouter();
 const authStore = useAuthStore();

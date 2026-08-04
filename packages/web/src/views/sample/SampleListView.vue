@@ -7,7 +7,7 @@
           <el-button v-if="canEdit" type="primary" :icon="Plus" @click="goCreate">新建</el-button>
           <el-button v-if="canEdit" plain :icon="Upload" @click="showImport = true">导入</el-button>
           <el-button plain :icon="Download" @click="exportCsv">导出</el-button>
-          <el-button v-if="canEdit" plain :icon="CopyDocument" :disabled="selected.length !== 1" @click="copyOne">复制</el-button>
+          <el-button v-if="canEdit" plain :icon="CopyDocument" :loading="copying" :disabled="copying || selected.length !== 1" @click="copyOne">复制</el-button>
           <el-button v-if="isAdmin" type="danger" plain :icon="Delete" :disabled="!selected.length" @click="batchRemove">
             删除{{ selected.length ? `(${selected.length})` : '' }}
           </el-button>
@@ -195,9 +195,15 @@ function goEdit(row: any) { router.push({ name: 'SampleEdit', params: { id: row.
 function goView(row: any) { router.push({ name: 'SampleView', params: { id: row.id } }); }
 function goPatternmaker(row: any) { router.push({ name: 'SamplePatternmaker', params: { id: row.id } }); }
 
+// 防连点：复制没有任何幂等保护，点 N 次就真建 N 条。8-04 反馈截图里
+// S-20260804-028~034 连续 8 条同款号同状态的样衣，就是这么来的。
+const copying = ref(false);
 async function copyOne() {
+  if (copying.value) return;
+  copying.value = true;
   try { await sampleApi.copy(selected.value[0].id); ElMessage.success('已复制为新样衣（待派单）'); load(); }
   catch (e: any) { errToast(e?.response?.data?.msg ?? '复制失败'); }
+  finally { copying.value = false; }
 }
 async function batchRemove() {
   try { await ElMessageBox.confirm(`确认删除选中的 ${selected.value.length} 条记录?此操作不可恢复。`, "批量删除", { type: "warning" }); } catch { return; }

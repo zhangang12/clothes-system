@@ -53,7 +53,9 @@
             </el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="中间商" prop="middlemanId" required>
+            <!-- 不再无条件必填：直接客户没有中间商（2026-08-04 反馈同 #05）。
+                 改为「中间商 / 最终买家至少填一个」，由下方 rules 的 validator 统一把关 -->
+            <el-form-item label="中间商" prop="middlemanId">
               <el-select v-model="form.middlemanId" filterable placeholder="选择中间商" style="width:100%" @change="onMiddleman">
                 <el-option v-for="m in middlemen" :key="m.id" :label="`${m.customer_no} · ${m.name}`" :value="m.id" />
               </el-select>
@@ -114,7 +116,7 @@
             content="在 Excel 中按列序复制后粘贴追加：部位｜品名｜门幅｜颜色｜供应商｜单位｜报价耗用｜人民币单价｜损耗%｜备注">
             <el-button size="small" @click="pasteItems">📋 Excel 粘贴</el-button>
           </el-tooltip>
-          <span class="hint">含损金额 = 人民币单价 × 报价耗用 × (1 + 损耗%)；美金单价 = 人民币单价 / 汇率</span>
+          <span class="hint">含损金额 = 人民币单价 × 报价耗用 × (1 + 损耗%)；{{ fxLabel }} = 人民币单价 / 汇率</span>
         </div>
         <div class="table-scroll">
           <el-table :data="form.items" size="small" border v-keynav @selection-change="(v: any[]) => selItems = v">
@@ -133,7 +135,7 @@
             <el-table-column label="单位" width="70"><template #default="{ row }"><el-input v-model="row.unit" size="small" /></template></el-table-column>
             <el-table-column label="报价耗用" width="100"><template #default="{ row }"><el-input v-model="row.quoteUsage" size="small" /></template></el-table-column>
             <el-table-column label="人民币单价" width="110"><template #default="{ row }"><el-input v-model="row.rmbPrice" size="small" class="hl-input" /></template></el-table-column>
-            <el-table-column label="美金单价" width="100"><template #default="{ row }">{{ usd(row.rmbPrice) }}</template></el-table-column>
+            <el-table-column :label="fxLabel" width="100"><template #default="{ row }">{{ usd(row.rmbPrice) }}</template></el-table-column>
             <el-table-column label="损耗%" width="80"><template #default="{ row }"><el-input v-model="row.lossRate" size="small" /></template></el-table-column>
             <el-table-column label="含损金额" width="110"><template #default="{ row }"><span class="calc">{{ lossAmt(row) }}</span></template></el-table-column>
             <el-table-column label="备注" min-width="100"><template #default="{ row }"><el-input v-model="row.remark" size="small" /></template></el-table-column>
@@ -157,7 +159,7 @@
           <el-table-column type="selection" width="38" />
           <el-table-column label="费用名称" min-width="140"><template #default="{ row }"><el-input v-model="row.feeName" size="small" /></template></el-table-column>
           <el-table-column label="人民币单价" width="120"><template #default="{ row }"><el-input v-model="row.rmbPrice" size="small" class="hl-input" /></template></el-table-column>
-          <el-table-column label="美金单价" width="110"><template #default="{ row }">{{ usd(row.rmbPrice) }}</template></el-table-column>
+          <el-table-column :label="fxLabel" width="110"><template #default="{ row }">{{ usd(row.rmbPrice) }}</template></el-table-column>
           <el-table-column label="报价耗用" width="100"><template #default="{ row }"><el-input v-model="row.quoteUsage" size="small" /></template></el-table-column>
         </el-table>
       </section-block>
@@ -166,10 +168,10 @@
       <section-block title="▣ 报价合计" badge="3 字段">
         <el-row :gutter="16">
           <el-col :span="8"><el-form-item label="报价人民币价格"><el-input :model-value="rmbTotal" readonly class="total-input" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="报价美元价格"><el-input :model-value="usdTotal" readonly class="total-input" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item :label="`报价${curCode}价格`"><el-input :model-value="usdTotal" readonly class="total-input" /></el-form-item></el-col>
           <el-col :span="24"><el-form-item label="备注说明"><el-input v-model="form.totalRemark" type="textarea" :rows="2" /></el-form-item></el-col>
         </el-row>
-        <div class="hint">报价人民币价格 = (含损金额合计 + 费用合计) × (1 + 利润率%)；美元价格按汇率换算。</div>
+        <div class="hint">报价人民币价格 = (含损金额合计 + 费用合计) × (1 + 利润率%)；{{ curCode }} 价格按汇率换算。</div>
       </section-block>
     </el-form>
 
@@ -209,6 +211,7 @@ import FileUpload from '@/components/FileUpload.vue';
 import type { DocLink } from '@/components/DocLinks.vue'; // 仅取类型:组件已全局注册
 import { QUOTE_STATUS_LABEL } from '@i9/types';
 import { TRADE_COUNTRIES, DICT_PRICE_TERMS, DICT_SETTLEMENT } from '@/constants/regions';
+import { fxPriceLabel } from '@/utils/currency';
 
 const SectionBlock = (props: { title: string; badge?: string }, { slots }: any) =>
   h('div', { class: 'section-block' }, [
@@ -256,6 +259,10 @@ const buyerNo = computed(() => buyers.value.find((b) => b.id === form.buyerId)?.
 const middlemanContacts = ref<Array<{ label: string; value: string }>>([]);
 
 const rate = computed(() => Number(form.exchangeRate) || 0);
+// 外销价一栏跟随单据币种，不再写死「美金」（2026-08-04 反馈 #13：选了 CNY 还显示 $/美金）。
+// 变量名 usd/usdTotal 沿用不改（改名会牵动模板与粘贴导入多处），只纠正对外展示的文案。
+const curCode = computed(() => String(form.currency || 'USD').toUpperCase());
+const fxLabel = computed(() => fxPriceLabel(curCode.value));
 const usd = (rmb: any) => (rate.value > 0 && rmb !== '' && rmb != null ? (Number(rmb) / rate.value).toFixed(2) : '-');
 const lossAmt = (row: any) => {
   const v = (Number(row.rmbPrice) || 0) * (Number(row.quoteUsage) || 0) * (1 + (Number(row.lossRate) || 0) / 100);
@@ -274,8 +281,19 @@ const selItems = ref<any[]>([]); const selFees = ref<any[]>([]);
 const importDialog = ref(false); const importSampleId = ref<number>();
 const rules: FormRules = {
   inquiryDate: [{ required: true, message: '请选择询价日期', trigger: 'change' }],
-  middlemanId: [{ required: true, message: '请选择中间商', trigger: 'change' }],
-  buyerId: [{ required: true, message: '请选择最终买家', trigger: 'change' }],
+  // 中间商/最终买家不再各自硬必填——直接客户没有中间商、只走中间商的单子也可能没具体终端买家。
+  // 但 quotation.customer_id 是 NOT NULL，单子总得挂到一个客户上，所以要求「两者至少填一个」，
+  // 后端按 middlemanId ?? customerId ?? buyerId 兜底落库（与 7-27 订单/样衣同口径）。
+  middlemanId: [{
+    validator: (_r: any, _v: any, cb: any) => (form.middlemanId || form.buyerId
+      ? cb() : cb(new Error('中间商与最终买家至少填一个'))),
+    trigger: 'change',
+  }],
+  buyerId: [{
+    validator: (_r: any, _v: any, cb: any) => (form.middlemanId || form.buyerId
+      ? cb() : cb(new Error('中间商与最终买家至少填一个'))),
+    trigger: 'change',
+  }],
   styleNo: [{ required: true, message: '请填写客户款号', trigger: 'blur' }],
   currency: [{ required: true, message: '请选择外销币种', trigger: 'change' }],
   exchangeRate: [{ validator: (_r, _v, cb) => (rate.value > 0 ? cb() : cb(new Error('汇率必须 > 0'))), trigger: 'blur' }],

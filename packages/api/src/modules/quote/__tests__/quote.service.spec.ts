@@ -198,4 +198,26 @@ describe('报价机密行级安全 (H4/H6)', () => {
       await expect(service.revert(14, BIZ_USER)).rejects.toThrow('只有已报价/已成单状态可撤回调整');
     });
   });
+
+  // 中间商可空（2026-08-04 反馈，与客户资料 #05 同源；7-27「中间商全链可空」漏了报价这一环）
+  describe('中间商可空：直接客户也能报价', () => {
+    it('UT-QUO-MM-01: 只给最终买家、不给中间商 → 落库挂到买家，且不把买家名写进中间商列', async () => {
+      mockCustomerRepo.findOne.mockResolvedValue({ id: 5, name: '直接客户A', customer_no: 'CN005' });
+      const manager: any = {
+        create: jest.fn((_: any, v: any) => v),
+        save: jest.fn((_: any, v: any) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
+        update: jest.fn(),
+      };
+      mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+      await service.create({ buyerId: 5, items: [] } as any, 1);
+      const saved = manager.save.mock.calls[0][1];
+      expect(saved.customer_id).toBe(5);          // NOT NULL 列有值，不会插入失败
+      expect(saved.buyer_id).toBe(5);
+      expect(saved.middleman_name).toBeUndefined(); // 没有中间商就别显示成有
+    });
+
+    it('UT-QUO-MM-02: 中间商与最终买家都不给 → 明确 400，而不是撞 NOT NULL 的 500', async () => {
+      await expect(service.create({ items: [] } as any, 1)).rejects.toThrow('中间商与最终买家至少填一个');
+    });
+  });
 });

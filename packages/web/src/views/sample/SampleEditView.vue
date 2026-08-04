@@ -122,6 +122,8 @@
             <el-table-column label="品名" min-width="130" fixed><template #default="{ row }"><el-input v-model="row.itemName" size="small" :disabled="bizDisabled" /></template></el-table-column>
             <el-table-column label="安排日期" width="130"><template #default="{ row }"><el-date-picker v-model="row.arrangeDate" type="date" value-format="YYYY-MM-DD" size="small" style="width:100%" :disabled="bizDisabled" /></template></el-table-column>
             <el-table-column label="门幅" width="90"><template #default="{ row }"><el-input v-model="row.width" size="small" :disabled="bizDisabled" /></template></el-table-column>
+            <!-- 部位在前、颜色在后（2026-08-04 business_user 反馈要求对调这两列） -->
+            <el-table-column label="部位" width="100"><template #default="{ row }"><el-input v-model="row.part" size="small" :disabled="bizDisabled" /></template></el-table-column>
             <el-table-column label="颜色（色组）" min-width="180">
               <template #default="{ row }">
                 <!-- 色组动态多列（用户反馈：一款四五个色组要分开看/分开录；存储仍逗号串,UI 按组分列） -->
@@ -136,7 +138,6 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="部位" width="100"><template #default="{ row }"><el-input v-model="row.part" size="small" :disabled="bizDisabled" /></template></el-table-column>
             <el-table-column label="成份" width="120"><template #default="{ row }"><el-input v-model="row.composition" size="small" :disabled="bizDisabled" /></template></el-table-column>
             <el-table-column label="码带" width="90"><template #default="{ row }"><el-input v-model="row.codeBand" size="small" :disabled="bizDisabled" /></template></el-table-column>
             <el-table-column label="拉链长度" width="100"><template #default="{ row }"><el-input v-model="row.zipperLength" size="small" :disabled="!pmEnabled && bizDisabled" /></template></el-table-column>
@@ -255,7 +256,7 @@
             <el-table-column prop="part" label="部位/位置" min-width="120" />
             <!-- 色组分列预览（用户反馈：颜色一/颜色二不要合并显示） -->
             <el-table-column v-for="gi in sheetMaxColorGroups" :key="gi" :label="`色组${gi}`" min-width="100">
-              <template #default="{ row }">{{ splitColors(row.colors)[gi - 1] ?? '' }}</template>
+              <template #default="{ row }">{{ (row.colorGroups ?? splitColors(row.colors))[gi - 1] ?? '' }}</template>
             </el-table-column>
             <el-table-column prop="supplierName" label="供应商" min-width="110" />
             <el-table-column prop="remark" label="备注" min-width="100" />
@@ -430,16 +431,20 @@ const sheetExtraColorCols = computed(() => {
   const colorsField = MATERIAL_FIELDS.find((f) => f.key === 'colors');
   if (!colorsField) return [];
   const headerRow = sheetRows.value[sheetHeaderRow.value] ?? [];
+  // 已被任何字段占用的列都不能再当作额外色组——否则一列会被同时导进两处
+  // （原来只排除了 colors 自己，像"颜色"字样出现在别的已映射表头里就会重复取值）。
+  const taken = new Set(Object.values(sheetActiveMapping.value).filter((v) => v != null));
   return headerRow
     .map((c, i) => ({ c, i }))
-    .filter(({ c, i }) => colorsField.keywords.test(String(c ?? '')) && i !== sheetActiveMapping.value.colors)
+    .filter(({ c, i }) => colorsField.keywords.test(String(c ?? '')) && !taken.has(i))
     .map(({ i }) => i);
 });
 const sheetPreviewRows = computed(() =>
   rowsToMaterials(sheetRows.value.slice(sheetHeader.value ? sheetHeaderRow.value + 1 : 0), sheetActiveMapping.value, sheetExtraColorCols.value).slice(0, 200));
 // 预览的色组列数（取各行最大组数，分列展示不合并）
 const sheetMaxColorGroups = computed(() =>
-  Math.max(1, ...sheetPreviewRows.value.map((r) => splitColors(r.colors).length)));
+  // 用结构化色组算列数，别再按逗号拆——列内逗号不是色组边界（Nina 8-04 反馈）
+  Math.max(1, ...sheetPreviewRows.value.map((r: any) => (r.colorGroups?.length ?? splitColors(r.colors).length))));
 function openSheetImport() { sheetDialog.value = true; }
 function resetSheetImport() {
   sheetFileName.value = ''; sheetRows.value = []; sheetHeader.value = true; sheetMode.value = 'append'; sheetHeaderRow.value = 0;
@@ -469,7 +474,10 @@ function confirmSheetImport() {
   let matched = 0, unmatched = 0;
   const mapped = rows.map((r) => {
     const m: any = { ...emptyMaterial(), ...r };
-    m.colorGroups = splitColors(m.colors); // 导入的逗号串颜色回分列展示（色组一/二分开看）
+    // 优先用导入侧给出的结构化色组（一个源列一组，列内逗号原样保留）；
+    // 只有拿不到时才退回按逗号拆——否则用户单元格里自己打的逗号会被误拆成两个色组（Nina 8-04 反馈）。
+    m.colorGroups = Array.isArray(r.colorGroups) && r.colorGroups.length
+      ? [...r.colorGroups] : splitColors(m.colors);
     if (m.supplierName) {
       const f = factories.value.find((x: any) => x.name === m.supplierName);
       if (f) { m.supplierId = f.id; matched++; } else unmatched++;
@@ -621,6 +629,30 @@ async function load() {
   versions.value = (vs.data ?? vs) ?? [];
 }
 
+// '' / null → undefined（字段不发，后端 @IsOptional 放行）；其余交给 Number()。
+// 注意别用 `Number(v) || undefined`：那会把合法的 0 也吞掉。
+const num = (v: any) => (v === '' || v == null ? undefined : Number(v));
+
+// 材料数值列的提交前自检。不这么做的话，用户在数量列填「若干」「2条」会得到
+// 一句 materials.16.qty must be a number conforming to the specified constraints——
+// 既看不懂、也不知道是第几行（下标从 0 起，还得自己 +1）。
+const MATERIAL_NUM_COLS: Array<[string, string]> = [
+  ['qty', '数量'], ['refPrice', '参考价格'], ['actualUsage', '实际耗用'],
+];
+function checkMaterialNumbers(): string | null {
+  const rows = form.materials.filter((m: any) => m.itemName);
+  for (let i = 0; i < rows.length; i++) {
+    for (const [key, label] of MATERIAL_NUM_COLS) {
+      const raw = (rows[i] as any)[key];
+      if (raw === '' || raw == null) continue;
+      if (Number.isNaN(Number(raw))) {
+        return `材料明细第 ${i + 1} 行「${label}」填的是「${raw}」，这一列只能填数字`;
+      }
+    }
+  }
+  return null;
+}
+
 function buildDto() {
   return {
     categories: form.categories, middlemanId: form.middlemanId ?? null, styleNo: form.styleNo,
@@ -635,7 +667,14 @@ function buildDto() {
     materials: form.materials.filter((m: any) => m.itemName).map((m: any, i: number) => {
       // colorGroups 是编辑态辅助数组，不能进 DTO（whitelist 会 400）；colors 逗号串已在编辑时同步
       const { colorGroups, ...rest } = m;
-      return { ...rest, sortOrder: i };
+      // 数值列必须归一后再发：这几列在页面上是自由文本输入框，此前整行原样透传，
+      // 空串/非数字直接撞后端 @IsNumber，报出 materials.16.qty must be a number…（2026-08-04 反馈 #08）。
+      // 非数字已在 checkMaterialNumbers() 拦在提交前，这里只负责 '' → undefined 与真正的数值转换。
+      return {
+        ...rest, sortOrder: i,
+        qty: num(m.qty), refPrice: num(m.refPrice),
+        actualUsage: num(m.actualUsage), supplierId: num(m.supplierId),
+      };
     }),
     shipRounds: buildRounds(),
   };
@@ -656,11 +695,20 @@ function buildRounds() {
 }
 
 async function save() {
-  await formRef.value?.validate();
-  if (!form.middlemanId && !form.buyerId) { ElMessage.error('请选择中间商或最终买家（直接客户选最终买家即可）'); return; }
-  const dto = buildDto();
-  if (!dto.materials.length) { ElMessage.error('材料明细至少 1 行且品名必填'); return; }
+  // 防连点：必须在任何 await 之前早退。此前 saving 置位排在 validate() 之后，
+  // 慢保存时用户连点会真落多条（8-04 反馈截图里 8 条一模一样的待派单样衣即此类）。
+  if (saving.value) return;
   saving.value = true;
+  try {
+    await formRef.value?.validate();
+  } catch {
+    saving.value = false; return;   // 校验未过：复位，否则按钮永久卡在 loading
+  }
+  if (!form.middlemanId && !form.buyerId) { ElMessage.error('请选择中间商或最终买家（直接客户选最终买家即可）'); saving.value = false; return; }
+  const numErr = checkMaterialNumbers();
+  if (numErr) { ElMessage.error(numErr); saving.value = false; return; }
+  const dto = buildDto();
+  if (!dto.materials.length) { ElMessage.error('材料明细至少 1 行且品名必填'); saving.value = false; return; }
   try {
     let id = editId.value;
     if (id) { await sampleApi.update(id, dto); ElMessage.success('更新成功'); }

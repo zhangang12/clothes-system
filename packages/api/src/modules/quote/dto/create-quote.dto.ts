@@ -26,7 +26,9 @@ export class CreateQuoteFeeDto {
 }
 
 export class CreateQuoteDto {
-  @ApiProperty({ description: '中间商客户ID' }) @Type(() => Number) @IsInt() @Min(1) middlemanId: number;
+  // 可空（2026-08-04）：直接客户没有中间商。service 按 中间商→客户→最终买家 兜底，三者全无才 400
+  @ApiPropertyOptional({ description: '中间商客户ID（可空；与 buyerId 至少给一个）' })
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) middlemanId?: number;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() customerId?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() inquiryDate?: string;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() sampleId?: number;

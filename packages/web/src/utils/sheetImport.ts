@@ -105,11 +105,14 @@ export function rowsToMaterials(rows: string[][], mapping: Record<string, number
   return rows
     .map((r) => {
       const out: any = Object.fromEntries(MATERIAL_FIELDS.map((f) => [f.key, cell(r, f.key)]));
-      if (extraColorCols.length) {
-        out.colors = [out.colors, ...extraColorCols.map((i) => String(r[i] ?? '').trim())]
-          .filter(Boolean)
-          .join('，');
-      }
+      // 色组按「源列」成组：一个源列恰好一个色组，**列内内容整体保留、绝不再拆**。
+      // 【2026-08-04 Nina 反馈】此前只产出 colors 逗号串，下游 splitColors 再按 [，,] 拆一次——
+      // 用户单元格里自己打的逗号就被误当成色组分隔符，一格「拉头古银，齿和码带黑色」被劈成两组。
+      // 这里直接给出结构化的 colorGroups，导入路径不再经过二次拆分；
+      // colors 逗号串照旧生成（落库字段没变、Helen 7-29/7-30 要的跨列分组也照旧成立）。
+      out.colorGroups = [out.colors, ...extraColorCols.map((i) => String(r[i] ?? '').trim())]
+        .filter(Boolean);
+      out.colors = out.colorGroups.join('，');
       return out;
     })
     .filter((m: any) => m.itemName);

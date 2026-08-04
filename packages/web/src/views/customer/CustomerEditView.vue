@@ -26,7 +26,10 @@
           </el-col>
           <el-col :span="8"><el-form-item label="客户编号"><el-input v-model="form.customerNo" placeholder="保存后自动生成 CN001" readonly /></el-form-item></el-col>
           <el-col v-if="form.type === 'BUYER'" :span="16">
-            <el-form-item label="关联中间商" prop="relatedMiddleman" required>
+            <!-- 别加回 required：el-form-item 的 required 属性会自绑一条必填规则，
+                 报出 "relatedMiddleman is required"——7-27 摘 rules 时漏了它，等于放宽没生效
+                 （2026-08-04 daisy 反馈：直接客户没有中间商，被这条挡住整个客户存不了） -->
+            <el-form-item label="关联中间商" prop="relatedMiddleman">
               <el-select v-model="middlemanIds" multiple filterable placeholder="选择归属的中间商" style="width:100%" class="highlight-field">
                 <el-option v-for="m in middlemen" :key="m.id" :label="`${m.customer_no ?? m.customerNo} · ${m.name}`" :value="String(m.id)" />
               </el-select>
