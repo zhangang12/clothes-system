@@ -77,7 +77,9 @@
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
-              <el-button v-if="canEdit" link type="primary" size="small" @click="doCopy(row)">复制</el-button>
+              <!-- 用 :disabled 而非 :loading：操作列是固定列宽 + flex-wrap（见 theme.css 的排布注释），
+                   行内按钮中途插入 spinner 会让整行按钮在请求期间重排跳动 -->
+              <el-button v-if="canEdit" link type="primary" size="small" :disabled="copying !== null" @click="doCopy(row)">复制</el-button>
               <el-dropdown
                 v-if="canEdit && ['CONFIRMED', 'CONTRACTED', 'PRODUCING'].includes(row.status)"
                 trigger="click" @command="(cmd: string) => onGenContract(cmd, row)"
@@ -192,13 +194,29 @@ async function onPrint(mode: string, row: any) {
 }
 
 // 订单复制(P3#34)
+// 防连点：后端 copy 无幂等，此前既无 in-flight 守卫也无确认框——点一下立刻建一张，
+// 连点几次就真出几张连号草稿（8-04 样衣列表 8 条同款即同型问题）。
+// 守卫必须早退在确认框之前，覆盖「确认框开着时又点一次」的窗口。
+const copying = ref<number | null>(null);
 async function doCopy(row: any) {
+  if (copying.value !== null) return;
+  // 置位必须在弹确认框【之前】：只把「检查」放在 await 前是不够的——两次快速点击会同时
+  // 穿过检查（那时还是 null）、各自弹框、各自通过，最后发出两次请求真建两张草稿。
+  // （单测 OrderListView.spec「连点两次只发一次」正是守着这个边界。）
+  copying.value = row.id;
+  // 两选确认（不照抄报价的三选：orderApi.copy 只收 id，没有 withItems 可传）
+  try {
+    await ElMessageBox.confirm(
+      `复制订单 ${row.order_no ?? ''} 为新草稿？将一并复制用料核算与尺码矩阵。`, '复制订单', { type: 'info' },
+    );
+  } catch { copying.value = null; return; }   // 用户取消要复位，否则按钮永久禁用
   try {
     const res: any = await orderApi.copy(row.id);
     const d = res?.data ?? res;
     ElMessage.success(`已复制为新草稿 ${d.order_no ?? ''}`);
     load();
   } catch (e: any) { errToast(e?.response?.data?.msg ?? '复制失败'); }
+  finally { copying.value = null; }
 }
 
 // 生成合同入口（设计稿 合同 A1 主流程:订单侧拆单,而非只能从合同侧反向带入）

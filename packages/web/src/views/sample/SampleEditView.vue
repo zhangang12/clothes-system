@@ -168,7 +168,7 @@
             <el-table-column v-if="!patternmaker && editId" label="采购" width="86" align="center">
               <template #default="{ row }">
                 <el-tooltip content="为该行生成无合同费用对账单(打样材料,金额=数量×参考价)" placement="top">
-                  <el-button link type="warning" size="small" :disabled="!row.id" @click="doPurchase(row)">🟠生成采购</el-button>
+                  <el-button link type="warning" size="small" :disabled="!row.id || purchasing.has(row.id)" @click="doPurchase(row)">🟠生成采购</el-button>
                 </el-tooltip>
               </template>
             </el-table-column>
@@ -496,8 +496,15 @@ function confirmSheetImport() {
   ElMessage.success(`已导入 ${rows.length} 行材料${matched ? `，供应商匹配 ${matched} 行` : ''}${unmatched ? `，${unmatched} 行供应商未在工厂库(保留名称)` : ''}`);
 }
 // 行级生成采购(样衣稿🟠按钮 B方案):打样材料→无合同对账单,直接进对账付款
+// 已在本次会话生成过采购的材料行 id → 单号。用于防连点与「再生成」的二次提醒。
+// 只在当前会话有效：后端目前没有耐久的幂等键（每存一次样衣，材料行 id 全部重建，
+// 详见 sample.service 的 update 是 delete + 全量重插），做真幂等要给对账单加来源列、
+// 会撞红线一，不在本轮量级内。但会话内守卫正好盖住最高频的「连点两下」。
+const purchasing = ref<Set<number>>(new Set());
+const purchasedNo = ref<Record<number, string>>({});
 async function doPurchase(row: any) {
   if (!row.id) { ElMessage.warning('新加的行请先保存样衣后再生成采购'); return; }
+  if (purchasing.value.has(row.id)) return;   // 早退在任何 await 之前
   if (!(Number(row.qty) > 0) || !(Number(row.refPrice) > 0)) {
     ElMessage.warning('请先填写该行的 数量 与 参考价格'); return;
   }
@@ -507,9 +514,21 @@ async function doPurchase(row: any) {
       '生成采购', { confirmButtonText: '生成', cancelButtonText: '取消', type: 'info' },
     );
   } catch { return; }
+  // 本行本次会话已生成过 → 再来一次要更强的确认（补料二轮确实可能要再采一次，所以不硬拦）
+  if (purchasedNo.value[row.id]) {
+    try {
+      await ElMessageBox.confirm(
+        `该行本次已生成过对账单 ${purchasedNo.value[row.id]}，确定再生成一张？`,
+        '重复生成', { type: 'warning' },
+      );
+    } catch { return; }
+  }
+  if (purchasing.value.has(row.id)) return;
+  purchasing.value.add(row.id);
   try {
     const res: any = await sampleApi.purchaseMaterial(Number(editId.value), row.id);
     const d = res?.data ?? res;
+    if (d?.reconcile_no) purchasedNo.value[row.id] = d.reconcile_no;
     ElMessage.success(`已生成对账单 ${d.reconcile_no ?? ''}，可在「对账管理」提交复核`);
   } catch (e: any) {
     errToast(e?.response?.data?.msg ?? e?.response?.data?.msg ?? '生成失败');
