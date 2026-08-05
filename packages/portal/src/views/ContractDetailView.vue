@@ -168,13 +168,23 @@
 
     <!-- Action Buttons -->
     <div class="action-area">
-      <!-- 打印合同：电脑登录门户可直出 A4 纸质件，盖章后拍照回传下方「纸质盖章照片」-->
+      <!-- 打印合同：电脑登录门户可直出 A4 纸质件，盖章后拍照回传下方「纸质盖章照片」。
+           打印窗口里用浏览器的「另存为 PDF」即可得到 PDF 文件（反馈 #52） -->
       <van-button
         type="default" plain block round size="large"
         icon="printer" style="margin-bottom: 10px;"
         @click="doPrint"
       >
-        打印合同（纸质盖章用）
+        打印合同 / 存 PDF
+      </van-button>
+      <!-- 导出 Excel（反馈 #52：供应商要把合同存成文件留档）。
+           只导出本页已展示给供应商的字段，详见 utils/contractExcel.ts 的白名单说明 -->
+      <van-button
+        type="default" plain block round size="large"
+        icon="down" style="margin-bottom: 10px;"
+        @click="doExportExcel"
+      >
+        导出 Excel
       </van-button>
       <div v-if="contract.portal_status === 'PUSHED'" class="terms-agree">
         <van-checkbox v-model="agreedTerms" shape="square" icon-size="18px">
@@ -389,6 +399,7 @@ import { showConfirmDialog, showSuccessToast } from 'vant';
 import { portalContractApi } from '../api/contract';
 import { uploadApi } from '../api/upload';
 import { printContract } from '../utils/contractPrint';
+import { exportPortalContractExcel } from '../utils/contractExcel';
 
 const route = useRoute();
 const contract = ref<any>({});
@@ -514,6 +525,16 @@ function doPrint() {
     printContract(contract.value, contract.value.factory, contract.value.company);
   } catch (e: any) {
     showConfirmDialog({ title: '提示', message: e?.message ?? '无法打开打印窗口', showCancelButton: false });
+  }
+}
+
+// 导出 Excel（反馈 #52）：字段走白名单，见 utils/contractExcel.ts 顶部说明——
+// 详情接口返回的是整个合同实体（含担保人身份证/盖章快照/内部审批字段），不能整包落表。
+function doExportExcel() {
+  try {
+    exportPortalContractExcel(contract.value);
+  } catch (e: any) {
+    showConfirmDialog({ title: '导出失败', message: e?.message ?? '请稍后重试', showCancelButton: false });
   }
 }
 

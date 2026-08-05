@@ -150,7 +150,17 @@ export function printContract(
   .stamp-hint { font-size:11px; color:#666; margin-top:4px; }
   .seal-img { position:absolute; top:-34px; left:96px; width:110px; height:110px; object-fit:contain; opacity:.88; pointer-events:none; }
   @media screen { body { max-width:820px; margin:20px auto; } }
-</style></head><body onload="window.print()">
+  /* 屏幕上的兜底操作条：onload 自动 print 在部分移动浏览器（微信 X5 等）会静默无反应，
+     此前页面上没有任何可点的按钮，用户只能干瞪眼。打印时用 @media print 隐藏。 */
+  .print-bar { position:sticky; top:0; display:flex; gap:8px; align-items:center;
+    padding:8px 10px; margin:-20px -10px 12px; background:#2E8B78; color:#fff; font-size:13px; }
+  .print-bar button { padding:5px 14px; border:0; border-radius:4px; background:#fff; color:#2E8B78; font-size:13px; }
+  @media print { .print-bar { display:none !important; } }
+</style></head><body onload="try{window.print()}catch(e){}">
+  <div class="print-bar">
+    <button onclick="window.print()">🖨 打印 / 另存为 PDF</button>
+    <span>没自动弹出打印窗口？点左边按钮；在打印目标里选「另存为 PDF」即可存成文件。</span>
+  </div>
   <div class="head">
     <div class="company">${esc(companyName)}</div>
     <div class="title">${esc(typeLabel(detail.type))}</div>
