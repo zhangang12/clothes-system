@@ -686,6 +686,31 @@ describe('ContractService', () => {
     } as any, 1)).rejects.toThrow(BadRequestException);
   });
 
+  // UT-CON-35: 材料合同一律人民币，绝不继承订单的外销币种（2026-08-05 用户口径）
+  it('UT-CON-35 generateFromOrder 对 USD 订单仍生成 CNY 材料合同（金额是人民币采购价，不做换算）', async () => {
+    mockRedis.eval.mockResolvedValue('HT-20260805-001');
+    // 订单是外销 USD——正是踩坑场景：生产现有 3 张 USD 订单，点一下「生成材料合同」即触发
+    mockOrderRepo.findOne.mockResolvedValue({ id: 10, style_no: 'M525', currency: 'USD', delivery_date: null, deleted: 0 });
+    mockOrderMaterialRepo.find.mockResolvedValue([
+      { id: 77, item_name: '主面料', unit: '米', unit_price: 8, split_mode: 'NONE', final_purchase: 100, sort_order: 0 },
+    ]);
+    mockMatrixRepo.findOne.mockResolvedValue(null);
+    const savedContracts: any[] = [];
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb({
+      create: jest.fn().mockImplementation((_: any, v: any) => v),
+      save: jest.fn().mockImplementation((_: any, v: any) => {
+        if (!Array.isArray(v) && v?.contract_no) savedContracts.push(v);
+        return Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 });
+      }),
+      findOne: jest.fn().mockResolvedValue(null),
+      delete: jest.fn(),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+      count: jest.fn().mockResolvedValue(0),
+    }));
+    await service.generateFromOrder(10, 1);
+    expect(savedContracts[0].currency).toBe('CNY');   // 不是 'USD'
+  });
+
   // ── 订单↔合同行级关联（用户反馈 2026-08-03：订单里标出哪些材料已生成合同）──
 
   // UT-CON-33: 从订单生成的合同明细带上 order_material_id；分色展开的多行都指回同一条订单材料

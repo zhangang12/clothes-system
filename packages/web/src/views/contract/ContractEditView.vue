@@ -81,7 +81,18 @@
               </div>
             </el-form-item>
           </el-col>
-          <el-col :span="6"><el-form-item label="币种"><el-select v-model="form.currency" style="width:100%"><el-option label="CNY" value="CNY" /><el-option label="USD" value="USD" /></el-select></el-form-item></el-col>
+          <el-col :span="6">
+            <el-form-item>
+              <template #label>
+                币种
+                <el-tooltip placement="top"
+                  content="材料/加工合同是对国内供应商的采购合同，一律人民币（CNY）；订单上的外销币种是对外销售用的，两者不是一回事，不要跟着订单选。下方单价/总价列头标的就是人民币。">
+                  <el-icon style="margin-left:2px;vertical-align:-2px"><InfoFilled /></el-icon>
+                </el-tooltip>
+              </template>
+              <el-select v-model="form.currency" style="width:100%"><el-option label="CNY" value="CNY" /><el-option label="USD" value="USD" /></el-select>
+            </el-form-item>
+          </el-col>
           <el-col :span="6"><el-form-item label="定金%"><el-input-number v-model="form.deposit_ratio" :min="0" :max="100" :precision="2" style="width:100%" /></el-form-item></el-col>
           <el-col :span="6"><el-form-item label="中期%"><el-input-number v-model="form.mid_ratio" :min="0" :max="100" :precision="2" style="width:100%" /></el-form-item></el-col>
           <el-col :span="6"><el-form-item label="尾款%"><el-input-number v-model="form.final_ratio" :min="0" :max="100" :precision="2" style="width:100%" /></el-form-item></el-col>

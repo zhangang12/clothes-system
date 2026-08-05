@@ -207,7 +207,13 @@ export class ContractService {
             type: ContractType.MATERIAL,
             factory_id: factory.id,
             order_id: orderId,
-            currency: order.currency ?? 'CNY',
+            // 【别改回 order.currency】材料合同是**对国内供应商的采购合同**，一律人民币
+            // （2026-08-05 用户明确口径）。而 order.currency 是**对外销售**的外销币种、默认 USD——
+            // 继承过来就会生成「币种 USD、金额却是人民币数字」的合同：金额取自订单用料核算的
+            // unit_price（人民币采购单价，见 order_material.unit_price 的 COMMENT），不做任何换算。
+            // 这批单据会一路流到对账/付款/结算，且合同是要盖章的法律文件。
+            // 实测隐患就在一步之外：生产现有 3 张 USD 订单，对其中任一张点「生成材料合同」即触发。
+            currency: 'CNY',
             remark: isPlaceholder ? `供应商待定（用料填写:${supplier}）——确定后在草稿改绑真实供应商` : undefined,
             materials: mats.flatMap((m) =>
               this.expandMaterialLines(m, matrixRows, order.style_no ?? null, lineDelivery)) as any,
