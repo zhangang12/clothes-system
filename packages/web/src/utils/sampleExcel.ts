@@ -1,16 +1,18 @@
-// 样衣导出 Excel —— 无第三方依赖(项目零新增依赖约定):生成 Excel 可直接打开的 HTML 工作表(.xls),
-// 含「基本信息 + 材料明细」两张表。中文用 UTF-8 BOM/meta 防乱码;单元格 mso-number-format 强制文本,
-// 避免款号(如 I27.230.03929)被 Excel 当数字截断。
-// 样衣照片/图稿按用户反馈嵌在文件底部:抓图转 base64 内联(导出件自包含离线可看);
-// 单图 >2MB 或抓取失败退回可点链接,不让整个导出失败。
+// 样衣导出 Excel —— 真 .xlsx（exceljs），照片/图稿真正嵌进文件。
+//
+// 【为什么从 .xls(HTML 工作表) 换成真 .xlsx】(2026-08-06 YSM 反馈「下载保存表格后没有图片呢」)
+// 原实现走的是全站通用的「HTML 表格存成 .xls」路子（零依赖，见 utils/docExcel.ts），
+// 图片是 `<img src="data:image/png;base64,...">` 内联进 HTML 的。数据部分没问题，
+// **但 Excel 打开 HTML 工作表时并不渲染 data: URI 图片**——文件里有，界面上就是不显示，
+// 用户看到的就是「表格下来了，图没了」，且没有任何报错。这是格式层面的限制，调参数解决不了。
+// 真 .xlsx 的图片是作为独立媒体条目打包进 zip 并由 drawing 锚定到单元格的，Excel/WPS 都能正常显示。
+//
+// 【为什么可以引 exceljs】它已经是 packages/web 的既有依赖（导入功能解析 .xlsx 用它），
+// 且一律**动态 import**：不点导出就不加载，主包体积不受影响（解包 20MB+，见 sheetPreview.ts 的说明）。
+//
+// 注意：本文件仍导出 toDataUrl —— contractExcel.ts 在用它给合同材料照片做内联，别删。
 
-const BOM = String.fromCharCode(0xfeff); // UTF-8 BOM,保证 Excel 以 UTF-8 打开、中文不乱码
-const esc = (v: unknown): string =>
-  String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const d10 = (v: unknown): string => (v ? String(v).slice(0, 10) : '');
-const val = (v: unknown): string => (v === null || v === undefined ? '' : esc(v));
-
-// 抓图转 base64 data URI（>2MB 或失败返回 null，退回链接）
+/** 抓图转 base64 data URI（>2MB 或失败返回 null，调用方退回链接文本） */
 export async function toDataUrl(url: string): Promise<string | null> {
   try {
     const res = await fetch(url);
@@ -26,7 +28,23 @@ export async function toDataUrl(url: string): Promise<string | null> {
   } catch { return null; }
 }
 
+const d10 = (v: unknown): string => (v ? String(v).slice(0, 10) : '');
+const val = (v: unknown): string => (v === null || v === undefined ? '' : String(v));
+
+/** 从 data URI 解出 exceljs 需要的扩展名与纯 base64 体 */
+function splitDataUrl(dataUrl: string): { ext: 'png' | 'jpeg' | 'gif'; body: string } | null {
+  const m = /^data:image\/(png|jpe?g|gif);base64,(.+)$/i.exec(dataUrl);
+  if (!m) return null;
+  const raw = m[1].toLowerCase();
+  return { ext: raw === 'jpg' ? 'jpeg' : (raw as 'png' | 'jpeg' | 'gif'), body: m[2] };
+}
+
 export async function exportSampleExcel(detail: any): Promise<void> {
+  const ExcelJS = await import('exceljs');
+  const wb = new ExcelJS.Workbook();
+  // 工作表名上限 31 字符，且 : \ / ? * [ ] 非法——样衣号不含这些，仍统一截断保平安
+  const ws = wb.addWorksheet(`样衣${String(detail.sample_no ?? '')}`.slice(0, 31));
+
   const cats = String(detail.categories ?? '').split(',').filter(Boolean).join(' / ');
   const mats: any[] = detail.materials ?? [];
   const rounds: any[] = detail.shipRounds ?? [];
@@ -37,7 +55,38 @@ export async function exportSampleExcel(detail: any): Promise<void> {
   const shipDate = detail.ship_sample_date ?? r1.ship_date;
   const shipNo = detail.material_ship_no ?? r1.ship_no;
 
-  const infoRows = [
+  const HEAD_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } } as const;
+  const KEY_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F5F8' } } as const;
+  const BORDER = {
+    top: { style: 'thin' }, left: { style: 'thin' },
+    bottom: { style: 'thin' }, right: { style: 'thin' },
+  } as const;
+
+  const titleRow = (text: string, span: number) => {
+    const row = ws.addRow([text]);
+    ws.mergeCells(row.number, 1, row.number, Math.max(span, 1));
+    row.getCell(1).font = { size: 14, bold: true };
+    return row;
+  };
+  const headerRow = (cells: string[]) => {
+    const row = ws.addRow(cells);
+    row.eachCell((c) => {
+      c.fill = HEAD_FILL as any;
+      c.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      c.border = BORDER as any;
+    });
+    return row;
+  };
+  const bodyRow = (cells: any[]) => {
+    const row = ws.addRow(cells);
+    // 一律文本格式：款号形如 I27.230.03929，不强制会被 Excel 当数字截断成 27.23
+    row.eachCell((c) => { c.numFmt = '@'; c.border = BORDER as any; });
+    return row;
+  };
+
+  // ── 基本信息 ──
+  titleRow(`样衣制作单 · ${val(detail.sample_no)}`, 4);
+  for (const [k1, v1, k2, v2] of [
     ['样衣编号', detail.sample_no, '客户款号', detail.style_no],
     ['样衣类别', cats, '样衣尺码', detail.sample_size],
     ['样衣数量', detail.sample_qty, '中间商', detail.middleman_name],
@@ -46,78 +95,83 @@ export async function exportSampleExcel(detail: any): Promise<void> {
     ['寄样日期', d10(shipDate), '收件人', detail.recipient],
     ['材料寄出单号', shipNo, '寄回单号', detail.return_no],
     ['件数', detail.piece_count, '成衣备注', detail.garment_remark],
-  ].map((r) => `<tr><td class="k">${val(r[0])}</td><td>${val(r[1])}</td><td class="k">${val(r[2])}</td><td>${val(r[3])}</td></tr>`).join('');
+  ] as any[][]) {
+    const row = bodyRow([val(k1), val(v1), val(k2), val(v2)]);
+    row.getCell(1).fill = KEY_FILL as any; row.getCell(1).font = { bold: true };
+    row.getCell(3).fill = KEY_FILL as any; row.getCell(3).font = { bold: true };
+  }
 
-  const roundHead = `<tr>${['轮次', '尺码', '件数', '寄出日期', '寄出单号', '寄回日期', '工价单价', '工价金额', '备注']
-    .map((h) => `<th>${h}</th>`).join('')}</tr>`;
-  const qtySum = rounds.reduce((s, r) => s + (Number(r.qty) || 0), 0);
-  const amtSum = +rounds.reduce((s, r) => s + (Number(r.labor_amount) || 0), 0).toFixed(2);
-  const roundTable = rounds.length
-    ? `<br/><table>
-    <tr><td colspan="9" class="title">寄样跟踪</td></tr>
-    ${roundHead}
-    ${rounds.map((r, i) => `<tr><td>${val(r.round_no ?? i + 1)}</td><td>${val(r.size)}</td><td>${val(r.qty)}</td>`
-      + `<td>${d10(r.ship_date)}</td><td>${val(r.ship_no)}</td><td>${d10(r.return_date)}</td>`
-      + `<td>${val(r.labor_unit_price)}</td><td>${val(r.labor_amount)}</td><td>${val(r.remark)}</td></tr>`).join('')}
-    <tr><td class="k" colspan="2">合计</td><td class="k">${qtySum}</td><td colspan="4"></td><td class="k">${amtSum}</td><td></td></tr>
-  </table>`
-    : '';
+  // ── 寄样跟踪（多轮）──
+  if (rounds.length) {
+    ws.addRow([]);
+    titleRow('寄样跟踪', 9);
+    headerRow(['轮次', '尺码', '件数', '寄出日期', '寄出单号', '寄回日期', '工价单价', '工价金额', '备注']);
+    rounds.forEach((r, i) => bodyRow([
+      val(r.round_no ?? i + 1), val(r.size), val(r.qty), d10(r.ship_date), val(r.ship_no),
+      d10(r.return_date), val(r.labor_unit_price), val(r.labor_amount), val(r.remark),
+    ]));
+    const qtySum = rounds.reduce((s, r) => s + (Number(r.qty) || 0), 0);
+    const amtSum = +rounds.reduce((s, r) => s + (Number(r.labor_amount) || 0), 0).toFixed(2);
+    const sumRow = bodyRow(['合计', '', String(qtySum), '', '', '', '', String(amtSum), '']);
+    sumRow.eachCell((c) => { c.font = { bold: true }; });
+  }
 
-  const matHead = `<tr>${['#', '品名', '门幅', '颜色', '部位', '成份', '码带', '拉链长度', '数量', '克重', '尺寸', '实际耗用', '供应商', '备注']
-    .map((h) => `<th>${h}</th>`).join('')}</tr>`;
-  const matRows = mats.length
-    ? mats.map((m, i) => `<tr><td>${i + 1}</td><td>${val(m.item_name)}</td><td>${val(m.width)}</td>`
-      + `<td>${val(m.colors)}</td><td>${val(m.part)}</td><td>${val(m.composition)}</td><td>${val(m.code_band)}</td>`
-      + `<td>${val(m.zipper_length)}</td><td>${val(m.qty)}</td><td>${val(m.gram_weight)}</td><td>${val(m.size)}</td><td>${val(m.actual_usage)}</td>`
-      + `<td>${val(m.supplier_name)}</td><td>${val(m.remark)}</td></tr>`).join('')
-    : '<tr><td colspan="14">（无材料明细）</td></tr>';
+  // ── 材料明细 ──
+  ws.addRow([]);
+  titleRow('材料明细', 14);
+  headerRow(['#', '品名', '门幅', '颜色', '部位', '成份', '码带', '拉链长度', '数量', '克重', '尺寸', '实际耗用', '供应商', '备注']);
+  if (mats.length) {
+    mats.forEach((m, i) => bodyRow([
+      String(i + 1), val(m.item_name), val(m.width), val(m.colors), val(m.part), val(m.composition),
+      val(m.code_band), val(m.zipper_length), val(m.qty), val(m.gram_weight), val(m.size),
+      val(m.actual_usage), val(m.supplier_name), val(m.remark),
+    ]));
+  } else {
+    bodyRow(['（无材料明细）']);
+  }
 
-  // 样衣照片/图稿（image1/2/3 每槽可多图，逗号分隔）：base64 内联进文件，离线可看；失败退回链接
+  // ── 样衣照片/图稿：真正嵌进 xlsx（image1/2/3 每槽可多图，逗号分隔）──
   const photoUrls = [detail.image1, detail.image2, detail.image3]
     .flatMap((u) => String(u ?? '').split(','))
     .map((s) => s.trim())
     .filter(Boolean);
-  let photosBlock = '';
   if (photoUrls.length) {
-    const cells = await Promise.all(photoUrls.map(async (u) => {
+    ws.addRow([]);
+    titleRow('样衣照片/图稿', 6);
+    const anchorRow = ws.rowCount; // 图片锚在标题行下方，逐张往右排
+    let col = 0;
+    for (const u of photoUrls) {
       const dataUrl = await toDataUrl(u);
-      return dataUrl
-        ? `<img src="${dataUrl}" style="max-width:220px;max-height:170px" />`
-        : `<a href="${esc(u)}">图（未内联）</a>`;
-    }));
-    photosBlock = `<br/><table><tr><td colspan="6" class="title">样衣照片/图稿</td></tr><tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr></table>`;
+      const parsed = dataUrl ? splitDataUrl(dataUrl) : null;
+      if (!parsed) {
+        // 抓取失败/超 2MB：退回一行可点链接，不让整个导出失败
+        const row = bodyRow([u]);
+        row.getCell(1).value = { text: '图（未内联，点开查看）', hyperlink: u } as any;
+        continue;
+      }
+      const imgId = wb.addImage({ base64: parsed.body, extension: parsed.ext });
+      ws.addImage(imgId, {
+        tl: { col, row: anchorRow } as any,
+        ext: { width: 220, height: 170 },
+      });
+      col += 4; // 一张图约占 4 列宽，避免相互压盖
+    }
+    // 给图片留出高度，否则会盖住后面的行
+    for (let i = 0; i < 9; i++) ws.addRow([]);
   }
 
-  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-<head><meta charset="utf-8">
-<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
-<x:Name>样衣${esc(detail.sample_no || '')}</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
-</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->
-<style>
-  table { border-collapse: collapse; }
-  td, th { border: 0.5pt solid #999; padding: 3px 6px; mso-number-format:"\\@"; }
-  th { background: #1E3A5F; color: #fff; font-weight: 700; }
-  td.k { background: #f2f5f8; font-weight: 700; }
-  .title { font-size: 15pt; font-weight: 700; }
-</style></head>
-<body>
-  <table>
-    <tr><td colspan="4" class="title">样衣制作单 · ${esc(detail.sample_no || '')}</td></tr>
-    ${infoRows}
-  </table>
-  ${roundTable}
-  <br/>
-  <table>${matHead}${matRows}</table>
-  ${photosBlock}
-</body></html>`;
+  ws.columns.forEach((c) => { c.width = c.width ?? 14; });
 
-  const blob = new Blob([BOM + html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `样衣-${detail.sample_no || detail.style_no || 'export'}.xls`;
+  a.download = `样衣-${detail.sample_no || detail.style_no || 'export'}.xlsx`;
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }

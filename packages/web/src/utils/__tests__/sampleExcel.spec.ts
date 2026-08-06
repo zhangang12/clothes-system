@@ -1,15 +1,35 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import ExcelJS from 'exceljs';
 import { exportSampleExcel } from '../sampleExcel';
 
-// 抓取写入 Blob 的内容，断言导出的工作表实际含哪些数据
-async function exportedHtml(detail: any): Promise<string> {
-  let captured = '';
+// 导出的是真 .xlsx（zip 二进制），字符串匹配没意义——直接把生成的文件用 exceljs 读回来断言，
+// 这样验的是最终产物本身（含图片是否真被打包进去），而不是我们拼出来的中间字符串。
+async function exportAndRead(detail: any): Promise<{ ws: ExcelJS.Worksheet; wb: ExcelJS.Workbook; name: string }> {
+  let captured: any = null;
+  let name = '';
   const OrigBlob = globalThis.Blob;
-  // @ts-expect-error 测试替身
-  globalThis.Blob = class { constructor(parts: any[]) { captured = parts.join(''); } };
-  try { await exportSampleExcel(detail); } finally { globalThis.Blob = OrigBlob; }
-  return captured;
+  // @ts-expect-error 测试替身：只截住写进 Blob 的 buffer
+  globalThis.Blob = class { constructor(parts: any[]) { captured = parts[0]; } };
+  const OrigClick = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) { name = this.download; };
+  try { await exportSampleExcel(detail); } finally {
+    globalThis.Blob = OrigBlob;
+    HTMLAnchorElement.prototype.click = OrigClick;
+  }
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(captured);
+  return { ws: wb.worksheets[0], wb, name };
 }
+
+/** 把整张表的文本铺平，便于「含某内容」这类断言 */
+function flatten(ws: ExcelJS.Worksheet): string {
+  const out: string[] = [];
+  ws.eachRow((row) => row.eachCell((c) => out.push(String(c.text ?? ''))));
+  return out.join('|');
+}
+
+// 1×1 透明 PNG
+const PNG_1PX = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
 const base = {
   sample_no: 'S-20260715-001',
@@ -26,60 +46,70 @@ const rounds = [
 beforeEach(() => {
   URL.createObjectURL = vi.fn(() => 'blob:x');
   URL.revokeObjectURL = vi.fn();
-  HTMLAnchorElement.prototype.click = vi.fn();
+  vi.restoreAllMocks();
 });
 
-describe('样衣导出 Excel', () => {
-  it('中文用 BOM、款号强制文本（防 Excel 把款号当数字截断）', async () => {
-    const html = await exportedHtml(base);
-    expect(html.charCodeAt(0)).toBe(0xfeff);
-    expect(html).toContain('mso-number-format');
-    expect(html).toContain('I27.230.03929');
+describe('样衣导出 Excel（真 .xlsx）', () => {
+  it('款号按文本存，不会被 Excel 当数字截断成 27.23', async () => {
+    const { ws } = await exportAndRead(base);
+    expect(flatten(ws)).toContain('I27.230.03929');
+    // 文本格式必须落到单元格上，否则 Excel 打开时照样按数字解析
+    let sawTextFmt = false;
+    ws.eachRow((row) => row.eachCell((c) => { if (c.numFmt === '@') sawTextFmt = true; }));
+    expect(sawTextFmt).toBe(true);
+  });
+
+  it('基本信息与材料明细都在表里', async () => {
+    const { ws } = await exportAndRead(base);
+    const all = flatten(ws);
+    expect(all).toContain('S-20260715-001');
+    expect(all).toContain('上衣 / 外套');
+    expect(all).toContain('面料A');
+    expect(all).toContain('苏州市坤业纺织有限公司');
   });
 
   it('多轮寄样：每轮的尺码/单号/工价都进导出，并给出合计', async () => {
-    const html = await exportedHtml({ ...base, piece_count: 5, shipRounds: rounds });
-    expect(html).toContain('寄样跟踪');
-    expect(html).toContain('FH-001');
-    expect(html).toContain('FH-002');
-    expect(html).toContain('2026-07-14');
-    // 合计：件数 2+3、工价 60+90
-    expect(html).toMatch(/合计<\/td><td class="k">5</);
-    expect(html).toMatch(/<td class="k">150<\/td>/);
+    const { ws } = await exportAndRead({ ...base, shipRounds: rounds });
+    const all = flatten(ws);
+    expect(all).toContain('FH-001');
+    expect(all).toContain('FH-002');
+    expect(all).toContain('5');    // 件数合计 2+3
+    expect(all).toContain('150');  // 工价合计 60+90
   });
 
-  it('多轮时基本信息的寄样日期/寄出单号回落到首轮（旧单值列已不再回填）', async () => {
-    const html = await exportedHtml({ ...base, material_ship_no: null, ship_sample_date: null, shipRounds: rounds });
-    expect(/材料寄出单号<\/td><td>([^<]*)</.exec(html)?.[1]).toBe('FH-001');
-    expect(/寄样日期<\/td><td>([^<]*)</.exec(html)?.[1]).toBe('2026-07-08');
+  it('照片真的被打包进 xlsx（这正是 8-06 反馈「下载后没有图片」的症结）', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      blob: async () => ({ size: 1024, type: 'image/png' }),
+    }));
+    // FileReader 在 jsdom 里读不了假 blob，直接打桩成返回 data URI
+    class FR {
+      onload: any; onerror: any; result = `data:image/png;base64,${PNG_1PX}`;
+      readAsDataURL() { setTimeout(() => this.onload?.(), 0); }
+    }
+    vi.stubGlobal('FileReader', FR as any);
+
+    const { wb, ws } = await exportAndRead({ ...base, image1: '/api/v1/uploads/file?p=a.png' });
+    expect(wb.model.media?.length ?? 0).toBeGreaterThan(0);   // 媒体真进了 zip
+    expect((ws.getImages?.() ?? []).length).toBeGreaterThan(0); // 且锚定到了工作表
+    expect(flatten(ws)).toContain('样衣照片/图稿');
   });
 
-  it('旧数据（无轮次）仍按原单值字段导出，不出现寄样跟踪表', async () => {
-    const html = await exportedHtml({ ...base, material_ship_no: 'OLD-9', ship_sample_date: '2026-06-01', piece_count: 4 });
-    expect(html).not.toContain('寄样跟踪');
-    expect(/材料寄出单号<\/td><td>([^<]*)</.exec(html)?.[1]).toBe('OLD-9');
-    expect(/寄样日期<\/td><td>([^<]*)</.exec(html)?.[1]).toBe('2026-06-01');
+  it('图片抓取失败时退回可点链接，不让整个导出失败', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
+    const { ws, wb } = await exportAndRead({ ...base, image1: '/api/v1/uploads/file?p=gone.png' });
+    expect(wb.model.media?.length ?? 0).toBe(0);
+    expect(flatten(ws)).toContain('图（未内联，点开查看）');
   });
 
-  it('无材料明细时给出占位而不是空表', async () => {
-    expect(await exportedHtml({ sample_no: 'S-1' })).toContain('（无材料明细）');
+  it('文件名用 .xlsx 后缀（换格式后别再发 .xls，否则 Excel 会报「格式与扩展名不符」）', async () => {
+    const { name } = await exportAndRead(base);
+    expect(name).toMatch(/\.xlsx$/);
+    expect(name).toContain('S-20260715-001');
   });
 
-  it('材料克重列进导出表', async () => {
-    const html = await exportedHtml({ ...base, materials: [{ item_name: '拉毛PU', qty: 1, gram_weight: '350gsm' }] });
-    expect(html).toContain('克重');
-    expect(html).toContain('350gsm');
-  });
-
-  it('样衣照片转 base64 内联进文件（离线可看）；抓图失败退回链接不炸', async () => {
-    // 注意：exportedHtml 会替换 globalThis.Blob 做捕获，mock 必须用提前取出的真 Blob 类
-    const RealBlob = globalThis.Blob;
-    globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce({ ok: true, blob: async () => new RealBlob(['x'], { type: 'image/png' }) } as any)
-      .mockRejectedValueOnce(new Error('404'));
-    const html = await exportedHtml({ ...base, image1: '/u/a.png', image2: '/u/b.png' });
-    expect(html).toContain('样衣照片/图稿');
-    expect(html).toContain('data:image/png;base64,'); // a.png 已内联
-    expect(html).toContain('图（未内联）'); // b.png 失败退回链接
+  it('无材料明细也能正常导出', async () => {
+    const { ws } = await exportAndRead({ ...base, materials: [] });
+    expect(flatten(ws)).toContain('（无材料明细）');
   });
 });

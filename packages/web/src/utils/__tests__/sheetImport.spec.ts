@@ -156,4 +156,34 @@ describe('rowsToMaterials extraColorCols（多组颜色按源列分列，用户�
     expect(out[0].colorGroups).toEqual(['黑色', '白色']);
     expect(out[0].colors).toBe('黑色，白色');
   });
+
+  // ── 表头叫「色组」也要认（2026-08-06 Nina 反馈）──────────────────────
+  // 系统自己的 UI 全叫色组（列头「颜色（色组）」/ 按钮「＋色组」/ 预览列「色组1」「色组2」），
+  // 用户照着命名工艺单列，旧关键词只有 /颜色|color/ 一个都不认，导致「一款打两组色」永远只导进一组。
+  describe('色组表头识别', () => {
+    it('「色组一」能被识别成颜色列', () => {
+      const { mapping } = guessMapping([['品名', '部位', '色组一', '色组二']]);
+      expect(mapping.colors).toBe(2);
+    });
+
+    it('「配色」「色组1」同样认', () => {
+      expect(guessMapping([['品名', '配色']]).mapping.colors).toBe(1);
+      expect(guessMapping([['品名', '色组1']]).mapping.colors).toBe(1);
+    });
+
+    it('色组一/色组二两列 → 两个独立色组（一款打两组色）', () => {
+      const rows = [['主面料', '大身', '05 RED', '01 黑色']];
+      const out = rowsToMaterials(rows, { itemName: 0, part: 1, colors: 2 }, [3]);
+      expect(out[0].colorGroups).toEqual(['05 RED', '01 黑色']);
+      expect(out[0].colors).toBe('05 RED，01 黑色');
+    });
+
+    it('不误伤其它字段的表头', () => {
+      const { mapping } = guessMapping([['品名', '部位', '成份', '码带', '拉头', '尺寸']]);
+      expect(mapping.colors).toBeUndefined();
+      expect(mapping.part).toBe(1);
+      expect(mapping.codeBand).toBe(3);
+      expect(mapping.puller).toBe(4);
+    });
+  });
 });
