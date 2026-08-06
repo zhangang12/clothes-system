@@ -1,9 +1,11 @@
-// 报价单导出 Excel —— 公共层见 docExcel.ts(BOM/防截断/落盘都在那)。
+// 报价单导出 Excel —— 公共层见 docExcel.ts(排版/防截断/落盘都在那)。
 // 与 quotePrint.ts(打印)的差别:打印分对内/对外两版脱敏,导出按业务要求**全量不脱敏**
 // (含中间商/买家/利润率/供应商),导出件仅供内部流转,勿直接转发客户。
+//
+// 【走 exportDocXlsx 而不是 exportDocExcel】带款图。原来内联成 <img src="data:...">
+// 塞进 HTML 工作表的 .xls，Excel 打开时那张图根本不渲染（和合同导出同一个病，2026-08-06 一并修）。
 
-import { exportDocExcel, d10, n2, n4, sum, type Block } from './docExcel';
-import { toDataUrl } from './sampleExcel';
+import { exportDocXlsx, d10, n2, n4, sum, imgCell, type Block } from './docExcel';
 
 export async function exportQuoteExcel(detail: any): Promise<void> {
   const items: any[] = detail.items ?? [];
@@ -60,20 +62,21 @@ export async function exportQuoteExcel(detail: any): Promise<void> {
     });
   }
 
-  // 款图内联（用户反馈：文件导出来照片在里面；image1/2 单图，>2MB/失败退回链接）
+  // 款图（用户反馈：文件导出来照片要在里面；image1/2 单图，抓不到/超 2MB 由公共层退回可点链接）
   const imageUrls = [detail.image1, detail.image2].filter(Boolean) as string[];
   if (imageUrls.length) {
-    const cells = await Promise.all(imageUrls.map(async (u) => {
-      const dataUrl = await toDataUrl(u);
-      return dataUrl ? `<img src="${dataUrl}" style="max-width:220px;max-height:170px" />` : `<a href="${u}">图（未内联）</a>`;
-    }));
-    blocks.push({ kind: 'table', title: '款图/图稿', head: imageUrls.map((_, i) => `图${i + 1}`), rows: [cells] });
+    blocks.push({
+      kind: 'table',
+      title: '款图/图稿',
+      head: imageUrls.map((_, i) => `图${i + 1}`),
+      rows: [imageUrls.map((u) => imgCell(u, 240, '图（未内联，点开查看）'))],
+    });
   }
 
-  exportDocExcel({
+  await exportDocXlsx({
     sheetName: `报价${detail.quote_no || ''}`,
     title: `报价单 · ${detail.quote_no || ''}`,
-    filename: `报价单-${detail.quote_no || detail.style_no || 'export'}.xls`,
+    filename: `报价单-${detail.quote_no || detail.style_no || 'export'}.xlsx`,
     blocks,
   });
 }

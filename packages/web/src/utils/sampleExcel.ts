@@ -10,34 +10,13 @@
 // 【为什么可以引 exceljs】它已经是 packages/web 的既有依赖（导入功能解析 .xlsx 用它），
 // 且一律**动态 import**：不点导出就不加载，主包体积不受影响（解包 20MB+，见 sheetPreview.ts 的说明）。
 //
-// 注意：本文件仍导出 toDataUrl —— contractExcel.ts 在用它给合同材料照片做内联，别删。
+// 注意：本表的版式是手写的（不走 docExcel 的 Block 声明式排版），但抓图/解 data URI 这两件
+// 公共事已收进 docExcel —— 合同、报价的导出也在用同一份，别再在这儿复制一遍。
 
-/** 抓图转 base64 data URI（>2MB 或失败返回 null，调用方退回链接文本） */
-export async function toDataUrl(url: string): Promise<string | null> {
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const blob = await res.blob();
-    if (blob.size > 2 * 1024 * 1024) return null;
-    return await new Promise<string | null>((resolve) => {
-      const r = new FileReader();
-      r.onload = () => resolve(String(r.result ?? ''));
-      r.onerror = () => resolve(null);
-      r.readAsDataURL(blob);
-    });
-  } catch { return null; }
-}
+import { toDataUrl, splitDataUrl } from './docExcel';
 
 const d10 = (v: unknown): string => (v ? String(v).slice(0, 10) : '');
 const val = (v: unknown): string => (v === null || v === undefined ? '' : String(v));
-
-/** 从 data URI 解出 exceljs 需要的扩展名与纯 base64 体 */
-function splitDataUrl(dataUrl: string): { ext: 'png' | 'jpeg' | 'gif'; body: string } | null {
-  const m = /^data:image\/(png|jpe?g|gif);base64,(.+)$/i.exec(dataUrl);
-  if (!m) return null;
-  const raw = m[1].toLowerCase();
-  return { ext: raw === 'jpg' ? 'jpeg' : (raw as 'png' | 'jpeg' | 'gif'), body: m[2] };
-}
 
 export async function exportSampleExcel(detail: any): Promise<void> {
   const ExcelJS = await import('exceljs');

@@ -1,9 +1,12 @@
-// 合同导出 Excel —— 复用 docExcel 公共层(BOM/文本格式/落盘都在那儿),本文件只声明区块。
+// 合同导出 Excel —— 复用 docExcel 公共层(排版/文本格式/落盘都在那儿),本文件只声明区块。
 // 材料/加工/补料三类共用一张明细表:加工合同的「货物」也落在 contract_material 上(字段同名),
 // 仅类型相关的字段(增值税/价格包含项 vs 发货地址)按 type 增减。业务已定:全量导出,不脱敏。
+//
+// 【走 exportDocXlsx 而不是 exportDocExcel】材料明细带照片列。原来是把照片内联成
+// <img src="data:..."> 塞进 HTML 工作表的 .xls——**Excel 根本不渲染 data: URI 图片**，
+// 文件下下来照片就是不显示、还不报错。真 .xlsx 才能把图打包进去。详见 docExcel.ts 文件头。
 
-import { exportDocExcel, d10, n2, n4, sum, sensitiveMark, type Block } from './docExcel';
-import { toDataUrl } from './sampleExcel';
+import { exportDocXlsx, d10, n2, n4, sum, sensitiveMark, imgCell, type Block } from './docExcel';
 
 const typeLabel = (t: string): string =>
   ({ MATERIAL: '材料合同', PROCESS: '加工合同', SUPPLEMENT: '补料合同' } as Record<string, string>)[t] ?? t;
@@ -72,19 +75,12 @@ export async function exportContractExcel(detail: any): Promise<void> {
     ['备注', detail.remark],
   );
 
-  // 材料照片（公开上传）：base64 内联缩略图，离线可看；>2MB/失败退回「系统内查看」标注
-  const matRows: unknown[][] = await Promise.all(mats.map(async (m, i) => {
-    let photo = '';
-    if (m.photo_url) {
-      const dataUrl = await toDataUrl(m.photo_url);
-      photo = dataUrl ? `<img src="${dataUrl}" style="max-width:80px;max-height:60px" />` : '图（系统内查看）';
-    }
-    return [
-      i + 1, m.item_name, m.spec, m.color, m.size, m.style_no, m.unit,
-      m.qty, m.qty_source, n4(m.unit_price), n2(m.amount), d10(m.delivery_date),
-      photo, m.remark,
-    ];
-  }));
+  // 材料照片（公开上传）：真正嵌进 xlsx 的缩略图，离线可看；抓不到/超 2MB 由公共层退回可点链接
+  const matRows: unknown[][] = mats.map((m, i) => [
+    i + 1, m.item_name, m.spec, m.color, m.size, m.style_no, m.unit,
+    m.qty, m.qty_source, n4(m.unit_price), n2(m.amount), d10(m.delivery_date),
+    m.photo_url ? imgCell(m.photo_url, 110, '图（系统内查看）') : '', m.remark,
+  ]);
 
   const blocks: Block[] = [
     { kind: 'kv', title: '合同基本信息', pairs },
@@ -114,10 +110,10 @@ export async function exportContractExcel(detail: any): Promise<void> {
     });
   }
 
-  exportDocExcel({
+  await exportDocXlsx({
     sheetName: `合同${detail.contract_no ?? ''}`,
     title: `${typeLabel(detail.type)} · ${detail.contract_no ?? ''}`,
-    filename: `合同-${detail.contract_no ?? 'export'}.xls`,
+    filename: `合同-${detail.contract_no ?? 'export'}.xlsx`,
     blocks,
   });
 }
