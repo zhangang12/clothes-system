@@ -94,7 +94,6 @@
             <el-button link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
             <el-button link size="small" @click="goView(row)">查看</el-button>
             <el-button link size="small" @click="printRow(row)">打印</el-button>
-            <el-button link size="small" @click="openCols(row)">列设置</el-button>
             <el-button link size="small" @click="exportRow(row)">导出Excel</el-button>
             <el-button v-if="isPatternmaker" link type="warning" size="small" @click="goPatternmaker(row)">版师</el-button>
             <el-popconfirm
@@ -120,7 +119,7 @@
       :template-headers="importHeaders" :parse-row="parseSampleRow" :submit="submitImport" @done="load" />
   </div>
 
-    <PrintColsDialog ref="colsDialog" doc-key="sample" @confirm="(keys: string[]) => colsRow && printRow(colsRow, keys)" />
+    <PrintDesigner ref="designer" doc-key="sample" @print="(l: any) => doPrint(l)" />
 </template>
 
 <script setup lang="ts">
@@ -132,8 +131,7 @@ import { Search, Plus, Upload, Download, Delete, CopyDocument, ArrowDown } from 
 import { sampleApi } from '@/api/sample';
 import { useAuthStore } from '@/stores/auth';
 import { printSample } from '@/utils/samplePrint';
-import { loadPrintCols } from '@/utils/printCols';
-import PrintColsDialog from '@/components/PrintColsDialog.vue';
+import PrintDesigner from '@/components/PrintDesigner.vue';
 import { exportSampleExcel } from '@/utils/sampleExcel';
 import CsvImportDialog from '@/components/CsvImportDialog.vue';
 import { UserRole, SAMPLE_STATUS_LABEL, SAMPLE_CATEGORIES } from '@i9/types';
@@ -229,14 +227,20 @@ async function batchRemove() {
   load();
 }
 // 打印/PDF(取详情含材料明细;对外脱敏,不含参考价格)
-async function printRow(row: any, cols?: string[]) {
-  try { const res: any = await sampleApi.get(row.id); printSample(res.data ?? res, cols ?? loadPrintCols('sample')); }
-  catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '打印失败'); }
+// 点「打印」先开排版操作台（左边摆元素、右边实时预览），满意了再打
+const designer = ref<any>(null);
+const printDetail = ref<any>(null);
+async function printRow(row: any) {
+  try {
+    const res: any = await sampleApi.get(row.id);
+    printDetail.value = res.data ?? res;
+    designer.value?.open(printDetail.value);
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '打开失败'); }
 }
-// 列设置：调完直接打这一行（省得再点一次打印）
-const colsDialog = ref<any>(null);
-const colsRow = ref<any>(null);
-function openCols(row: any) { colsRow.value = row; colsDialog.value?.open(); }
+function doPrint(l: any) {
+  try { printSample(printDetail.value, l); }
+  catch (e: any) { errToast(e?.message ?? '打印失败'); }
+}
 // 导出 Excel(取详情含材料明细;.xls)
 async function exportRow(row: any) {
   try { const res: any = await sampleApi.get(row.id); await exportSampleExcel(res.data ?? res); }
