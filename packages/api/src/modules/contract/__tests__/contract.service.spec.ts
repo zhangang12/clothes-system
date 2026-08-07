@@ -67,6 +67,7 @@ const mockOrderRepo = {
 };
 const mockFactoryRepo = {
   findOne: jest.fn().mockResolvedValue({ id: 7, name: '面料厂A', deleted: 0 }),
+  find: jest.fn().mockResolvedValue([]), // 关键词搜供应商名时用
 };
 const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn().mockResolvedValue(1), expire: jest.fn() };
 // updateStatus 作废前检查对账/付款关联（L6）：按实体分流 mock
@@ -92,6 +93,7 @@ const mockDataSource = {
     if (entity === Reconciliation) return mockReconRepo;
     if (entity === ReconciliationShipment) return mockReconShipRepo;
     if (entity === Prepayment) return mockPrepayRepo;
+    if (entity === Factory) return mockFactoryRepo;
     return {};
   }),
 };
@@ -763,5 +765,126 @@ describe('ContractService', () => {
       materials: [{ item_name: '主面料', color: '藏青', unit_price: 8, qty: 120 }],
     } as any);
     expect(savedLines[0]).toMatchObject({ item_name: '主面料', qty: 120, order_material_id: 77 });
+  });
+
+  // ── 列表关键词搜索（2026-08-07 King：「合同号记不住」，要能按供应商/款号找）──────
+  describe('findAll 关键词搜索', () => {
+    const whereOf = () => (mockRepo.findAndCount.mock.calls.at(-1)![0] as any).where;
+
+    it('不给关键词时是单条件对象，不走 OR 分支（别把原有列表行为改坏）', async () => {
+      await service.findAll({} as any);
+      const w = whereOf();
+      expect(Array.isArray(w)).toBe(false);
+      expect(w).toMatchObject({ deleted: 0 });
+    });
+
+    it('关键词同时按合同号和款号找（OR 分支）', async () => {
+      mockFactoryRepo.find.mockResolvedValueOnce([]);
+      await service.findAll({ keyword: 'CHA271' } as any);
+      const w = whereOf();
+      expect(Array.isArray(w)).toBe(true);
+      expect(w).toHaveLength(2);
+      expect(w[0].contract_no).toBeDefined();
+      expect(w[1].style_nos).toBeDefined();
+    });
+
+    it('关键词命中供应商名时并进 factory_id 分支', async () => {
+      mockFactoryRepo.find.mockResolvedValueOnce([{ id: 7 }, { id: 9 }]);
+      await service.findAll({ keyword: '坤业' } as any);
+      const w = whereOf();
+      expect(w).toHaveLength(3);
+      expect(w[2].factory_id).toBeDefined();
+    });
+
+    it('没有工厂命中就不加空的 IN 分支（IN () 会把结果清零）', async () => {
+      mockFactoryRepo.find.mockResolvedValueOnce([]);
+      await service.findAll({ keyword: 'zzz' } as any);
+      expect(whereOf()).toHaveLength(2);
+    });
+
+    it('其它筛选条件在每个 OR 分支里都保留（否则按类型筛完再搜就漏筛）', async () => {
+      mockFactoryRepo.find.mockResolvedValueOnce([{ id: 7 }]);
+      await service.findAll({ keyword: '坤业', type: 'MATERIAL' } as any);
+      for (const b of whereOf() as any[]) expect(b).toMatchObject({ deleted: 0, type: 'MATERIAL' });
+    });
+  });
+
+  // ── BY_BOTH：颜色×尺码同时拆（2026-08-07 King：「材料拆分有的要按颜色按尺码都分」）────
+  describe('expandMaterialLines · BY_BOTH', () => {
+    const expand = (om: any, rows: any[]) => (service as any).expandMaterialLines(om, rows, 'ST-1', null);
+    const MAT = { id: 5, item_name: '主面料', unit: '米', net_usage: 2, loss_rate: 0, unit_price: 10 };
+    const ROWS = [
+      { color: '黑色', size: 'S', qtys: [10] },
+      { color: '黑色', size: 'M', qtys: [20] },
+      { color: '白色', size: 'S', qtys: [5] },
+    ];
+
+    it('按「颜色+尺码」组合出行，每个组合各一行', () => {
+      const out = expand({ ...MAT, split_mode: 'BY_BOTH' }, ROWS);
+      expect(out).toHaveLength(3);
+      expect(out.map((r: any) => `${r.color}/${r.size}`).sort())
+        .toEqual(['白色/S', '黑色/M', '黑色/S']);
+    });
+
+    it('每行数量 = 该组合件数 × 单件耗用 ×(1+损耗)', () => {
+      const out = expand({ ...MAT, split_mode: 'BY_BOTH' }, ROWS);
+      const byKey = Object.fromEntries(out.map((r: any) => [`${r.color}/${r.size}`, r.qty]));
+      expect(byKey['黑色/S']).toBe(20);  // 10 × 2
+      expect(byKey['黑色/M']).toBe(40);  // 20 × 2
+      expect(byKey['白色/S']).toBe(10);  //  5 × 2
+    });
+
+    it('同色同码的多行(跨PO)合并计数，不重复出行', () => {
+      const out = expand({ ...MAT, split_mode: 'BY_BOTH' }, [
+        { color: '黑色', size: 'S', qtys: [10] },
+        { color: '黑色', size: 'S', qtys: [7] },
+      ]);
+      expect(out).toHaveLength(1);
+      expect(out[0].qty).toBe(34); // (10+7) × 2
+    });
+
+    it('颜色或尺码缺一个的矩阵行直接跳过，不拼出空维度的组合', () => {
+      const out = expand({ ...MAT, split_mode: 'BY_BOTH' }, [
+        { color: '黑色', size: '', qtys: [10] },
+        { color: '', size: 'M', qtys: [10] },
+        { color: '蓝色', size: 'L', qtys: [3] },
+      ]);
+      expect(out).toHaveLength(1);
+      expect(out[0]).toMatchObject({ color: '蓝色', size: 'L' });
+    });
+
+    it('各码尺寸按【纯尺码】取 size_specs，不能拿"黑色 S"去查', () => {
+      const out = expand({ ...MAT, split_mode: 'BY_BOTH', size_specs: { S: '50' } }, ROWS);
+      const s = out.find((r: any) => r.color === '黑色' && String(r.size).startsWith('S'));
+      expect(s.size).toBe('S(50)');
+    });
+
+    it('qty_source 标明是分色分码，且不超 varchar(20)', () => {
+      const out = expand({ ...MAT, split_mode: 'BY_BOTH' }, ROWS);
+      expect(out[0].qty_source).toBe('采购量·分色分码');
+      expect(out[0].qty_source.length).toBeLessThanOrEqual(20);
+    });
+
+    it('BY_BOTH 这个取值本身不能超 split_mode 的 varchar(10)', () => {
+      // 【别改成 BY_COLOR_SIZE】13 个字符会 Data too long，保存订单直接 500
+      expect('BY_BOTH'.length).toBeLessThanOrEqual(10);
+    });
+
+    it('不动原有 BY_COLOR / BY_SIZE 的行为', () => {
+      const byColor = expand({ ...MAT, split_mode: 'BY_COLOR' }, ROWS);
+      expect(byColor.map((r: any) => r.color).sort()).toEqual(['白色', '黑色']);
+      expect(byColor.every((r: any) => r.size === undefined)).toBe(true);
+      expect(byColor[0].qty_source).toBe('采购量·分色');
+
+      const bySize = expand({ ...MAT, split_mode: 'BY_SIZE' }, ROWS);
+      expect(bySize.map((r: any) => r.size).sort()).toEqual(['M', 'S']);
+      expect(bySize[0].qty_source).toBe('采购量·分码');
+    });
+
+    it('矩阵为空时退回整单单行，不因新模式炸掉', () => {
+      const out = expand({ ...MAT, split_mode: 'BY_BOTH', final_purchase: 99 }, []);
+      expect(out).toHaveLength(1);
+      expect(out[0]).toMatchObject({ qty: 99, qty_source: '采购量含损耗' });
+    });
   });
 });

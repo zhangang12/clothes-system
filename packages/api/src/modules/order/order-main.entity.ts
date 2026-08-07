@@ -61,7 +61,7 @@ export class OrderMain {
   make_date: string; // 制单日期
 
   @Column({ type: 'varchar', length: 10, default: 'NONE' })
-  split_mode: string; // 整单核算模式 NONE/BY_SIZE/BY_COLOR
+  split_mode: string; // 整单核算模式 NONE/BY_SIZE/BY_COLOR/BY_BOTH。**列是 varchar(10)，新增取值别超 10 字符**
 
   // 附件档案 5 类（逗号分隔多文件 URL）
   @Column({ type: 'text', nullable: true })

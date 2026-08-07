@@ -21,7 +21,7 @@
     <template v-if="tip" #tip><div class="up-tip">{{ tip }}</div></template>
   </el-upload>
 
-  <div v-if="!disabled" class="fu-hint">支持拖入文件 / {{ globalPaste ? 'Ctrl+V 粘贴截图' : '聚焦后 Ctrl+V 粘贴截图' }}</div>
+  <div v-if="!disabled" class="fu-hint">支持拖入文件 / Ctrl+V 粘贴截图 · 大图自动压缩后上传</div>
   </div>
 
   <el-dialog v-model="previewVisible" :width="previewKind === 'sheet' ? '90%' : '640px'" append-to-body :title="previewKind === 'sheet' ? previewFile?.name : ''">
@@ -58,6 +58,20 @@ import { Plus, Upload } from '@element-plus/icons-vue';
 import { http } from '@/api';
 import { signedUrl } from '@/utils/secureFile';
 import { parseXlsx, isXlsxName, isLegacyXlsName, type SheetData } from '@/utils/sheetPreview';
+import { compressImage } from '@/utils/imageCompress';
+
+// 全局粘贴登记表：页面上可能同时有多个上传框（样衣图片1/2/3），document 上只挂一个监听，
+// 由这里决定交给谁。**从后往前找**——后挂载的在视觉上更靠前（弹窗 > 页面表单），
+// 谁"没满"谁接；都满了才提示。这样反馈弹窗一开就自然接管粘贴，关掉又还给页面表单，
+// 不会出现"粘贴到反馈弹窗、图却传进了样衣表单"这种串台（原来的 globalPaste 注释担心的正是它）。
+const pasteStack: Array<(e: ClipboardEvent) => void> = [];
+let pasteBound = false;
+function dispatchPaste(e: ClipboardEvent) {
+  for (let i = pasteStack.length - 1; i >= 0; i--) {
+    pasteStack[i](e);
+    if ((e as any)._fuHandled) return;
+  }
+}
 
 const props = withDefaults(defineProps<{
   modelValue?: string;
@@ -68,8 +82,8 @@ const props = withDefaults(defineProps<{
   disabled?: boolean;
   tip?: string;
   sensitive?: boolean; // 敏感附件(身份证/水单/发票):存 private/ 子目录,读取须签名令牌
-  globalPaste?: boolean; // 全局粘贴:在 document 上监听 Ctrl+V,不必先聚焦上传框(用于弹窗内焦点常在别处的场景,如问题反馈)。
-                         // 注意:仅适合"仅在可见时挂载"的场景(如 el-dialog destroy-on-close),否则会全局抢占图片粘贴。
+  globalPaste?: boolean; // 【已无实际作用，保留只为不改调用方】2026-08-07 起所有实例都参与全局粘贴，
+                         // 由 pasteStack「后挂载优先 + 满了让给下一个」派发，不再需要逐处开关。
 }>(), {
   modelValue: '', multiple: false, accept: 'image/*', limit: 6, listType: 'picture-card', disabled: false, tip: '', sensitive: false, globalPaste: false,
 });
@@ -100,26 +114,36 @@ const curSheet = computed(() => sheets.value[Number(activeSheet.value)] ?? null)
 // 粘贴截图 / 拖拽文件 → 复用同一上传通道(设计稿:①点选 ②Ctrl+V 粘贴 ③拖文件)
 function onPaste(e: ClipboardEvent) {
   if (props.disabled) return;
-  // globalPaste 时 wrap 的 @paste 与 document 监听会对同一事件各触发一次(冒泡),用标记去重防重复上传
+  // wrap 的 @paste 与 document 监听会对同一事件各触发一次(冒泡),用标记去重防重复上传
   if ((e as any)._fuHandled) return;
   const items = e.clipboardData?.items;
   if (!items) return;
+  // 只接"文件型"剪贴板内容：粘贴纯文本一律不拦，输入框里的 Ctrl+V 行为不受影响
+  const files = Array.from(items)
+    .filter((it) => it.kind === 'file')
+    .map((it) => it.getAsFile())
+    .filter(Boolean) as File[];
+  if (!files.length) return;
   let room = effectiveLimit.value - urls().length;
-  for (const it of Array.from(items)) {
-    if (it.kind !== 'file') continue;
-    const f = it.getAsFile();
-    if (!f) continue;
+  if (room <= 0) return; // 本框已满：不吃这次粘贴，交给栈里下一个（原来会在这弹警告并中断，多个上传框会连弹好几条）
+  (e as any)._fuHandled = true;
+  e.preventDefault();
+  for (const f of files) {
     if (room <= 0) { ElMessage.warning(`最多上传 ${effectiveLimit.value} 个文件`); break; }
-    (e as any)._fuHandled = true;
-    e.preventDefault();
     room -= 1;
     doUpload({ file: f });
   }
 }
-// 全局粘贴:焦点常不在上传框(如反馈弹窗焦点在文本框)时,在 document 上兜底监听。
-// 监听随组件挂载/卸载增删;配合 el-dialog destroy-on-close,即"弹窗开着才监听"。
-onMounted(() => { if (props.globalPaste) document.addEventListener('paste', onPaste); });
-onBeforeUnmount(() => { document.removeEventListener('paste', onPaste); });
+// 粘贴不再要求先点一下上传框（Grace 反馈：反馈弹窗里能直接 Ctrl+V，样衣表单却要先聚焦）。
+// 所有实例都进 pasteStack，由 document 上的单个监听按"后挂载优先"派发，见文件顶部说明。
+onMounted(() => {
+  pasteStack.push(onPaste);
+  if (!pasteBound) { document.addEventListener('paste', dispatchPaste); pasteBound = true; }
+});
+onBeforeUnmount(() => {
+  const i = pasteStack.indexOf(onPaste);
+  if (i >= 0) pasteStack.splice(i, 1);
+});
 function onDrop(e: DragEvent) {
   if (props.disabled) return;
   const files = e.dataTransfer?.files;
@@ -130,7 +154,10 @@ function onDrop(e: DragEvent) {
 
 async function doUpload(opt: any) {
   const fd = new FormData();
-  fd.append('file', opt.file);
+  // 大图先在浏览器里压小再传（Grace 反馈上传要等 1-2 分钟；实测服务器侧 2MB 只要 2.9s，
+  // 瓶颈是整张手机原图走用户上行带宽）。压不动/不该压时 compressImage 原样返回。
+  const file = await compressImage(opt.file);
+  fd.append('file', file);
   try {
     const res: any = await http.post(props.sensitive ? '/uploads?sensitive=1' : '/uploads', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
     const url = res.data?.url ?? res.url;

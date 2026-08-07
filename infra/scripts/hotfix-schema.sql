@@ -543,7 +543,7 @@ CREATE TABLE IF NOT EXISTS `quotation_fee` (
 CREATE TABLE IF NOT EXISTS `order_main` (
   `id`             BIGINT        NOT NULL AUTO_INCREMENT,
   `order_no`       VARCHAR(20)   NOT NULL COMMENT 'O-YYYYMMDD-001',
-  `customer_po`    VARCHAR(50)   DEFAULT NULL COMMENT '客户PO号',
+  `customer_po`    VARCHAR(255)  DEFAULT NULL COMMENT '客户PO号(可含多个,逗号分隔——一张订单常跨多个PO)',
   `customer_id`    BIGINT        NOT NULL COMMENT '中间商客户ID',
   `quote_id`       BIGINT        DEFAULT NULL COMMENT '关联报价',
   `style_name`     VARCHAR(100)  DEFAULT NULL,
@@ -1698,8 +1698,8 @@ CALL _i9_sync_col('quotation_fee','quote_usage',"DECIMAL(12,2)","DECIMAL(12,2) N
 -- order_main
 CALL _i9_add_col('order_main','order_no',"VARCHAR(20)   NOT NULL COMMENT 'O-YYYYMMDD-001'");
 CALL _i9_sync_col('order_main','order_no',"VARCHAR(20)","VARCHAR(20)   NOT NULL COMMENT 'O-YYYYMMDD-001'");
-CALL _i9_add_col('order_main','customer_po',"VARCHAR(50)   DEFAULT NULL COMMENT '客户PO号'");
-CALL _i9_sync_col('order_main','customer_po',"VARCHAR(50)","VARCHAR(50)   DEFAULT NULL COMMENT '客户PO号'");
+CALL _i9_add_col('order_main','customer_po',"VARCHAR(255)  DEFAULT NULL COMMENT '客户PO号(可含多个,逗号分隔——一张订单常跨多个PO)'");
+CALL _i9_sync_col('order_main','customer_po',"VARCHAR(255)","VARCHAR(255)  DEFAULT NULL COMMENT '客户PO号(可含多个,逗号分隔——一张订单常跨多个PO)'");
 CALL _i9_add_col('order_main','customer_id',"BIGINT        NOT NULL COMMENT '中间商客户ID'");
 CALL _i9_sync_col('order_main','customer_id',"BIGINT","BIGINT        NOT NULL COMMENT '中间商客户ID'");
 CALL _i9_add_col('order_main','quote_id',"BIGINT        DEFAULT NULL COMMENT '关联报价'");

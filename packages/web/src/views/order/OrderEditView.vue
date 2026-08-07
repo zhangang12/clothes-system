@@ -64,7 +64,17 @@
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :span="8"><el-form-item label="客户 PO 号" prop="customerPo" required><el-input v-model="form.customerPo" /></el-form-item></el-col>
+          <el-col :span="8">
+            <el-form-item label="客户 PO 号" prop="customerPo" required>
+              <el-input v-model="form.customerPo" :maxlength="255" placeholder="多个 PO 用逗号分隔">
+                <template v-if="!readonly" #append>
+                  <el-tooltip placement="top" :content="matrixPoNos.length ? `从下方矩阵带入：${matrixPoNos.join('、')}` : '下方「尺码数量搭配」里填/导入 PO 号后可一键带入'">
+                    <el-button :disabled="!matrixPoNos.length" @click="fillPoFromMatrix()">从 PO 列带入</el-button>
+                  </el-tooltip>
+                </template>
+              </el-input>
+            </el-form-item>
+          </el-col>
           <el-col :span="8"><el-form-item label="客户款号" prop="styleNo" required><el-input v-model="form.styleNo" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="单品单价"><el-input v-model="form.unitPrice" type="number" /></el-form-item></el-col>
           <el-col :span="8">
@@ -169,23 +179,25 @@
               <template #default="{ row }">
                 <div class="split-preview">
                   <template v-if="row.splitMode !== 'NONE'">
-                    <div class="split-title">分{{ row.splitMode === 'BY_COLOR' ? '色' : '码' }}出量（{{ row.splitMode === 'BY_COLOR' ? '某色该料量=该色数量' : '某码该料量=该码数量' }}×单件耗用×(1+损耗率)；生成材料合同时按此分行）{{ row.splitMode === 'BY_SIZE' ? '；「尺寸」列按码填（拉链/织带等），不填与门幅一致' : '' }}</div>
+                    <div class="split-title">分{{ splitLabel(row.splitMode) }}出量（某{{ splitLabel(row.splitMode) }}该料量=该{{ splitLabel(row.splitMode) }}数量×单件耗用×(1+损耗率)；生成材料合同时按此分行）{{ hasSizeDim(row.splitMode) ? '；「尺寸」列按码填（拉链/织带等），不填与门幅一致' : '' }}</div>
                     <el-table :data="splitPreview(row)" size="small" border style="max-width:760px">
-                      <el-table-column prop="key" :label="row.splitMode === 'BY_COLOR' ? '颜色' : '尺码'" width="100" />
+                      <el-table-column prop="key" :label="splitDimLabel(row.splitMode)" width="120" />
                       <el-table-column prop="groupQty" label="件数" width="90" align="right" />
                       <el-table-column prop="qty" label="该料采购量" width="120" align="right" />
                       <el-table-column prop="formula" label="公式" min-width="180" />
-                      <!-- 各码尺寸（用户反馈：拉链/织带按码不同尺寸）——占位=材料行门幅/尺寸，不填即与通用一致 -->
-                      <el-table-column v-if="row.splitMode === 'BY_SIZE'" label="尺寸" width="120">
+                      <!-- 各码尺寸（用户反馈：拉链/织带按码不同尺寸）——占位=材料行门幅/尺寸，不填即与通用一致。
+                           注意按 srow.size 存取而不是 srow.key：BY_BOTH 的 key 是「黑色 S」，而
+                           size_specs 后端是按纯尺码「S」建表的，用 key 存会对不上、尺寸带不进合同 -->
+                      <el-table-column v-if="hasSizeDim(row.splitMode)" label="尺寸" width="120">
                         <template #default="{ row: srow }">
-                          <el-input v-if="!readonly" v-model="row.sizeSpecs[srow.key]" size="small" :placeholder="row.width || '同门幅'" />
-                          <span v-else>{{ row.sizeSpecs?.[srow.key] || row.width || '—' }}</span>
+                          <el-input v-if="!readonly" v-model="row.sizeSpecs[srow.size]" size="small" :placeholder="row.width || '同门幅'" />
+                          <span v-else>{{ row.sizeSpecs?.[srow.size] || row.width || '—' }}</span>
                         </template>
                       </el-table-column>
                     </el-table>
-                    <div v-if="!splitPreview(row).length" class="hint">尺码数量搭配暂无{{ row.splitMode === 'BY_COLOR' ? '颜色' : '尺码' }}数据，先在上方矩阵填写</div>
+                    <div v-if="!splitPreview(row).length" class="hint">尺码数量搭配暂无{{ splitDimLabel(row.splitMode) }}数据，先在上方矩阵填写{{ row.splitMode === 'BY_BOTH' ? '（颜色与尺码都要填才成组）' : '' }}</div>
                   </template>
-                  <span v-else class="hint">该料不拆分（整单量核算）；选「按颜色/按尺码」后此处按矩阵出分行预览</span>
+                  <span v-else class="hint">该料不拆分（整单量核算）；选「按颜色/按尺码/颜色+尺码」后此处按矩阵出分行预览</span>
                 </div>
               </template>
             </el-table-column>
@@ -212,7 +224,7 @@
             <el-table-column label="取整" width="92"><template #default="{ row }"><el-select v-model="row.roundUp" size="small" style="width:100%" clearable placeholder="自动"><el-option label="强制取整" :value="1" /><el-option label="不取整" :value="0" /></el-select></template></el-table-column>
             <el-table-column label="单件耗用" width="90"><template #default="{ row }"><el-input v-model="row.netUsage" size="small" /></template></el-table-column>
             <el-table-column label="损耗%" width="80"><template #default="{ row }"><el-input v-model="row.lossRate" size="small" /></template></el-table-column>
-            <el-table-column label="拆分" width="100"><template #default="{ row }"><el-select v-model="row.splitMode" size="small" style="width:100%"><el-option label="不拆" value="NONE" /><el-option label="按尺码" value="BY_SIZE" /><el-option label="按颜色" value="BY_COLOR" /></el-select></template></el-table-column>
+            <el-table-column label="拆分" width="100"><template #default="{ row }"><el-select v-model="row.splitMode" size="small" style="width:100%"><el-option label="不拆" value="NONE" /><el-option label="按尺码" value="BY_SIZE" /><el-option label="按颜色" value="BY_COLOR" /><el-option label="颜色+尺码" value="BY_BOTH" /></el-select></template></el-table-column>
             <el-table-column label="系统采购量" width="110"><template #default="{ row }"><span class="calc">{{ sysPurchase(row) }}</span></template></el-table-column>
             <el-table-column label="最终采购量" width="120">
               <template #default="{ row }">
@@ -231,6 +243,7 @@
             <el-radio value="NONE">不拆分</el-radio>
             <el-radio value="BY_SIZE">按尺码</el-radio>
             <el-radio value="BY_COLOR">按颜色</el-radio>
+            <el-radio value="BY_BOTH">颜色+尺码</el-radio>
           </el-radio-group>
         </el-form-item>
         <div class="hint">采购量公式：不拆分 = 大货总数×单件耗用×(1+损耗率)；按分码/分色分别出量。整数类材料(个/条)损耗后向上取整。</div>
@@ -405,14 +418,25 @@ const summaryRows = computed(() => {
   return [...map.values()];
 });
 // 分色/分码出量预览（设计稿：某色该料量 = 该色数量×单件耗用×(1+损耗率)；整数类向上取整）
+// 【必须与后端 contract.service.expandMaterialLines 的分组口径逐字一致】
+// 这里是预览、那里是真出合同行，两边算不一样就是"看到的和生成的对不上"。
+// BY_BOTH 的 key 用「颜色 空格 尺码」，颜色或尺码缺一个就跳过该行（拼出"黑色 "这种空维度没意义）。
+function splitKeyOf(mode: string, r: any): { key: string; color: string; size: string } {
+  const color = String(r?.color ?? '').trim();
+  const size = String(r?.size ?? '').trim();
+  if (mode === 'BY_COLOR') return { key: color, color, size: '' };
+  if (mode === 'BY_SIZE') return { key: size, color: '', size };
+  return { key: color && size ? `${color} ${size}` : '', color, size };
+}
 function splitPreview(mat: any) {
-  const dim = mat.splitMode === 'BY_COLOR' ? 'color' : 'size';
   const groups = new Map<string, number>();
+  const dims = new Map<string, { color: string; size: string }>();
   for (const r of form.matrix.rows) {
-    const key = String(r[dim] ?? '').trim();
+    const { key, color, size } = splitKeyOf(mat.splitMode, r);
     const qty = rowTotal(r);
     if (!key || !qty) continue;
     groups.set(key, (groups.get(key) ?? 0) + qty);
+    if (!dims.has(key)) dims.set(key, { color, size });
   }
   const per = Number(mat.netUsage) || 0;
   const loss = 1 + (Number(mat.lossRate) || 0) / 100;
@@ -420,9 +444,14 @@ function splitPreview(mat: any) {
   return [...groups].map(([key, groupQty]) => {
     let qty = groupQty * per * loss;
     qty = shouldRound ? Math.ceil(qty) : +qty.toFixed(2);
-    return { key, groupQty, qty, formula: `${groupQty} × ${per} × ${loss.toFixed(2)}${shouldRound ? ' ↑取整' : ''}` };
+    const d = dims.get(key) ?? { color: '', size: '' };
+    return { key, ...d, groupQty, qty, formula: `${groupQty} × ${per} × ${loss.toFixed(2)}${shouldRound ? ' ↑取整' : ''}` };
   });
 }
+const splitLabel = (m: string) => (m === 'BY_COLOR' ? '色' : m === 'BY_SIZE' ? '码' : '色分码');
+const splitDimLabel = (m: string) => (m === 'BY_COLOR' ? '颜色' : m === 'BY_SIZE' ? '尺码' : '颜色+尺码');
+// 「尺寸」列（拉链/织带按码不同尺寸）只要拆分维度里含尺码就该出现
+const hasSizeDim = (m: string) => m === 'BY_SIZE' || m === 'BY_BOTH';
 const statusLabel = computed(() => (ORDER_STATUS_LABEL as any)[form.status] ?? '');
 function sysPurchase(row: any) {
   const per = (Number(row.netUsage) || 0) * (1 + (Number(row.lossRate) || 0) / 100);
@@ -775,7 +804,43 @@ function confirmExcel() {
   form.matrix.pos = excelPreview.value.pos;
   form.matrix.rows = excelPreview.value.rows.map((r) => ({ ...r, qtys: [...r.qtys] }));
   excelDialog.value = false; excelPreview.value = null;
+  fillPoFromMatrix({ silent: true }); // 导入后顺手把客户PO号带上（用户反馈 2026-08-07 King：「太多了」）
   ElMessage.success(`已生成搭配表：${form.matrix.rows.length} 行 × ${form.matrix.pos.length} 个 PO，总计 ${qtyTotal.value}（已回填大货总数量）`);
+}
+
+// ── 客户PO号从矩阵 PO 列带入（2026-08-07 King：「PO号能不能按照导入的PO自动填进去，太多了」）──
+// 【为什么要限长】customer_po 这次已从 VARCHAR(50) 加宽到 255（见 init.sql / hotfix-schema），
+// 但仍有上限；PO 多到装不下时**宁可少填并明确告知**，也不能让它超长——超了保存直接 500 Data too long，
+// 正是 CLAUDE.md 里「组合值超列宽」那类事故。
+const CUSTOMER_PO_MAX = 255;
+const PO_PLACEHOLDER = '（未填PO）';
+/** 矩阵里真实填了的 PO 号，去重保序 */
+const matrixPoNos = computed<string[]>(() => [...new Set(
+  (form.matrix?.pos ?? [])
+    .map((p: any) => String(p?.po_no ?? '').trim())
+    .filter((v: string) => v && v !== PO_PLACEHOLDER),
+)] as string[]);
+
+function fillPoFromMatrix(opts: { silent?: boolean } = {}) {
+  const all = matrixPoNos.value;
+  if (!all.length) {
+    if (!opts.silent) ElMessage.warning('尺码数量搭配里还没有填 PO 号');
+    return;
+  }
+  // 逐个累加，装不下就停——不做截断，避免把一个 PO 号切成半截
+  const kept: string[] = [];
+  for (const po of all) {
+    const next = [...kept, po].join(', ');
+    if (next.length > CUSTOMER_PO_MAX) break;
+    kept.push(po);
+  }
+  form.customerPo = kept.join(', ');
+  const dropped = all.length - kept.length;
+  if (dropped > 0) {
+    ElMessage.warning(`已带入 ${kept.length} 个 PO 号；还有 ${dropped} 个因字段长度上限未带入，请自行取舍`);
+  } else if (!opts.silent) {
+    ElMessage.success(`已带入 ${kept.length} 个 PO 号`);
+  }
 }
 
 async function doImport() {

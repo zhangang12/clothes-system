@@ -9,7 +9,7 @@
           <el-button plain :icon="Download" @click="exportCsv">导出</el-button>
         </div>
         <div class="tools-right">
-          <el-input v-model="query.keyword" placeholder="合同编号" clearable style="width:200px" @keyup.enter="load" @clear="load">
+          <el-input v-model="query.keyword" placeholder="合同号 / 供应商 / 款号" clearable style="width:220px" @keyup.enter="load" @clear="load">
             <template #prefix><el-icon><Search /></el-icon></template>
           </el-input>
           <el-select v-model="query.type" clearable placeholder="全部类型" style="width:130px" @change="load">

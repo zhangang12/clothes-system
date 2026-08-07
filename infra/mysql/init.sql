@@ -450,7 +450,7 @@ CREATE TABLE IF NOT EXISTS `quotation_fee` (
 CREATE TABLE IF NOT EXISTS `order_main` (
   `id`             BIGINT        NOT NULL AUTO_INCREMENT,
   `order_no`       VARCHAR(20)   NOT NULL COMMENT 'O-YYYYMMDD-001',
-  `customer_po`    VARCHAR(50)   DEFAULT NULL COMMENT '客户PO号',
+  `customer_po`    VARCHAR(255)  DEFAULT NULL COMMENT '客户PO号(可含多个,逗号分隔——一张订单常跨多个PO)',
   `customer_id`    BIGINT        NOT NULL COMMENT '中间商客户ID',
   `quote_id`       BIGINT        DEFAULT NULL COMMENT '关联报价',
   `style_name`     VARCHAR(100)  DEFAULT NULL,

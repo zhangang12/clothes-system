@@ -116,6 +116,14 @@
             content="在 Excel 中按列序复制后粘贴追加：部位｜品名｜门幅｜颜色｜供应商｜单位｜报价耗用｜人民币单价｜损耗%｜备注">
             <el-button size="small" @click="pasteItems">📋 Excel 粘贴</el-button>
           </el-tooltip>
+          <span class="bulk-loss">
+            统一损耗%
+            <el-input-number v-model="bulkLoss" size="small" :min="0" :max="100" :step="0.5" :controls="false"
+              style="width:72px" @change="applyBulkLoss" />
+            <el-tooltip placement="top" content="改这里会刷到下面所有明细行，新增/粘贴的行也用这个值；个别行仍可在「损耗%」列单独改">
+              <span class="bulk-loss-q">?</span>
+            </el-tooltip>
+          </span>
           <span class="hint">含损金额 = 人民币单价 × 报价耗用 × (1 + 损耗%)；{{ fxLabel }} = 人民币单价 / 汇率</span>
         </div>
         <div class="table-scroll">
@@ -239,7 +247,23 @@ const middlemen = ref<any[]>([]);
 const buyers = ref<any[]>([]);
 const samples = ref<any[]>([]);
 
-const emptyItem = () => ({ part: '', itemName: '', width: '', color: '', supplier: '', unit: '', quoteUsage: '', rmbPrice: '', lossRate: 3, remark: '' });
+// 统一损耗%（用户反馈 2026-08-07 daisy：「需要在上面加一个统一的，不需要每行都填」）。
+// 它是「新行默认值 + 一键刷全表」，**不取消**每行那列——拉链/织带跟面料的损耗本就可能不同，
+// 统一填完仍可单独改某行。DEFAULT_LOSS 是历来的默认值，别改，会动到既有报价的口径。
+const DEFAULT_LOSS = 3;
+const bulkLoss = ref<number | string>(DEFAULT_LOSS);
+const lossOrDefault = (v: unknown) => {
+  const n = Number(v);
+  return v === '' || v == null || !Number.isFinite(n) ? Number(bulkLoss.value) || 0 : n;
+};
+/** 改「统一损耗%」即刷到所有明细行（这正是她要的"不用每行都填"） */
+function applyBulkLoss() {
+  const v = Number(bulkLoss.value);
+  if (!Number.isFinite(v) || v < 0) return;
+  form.items.forEach((r: any) => { r.lossRate = v; });
+}
+
+const emptyItem = () => ({ part: '', itemName: '', width: '', color: '', supplier: '', unit: '', quoteUsage: '', rmbPrice: '', lossRate: Number(bulkLoss.value) || DEFAULT_LOSS, remark: '' });
 const emptyFee = (n = '') => ({ feeName: n, rmbPrice: '', quoteUsage: 1 });
 const DEFAULT_FEES = ['加工费', '线', '包装', '样衣费', '测试费', '运费'];
 const authStore = useAuthStore();
@@ -379,7 +403,8 @@ async function pasteItems() {
     const mapped = rows.map((r: any) => ({
       ...emptyItem(), ...r,
       quoteUsage: toNum(r.quoteUsage), rmbPrice: toNum(r.rmbPrice),
-      lossRate: r.lossRate === '' || r.lossRate == null ? 3 : (toNum(r.lossRate) === '' ? 3 : toNum(r.lossRate)),
+      // 粘贴的表里没填损耗% 时，用顶部「统一损耗%」兜底（此前硬编码 3，统一值就白设了）
+      lossRate: lossOrDefault(toNum(r.lossRate) === '' ? null : toNum(r.lossRate)),
     }));
     // 追加；若当前只有一行空白行则替换之
     if (form.items.length === 1 && !form.items[0].itemName && !form.items[0].part) form.items = [];
@@ -504,6 +529,11 @@ async function load() {
     })) : [emptyItem()],
     fees: d.fees?.length ? d.fees.map((f: any) => ({ feeName: f.fee_name, rmbPrice: f.rmb_price, quoteUsage: f.quote_usage })) : DEFAULT_FEES.map((n) => emptyFee(n)),
   });
+  // 打开既有报价时，「统一损耗%」显示各行的实际值；各行不一致就不假装统一（留空，改了才刷全表）
+  const rates: number[] = [...new Set<number>(
+    (d.items ?? []).map((i: any) => Number(i.loss_rate)).filter((n: number) => Number.isFinite(n)),
+  )];
+  bulkLoss.value = rates.length === 1 ? rates[0] : (rates.length === 0 ? DEFAULT_LOSS : '');
   loadContacts(form.middlemanId);
   await ensureSelectedOptions(); // 当前值若被 size:100 截断则补拉入选项,防回显裸 ID
   void loadSampleNo(); // 不 await:关联单据反查不该拖住主表单
@@ -647,6 +677,11 @@ onMounted(async () => { await loadRefs(); await load(); await draft.restorePromp
 </script>
 
 <style scoped>
+/* 统一损耗%：紧挨着工具条按钮，别抢明细表的视觉重量 */
+.bulk-loss { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--el-text-color-regular); margin-left: 4px; }
+.bulk-loss-q { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 50%;
+  border: 1px solid var(--el-text-color-placeholder); color: var(--el-text-color-placeholder); font-size: 11px; cursor: help; }
+
 /* 「占用中」标记与关联单据 chips 同排;DocLinks 自带底色/边框,这里只排版 */
 .doc-links-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .doc-links-bar :deep(.doc-links) { flex: 1; min-width: 0; }
