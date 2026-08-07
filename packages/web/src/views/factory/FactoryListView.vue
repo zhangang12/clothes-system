@@ -130,6 +130,7 @@ import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import { copyText } from '@/utils/clipboard';
 import { Search, Plus, Upload, Download, Delete, ArrowDown } from '@element-plus/icons-vue';
 import { factoryApi } from '@/api/factory';
 import { useAuthStore } from '@/stores/auth';
@@ -303,7 +304,10 @@ function onMore(cmd: string) {
   else if (cmd === 'copy') {
     const tsv = [ALL_COLS.map((c) => c.title).join('\t'),
       ...list.value.map((r: any) => ALL_COLS.map((c) => r[c.key] ?? '').join('\t'))].join('\n');
-    navigator.clipboard.writeText(tsv).then(() => ElMessage.success('已复制当前页到剪贴板(可直接粘进 Excel)'));
+    // 不能直接用 navigator.clipboard：HTTP 下它是 undefined，会当场抛异常且连提示都没有
+    copyText(tsv).then((ok) => (ok
+      ? ElMessage.success('已复制当前页到剪贴板(可直接粘进 Excel)')
+      : ElMessage.error('复制失败，请手动框选表格复制')));
   }
   else if (cmd === 'cols') colsVisible.value = true;
   else if (cmd === 'reset') reset();

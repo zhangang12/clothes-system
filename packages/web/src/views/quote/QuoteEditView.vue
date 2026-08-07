@@ -212,6 +212,7 @@ import { sampleApi } from '@/api/sample';
 import { companyApi } from '@/api/company';
 import GlobalDictSelect from '@/components/DictSelect.vue';
 import { pasteRowsFromClipboard } from '@/utils/pasteRows';
+import { CLIPBOARD_CANCELLED } from '@/utils/clipboard';
 import { useFormDraft } from '@/utils/formDraft';
 import { printQuote } from '@/utils/quotePrint';
 import { exportQuoteExcel } from '@/utils/quoteExcel';
@@ -411,6 +412,7 @@ async function pasteItems() {
     form.items.push(...mapped);
     ElMessage.success(`已粘贴 ${mapped.length} 行`);
   } catch (e: any) {
+    if (e === CLIPBOARD_CANCELLED) return; // 用户在兜底粘贴框里点了取消，不是错误
     ElMessage.error(e?.message ?? '粘贴失败——请先在 Excel 中复制表格区域');
   }
 }
