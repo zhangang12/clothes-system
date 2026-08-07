@@ -20,6 +20,7 @@
           <el-button v-if="editId" :icon="CopyDocument" @click="copy">复制</el-button>
         </template>
         <el-button v-if="editId" :icon="Printer" @click="print">打印/PDF</el-button>
+        <el-button v-if="editId" link size="small" @click="colsDialog?.open()">列设置</el-button>
         <el-button v-if="editId" :icon="Download" @click="exportExcel">导出Excel</el-button>
         <el-button v-if="editId && isAdmin" type="danger" plain :icon="Delete" @click="removeSample">删除</el-button>
       </div>
@@ -227,6 +228,7 @@
         <el-empty v-else description="暂无变更记录" :image-size="60" />
       </section-block>
     </el-form>
+    <PrintColsDialog ref="colsDialog" doc-key="sample" @confirm="(keys: string[]) => print(keys)" />
 
     <!-- 材料电子表格导入（用户反馈：工艺单 xlsx/csv 直接导入，不定格式靠列映射） -->
     <el-dialog v-model="sheetDialog" title="📥 材料电子表格导入" width="960px" @closed="resetSheetImport">
@@ -295,6 +297,8 @@ import { factoryApi } from '@/api/factory';
 import FileUpload from '@/components/FileUpload.vue';
 import type { DocLink } from '@/components/DocLinks.vue'; // 仅取类型:组件已全局注册
 import { printSample } from '@/utils/samplePrint';
+import { loadPrintCols } from '@/utils/printCols';
+import PrintColsDialog from '@/components/PrintColsDialog.vue';
 import { exportSampleExcel } from '@/utils/sampleExcel';
 import { parseSheetFile, guessMapping, rowsToMaterials, MATERIAL_FIELDS } from '@/utils/sheetImport';
 import { useFormDraft } from '@/utils/formDraft';
@@ -370,6 +374,7 @@ const shipRoundsTotal = computed(() => form.shipRounds.reduce((s: number, r: any
 const shipRoundsQty = computed(() => form.shipRounds.reduce((s: number, r: any) => s + (Number(r.qty) || 0), 0));
 
 const formRef = ref<FormInstance>();
+const colsDialog = ref<any>(null);
 const saving = ref(false);
 const selMaterials = ref<any[]>([]);
 const selectedRounds = ref<any[]>([]);
@@ -814,9 +819,10 @@ async function removeSample() {
   catch (e: any) { errToast(e?.response?.data?.msg ?? '删除失败'); }
 }
 // 打印/PDF(A4;材料明细脱敏,不含参考价格)
-async function print() {
+async function print(cols?: string[]) {
   if (!editId.value) return;
-  try { const res: any = await sampleApi.get(editId.value); printSample(res.data ?? res); }
+  // 不传就用本机保存的列偏好（用户反馈 2026-08-07：列太多打不成一行，想自己砍列/调顺序）
+  try { const res: any = await sampleApi.get(editId.value); printSample(res.data ?? res, cols ?? loadPrintCols('sample')); }
   catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '打印失败'); }
 }
 // 导出 Excel(基本信息+材料明细,.xls)
