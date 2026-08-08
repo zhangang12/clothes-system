@@ -24,6 +24,7 @@
         <el-menu-item v-if="canMenu('settlements')" index="/settlements"><el-icon><TrendCharts /></el-icon><template #title>结算清单</template></el-menu-item>
         <el-menu-item v-if="canMenu('export-invoices')" index="/export-invoices"><el-icon><Postcard /></el-icon><template #title>出口发票</template></el-menu-item>
         <el-menu-item v-if="canMenu('reports')" index="/reports"><el-icon><PieChart /></el-icon><template #title>报表统计</template></el-menu-item>
+        <el-menu-item v-if="canMenu('ai-tools')" index="/ai-tools"><el-icon><MagicStick /></el-icon><template #title>AI工具集</template></el-menu-item>
         <el-menu-item v-if="canMenu('feedbacks')" index="/feedbacks"><el-icon><ChatDotRound /></el-icon><template #title>反馈管理</template></el-menu-item>
         <el-menu-item v-if="canMenu('error-logs')" index="/error-logs"><el-icon><Warning /></el-icon><template #title>系统报错</template></el-menu-item>
         <el-menu-item v-if="canMenu('accounts')" index="/accounts"><el-icon><UserFilled /></el-icon><template #title>账号管理</template></el-menu-item>

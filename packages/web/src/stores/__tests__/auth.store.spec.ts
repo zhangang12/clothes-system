@@ -163,12 +163,13 @@ describe('auth store', () => {
       expect(store.canMenu('payments')).toBe(true);
     });
 
-    it('menuKeys 为 null 时按角色默认（船务仅 订单/合同/对账/工作台）', () => {
+    it('menuKeys 为 null 时按角色默认（船务仅 订单/合同/对账/AI工具集/工作台）', () => {
       const store = useAuthStore();
       store.setAuth({ access_token: 't', role: UserRole.SHIPPING, real_name: '船' });
       expect(store.canMenu('orders')).toBe(true);
       expect(store.canMenu('contracts')).toBe(true);
       expect(store.canMenu('reconciliations')).toBe(true);
+      expect(store.canMenu('ai-tools')).toBe(true); // 清关三件套本来就是船务的活
       expect(store.canMenu('payments')).toBe(false);
       expect(store.canMenu('samples')).toBe(false);
       expect(store.canMenu('accounts')).toBe(false);

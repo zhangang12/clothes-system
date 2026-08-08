@@ -54,6 +54,9 @@ const routes: RouteRecordRaw[] = [
       { path: 'export-invoices', name: 'ExportInvoices', component: () => import('../views/invoice/ExportInvoiceView.vue'), meta: { title: '出口发票', menu: 'export-invoices' } },
       { path: 'export-invoices/:id/view', name: 'ExportInvoiceView', component: () => import('../views/invoice/ExportInvoiceView.vue'), meta: { title: '发票详情', menu: 'export-invoices' } },
       { path: 'reports', name: 'Reports', component: () => import('../views/report/ReportView.vue'), meta: { title: '报表统计', menu: 'reports' } },
+      // AI 工具集：纯前端场景工具（不落库、不进单据链路），首页是卡片栅格，每个场景一条子路由
+      { path: 'ai-tools', name: 'AiTools', component: () => import('../views/aitools/AiToolsView.vue'), meta: { title: 'AI工具集', menu: 'ai-tools' } },
+      { path: 'ai-tools/customs-docs', name: 'AiCustomsDocs', component: () => import('../views/aitools/CustomsDocsView.vue'), meta: { title: '清关单据生成', menu: 'ai-tools' } },
       { path: 'company-profiles', name: 'CompanyProfiles', component: () => import('../views/company/CompanyProfileView.vue'), meta: { title: '本司主体', menu: 'company-profiles' } },
       { path: 'dicts', name: 'DictManage', component: () => import('../views/dict/DictManageView.vue'), meta: { title: '字典维护', menu: 'dicts' } },
       { path: 'feedbacks', name: 'Feedbacks', component: () => import('../views/feedback/FeedbackListView.vue'), meta: { admin: true, title: '反馈管理' } },

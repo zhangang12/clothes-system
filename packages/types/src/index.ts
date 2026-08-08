@@ -61,6 +61,7 @@ export const MENU_REGISTRY: MenuDef[] = [
   { key: 'settlements', label: '结算清单' },
   { key: 'export-invoices', label: '出口发票' },
   { key: 'reports', label: '报表统计' },
+  { key: 'ai-tools', label: 'AI工具集' },
   { key: 'feedbacks', label: '反馈管理', adminOnly: true },
   { key: 'error-logs', label: '系统报错', adminOnly: true },
   { key: 'accounts', label: '账号管理', adminOnly: true },
@@ -77,7 +78,8 @@ export const ROLE_DEFAULT_MENUS: Record<UserRole, string[]> = {
   [UserRole.FINANCE]: ['dashboard', 'reconciliations', 'payments', 'settlements', 'export-invoices', 'reports'],
   [UserRole.PATTERNMAKER]: ['dashboard', 'factories', 'customers', 'samples', 'orders', 'contracts', 'reconciliations', 'payments', 'settlements', 'export-invoices'],
   [UserRole.SAMPLE_MAKER]: ['dashboard', 'factories', 'customers', 'samples', 'orders', 'contracts', 'reconciliations', 'payments', 'settlements', 'export-invoices'],
-  [UserRole.SHIPPING]: ['dashboard', 'orders', 'contracts', 'reconciliations'],
+  // 船务默认带上 ai-tools：清关三件套（箱单/发票/装柜计划）本来就是船务的活
+  [UserRole.SHIPPING]: ['dashboard', 'orders', 'contracts', 'reconciliations', 'ai-tools'],
 };
 
 /** 解析某账号最终可见菜单：管理级角色（ADMIN/SUPERVISOR）恒全量；menuKeys 为 null/undefined 用角色默认；否则用配置 */
