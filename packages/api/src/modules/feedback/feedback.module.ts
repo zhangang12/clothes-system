@@ -3,11 +3,12 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Feedback } from './feedback.entity';
 import { FeedbackService } from './feedback.service';
 import { FeedbackController } from './feedback.controller';
+import { PortalFeedbackController } from './portal-feedback.controller';
 import { FileModule } from '../../common/services/file.module';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Feedback]), FileModule],
-  controllers: [FeedbackController],
+  controllers: [FeedbackController, PortalFeedbackController],
   providers: [FeedbackService],
   exports: [FeedbackService],
 })

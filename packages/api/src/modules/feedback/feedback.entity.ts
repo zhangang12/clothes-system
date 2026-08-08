@@ -2,6 +2,11 @@ import {
   Entity, PrimaryGeneratedColumn, Column, CreateDateColumn,
 } from 'typeorm';
 
+export enum FeedbackUserType {
+  INTERNAL = 'INTERNAL',   // 内部员工（PC 管理端）
+  SUPPLIER = 'SUPPLIER',   // 供应商（门户）
+}
+
 export enum FeedbackStatus {
   PENDING = 'PENDING', // 待处理
   HANDLED = 'HANDLED', // 已处理(导出时排除)
@@ -15,6 +20,11 @@ export class Feedback {
 
   @Column({ type: 'bigint', comment: '提交用户' })
   user_id: number;
+
+  // 【必须与 user_id 成对使用】内部用户和供应商账号是**两套各自独立的自增 ID**，
+  // 只按 user_id 过滤会串号：内部用户#5 会看到供应商账号#5 的反馈，反之亦然。
+  @Column({ type: 'enum', enum: FeedbackUserType, default: FeedbackUserType.INTERNAL })
+  user_type: FeedbackUserType;
 
   @Column({ length: 50, nullable: true, comment: '提交人(快照)' })
   username: string;

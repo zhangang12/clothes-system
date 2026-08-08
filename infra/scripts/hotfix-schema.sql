@@ -1080,7 +1080,8 @@ CREATE TABLE IF NOT EXISTS `company_profile` (
 
 CREATE TABLE IF NOT EXISTS `feedback` (
   `id`         BIGINT       NOT NULL AUTO_INCREMENT,
-  `user_id`    BIGINT       NOT NULL COMMENT '提交用户',
+  `user_id`    BIGINT       NOT NULL COMMENT '提交用户(内部用户ID 或 供应商账号ID,按 user_type 区分)',
+  `user_type`  ENUM('INTERNAL','SUPPLIER') NOT NULL DEFAULT 'INTERNAL' COMMENT '提交人来源;两套ID各自独立,不加此列会串号',
   `username`   VARCHAR(50)  DEFAULT NULL COMMENT '提交人(快照)',
   `content`    TEXT         NOT NULL COMMENT '问题描述',
   `images`     TEXT         DEFAULT NULL COMMENT '图片URL(JSON数组)',
@@ -2482,8 +2483,10 @@ CALL _i9_add_col('company_profile','updated_at',"DATETIME     NOT NULL DEFAULT C
 CALL _i9_sync_col('company_profile','updated_at',"DATETIME","DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
 
 -- feedback
-CALL _i9_add_col('feedback','user_id',"BIGINT       NOT NULL COMMENT '提交用户'");
-CALL _i9_sync_col('feedback','user_id',"BIGINT","BIGINT       NOT NULL COMMENT '提交用户'");
+CALL _i9_add_col('feedback','user_id',"BIGINT       NOT NULL COMMENT '提交用户(内部用户ID 或 供应商账号ID,按 user_type 区分)'");
+CALL _i9_sync_col('feedback','user_id',"BIGINT","BIGINT       NOT NULL COMMENT '提交用户(内部用户ID 或 供应商账号ID,按 user_type 区分)'");
+CALL _i9_add_col('feedback','user_type',"ENUM('INTERNAL','SUPPLIER') NOT NULL DEFAULT 'INTERNAL' COMMENT '提交人来源;两套ID各自独立,不加此列会串号'");
+CALL _i9_sync_col('feedback','user_type',"ENUM('INTERNAL','SUPPLIER')","ENUM('INTERNAL','SUPPLIER') NOT NULL DEFAULT 'INTERNAL' COMMENT '提交人来源;两套ID各自独立,不加此列会串号'");
 CALL _i9_add_col('feedback','username',"VARCHAR(50)  DEFAULT NULL COMMENT '提交人(快照)'");
 CALL _i9_sync_col('feedback','username',"VARCHAR(50)","VARCHAR(50)  DEFAULT NULL COMMENT '提交人(快照)'");
 CALL _i9_add_col('feedback','content',"TEXT         NOT NULL COMMENT '问题描述'");

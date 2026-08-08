@@ -17,7 +17,13 @@
       <el-table-column label="提交时间" width="160">
         <template #default="{ row }">{{ fmt(row.created_at) }}</template>
       </el-table-column>
-      <el-table-column label="提交人" width="110" prop="username" />
+      <el-table-column label="提交人" width="140">
+        <template #default="{ row }">
+          {{ row.username || row.user_id }}
+          <!-- 供应商门户提的反馈：来源不同、处理口径也不同，列表上要一眼看出来 -->
+          <el-tag v-if="row.user_type === 'SUPPLIER'" size="small" type="warning" effect="plain">供应商</el-tag>
+        </template>
+      </el-table-column>
       <el-table-column label="问题描述" min-width="280" show-overflow-tooltip prop="content" />
       <el-table-column label="图片" width="140">
         <template #default="{ row }">

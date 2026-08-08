@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as fs from 'fs';
 import * as path from 'path';
-import { Feedback, FeedbackStatus } from './feedback.entity';
+import { Feedback, FeedbackStatus, FeedbackUserType } from './feedback.entity';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
 import { FileService } from '../../common/services/file.service';
 
@@ -21,9 +21,11 @@ export class FeedbackService {
     private readonly fileService: FileService,
   ) {}
 
-  create(dto: CreateFeedbackDto, userId: number, username?: string) {
+  create(dto: CreateFeedbackDto, userId: number, username?: string,
+         userType: FeedbackUserType = FeedbackUserType.INTERNAL) {
     const fb = this.repo.create({
       user_id: userId,
+      user_type: userType,
       username: username ?? null,
       content: dto.content,
       images: dto.images?.length ? JSON.stringify(dto.images) : null,
@@ -56,28 +58,31 @@ export class FeedbackService {
   }
 
   /** 提交人:我的反馈(含管理员回复),按时间倒序 */
-  async mine(userId: number, query: { page?: number; size?: number }) {
+  async mine(userId: number, query: { page?: number; size?: number },
+             userType: FeedbackUserType = FeedbackUserType.INTERNAL) {
     const size = Math.min(Math.max(Number(query.size) || 20, 1), 100);
     const page = Math.max(Number(query.page) || 1, 1);
     const [items, total] = await this.repo.findAndCount({
-      where: { user_id: userId, deleted: 0 }, order: { id: 'DESC' }, skip: (page - 1) * size, take: size,
+      where: { user_id: userId, user_type: userType, deleted: 0 }, order: { id: 'DESC' }, skip: (page - 1) * size, take: size,
     });
     return { items, total, page, size };
   }
 
   /** 提交人:未读回复数(右下角红点角标) */
-  async unreadCount(userId: number) {
+  async unreadCount(userId: number, userType: FeedbackUserType = FeedbackUserType.INTERNAL) {
     const count = await this.repo
       .createQueryBuilder('f')
-      .where('f.user_id = :userId AND f.deleted = 0 AND f.reply IS NOT NULL AND f.reply <> :empty AND f.reply_read = 0',
-        { userId, empty: '' })
+      .where('f.user_id = :userId AND f.user_type = :userType AND f.deleted = 0'
+        + ' AND f.reply IS NOT NULL AND f.reply <> :empty AND f.reply_read = 0',
+        { userId, userType, empty: '' })
       .getCount();
     return { count };
   }
 
   /** 提交人:标记某条回复已读(消红点);仅本人可标记 */
-  async markRead(id: number, userId: number) {
-    await this.repo.update({ id, user_id: userId }, { reply_read: 1 });
+  async markRead(id: number, userId: number, userType: FeedbackUserType = FeedbackUserType.INTERNAL) {
+    // 条件里必须带 user_type，否则供应商能把同号内部用户的回复标成已读
+    await this.repo.update({ id, user_id: userId, user_type: userType }, { reply_read: 1 });
     return { ok: true };
   }
 
@@ -120,7 +125,7 @@ export class FeedbackService {
     };
     const trs = rows.map((r) => `<tr>
       <td class="mono">${esc(r.created_at)}</td>
-      <td>${esc(r.username ?? r.user_id)}</td>
+      <td>${esc(r.username ?? r.user_id)}${r.user_type === FeedbackUserType.SUPPLIER ? ' <b>[供应商]</b>' : ''}</td>
       <td>${esc(r.content)}</td>
       <td>${r.images ? imgs(r.images) : ''}</td>
       <td class="mono">${esc(r.page_url ?? '')}</td>
