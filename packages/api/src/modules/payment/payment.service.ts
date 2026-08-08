@@ -106,6 +106,9 @@ export class PaymentService {
       // 分批付款·超付拦截（设计稿 G4）：锁定对账单行,串行化同一对账单的并发付款申请,
       // 避免「先查后写」竞态下两笔并发申请双双通过导致累计超付。
       let contractRow: { account_period_days: number | null; due_date: string | null } | null = null;
+      // 从对账单带出的款号：结算单按款号归集所有相关付款要靠它（2026-08-08 King 反馈）。
+      // 此前只有手填的 dto.related_style_no，合同类付款一律为空，结算那边自然一条也带不出来。
+      let recStyleNo: string | null = null;
       if (dto.reconcile_id) {
         const rec = await manager.findOne(Reconciliation, {
           where: { id: dto.reconcile_id, deleted: 0 },
@@ -137,6 +140,7 @@ export class PaymentService {
             `累计付款申请 ${(requested + dto.amount).toFixed(2)} 超过对账应付 ${(+rec.total_amount).toFixed(2)}（已申请 ${requested.toFixed(2)}，本次 ${dto.amount}）`,
           );
         }
+        recStyleNo = rec.style_no ?? null;
         // 账期/到期日从合同带入（设计稿 06：账期取合同结算条款；到期日=出货日+账期，可人工改）
         if (rec.contract_id) {
           const rows = await manager.query(
@@ -161,7 +165,7 @@ export class PaymentService {
         created_by: createdBy,
         bank_name: dto.bank_name ?? null,
         bank_account: dto.bank_account ?? null,
-        related_style_no: dto.related_style_no ?? null,
+        related_style_no: dto.related_style_no ?? recStyleNo ?? null, // 手填优先，没填就用对账单的款号
       });
       return manager.save(pr);
     });

@@ -146,6 +146,39 @@
           </el-table>
         </template>
 
+        <!-- 发货对比（2026-08-08 King：「按数量发货的话，能否看到明细，就是按照订单分码分色，
+             前面一列订单数 后面一列发货数这样对比？」）。合同行本身在分色/分码生成时就是拆开的，
+             实发按批次物料行归到对应合同行；**没按行填报的批次归不到具体色码**，单列出来说明白，
+             不能悄悄算成 0，那会让人以为某个色码一件没发。 -->
+        <template v-if="shipCompare.rows.length">
+          <h4 class="sec">发货对比（按色/码）</h4>
+          <el-table :data="shipCompare.rows" size="small" border>
+            <el-table-column type="index" label="#" width="44" />
+            <el-table-column prop="item_name" label="品名" min-width="120" />
+            <el-table-column label="颜色" width="100"><template #default="{ row }">{{ row.color || '—' }}</template></el-table-column>
+            <el-table-column label="尺码" width="90"><template #default="{ row }">{{ row.size || '—' }}</template></el-table-column>
+            <el-table-column label="订单数" width="96" align="right"><template #default="{ row }">{{ nfmt(row.ordered) }}</template></el-table-column>
+            <el-table-column label="已发数" width="96" align="right"><template #default="{ row }">{{ nfmt(row.shipped) }}</template></el-table-column>
+            <el-table-column label="差额" width="96" align="right">
+              <template #default="{ row }">
+                <span :class="row.diff > 0 ? 'text-warn' : (row.diff < 0 ? 'text-danger' : '')">{{ nfmt(row.diff) }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="进度" min-width="120">
+              <template #default="{ row }">
+                <el-progress :percentage="row.pct" :status="row.pct >= 100 ? 'success' : undefined" :stroke-width="10" />
+              </template>
+            </el-table-column>
+          </el-table>
+          <div class="cmp-tip">
+            差额 = 订单数 − 已发数：正数为未发完，<span class="text-danger">负数为超发</span>。
+            <template v-if="shipCompare.unassigned > 0">
+              另有 <b>{{ nfmt(shipCompare.unassigned) }}</b> 来自 {{ shipCompare.unassignedBatches }} 个<b>未按物料行填报</b>的批次，
+              无法归到具体色/码——需要精确对比的话，请供应商在门户发货时打开「按物料行填写实发数」。
+            </template>
+          </div>
+        </template>
+
         <h4 class="sec">材料明细</h4>
         <el-table :data="detail.materials || []" size="small" border>
           <el-table-column type="index" label="#" width="44" />
@@ -258,6 +291,57 @@ onMounted(() => {
 // detail
 const detailVisible = ref(false);
 const detail = ref<any>(null);
+
+// 数字显示：去掉 decimal 带来的一串 0，整数就不显示小数
+const nfmt = (v: any) => {
+  const n = Number(v) || 0;
+  return Number.isInteger(n) ? String(n) : n.toFixed(2);
+};
+
+/**
+ * 发货对比（按色/码）——2026-08-08 King 反馈。
+ * 合同行在「分色/分码/颜色+尺码」生成时本就是拆开的（见 contract.service.expandMaterialLines），
+ * 所以对比的粒度直接用合同行；实发按批次的物料行 material_id 归集。
+ *
+ * 【为什么要单独统计「未按行填报」】门户发货时「按物料行填写实发数」是可选的，
+ * 只填总量的批次没有 items，其数量**无法归到某个色/码**。若把它们忽略，某个色码会显示成
+ * 「一件没发」——比不显示更误导。所以单列出来告诉用户差在哪、怎么让它变精确。
+ */
+const shipCompare = computed(() => {
+  const mats: any[] = detail.value?.materials ?? [];
+  const ships: any[] = detail.value?.shipments ?? [];
+  if (!mats.length) return { rows: [], unassigned: 0, unassignedBatches: 0 };
+
+  const shippedBy = new Map<number, number>();
+  let unassigned = 0;
+  let unassignedBatches = 0;
+  for (const b of ships) {
+    const items: any[] = b?.items ?? [];
+    const lined = items.reduce((sm, it) => sm + (Number(it?.qty) || 0), 0);
+    for (const it of items) {
+      const mid = it?.material_id != null ? +it.material_id : null;
+      if (mid == null) continue;
+      shippedBy.set(mid, (shippedBy.get(mid) ?? 0) + (Number(it.qty) || 0));
+    }
+    // 整批没按行填 / 行合计小于批次总量（部分填报）：差额都算作归不到色码的部分
+    const rest = (Number(b?.qty) || 0) - lined;
+    if (rest > 0.0001) { unassigned += rest; if (!items.length) unassignedBatches += 1; }
+  }
+
+  const rows = mats.map((m: any) => {
+    const ordered = Number(m.qty) || 0;
+    const shipped = shippedBy.get(+m.id) ?? 0;
+    const diff = +(ordered - shipped).toFixed(4);
+    return {
+      item_name: m.item_name, color: m.color, size: m.size,
+      ordered, shipped, diff,
+      pct: ordered > 0 ? Math.min(100, Math.round((shipped / ordered) * 100)) : 0,
+    };
+  });
+  // 只有一行且没有色/码时，这张表和上面的「发货核对」重复，不必再出
+  const meaningful = rows.length > 1 || rows.some((r) => r.color || r.size);
+  return { rows: meaningful ? rows : [], unassigned: +unassigned.toFixed(4), unassignedBatches };
+});
 const logs = ref<any[]>([]);
 async function viewDetail(row: any) {
   const [d, l]: any = await Promise.all([contractApi.get(row.id), contractApi.getLogs(row.id)]);
@@ -330,6 +414,9 @@ function factoryName(id: number): string {
 </script>
 
 <style scoped>
+.cmp-tip { font-size: 12px; color: var(--el-text-color-secondary); line-height: 1.7; margin-top: 6px; }
+.text-warn { color: var(--el-color-warning); }
+
 .list-page { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .toolbar-card, .table-card { background: var(--el-bg-color); border: 1px solid var(--el-border-color-light); border-radius: 6px; padding: 12px 14px; }
 .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }

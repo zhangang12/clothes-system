@@ -870,7 +870,7 @@ CREATE TABLE IF NOT EXISTS `payment_request` (
   `slip_url`          VARCHAR(500)   DEFAULT NULL COMMENT '水单文件路径',
   `bank_name`       VARCHAR(100)  DEFAULT NULL COMMENT '收款银行(无合同付款,P3#40)',
   `bank_account`    VARCHAR(50)   DEFAULT NULL COMMENT '收款账号',
-  `related_style_no` VARCHAR(60)  DEFAULT NULL COMMENT '相关款号(无合同付款归集)',
+  `related_style_no` VARCHAR(200) DEFAULT NULL COMMENT '相关款号(结算按款号归集;宽度须>=reconciliation.style_no的200,否则带入时截断)',
   `paid_by`           BIGINT         DEFAULT NULL COMMENT '标记付款操作人',
   `slip_uploaded_at`  DATETIME       DEFAULT NULL,
   `approval_status`   ENUM('DRAFT','PENDING','APPROVED','REJECTED','PAID') NOT NULL DEFAULT 'DRAFT',
@@ -2186,8 +2186,8 @@ CALL _i9_add_col('payment_request','bank_name',"VARCHAR(100)  DEFAULT NULL COMME
 CALL _i9_sync_col('payment_request','bank_name',"VARCHAR(100)","VARCHAR(100)  DEFAULT NULL COMMENT '收款银行(无合同付款,P3#40)'");
 CALL _i9_add_col('payment_request','bank_account',"VARCHAR(50)   DEFAULT NULL COMMENT '收款账号'");
 CALL _i9_sync_col('payment_request','bank_account',"VARCHAR(50)","VARCHAR(50)   DEFAULT NULL COMMENT '收款账号'");
-CALL _i9_add_col('payment_request','related_style_no',"VARCHAR(60)  DEFAULT NULL COMMENT '相关款号(无合同付款归集)'");
-CALL _i9_sync_col('payment_request','related_style_no',"VARCHAR(60)","VARCHAR(60)  DEFAULT NULL COMMENT '相关款号(无合同付款归集)'");
+CALL _i9_add_col('payment_request','related_style_no',"VARCHAR(200) DEFAULT NULL COMMENT '相关款号(结算按款号归集;宽度须>=reconciliation.style_no的200,否则带入时截断)'");
+CALL _i9_sync_col('payment_request','related_style_no',"VARCHAR(200)","VARCHAR(200) DEFAULT NULL COMMENT '相关款号(结算按款号归集;宽度须>=reconciliation.style_no的200,否则带入时截断)'");
 CALL _i9_add_col('payment_request','paid_by',"BIGINT         DEFAULT NULL COMMENT '标记付款操作人'");
 CALL _i9_sync_col('payment_request','paid_by',"BIGINT","BIGINT         DEFAULT NULL COMMENT '标记付款操作人'");
 CALL _i9_add_col('payment_request','slip_uploaded_at',"DATETIME       DEFAULT NULL");

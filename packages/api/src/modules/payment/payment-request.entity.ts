@@ -47,8 +47,10 @@ export class PaymentRequest {
   @Column({ length: 50, nullable: true })
   bank_account: string; // 收款账号
 
-  @Column({ length: 60, nullable: true })
-  related_style_no: string; // 相关款号（无合同付款归集用）
+  // 【宽度须 >= reconciliation.style_no 的 200】建付款申请时从对账单原样带过来，
+  // 窄了会 Data too long；截断则「按款号归集」直接失配，等于白做（2026-08-08 King 反馈）
+  @Column({ length: 200, nullable: true })
+  related_style_no: string; // 相关款号（结算按款号归集：合同付款也带，不再只服务无合同付款）
 
   @Column({ type: 'bigint', nullable: true })
   paid_by: number;

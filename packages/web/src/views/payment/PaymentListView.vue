@@ -691,6 +691,19 @@ onMounted(() => {
     filteredByReconcile.value = rid;
   }
   if (route.query.tab === 'request' || rid) activeTab.value = 'request';
+  // 从对账单「生成付款申请」跳过来：直接开弹窗并预填，省得再手工挑一遍对账单/工厂/金额
+  // （2026-08-08 King：「是否能自动按发票生成付款申请单，直接带入款号相应对账单」）
+  if (route.query.create === '1') {
+    const q = route.query as Record<string, string>;
+    Object.assign(prForm, {
+      type: q.type || 'CONTRACT',
+      reconcile_id: rid || undefined,
+      factory_id: Number(q.factory_id) || undefined,
+      amount: Number(q.amount) || undefined,
+      related_style_no: q.related_style_no || '',
+    });
+    createPRVisible.value = true;
+  }
   loadPrepay();
   loadPR();
 });

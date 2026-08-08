@@ -116,6 +116,73 @@ describe('PaymentService', () => {
     }));
   });
 
+  // ── 款号从对账单带出（2026-08-08 King：拉结算单时要能按款号带入所有相关付款）──────
+  // 此前 related_style_no 只有手填，合同类付款一律为空，结算那边按款号一条也捞不出来。
+  describe('createPaymentRequest 带出款号', () => {
+    const confirmedRec = (over: any = {}) => ({
+      id: 9, status: 'CONFIRMED', factory_id: 5, total_amount: 10000,
+      style_no: 'CHA271M500', contract_id: null, ...over,
+    });
+
+    it('从对账单带出 style_no 落到 related_style_no', async () => {
+      mockManager.findOne.mockResolvedValue(confirmedRec());
+      mockManager.find.mockResolvedValue([]);
+      await service.createPaymentRequest(
+        { type: ReconcileType.CONTRACT, factory_id: 5, amount: 100, reconcile_id: 9 } as any, 1,
+      );
+      expect(mockManager.create).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        related_style_no: 'CHA271M500',
+      }));
+    });
+
+    it('手填的优先级高于对账单带出（人工指定不该被覆盖）', async () => {
+      mockManager.findOne.mockResolvedValue(confirmedRec());
+      mockManager.find.mockResolvedValue([]);
+      await service.createPaymentRequest(
+        { type: ReconcileType.CONTRACT, factory_id: 5, amount: 100, reconcile_id: 9, related_style_no: '手填款号' } as any, 1,
+      );
+      expect(mockManager.create).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        related_style_no: '手填款号',
+      }));
+    });
+
+    it('对账单没有款号时给 null，不写空串', async () => {
+      mockManager.findOne.mockResolvedValue(confirmedRec({ style_no: null }));
+      mockManager.find.mockResolvedValue([]);
+      await service.createPaymentRequest(
+        { type: ReconcileType.CONTRACT, factory_id: 5, amount: 100, reconcile_id: 9 } as any, 1,
+      );
+      expect(mockManager.create).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        related_style_no: null,
+      }));
+    });
+
+    it('多款合并的长款号能整段带过来——related_style_no 已加宽到 200，与来源同宽', async () => {
+      // reconciliation.style_no 是 varchar(200)（工时对账多款合并会写「款A 等N款」，
+      // 合同也可能跨多款）。目标列若仍是 60 会 Data too long；截断则按款号归集直接失配。
+      const long = 'CHA271M500,CHA271M503,CHA271M502,CHA271M505,CHA271M507,CHA271M509,CHA271M511';
+      expect(long.length).toBeGreaterThan(60);
+      mockManager.findOne.mockResolvedValue(confirmedRec({ style_no: long }));
+      mockManager.find.mockResolvedValue([]);
+      await service.createPaymentRequest(
+        { type: ReconcileType.CONTRACT, factory_id: 5, amount: 100, reconcile_id: 9 } as any, 1,
+      );
+      const arg = mockManager.create.mock.calls.at(-1)![1] as any;
+      expect(arg.related_style_no).toBe(long);
+      expect(arg.related_style_no.length).toBeLessThanOrEqual(200);
+    });
+
+    it('无对账单的付款（预付/无合同）不受影响，仍只认手填', async () => {
+      mockPrepayRepo.find.mockResolvedValue([]);
+      await service.createPaymentRequest(
+        { type: ReconcileType.CONTRACT, factory_id: 5, amount: 100 } as any, 1,
+      );
+      expect(mockManager.create).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        related_style_no: null,
+      }));
+    });
+  });
+
   // UT-PAY-04: createPaymentRequest throws when prepay_offset > balance (overpayment guard)
   it('UT-PAY-04 createPaymentRequest throws BadRequest when prepay_offset exceeds balance', async () => {
     const dto = { type: ReconcileType.CONTRACT, factory_id: 5, amount: 3000, prepay_offset: 2000 };

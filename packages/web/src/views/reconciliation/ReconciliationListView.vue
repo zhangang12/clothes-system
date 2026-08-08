@@ -71,7 +71,8 @@
         </el-table-column>
         <el-table-column prop="has_invoice" label="含发票" width="75" align="center">
           <template #default="{ row }">
-            <el-tag size="small" :type="row.has_invoice ? 'success' : 'info'">
+            <el-link v-if="row.invoice_url" type="primary" @click.stop="openFile(row.invoice_url)">查看</el-link>
+            <el-tag v-else size="small" :type="row.has_invoice ? 'success' : 'info'">
               {{ row.has_invoice ? '是' : '否' }}
             </el-tag>
           </template>
@@ -88,6 +89,12 @@
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="viewDetail(row)">详情</el-button>
             <el-button link size="small" @click="exportRow(row)">导出Excel</el-button>
+            <!-- 已确认才给：后端 createPaymentRequest 也只放行 CONFIRMED，这里提前挡掉无谓的往返 -->
+            <el-button
+              v-if="row.status === 'CONFIRMED' && canCreatePayment"
+              link type="primary" size="small"
+              @click="goCreatePayment(row)"
+            >生成付款申请</el-button>
             <el-button
               v-if="row.status === 'DRAFT' && canEdit"
               link type="warning" size="small"
@@ -152,6 +159,12 @@
           <el-descriptions-item label="发票号">{{ detailData.invoice_no ?? '--' }}</el-descriptions-item>
           <el-descriptions-item label="发票金额">{{ detailData.invoice_amount != null ? (+detailData.invoice_amount).toFixed(2) : '--' }}</el-descriptions-item>
           <el-descriptions-item label="发票差额">{{ detailData.invoice_diff != null ? (+detailData.invoice_diff).toFixed(2) : '--' }}</el-descriptions-item>
+          <!-- 供应商上传的发票文件此前只入库、界面上没有任何入口（2026-08-08 King：「供应商上传发票后，在哪里看到呀？」）。
+               走 openFile 换短时签名链接：供应商上传一律落 private/，裸 URL 点开必 403 -->
+          <el-descriptions-item label="发票附件">
+            <el-link v-if="detailData.invoice_url" type="primary" :icon="Paperclip" @click="openFile(detailData.invoice_url)">查看 / 下载</el-link>
+            <span v-else>--</span>
+          </el-descriptions-item>
           <el-descriptions-item label="确认时间">{{ detailData.confirmed_at ?? '--' }}</el-descriptions-item>
           <el-descriptions-item v-if="detailData.review_remark" label="退回批注" :span="3">
             <span style="color:var(--el-color-danger)">{{ detailData.review_remark }}</span>
@@ -378,7 +391,8 @@ import { ref, reactive, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { fmtDateTime } from '@/utils/format';
-import { Search, Refresh, Plus, Coin } from '@element-plus/icons-vue';
+import { Search, Refresh, Plus, Coin, Paperclip } from '@element-plus/icons-vue';
+import { openFile } from '@/utils/secureFile';
 import type { FormInstance, FormRules } from 'element-plus';
 import { reconciliationApi } from '@/api/reconciliation';
 import { exportReconciliationExcel } from '@/utils/reconciliationExcel';
@@ -404,6 +418,28 @@ function goContract(contractId: number) {
 }
 const canEdit = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.FINANCE) || authStore.hasRole(UserRole.BUSINESS));
 const canReview = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.SUPERVISOR));
+// 与付款页「新建付款申请」同一套口径（后端 POST /payments/requests 放行 ADMIN/FINANCE/BUSINESS）
+const canCreatePayment = computed(() => authStore.hasRole(UserRole.ADMIN)
+  || authStore.hasRole(UserRole.FINANCE) || authStore.hasRole(UserRole.BUSINESS));
+
+/**
+ * 从对账单直接去建付款申请，把对账单/工厂/金额/款号都带过去（2026-08-08 King 反馈）。
+ * 金额优先取发票金额——他的原话是「按发票生成付款申请单」，有票就以票面为准；
+ * 没票才退回对账金额。真正的校验仍在后端（状态闸门、工厂一致性、累计超付拦截）。
+ */
+function goCreatePayment(row: any) {
+  router.push({
+    path: '/payments',
+    query: {
+      tab: 'request', create: '1',
+      reconcile_id: String(row.id),
+      type: row.type ?? 'CONTRACT',
+      ...(row.factory_id != null ? { factory_id: String(row.factory_id) } : {}),
+      amount: String(row.invoice_amount ?? row.total_amount ?? ''),
+      ...(row.style_no ? { related_style_no: String(row.style_no) } : {}),
+    },
+  });
+}
 const canBusiness = computed(() =>
   authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.FINANCE) || authStore.hasRole(UserRole.BUSINESS));
 
