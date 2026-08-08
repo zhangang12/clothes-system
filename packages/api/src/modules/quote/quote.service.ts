@@ -54,6 +54,7 @@ export class QuoteService {
       return this.itemRepo.create({
         quote_id: quoteId, sort_order: it.sortOrder ?? idx,
         part: it.part, item_name: it.itemName, width: it.width, color: it.color, supplier: it.supplier,
+        puller: it.puller ?? null, zipper_teeth: it.zipperTeeth ?? null, code_band: it.codeBand ?? null,
         unit: it.unit, quote_usage: it.quoteUsage, rmb_price: it.rmbPrice,
         usd_price: rate > 0 ? r4(rmb / rate) : null,
         loss_rate: loss, loss_amount: r4(calcLossAmount(rmb, usage, loss)), remark: it.remark,
@@ -327,6 +328,8 @@ export class QuoteService {
       const items = this.buildItems(id, materials.map((m) => ({
         part: m.part, itemName: m.item_name, width: m.width, color: m.colors,
         supplier: m.supplier_name, quoteUsage: +m.actual_usage || +m.qty || 0, lossRate: 3,
+        // 拉链三件套随材料一路带下去，别让版师在样衣上填的东西到报价就断了
+        puller: m.puller, zipperTeeth: m.zipper_teeth, codeBand: m.code_band,
       } as CreateQuoteItemDto)), rate);
       if (items.length) await manager.save(QuotationItem, items);
       const fees = await this.feeRepo.find({ where: { quote_id: id } });

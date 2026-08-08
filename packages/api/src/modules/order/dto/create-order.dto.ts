@@ -22,6 +22,10 @@ export class CreateOrderMaterialDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) width?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) color?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) composition?: string;
+  // 拉链三件套（报价带入，可在用料核算里改）
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) puller?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) zipper_teeth?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) code_band?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) supplier?: string;
   @ApiPropertyOptional({ description: 'NONE/BY_SIZE/BY_COLOR/BY_BOTH' }) @IsOptional() @IsString() @MaxLength(10) split_mode?: string;
   @ApiPropertyOptional({ description: '各码尺寸（仅 BY_SIZE）：{"S":"50","M":"52"}，空=各码同尺寸' }) @IsOptional() @IsObject() size_specs?: Record<string, string>;

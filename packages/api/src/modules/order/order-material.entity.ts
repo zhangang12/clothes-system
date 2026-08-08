@@ -26,6 +26,18 @@ export class OrderMaterial {
   @Column({ length: 100, nullable: true })
   composition: string; // 成份
 
+  // ── 拉链三件套：样衣→报价→订单→合同 整条链带下来（2026-08-08）──────────
+  // 供应商合同按真实版式要把「拉头/拉齿/码带」各自成列，塞进 spec 拼串是印不出来的。
+  @Column({ length: 50, nullable: true })
+  puller: string; // 拉头
+
+  @Column({ length: 50, nullable: true })
+  zipper_teeth: string; // 拉齿
+
+  @Column({ length: 50, nullable: true })
+  code_band: string; // 码带
+
+
   @Column({ length: 100, nullable: true })
   supplier: string; // 供应商
 

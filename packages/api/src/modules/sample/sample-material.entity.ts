@@ -39,6 +39,9 @@ export class SampleMaterial {
   @Column({ length: 30, nullable: true })
   puller: string; // 拉头
 
+  @Column({ length: 50, nullable: true })
+  zipper_teeth: string; // 拉齿（如「配色」）——补齐拉链三件套，随报价/订单带到合同
+
   @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
   qty: number; // 数量
 

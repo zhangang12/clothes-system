@@ -16,6 +16,7 @@ export class SampleMaterialDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) codeBand?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(30) zipperLength?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(30) puller?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) zipperTeeth?: string; // 拉齿
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() qty?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(30) gramWeight?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) size?: string;

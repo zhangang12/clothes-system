@@ -18,6 +18,11 @@ export class CreateContractMaterialDto {
   @MaxLength(200)
   spec?: string;
 
+  // 拉链三件套（订单带入的合同快照；供应商合同按真实版式各自成列，不能拼进 spec）
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) puller?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) zipper_teeth?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) code_band?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

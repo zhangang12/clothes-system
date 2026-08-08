@@ -421,6 +421,7 @@ CREATE TABLE IF NOT EXISTS `sample_material` (
   `composition`   VARCHAR(100)  DEFAULT NULL COMMENT '成份',
   `code_band`     VARCHAR(50)   DEFAULT NULL COMMENT '码带',
   `zipper_length` VARCHAR(30)   DEFAULT NULL COMMENT '拉链长度(版师)',
+  `zipper_teeth`  VARCHAR(50)   DEFAULT NULL COMMENT '拉齿(如"配色")',
   `puller`        VARCHAR(30)   DEFAULT NULL COMMENT '拉头',
   `qty`           DECIMAL(12,2) DEFAULT NULL COMMENT '数量',
   `gram_weight`   VARCHAR(30)   DEFAULT NULL COMMENT '克重(如350gsm)',
@@ -515,6 +516,9 @@ CREATE TABLE IF NOT EXISTS `quotation_item` (
   `part`           VARCHAR(200)   DEFAULT NULL COMMENT '部位',
   `item_name`      VARCHAR(100)   NOT NULL COMMENT '品名',
   `width`          VARCHAR(30)    DEFAULT NULL COMMENT '门幅',
+  `puller`         VARCHAR(50)    DEFAULT NULL COMMENT '拉头(样衣带入)',
+  `zipper_teeth`   VARCHAR(50)    DEFAULT NULL COMMENT '拉齿(样衣带入)',
+  `code_band`      VARCHAR(50)    DEFAULT NULL COMMENT '码带(样衣带入)',
   `color`          VARCHAR(200)    DEFAULT NULL COMMENT '颜色',
   `supplier`       VARCHAR(100)   DEFAULT NULL COMMENT '供应商(PDF隐藏)',
   `unit`           VARCHAR(20)    DEFAULT NULL COMMENT '计量单位',
@@ -602,6 +606,9 @@ CREATE TABLE IF NOT EXISTS `order_material` (
   `width`          VARCHAR(50)    DEFAULT NULL COMMENT '门幅/尺寸',
   `color`          VARCHAR(200)   DEFAULT NULL COMMENT '颜色',
   `composition`    VARCHAR(100)   DEFAULT NULL COMMENT '成份',
+  `puller`         VARCHAR(50)    DEFAULT NULL COMMENT '拉头(报价带入,可改)',
+  `zipper_teeth`   VARCHAR(50)    DEFAULT NULL COMMENT '拉齿(报价带入,可改)',
+  `code_band`      VARCHAR(50)    DEFAULT NULL COMMENT '码带(报价带入,可改)',
   `supplier`       VARCHAR(100)   DEFAULT NULL COMMENT '供应商',
   `split_mode`     VARCHAR(10)    NOT NULL DEFAULT 'NONE' COMMENT '拆分 NONE/BY_SIZE/BY_COLOR',
   `size_specs`     JSON           DEFAULT NULL COMMENT '各码尺寸(仅BY_SIZE) {"S":"50","M":"52"};空=各码同尺寸',
@@ -694,6 +701,9 @@ CREATE TABLE IF NOT EXISTS `contract_material` (
   `sort_order`   INT            NOT NULL DEFAULT 0,
   `item_name`    VARCHAR(100)   NOT NULL COMMENT '材料名称',
   `spec`         VARCHAR(200)   DEFAULT NULL COMMENT '规格型号',
+  `puller`       VARCHAR(50)    DEFAULT NULL COMMENT '拉头(订单带入,合同快照)',
+  `zipper_teeth` VARCHAR(50)    DEFAULT NULL COMMENT '拉齿(订单带入,合同快照)',
+  `code_band`    VARCHAR(50)    DEFAULT NULL COMMENT '码带(订单带入,合同快照)',
   `unit`         VARCHAR(20)    DEFAULT NULL COMMENT '单位',
   `unit_price`   DECIMAL(15,4)  NOT NULL COMMENT '单价',
   `qty`          DECIMAL(15,4)  NOT NULL COMMENT '数量',
@@ -1519,6 +1529,8 @@ CALL _i9_add_col('sample_material','code_band',"VARCHAR(50)   DEFAULT NULL COMME
 CALL _i9_sync_col('sample_material','code_band',"VARCHAR(50)","VARCHAR(50)   DEFAULT NULL COMMENT '码带'");
 CALL _i9_add_col('sample_material','zipper_length',"VARCHAR(30)   DEFAULT NULL COMMENT '拉链长度(版师)'");
 CALL _i9_sync_col('sample_material','zipper_length',"VARCHAR(30)","VARCHAR(30)   DEFAULT NULL COMMENT '拉链长度(版师)'");
+CALL _i9_add_col('sample_material','zipper_teeth',"VARCHAR(50)   DEFAULT NULL COMMENT '拉齿(如\"配色\")'");
+CALL _i9_sync_col('sample_material','zipper_teeth',"VARCHAR(50)","VARCHAR(50)   DEFAULT NULL COMMENT '拉齿(如\"配色\")'");
 CALL _i9_add_col('sample_material','puller',"VARCHAR(30)   DEFAULT NULL COMMENT '拉头'");
 CALL _i9_sync_col('sample_material','puller',"VARCHAR(30)","VARCHAR(30)   DEFAULT NULL COMMENT '拉头'");
 CALL _i9_add_col('sample_material','qty',"DECIMAL(12,2) DEFAULT NULL COMMENT '数量'");
@@ -1663,6 +1675,12 @@ CALL _i9_add_col('quotation_item','item_name',"VARCHAR(100)   NOT NULL COMMENT '
 CALL _i9_sync_col('quotation_item','item_name',"VARCHAR(100)","VARCHAR(100)   NOT NULL COMMENT '品名'");
 CALL _i9_add_col('quotation_item','width',"VARCHAR(30)    DEFAULT NULL COMMENT '门幅'");
 CALL _i9_sync_col('quotation_item','width',"VARCHAR(30)","VARCHAR(30)    DEFAULT NULL COMMENT '门幅'");
+CALL _i9_add_col('quotation_item','puller',"VARCHAR(50)    DEFAULT NULL COMMENT '拉头(样衣带入)'");
+CALL _i9_sync_col('quotation_item','puller',"VARCHAR(50)","VARCHAR(50)    DEFAULT NULL COMMENT '拉头(样衣带入)'");
+CALL _i9_add_col('quotation_item','zipper_teeth',"VARCHAR(50)    DEFAULT NULL COMMENT '拉齿(样衣带入)'");
+CALL _i9_sync_col('quotation_item','zipper_teeth',"VARCHAR(50)","VARCHAR(50)    DEFAULT NULL COMMENT '拉齿(样衣带入)'");
+CALL _i9_add_col('quotation_item','code_band',"VARCHAR(50)    DEFAULT NULL COMMENT '码带(样衣带入)'");
+CALL _i9_sync_col('quotation_item','code_band',"VARCHAR(50)","VARCHAR(50)    DEFAULT NULL COMMENT '码带(样衣带入)'");
 CALL _i9_add_col('quotation_item','color',"VARCHAR(200)    DEFAULT NULL COMMENT '颜色'");
 CALL _i9_sync_col('quotation_item','color',"VARCHAR(200)","VARCHAR(200)    DEFAULT NULL COMMENT '颜色'");
 CALL _i9_add_col('quotation_item','supplier',"VARCHAR(100)   DEFAULT NULL COMMENT '供应商(PDF隐藏)'");
@@ -1793,6 +1811,12 @@ CALL _i9_add_col('order_material','color',"VARCHAR(200)   DEFAULT NULL COMMENT '
 CALL _i9_sync_col('order_material','color',"VARCHAR(200)","VARCHAR(200)   DEFAULT NULL COMMENT '颜色'");
 CALL _i9_add_col('order_material','composition',"VARCHAR(100)   DEFAULT NULL COMMENT '成份'");
 CALL _i9_sync_col('order_material','composition',"VARCHAR(100)","VARCHAR(100)   DEFAULT NULL COMMENT '成份'");
+CALL _i9_add_col('order_material','puller',"VARCHAR(50)    DEFAULT NULL COMMENT '拉头(报价带入,可改)'");
+CALL _i9_sync_col('order_material','puller',"VARCHAR(50)","VARCHAR(50)    DEFAULT NULL COMMENT '拉头(报价带入,可改)'");
+CALL _i9_add_col('order_material','zipper_teeth',"VARCHAR(50)    DEFAULT NULL COMMENT '拉齿(报价带入,可改)'");
+CALL _i9_sync_col('order_material','zipper_teeth',"VARCHAR(50)","VARCHAR(50)    DEFAULT NULL COMMENT '拉齿(报价带入,可改)'");
+CALL _i9_add_col('order_material','code_band',"VARCHAR(50)    DEFAULT NULL COMMENT '码带(报价带入,可改)'");
+CALL _i9_sync_col('order_material','code_band',"VARCHAR(50)","VARCHAR(50)    DEFAULT NULL COMMENT '码带(报价带入,可改)'");
 CALL _i9_add_col('order_material','supplier',"VARCHAR(100)   DEFAULT NULL COMMENT '供应商'");
 CALL _i9_sync_col('order_material','supplier',"VARCHAR(100)","VARCHAR(100)   DEFAULT NULL COMMENT '供应商'");
 CALL _i9_add_col('order_material','split_mode',"VARCHAR(10)    NOT NULL DEFAULT 'NONE' COMMENT '拆分 NONE/BY_SIZE/BY_COLOR'");
@@ -1941,6 +1965,12 @@ CALL _i9_add_col('contract_material','item_name',"VARCHAR(100)   NOT NULL COMMEN
 CALL _i9_sync_col('contract_material','item_name',"VARCHAR(100)","VARCHAR(100)   NOT NULL COMMENT '材料名称'");
 CALL _i9_add_col('contract_material','spec',"VARCHAR(200)   DEFAULT NULL COMMENT '规格型号'");
 CALL _i9_sync_col('contract_material','spec',"VARCHAR(200)","VARCHAR(200)   DEFAULT NULL COMMENT '规格型号'");
+CALL _i9_add_col('contract_material','puller',"VARCHAR(50)    DEFAULT NULL COMMENT '拉头(订单带入,合同快照)'");
+CALL _i9_sync_col('contract_material','puller',"VARCHAR(50)","VARCHAR(50)    DEFAULT NULL COMMENT '拉头(订单带入,合同快照)'");
+CALL _i9_add_col('contract_material','zipper_teeth',"VARCHAR(50)    DEFAULT NULL COMMENT '拉齿(订单带入,合同快照)'");
+CALL _i9_sync_col('contract_material','zipper_teeth',"VARCHAR(50)","VARCHAR(50)    DEFAULT NULL COMMENT '拉齿(订单带入,合同快照)'");
+CALL _i9_add_col('contract_material','code_band',"VARCHAR(50)    DEFAULT NULL COMMENT '码带(订单带入,合同快照)'");
+CALL _i9_sync_col('contract_material','code_band',"VARCHAR(50)","VARCHAR(50)    DEFAULT NULL COMMENT '码带(订单带入,合同快照)'");
 CALL _i9_add_col('contract_material','unit',"VARCHAR(20)    DEFAULT NULL COMMENT '单位'");
 CALL _i9_sync_col('contract_material','unit',"VARCHAR(20)","VARCHAR(20)    DEFAULT NULL COMMENT '单位'");
 CALL _i9_add_col('contract_material','unit_price',"DECIMAL(15,4)  NOT NULL COMMENT '单价'");

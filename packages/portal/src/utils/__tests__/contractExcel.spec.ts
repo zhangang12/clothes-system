@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { exportPortalContractExcel } from '../contractExcel';
+import { exportPortalContractExcel, rmbUpper } from '../contractExcel';
 
 // 抓住写进 Blob 的内容（同 web 端 sampleExcel.spec 的套路）
 function captureExport(detail: any): string {
@@ -86,5 +86,83 @@ describe('门户合同导出 Excel（反馈 #52）', () => {
 
   it('金额带上单据币种（本项目材料合同一律 CNY）', () => {
     expect(captureExport(DETAIL)).toContain('CNY 27800.00');
+  });
+});
+
+// ── 真实合同版式（2026-08-08 用户给了实物合同截图）────────────────────────
+describe('第一条 货物 · 真实合同版式', () => {
+  const ZIP = {
+    ...DETAIL,
+    materials: [
+      { item_name: '3#尼龙反装开口', puller: '喷漆配色', zipper_teeth: '配色', code_band: '米白D121',
+        color: '米白', size: '', unit: '条', qty: 350, unit_price: 0.98, amount: 343,
+        style_no: 'WR09', delivery_date: '2026-02-28T00:00:00.000Z' },
+      { item_name: '3#尼龙反装开口', puller: '喷漆配色', zipper_teeth: '配色', code_band: '浅绿',
+        color: '浅绿', size: '', unit: '条', qty: 350, unit_price: 0.98, amount: 343,
+        style_no: 'WR09', delivery_date: '2026-02-28T00:00:00.000Z' },
+      { item_name: 'wild rock 拉牌', puller: '', zipper_teeth: '', code_band: '黑色',
+        color: '黑色', size: '', unit: '个', qty: 1100, unit_price: 0.26, amount: 286,
+        style_no: 'WR09', delivery_date: '2026-02-28T00:00:00.000Z' },
+    ],
+  };
+
+  it('表头是真实合同那几列（含专门带下来的 拉头/拉齿/码带）', () => {
+    const html = captureExport(ZIP);
+    expect(html).toContain('第一条　货物');
+    for (const h of ['品名', '拉头', '拉齿', '码带', '单位', '数量', '款号', '交货期限']) {
+      expect(html).toContain(h);
+    }
+  });
+
+  it('三列的值真的印出来了——这正是这次从样衣一路带到合同的原因', () => {
+    const html = captureExport(ZIP);
+    expect(html).toContain('喷漆配色');
+    expect(html).toContain('米白D121');
+  });
+
+  it('同名品名跨其配色行合并（rowspan=2），不是重复印两遍', () => {
+    const html = captureExport(ZIP);
+    expect(html).toMatch(/rowspan="2"[^>]*>3#尼龙反装开口/);
+    // 合并后整份文件里这个品名只出现一次
+    expect(html.split('3#尼龙反装开口').length - 1).toBe(1);
+  });
+
+  it('款号/交货期限整列只写一次（三行合并成一格）', () => {
+    const html = captureExport(ZIP);
+    expect(html).toMatch(/rowspan="3"[^>]*>WR09/);
+    expect(html.split('WR09').length - 1).toBe(1);
+  });
+
+  it('总价行给出金额与中文大写', () => {
+    const html = captureExport(ZIP);
+    expect(html).toContain('总价');
+    expect(html).toContain('972.00');            // 343+343+286
+    expect(html).toContain('玖佰柒拾贰元整');
+  });
+
+  it('没有材料时不印出一张空的货物表', () => {
+    expect(captureExport({ ...DETAIL, materials: [] })).not.toContain('第一条　货物');
+  });
+});
+
+describe('rmbUpper 中文大写金额', () => {
+  it('整数与角分', () => {
+    expect(rmbUpper(0)).toBe('零元整');
+    expect(rmbUpper(972)).toBe('玖佰柒拾贰元整');
+    expect(rmbUpper(3321)).toBe('叁仟叁佰贰拾壹元整');   // 用户截图里的总价
+    expect(rmbUpper(0.5)).toBe('零元伍角');
+    expect(rmbUpper(1.23)).toBe('壹元贰角叁分');
+  });
+
+  it('带零的位不会漏读（万/亿分组最容易出错的地方）', () => {
+    expect(rmbUpper(10001)).toBe('壹万零壹元整');
+    expect(rmbUpper(100000000)).toBe('壹亿元整');
+    expect(rmbUpper(20500)).toBe('贰万零伍佰元整');
+  });
+
+  it('非法输入给空串，不把 NaN 印到合同上', () => {
+    expect(rmbUpper(null)).toBe('');
+    expect(rmbUpper('abc')).toBe('');
+    expect(rmbUpper(-5)).toBe('');
   });
 });

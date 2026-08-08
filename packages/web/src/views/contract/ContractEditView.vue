@@ -140,6 +140,10 @@
         <template v-if="!isProcess">
           <el-table-column label="品名" min-width="130"><template #default="{ row }"><el-input v-model="row.item_name" size="small" :disabled="!editable" /></template></el-table-column>
           <el-table-column label="规格" min-width="110"><template #default="{ row }"><el-input v-model="row.spec" size="small" :disabled="!editable" /></template></el-table-column>
+          <!-- 拉链三件套：订单带入的快照，供应商合同按真实版式要各自成列（2026-08-08）-->
+          <el-table-column label="拉头" width="88"><template #default="{ row }"><el-input v-model="row.puller" size="small" :disabled="!editable" /></template></el-table-column>
+          <el-table-column label="拉齿" width="88"><template #default="{ row }"><el-input v-model="row.zipper_teeth" size="small" :disabled="!editable" /></template></el-table-column>
+          <el-table-column label="码带" width="88"><template #default="{ row }"><el-input v-model="row.code_band" size="small" :disabled="!editable" /></template></el-table-column>
           <el-table-column label="颜色" width="90"><template #default="{ row }"><el-input v-model="row.color" size="small" :disabled="!editable" /></template></el-table-column>
           <el-table-column label="尺码/码" width="84"><template #default="{ row }"><el-input v-model="row.size" size="small" placeholder="—" :disabled="!editable" /></template></el-table-column>
         </template>
@@ -255,6 +259,9 @@
               <el-table-column type="selection" width="40" />
               <el-table-column prop="item_name" label="品名" min-width="120" />
               <el-table-column prop="spec" label="规格" min-width="110"><template #default="{ row }">{{ row.spec || '—' }}</template></el-table-column>
+              <el-table-column prop="puller" label="拉头" width="80"><template #default="{ row }">{{ row.puller || '—' }}</template></el-table-column>
+              <el-table-column prop="zipper_teeth" label="拉齿" width="80"><template #default="{ row }">{{ row.zipper_teeth || '—' }}</template></el-table-column>
+              <el-table-column prop="code_band" label="码带" width="80"><template #default="{ row }">{{ row.code_band || '—' }}</template></el-table-column>
               <el-table-column prop="color" label="颜色" width="80"><template #default="{ row }">{{ row.color || '—' }}</template></el-table-column>
               <el-table-column prop="unit" label="单位" width="60" />
               <el-table-column label="单耗" width="80" align="right"><template #default="{ row }">{{ row.net_usage }}</template></el-table-column>

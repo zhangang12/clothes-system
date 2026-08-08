@@ -181,7 +181,7 @@
                   <template v-if="row.splitMode !== 'NONE'">
                     <div class="split-title">分{{ splitLabel(row.splitMode) }}出量（某{{ splitLabel(row.splitMode) }}该料量=该{{ splitLabel(row.splitMode) }}数量×单件耗用×(1+损耗率)；生成材料合同时按此分行）{{ hasSizeDim(row.splitMode) ? '；「尺寸」列按码填（拉链/织带等），不填与门幅一致' : '' }}</div>
                     <el-table :data="splitPreview(row)" size="small" border style="max-width:760px">
-                      <el-table-column prop="key" :label="splitDimLabel(row.splitMode)" width="120" />
+                      <el-table-column prop="label" :label="splitDimLabel(row.splitMode)" width="120" />
                       <el-table-column prop="groupQty" label="件数" width="90" align="right" />
                       <el-table-column prop="qty" label="该料采购量" width="120" align="right" />
                       <el-table-column prop="formula" label="公式" min-width="180" />
@@ -218,6 +218,10 @@
             <el-table-column label="门幅/尺寸" width="100"><template #default="{ row }"><el-input v-model="row.width" size="small" /></template></el-table-column>
             <el-table-column label="颜色" width="90"><template #default="{ row }"><el-input v-model="row.color" size="small" /></template></el-table-column>
             <el-table-column label="成份" width="100"><template #default="{ row }"><el-input v-model="row.composition" size="small" /></template></el-table-column>
+            <!-- 拉链三件套：报价带入、此处可改，生成合同时快照进合同行（供应商合同按真实版式各自成列）-->
+            <el-table-column label="拉头" width="88"><template #default="{ row }"><el-input v-model="row.puller" size="small" /></template></el-table-column>
+            <el-table-column label="拉齿" width="88"><template #default="{ row }"><el-input v-model="row.zipperTeeth" size="small" /></template></el-table-column>
+            <el-table-column label="码带" width="88"><template #default="{ row }"><el-input v-model="row.codeBand" size="small" /></template></el-table-column>
             <el-table-column label="供应商" min-width="130"><template #default="{ row }"><el-select v-model="row.supplier" size="small" filterable clearable placeholder="从工厂库选(面/辅料)" style="width:100%"><el-option v-for="f in supplierFactories" :key="f.id" :label="f.name" :value="f.name" /></el-select></template></el-table-column>
             <el-table-column label="单位" width="70"><template #default="{ row }"><el-input v-model="row.unit" size="small" /></template></el-table-column>
             <el-table-column label="单价(元)" width="90"><template #default="{ row }"><el-input v-model="row.unitPrice" size="small" type="number" /></template></el-table-column>
@@ -377,7 +381,7 @@ const INT_UNITS = ['个', '条', '只', '件', '粒', '套', '对', 'pcs', 'PCS'
 // 尺码数量搭配矩阵（设计稿 03：行=款·色·尺码，列=各 PO（PO号/目的地/收货人），格=数量）
 const emptyPo = () => ({ po_no: '', destination: '', consignee: '' });
 const emptyMatrixRow = (poCount: number) => ({ style_no: '', color: '', article: '', size: '', qtys: Array(poCount).fill('') });
-const emptyMat = () => ({ id: undefined as number | undefined, itemName: '', part: '', width: '', color: '', composition: '', supplier: '', unit: '', unitPrice: '', netUsage: '', lossRate: 3, splitMode: 'NONE', finalPurchase: '', roundUp: null, remark: '', sizeSpecs: {} as Record<string, string>, contracted: false, contracts: [] as Array<{ id: number; contract_no: string }> });
+const emptyMat = () => ({ id: undefined as number | undefined, itemName: '', part: '', width: '', color: '', composition: '', puller: '', zipperTeeth: '', codeBand: '', supplier: '', unit: '', unitPrice: '', netUsage: '', lossRate: 3, splitMode: 'NONE', finalPurchase: '', roundUp: null, remark: '', sizeSpecs: {} as Record<string, string>, contracted: false, contracts: [] as Array<{ id: number; contract_no: string }> });
 const form = reactive<any>({
   orderNo: '', quoteId: undefined, customerPo: '', styleNo: '', unitPrice: '', currency: 'USD',
   deliveryDate: '', commissionRate: 0, factoryId: undefined, middlemanName: '', buyerName: '',
@@ -421,22 +425,26 @@ const summaryRows = computed(() => {
 // 【必须与后端 contract.service.expandMaterialLines 的分组口径逐字一致】
 // 这里是预览、那里是真出合同行，两边算不一样就是"看到的和生成的对不上"。
 // BY_BOTH 的 key 用「颜色 空格 尺码」，颜色或尺码缺一个就跳过该行（拼出"黑色 "这种空维度没意义）。
-function splitKeyOf(mode: string, r: any): { key: string; color: string; size: string } {
+// key 只用于分组、label 只用于显示——两者必须分开：
+// 颜色里本来就带空格（导入的色号形如「10 White 增白色」），用拼串当 key 会有歧义；
+// 而 JSON 串又不能直接印给用户看。后端 expandMaterialLines 用同样的 JSON key 分组。
+function splitKeyOf(mode: string, r: any): { key: string; label: string; color: string; size: string } {
   const color = String(r?.color ?? '').trim();
   const size = String(r?.size ?? '').trim();
-  if (mode === 'BY_COLOR') return { key: color, color, size: '' };
-  if (mode === 'BY_SIZE') return { key: size, color: '', size };
-  return { key: color && size ? `${color} ${size}` : '', color, size };
+  if (mode === 'BY_COLOR') return { key: color, label: color, color, size: '' };
+  if (mode === 'BY_SIZE') return { key: size, label: size, color: '', size };
+  const both = color && size;
+  return { key: both ? JSON.stringify([color, size]) : '', label: both ? `${color} ${size}` : '', color, size };
 }
 function splitPreview(mat: any) {
   const groups = new Map<string, number>();
-  const dims = new Map<string, { color: string; size: string }>();
+  const dims = new Map<string, { color: string; size: string; label: string }>();
   for (const r of form.matrix.rows) {
-    const { key, color, size } = splitKeyOf(mat.splitMode, r);
+    const { key, label, color, size } = splitKeyOf(mat.splitMode, r);
     const qty = rowTotal(r);
     if (!key || !qty) continue;
     groups.set(key, (groups.get(key) ?? 0) + qty);
-    if (!dims.has(key)) dims.set(key, { color, size });
+    if (!dims.has(key)) dims.set(key, { color, size, label });
   }
   const per = Number(mat.netUsage) || 0;
   const loss = 1 + (Number(mat.lossRate) || 0) / 100;
@@ -444,7 +452,7 @@ function splitPreview(mat: any) {
   return [...groups].map(([key, groupQty]) => {
     let qty = groupQty * per * loss;
     qty = shouldRound ? Math.ceil(qty) : +qty.toFixed(2);
-    const d = dims.get(key) ?? { color: '', size: '' };
+    const d = dims.get(key) ?? { color: '', size: '', label: key };
     return { key, ...d, groupQty, qty, formula: `${groupQty} × ${per} × ${loss.toFixed(2)}${shouldRound ? ' ↑取整' : ''}` };
   });
 }
@@ -635,6 +643,7 @@ async function load() {
       // 合同侧 contract_material.order_material_id 才不会悬空、「已订」标记才不会丢
       id: m.id,
       itemName: m.item_name, part: m.part, width: m.width, color: m.color, composition: m.composition,
+      puller: m.puller ?? '', zipperTeeth: m.zipper_teeth ?? '', codeBand: m.code_band ?? '',
       supplier: m.supplier, unit: m.unit, unitPrice: m.unit_price ?? '', netUsage: m.net_usage, lossRate: m.loss_rate, splitMode: m.split_mode ?? 'NONE',
       finalPurchase: m.final_purchase ?? '', roundUp: m.round_up ?? null, remark: m.remark,
       sizeSpecs: m.size_specs ?? {},
@@ -673,6 +682,7 @@ function buildDto() {
     materials: form.materials.filter((m: any) => m.itemName).map((m: any, i: number) => ({
       id: m.id ?? undefined,
       item_name: m.itemName, part: m.part, width: m.width, color: m.color, composition: m.composition,
+      puller: m.puller || undefined, zipper_teeth: m.zipperTeeth || undefined, code_band: m.codeBand || undefined,
       supplier: m.supplier, unit: m.unit, unit_price: num(m.unitPrice), net_usage: num(m.netUsage), loss_rate: num(m.lossRate) ?? 3,
       split_mode: m.splitMode, final_purchase: num(m.finalPurchase),
       size_specs: m.splitMode === 'BY_SIZE' && m.sizeSpecs && Object.values(m.sizeSpecs).some((v: any) => String(v ?? '').trim()) ? m.sizeSpecs : undefined,

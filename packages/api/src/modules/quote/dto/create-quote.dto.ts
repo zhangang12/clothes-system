@@ -8,6 +8,10 @@ export class CreateQuoteItemDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) part?: string;
   @ApiProperty({ example: '32S 全棉府绸' }) @IsString() @MaxLength(100) itemName: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(30) width?: string;
+  // 拉链三件套：样衣→报价→订单→合同 整条链带下去（2026-08-08 供应商合同要按真实版式各自成列）
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) puller?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) zipperTeeth?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) codeBand?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) color?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) supplier?: string;
   @ApiPropertyOptional({ example: '米' }) @IsOptional() @IsString() @MaxLength(20) unit?: string;

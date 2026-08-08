@@ -43,6 +43,61 @@ const reconLabel = (s: string): string =>
 /** 一律强制文本格式：款号形如 I27.230.03929，不加这个会被 Excel 当数字截断成 27.23 */
 const TD = 'style="mso-number-format:\\@"';
 
+
+/** 人民币金额转中文大写（真实合同的「总价」行要印大写，凭证类文件的惯例） */
+export function rmbUpper(v: unknown): string {
+  // 空值一律空串：合同上「未填」和「零元」含义完全不同，不能把没填的印成零
+  if (v === null || v === undefined || v === '') return '';
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0) return '';
+  if (n === 0) return '零元整';
+  const D = '零壹贰叁肆伍陆柒捌玖';
+  const U = ['', '拾', '佰', '仟'];
+  const G = ['', '万', '亿', '万亿'];
+  const [intPart, decPart] = n.toFixed(2).split('.');
+
+  // 四位一组；组内按权位读，组间按「本组最高位是否为 0」补读一个「零」——
+  // 少了这一步 10001 会读成「壹万壹元」（漏掉中间的零），是大写金额最典型的错法
+  const groups: string[] = [];
+  for (let i = intPart.length; i > 0; i -= 4) groups.unshift(intPart.slice(Math.max(0, i - 4), i));
+  let out = '';
+  groups.forEach((g, gi) => {
+    let seg = '';
+    let zero = false;
+    for (let i = 0; i < g.length; i++) {
+      const d = +g[i];
+      if (d === 0) { zero = true; continue; }
+      if (zero && seg) seg += D[0];
+      zero = false;
+      seg += D[d] + U[g.length - 1 - i];
+    }
+    if (!seg) return;                       // 整组为零：跳过，由下一组的首位零补读
+    if (out && g[0] === '0') out += D[0];
+    out += seg + G[groups.length - 1 - gi];
+  });
+
+  out = (out || D[0]) + '元';
+  const jiao = +decPart[0];
+  const fen = +decPart[1];
+  if (!jiao && !fen) return out + '整';
+  out += jiao ? D[jiao] + '角' : D[0];
+  if (fen) out += D[fen] + '分';
+  return out;
+}
+
+/** 同值连续行合并：真实合同里「款号」「交货期限」整列只写一次，品名跨其配色行合并 */
+function spans(values: string[]): number[] {
+  const out = new Array(values.length).fill(0);
+  let i = 0;
+  while (i < values.length) {
+    let j = i;
+    while (j + 1 < values.length && values[j + 1] === values[i]) j++;
+    out[i] = j - i + 1;
+    i = j + 1;
+  }
+  return out;
+}
+
 function kvRows(pairs: Array<[string, string]>): string {
   return pairs
     .filter(([, v]) => v !== '')
@@ -91,15 +146,45 @@ export function exportPortalContractExcel(detail: any): void {
     ['盖章时间', d10(detail.stamped_at)],
   ]);
 
-  const materials = tableBlock(
-    '货物明细',
-    ['品名', '规格', '颜色', '尺码', '款号', '单位', `单价(${cur || '—'})`, '数量', `金额(${cur || '—'})`, '交货期限', '备注'],
-    (detail.materials ?? []).map((m: any) => [
-      String(m.item_name ?? ''), String(m.spec ?? ''), String(m.color ?? ''), String(m.size ?? ''),
-      String(m.style_no ?? ''), String(m.unit ?? ''), n4(m.unit_price), String(m.qty ?? ''),
-      n2(m.amount), d10(m.delivery_date), String(m.remark ?? ''),
-    ]),
-  );
+  // ── 第一条 货物：按真实采购合同版式（2026-08-08 用户给了实物合同截图）────────────
+  // 与通用「一行一格」表格的差别：①品名跨其配色行合并 ②款号/交货期限整列只写一次
+  // ③末尾「总价」行附中文大写。拉头/拉齿/码带是这次专门从样衣一路带下来的三列。
+  const mats: any[] = detail.materials ?? [];
+  const nameSpan = spans(mats.map((m) => String(m.item_name ?? '')));
+  const styleSpan = spans(mats.map((m) => String(m.style_no ?? '')));
+  const dueSpan = spans(mats.map((m) => d10(m.delivery_date)));
+  const goodsHead = ['品名', '拉头', '拉齿', '码带', '颜色', '尺码', '单位',
+    '数量', `单价(${cur || '元'})`, `小计(${cur || '元'})`, '款号', '交货期限'];
+  const goodsRows = mats.map((m: any, i: number) => {
+    const cells: string[] = [];
+    // rowspan 只写在区块首行，其余行整格省略（省略而不是留空格，才是合并效果）
+    if (nameSpan[i]) cells.push(`<td ${TD} rowspan="${nameSpan[i]}">${esc(m.item_name ?? '')}</td>`);
+    cells.push(
+      `<td ${TD}>${esc(m.puller ?? '')}</td>`,
+      `<td ${TD}>${esc(m.zipper_teeth ?? '')}</td>`,
+      `<td ${TD}>${esc(m.code_band ?? '')}</td>`,
+      `<td ${TD}>${esc(m.color ?? '')}</td>`,
+      `<td ${TD}>${esc(m.size ?? '')}</td>`,
+      `<td ${TD}>${esc(m.unit ?? '')}</td>`,
+      `<td ${TD}>${esc(m.qty ?? '')}</td>`,
+      `<td ${TD}>${esc(n4(m.unit_price))}</td>`,
+      `<td ${TD}>${esc(n2(m.amount))}</td>`,
+    );
+    if (styleSpan[i]) cells.push(`<td ${TD} rowspan="${styleSpan[i]}">${esc(m.style_no ?? '')}</td>`);
+    if (dueSpan[i]) cells.push(`<td ${TD} rowspan="${dueSpan[i]}">${esc(d10(m.delivery_date))}</td>`);
+    return `<tr>${cells.join('')}</tr>`;
+  }).join('');
+  // 只有真出现过金额才印总价：全表金额都没填时印「0.00」会被读成「货款为零」，
+  // 与「未填」是两回事（门户导出早有一条用例钉这个语义，别踩回去）
+  const hasAmount = mats.some((m) => Number.isFinite(Number(m.amount)) && m.amount !== null && m.amount !== '');
+  const total = mats.reduce((sm, m) => sm + (Number(m.amount) || 0), 0);
+  const totalRow = mats.length && hasAmount
+    ? `<tr><th ${TD} colspan="9">总价</th><td ${TD} colspan="3">${esc(n2(total))}　${esc(rmbUpper(total))}</td></tr>`
+    : '';
+  const materials = mats.length
+    ? `<tr><td colspan="${goodsHead.length}"><b>第一条　货物</b></td></tr>
+    <tr>${goodsHead.map((h) => `<th ${TD}>${esc(h)}</th>`).join('')}</tr>${goodsRows}${totalRow}`
+    : '';
 
   const shipments = tableBlock(
     '发货批次',

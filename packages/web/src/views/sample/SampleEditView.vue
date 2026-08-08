@@ -142,6 +142,8 @@
             <el-table-column label="码带" width="90"><template #default="{ row }"><el-input v-model="row.codeBand" size="small" :disabled="bizDisabled" /></template></el-table-column>
             <el-table-column label="拉链长度" width="100"><template #default="{ row }"><el-input v-model="row.zipperLength" size="small" :disabled="!pmEnabled && bizDisabled" /></template></el-table-column>
             <el-table-column label="拉头" width="80"><template #default="{ row }"><el-input v-model="row.puller" size="small" :disabled="bizDisabled" /></template></el-table-column>
+            <!-- 拉齿：补齐拉链三件套，随报价/订单带到供应商合同（2026-08-08） -->
+            <el-table-column label="拉齿" width="80"><template #default="{ row }"><el-input v-model="row.zipperTeeth" size="small" :disabled="bizDisabled" /></template></el-table-column>
             <el-table-column label="数量" width="90"><template #default="{ row }"><el-input v-model="row.qty" size="small" :disabled="bizDisabled" /></template></el-table-column>
             <el-table-column label="克重" width="90"><template #default="{ row }"><el-input v-model="row.gramWeight" size="small" :disabled="bizDisabled" placeholder="如350gsm" /></template></el-table-column>
             <el-table-column label="尺寸" width="110"><template #default="{ row }"><el-input v-model="row.size" size="small" :disabled="bizDisabled" /></template></el-table-column>
@@ -330,7 +332,7 @@ const versions = ref<any[]>([]);
 const pmUsers = ref<any[]>([]);       // 制版师用户(role=PATTERNMAKER)
 const pmLoadFailed = ref(false);      // 加载失败降级为文本输入
 
-const emptyMaterial = () => ({ itemName: '', arrangeDate: '', width: '', colors: '', colorGroups: [] as string[], part: '', composition: '', codeBand: '', zipperLength: '', puller: '', qty: '', gramWeight: '', size: '', refPrice: '', actualUsage: '', supplierId: undefined, supplierName: '', image: '', remark: '' });
+const emptyMaterial = () => ({ itemName: '', arrangeDate: '', width: '', colors: '', colorGroups: [] as string[], part: '', composition: '', codeBand: '', zipperLength: '', puller: '', zipperTeeth: '', qty: '', gramWeight: '', size: '', refPrice: '', actualUsage: '', supplierId: undefined, supplierName: '', image: '', remark: '' });
 // 色组分列（用户反馈：四五个色组要分开录/分开看）：colorGroups 数组是编辑源,colors 逗号串同步存储
 const splitColors = (s: any): string[] => String(s ?? '').split(/[，,]/).map((x) => x.trim()).filter(Boolean);
 function syncColors(row: any) { row.colors = row.colorGroups.map((s: string) => s.trim()).filter(Boolean).join('，'); }
@@ -632,6 +634,7 @@ async function load() {
     materials: d.materials?.length ? d.materials.map((m: any) => ({
       id: m.id, itemName: m.item_name, arrangeDate: m.arrange_date ?? '', image: m.image ?? '', width: m.width, colors: m.colors, colorGroups: splitColors(m.colors), part: m.part,
       composition: m.composition, codeBand: m.code_band, zipperLength: m.zipper_length, puller: m.puller,
+      zipperTeeth: m.zipper_teeth,
       qty: m.qty, gramWeight: m.gram_weight ?? '', size: m.size, refPrice: m.ref_price, actualUsage: m.actual_usage,
       supplierId: m.supplier_id ?? undefined, supplierName: m.supplier_name, remark: m.remark,
     })) : [emptyMaterial()],

@@ -65,6 +65,7 @@ export class OrderService {
         ...(m.id ? { id: m.id } : {}),
         order_id: orderId, quote_item_id: m.quote_item_id, item_name: m.item_name,
         part: m.part, width: m.width, color: m.color, composition: m.composition, supplier: m.supplier,
+        puller: m.puller ?? null, zipper_teeth: m.zipper_teeth ?? null, code_band: m.code_band ?? null,
         split_mode: m.split_mode ?? 'NONE', unit: m.unit, net_usage: m.net_usage, loss_rate: lossRate,
         size_specs: m.size_specs ?? null, // 各码尺寸（仅 BY_SIZE，拉链/织带按码不同尺寸）
         loss_usage: perUnit, qty: qtyTotal, total_purchase: total, final_purchase: finalPurchase,
@@ -287,6 +288,7 @@ export class OrderService {
       await manager.delete(OrderMaterial, { order_id: id });
       const materials = this.buildMaterials(id, order.qty_total, items.map((it) => ({
         item_name: it.item_name, part: it.part, width: it.width, color: it.color, supplier: it.supplier,
+        puller: it.puller, zipper_teeth: it.zipper_teeth, code_band: it.code_band,
         unit: it.unit, net_usage: +it.quote_usage || 0, loss_rate: +it.loss_rate || 3, unit_price: +it.rmb_price || undefined,
         quote_item_id: it.id,
       } as CreateOrderMaterialDto)));
