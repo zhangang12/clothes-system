@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { guessMapping, rowsToMaterials, parseSheetFile, MATERIAL_FIELDS } from '../sheetImport';
+import { guessMapping, rowsToMaterials, parseSheetFile, MATERIAL_FIELDS, QUOTE_ITEM_FIELDS } from '../sheetImport';
 
 // 以用户截图的真实工艺单结构为基准：面里料部分|单耗|位置|颜色1|备注（带分区行/空行）
 const CRAFT_SHEET = [
@@ -185,5 +185,64 @@ describe('rowsToMaterials extraColorCols（多组颜色按源列分列，用户�
       expect(mapping.codeBand).toBe(3);
       expect(mapping.puller).toBe(4);
     });
+  });
+});
+
+// ── 报价明细导入（2026-08-10 Grace：老系统里已有报价，想直接导 Excel）──────────
+// 与样衣材料共用同一套「靠表头关键词自适应」的机制，只是字段表不同——
+// 她手上的老表列序五花八门，要求对齐固定模板等于没解决问题。
+describe('QUOTE_ITEM_FIELDS 报价明细字段表', () => {
+  it('认得报价单常见表头', () => {
+    const { mapping, hasHeader } = guessMapping(
+      [['品名', '部位', '门幅', '颜色', '供应商', '单位', '报价耗用', '人民币单价', '损耗%', '备注']],
+      QUOTE_ITEM_FIELDS,
+    );
+    expect(hasHeader).toBe(true);
+    expect(mapping.itemName).toBe(0);
+    expect(mapping.part).toBe(1);
+    expect(mapping.color).toBe(3);
+    expect(mapping.supplier).toBe(4);
+    expect(mapping.quoteUsage).toBe(6);
+    expect(mapping.rmbPrice).toBe(7);
+    expect(mapping.lossRate).toBe(8);
+  });
+
+  it('表头不在首行也能认（老系统导出常带大标题行）', () => {
+    const { hasHeader, headerRow } = guessMapping(
+      [['某某公司报价单'], ['品名', '单价', '数量'], ['面料A', '10', '2']],
+      QUOTE_ITEM_FIELDS,
+    );
+    expect(hasHeader).toBe(true);
+    expect(headerRow).toBe(1);
+  });
+
+  it('字段关键词不互相抢列', () => {
+    for (const f of QUOTE_ITEM_FIELDS) {
+      const header = QUOTE_ITEM_FIELDS.map((x) => x.label);
+      const { mapping } = guessMapping([header], QUOTE_ITEM_FIELDS);
+      expect(mapping[f.key]).toBe(header.indexOf(f.label));
+    }
+  });
+
+  it('「损耗%」不会被「单价」或「耗用」抢走', () => {
+    const { mapping } = guessMapping([['品名', '报价耗用', '人民币单价', '损耗%']], QUOTE_ITEM_FIELDS);
+    expect(mapping.quoteUsage).toBe(1);
+    expect(mapping.rmbPrice).toBe(2);
+    expect(mapping.lossRate).toBe(3);
+  });
+
+  it('行映射按报价字段出对象，品名为空的行滤掉', () => {
+    const rows = [['面料A', '大身', '10', '2'], ['', '', '', ''], ['里布B', '里襟', '5', '1']];
+    const out = rowsToMaterials(rows, { itemName: 0, part: 1, rmbPrice: 2, quoteUsage: 3 }, [], QUOTE_ITEM_FIELDS);
+    expect(out).toHaveLength(2);
+    expect(out[0]).toMatchObject({ itemName: '面料A', part: '大身', rmbPrice: '10', quoteUsage: '2' });
+    // 报价没有色组概念，不该混进 colorGroups
+    expect(out[0].colorGroups).toBeUndefined();
+  });
+
+  it('不影响样衣材料的既有行为（默认字段表仍是 MATERIAL_FIELDS）', () => {
+    const out = rowsToMaterials([['春亚纺', '黑色']], { itemName: 0, colors: 1 });
+    expect(out[0].colorGroups).toEqual(['黑色']); // 样衣路径照旧产出色组
+    expect(MATERIAL_FIELDS.some((f) => f.key === 'gramWeight')).toBe(true);
   });
 });

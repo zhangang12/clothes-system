@@ -38,6 +38,39 @@
       </template>
     </el-dialog>
 
+    <!-- Excel 导入预览：先让用户核对认出来的列与行数，再决定追加还是替换 -->
+    <el-dialog v-model="xlsxDialog" title="Excel 导入报价明细" width="640px" destroy-on-close>
+      <div v-if="xlsxErr" class="hint" style="color:var(--el-color-danger)">{{ xlsxErr }}</div>
+      <template v-else>
+        <p class="hint">
+          文件：<b>{{ xlsxName }}</b>　识别到 <b>{{ xlsxRows.length }}</b> 行、
+          <b>{{ Object.keys(xlsxMap).length }}</b> 列（品名为空的行已自动跳过）
+        </p>
+        <p class="hint">
+          列对应：
+          <el-tag v-for="f in QUOTE_ITEM_FIELDS.filter((x) => xlsxMap[x.key] != null)" :key="f.key" size="small" style="margin:2px">
+            {{ f.label }} ← 第{{ (xlsxMap[f.key] ?? 0) + 1 }}列
+          </el-tag>
+          <span v-if="!Object.keys(xlsxMap).length" style="color:var(--el-color-danger)">一列都没认出来——请确认表头行里有「品名」等字样</span>
+        </p>
+        <el-table :data="xlsxRows.slice(0, 5)" size="small" border max-height="240">
+          <el-table-column prop="itemName" label="品名" min-width="130" />
+          <el-table-column prop="part" label="部位" width="80" />
+          <el-table-column prop="color" label="颜色" width="90" />
+          <el-table-column prop="unit" label="单位" width="70" />
+          <el-table-column prop="quoteUsage" label="报价耗用" width="90" />
+          <el-table-column prop="rmbPrice" label="人民币单价" width="100" />
+          <el-table-column prop="lossRate" label="损耗%" width="70" />
+        </el-table>
+        <p class="hint">仅预览前 5 行；未识别的列可导入后在表里补。</p>
+      </template>
+      <template #footer>
+        <el-button @click="xlsxDialog = false">取消</el-button>
+        <el-button :disabled="!xlsxRows.length" @click="applyXlsx(true)">替换现有明细</el-button>
+        <el-button type="primary" :disabled="!xlsxRows.length" @click="applyXlsx(false)">追加到明细</el-button>
+      </template>
+    </el-dialog>
+
     <RuleHint>可从样衣一键导入材料明细(品名在前);报价合计<b>超审批阈值需主管审批后才能发出</b>;发出后可被订单引用,<b>已成单不可再改</b>;转销售合同会自动建订单(数量留空待补矩阵)。</RuleHint>
     <el-form ref="formRef" :model="form" :rules="rules" label-width="104px" :disabled="readonly" class="form-body">
       <!-- 主要信息 -->
@@ -116,6 +149,10 @@
             content="在 Excel 中按列序复制后粘贴追加：部位｜品名｜门幅｜颜色｜供应商｜单位｜报价耗用｜人民币单价｜损耗%｜备注">
             <el-button size="small" @click="pasteItems">📋 Excel 粘贴</el-button>
           </el-tooltip>
+          <!-- 直接导 Excel 文件（2026-08-10 Grace：老系统里已有报价，想直接导进来，
+               不必先去建样衣再从样衣导入）。列名靠关键词自适应，不要求固定模板 -->
+          <el-button size="small" type="primary" plain @click="xlsxInput?.click()">📥 Excel 导入</el-button>
+          <input ref="xlsxInput" type="file" accept=".xlsx,.csv,.txt" style="display:none" @change="onXlsxPick" />
           <span class="bulk-loss">
             统一损耗%
             <el-input-number v-model="bulkLoss" size="small" :min="0" :max="100" :step="0.5" :controls="false"
@@ -212,6 +249,7 @@ import { sampleApi } from '@/api/sample';
 import { companyApi } from '@/api/company';
 import GlobalDictSelect from '@/components/DictSelect.vue';
 import { pasteRowsFromClipboard } from '@/utils/pasteRows';
+import { parseSheetFile, guessMapping, rowsToMaterials, QUOTE_ITEM_FIELDS } from '@/utils/sheetImport';
 import { CLIPBOARD_CANCELLED } from '@/utils/clipboard';
 import { useFormDraft } from '@/utils/formDraft';
 import { printQuote } from '@/utils/quotePrint';
@@ -388,6 +426,61 @@ async function onSample(id?: number) {
 function onCurrencyItem(d: any) {
   const rateVal = Number(d?.value);
   if (Number.isFinite(rateVal) && rateVal > 0) form.exchangeRate = rateVal;
+}
+
+// ── Excel 文件导入（2026-08-10 Grace：老系统里已有报价，想直接导进来，
+// 不必先建样衣再从样衣导入）。与「Excel 粘贴」的区别：粘贴按固定列序，导入靠表头关键词自适应，
+// 因为她手上的老表列序五花八门，要求对齐模板等于没解决问题。
+const xlsxInput = ref<HTMLInputElement | null>(null);
+const xlsxDialog = ref(false);
+const xlsxName = ref('');
+const xlsxErr = ref('');
+const xlsxRows = ref<any[]>([]);
+const xlsxMap = ref<Record<string, number>>({});
+
+async function onXlsxPick(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = ''; // 允许连选同一个文件（否则第二次不触发 change）
+  if (!file) return;
+  xlsxName.value = file.name;
+  xlsxErr.value = '';
+  xlsxRows.value = [];
+  xlsxMap.value = {};
+  xlsxDialog.value = true;
+  try {
+    const rows = await parseSheetFile(file, QUOTE_ITEM_FIELDS);
+    const { mapping, hasHeader, headerRow } = guessMapping(rows, QUOTE_ITEM_FIELDS);
+    if (!hasHeader) { xlsxErr.value = '没找到表头行——请确认第一行（或前 5 行内）有「品名」「单价」这类列名'; return; }
+    xlsxMap.value = mapping;
+    // 表头行本身不能当数据，从它下一行开始取
+    xlsxRows.value = rowsToMaterials(rows.slice(headerRow + 1), mapping, [], QUOTE_ITEM_FIELDS);
+    if (!xlsxRows.value.length) xlsxErr.value = '没解析出任何有效行（品名为空的行会被跳过）';
+  } catch (err: any) {
+    xlsxErr.value = err?.message ?? '文件解析失败';
+  }
+}
+
+function applyXlsx(replace: boolean) {
+  const toNum = (v: any) => {
+    if (v === '' || v == null) return '';
+    const n = Number(String(v).replace(/,/g, ''));
+    return Number.isFinite(n) ? n : '';
+  };
+  const mapped = xlsxRows.value.map((r: any) => ({
+    ...emptyItem(), ...r,
+    quoteUsage: toNum(r.quoteUsage), rmbPrice: toNum(r.rmbPrice),
+    // 表里没填损耗% 时用顶部「统一损耗%」兜底，与粘贴路径同口径
+    lossRate: lossOrDefault(toNum(r.lossRate) === '' ? null : toNum(r.lossRate)),
+  }));
+  if (replace) form.items = mapped;
+  else {
+    // 只有一行空白行时替换它，否则真追加（与粘贴路径同行为）
+    if (form.items.length === 1 && !form.items[0].itemName && !form.items[0].part) form.items = [];
+    form.items.push(...mapped);
+  }
+  xlsxDialog.value = false;
+  ElMessage.success(`已${replace ? '替换为' : '导入'} ${mapped.length} 行明细`);
 }
 
 // Excel 粘贴追加明细（列序：部位/品名/门幅/颜色/供应商/单位/报价耗用/人民币单价/损耗%/备注）

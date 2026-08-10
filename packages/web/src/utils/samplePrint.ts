@@ -9,6 +9,7 @@
 // 否则就成了所见非所得，调半天打出来还是另一个样。区别只有 autoPrint 一个开关。
 
 import type { PrintLayout } from './printLayout';
+import { splitColorGroups, maxColorGroups, colorGroupLabel } from './colorGroups';
 
 const esc = (v: unknown): string =>
   String(v ?? '')
@@ -93,6 +94,23 @@ function pick<T extends { key: string }>(all: T[], keys: string[] | undefined, f
   return got.length ? got : (fallback.map((k) => map.get(k)).filter(Boolean) as T[]);
 }
 
+/** 把「颜色」一列摊成「颜色一/颜色二/…」——工厂要横着对每个色组下的辅料颜色（2026-08-10 Grace）。
+ *  只有一个色组时保持原样，别让单色样衣平白多出一堆空列。 */
+export function expandColorCols(cols: MatCol[], materials: any[]): MatCol[] {
+  const n = maxColorGroups(materials);
+  if (n <= 1) return cols;
+  const at = cols.findIndex((c) => c.key === 'colors');
+  if (at < 0) return cols; // 用户在操作台里关掉了颜色列，就不要自作主张加回来
+  const made: MatCol[] = Array.from({ length: n }, (_, i) => ({
+    key: `colors_${i}`,
+    label: colorGroupLabel(i),
+    width: 84,
+    align: 'c' as const,
+    get: (m: any) => dash(splitColorGroups(m.colors)[i] ?? ''),
+  }));
+  return [...cols.slice(0, at), ...made, ...cols.slice(at + 1)];
+}
+
 export const resolveMatCols = (keys?: string[] | null): MatCol[] =>
   pick(SAMPLE_MAT_COLS, keys ?? undefined, DEFAULT_SAMPLE_LAYOUT.matCols);
 export const resolveMetaFields = (keys?: string[] | null): MetaField[] =>
@@ -123,7 +141,7 @@ export function buildSampleHtml(detail: any, layout?: Partial<PrintLayout>, auto
 
   const materialsBlock = () => {
     const mats: any[] = detail.materials ?? [];
-    const cols = resolveMatCols(L.matCols);
+    const cols = expandColorCols(resolveMatCols(L.matCols), mats);
     const head = `<tr>${cols.map((c) =>
       `<th${c.width ? ` style="width:${c.width}px"` : ''}>${esc(c.label)}</th>`).join('')}</tr>`;
     const body = mats.length

@@ -4,6 +4,7 @@ import {
   SAMPLE_MAT_COLS, SAMPLE_META_FIELDS, SAMPLE_BLOCKS, DEFAULT_SAMPLE_LAYOUT,
 } from '../samplePrint';
 import { loadLayout, saveLayout, resetLayout, type PrintLayout } from '../printLayout';
+import { splitColorGroups, maxColorGroups, colorGroupLabel } from '../colorGroups';
 
 const detail = {
   sample_no: 'S-1', style_no: 'I27.230.03929', garment_remark: '注意做工',
@@ -192,5 +193,77 @@ describe('排版方案存取', () => {
     for (const k of D.matCols) expect(cols.has(k)).toBe(true);
     const metas = new Set(SAMPLE_META_FIELDS.map((f) => f.key));
     for (const k of D.metaFields) expect(metas.has(k)).toBe(true);
+  });
+});
+
+// ── 颜色按色组分列（2026-08-10 Grace，附了工厂真实工艺单）───────────────────
+// 工厂要横着看「每个色组下这条辅料用什么颜色」；此前所有色组挤在一格里（"粉色，砖红"），
+// 得自己数第几个逗号对应第几个色，很容易对错行。
+describe('材料明细 · 颜色按色组分列', () => {
+  const multi = {
+    sample_no: 'S-1',
+    materials: [
+      { item_name: '主面料', colors: '藏青，红色，绿色' },
+      { item_name: '5#尼龙拉链', colors: '蓝色，藏青，藏青' },
+      { item_name: '洗标', colors: '' },                    // 没填颜色的行也要能对齐
+    ],
+  };
+
+  it('多色组时摊成 颜色一/颜色二/颜色三', () => {
+    const head = headOf(buildSampleHtml(multi, L()));
+    expect(head).toContain('颜色一');
+    expect(head).toContain('颜色二');
+    expect(head).toContain('颜色三');
+    expect(head).not.toContain('颜色四');
+    expect(head.filter((h) => h === '颜色')).toHaveLength(0); // 原来那个合并列没了
+  });
+
+  it('每行的值落到各自的色组列，不再挤成一格', () => {
+    const html = buildSampleHtml(multi, L());
+    const body = html.split('<tbody>')[1].split('</tbody>')[0];
+    const rows = body.split('</tr>');
+    expect(rows[0]).toContain('藏青');
+    expect(rows[0]).toContain('红色');
+    expect(rows[0]).toContain('绿色');
+    expect(rows[0]).not.toContain('藏青，红色'); // 不能还是逗号串
+  });
+
+  it('色组数不足的行补空格，列不会错位', () => {
+    const html = buildSampleHtml({
+      sample_no: 'S', materials: [{ item_name: 'A', colors: '红，蓝' }, { item_name: 'B', colors: '黑' }],
+    }, L());
+    const body = html.split('<tbody>')[1].split('</tbody>')[0];
+    const cellCounts = body.split('</tr>').filter((r) => r.includes('<td')).map((r) => (r.match(/<td/g) ?? []).length);
+    expect(new Set(cellCounts).size).toBe(1); // 每行单元格数一致
+  });
+
+  it('只有一个色组时保持单列「颜色」，不给单色样衣平白加空列', () => {
+    const head = headOf(buildSampleHtml({ sample_no: 'S', materials: [{ item_name: 'A', colors: '黑色' }] }, L()));
+    expect(head).toContain('颜色');
+    expect(head).not.toContain('颜色一');
+  });
+
+  it('用户在操作台里关掉了颜色列，就不该自作主张加回来', () => {
+    const head = headOf(buildSampleHtml(multi, L({ matCols: ['item_name', 'qty'] })));
+    expect(head.some((h) => h.startsWith('颜色'))).toBe(false);
+  });
+});
+
+describe('colorGroups 拆分口径', () => {
+  it('中英文逗号都认，去空白与空项', () => {
+    expect(splitColorGroups('红, 蓝，  绿 ,')).toEqual(['红', '蓝', '绿']);
+    expect(splitColorGroups('')).toEqual([]);
+    expect(splitColorGroups(null)).toEqual([]);
+  });
+
+  it('取一批材料里最多的色组数', () => {
+    expect(maxColorGroups([{ colors: '红，蓝' }, { colors: '黑' }, { colors: '' }])).toBe(2);
+    expect(maxColorGroups([])).toBe(0);
+  });
+
+  it('列名到十为止用中文，超出退回数字', () => {
+    expect(colorGroupLabel(0)).toBe('颜色一');
+    expect(colorGroupLabel(9)).toBe('颜色十');
+    expect(colorGroupLabel(10)).toBe('颜色11');
   });
 });

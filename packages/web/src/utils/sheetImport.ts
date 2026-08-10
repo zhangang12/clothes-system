@@ -29,8 +29,23 @@ export const MATERIAL_FIELDS: SheetField[] = [
   { key: 'remark', label: '备注', keywords: /备注|说明|remark/i },
 ];
 
+// 报价明细可映射的字段（2026-08-10 Grace：老系统里已有报价，想直接导进来，
+// 不必先去建样衣再从样衣导入）。与 MATERIAL_FIELDS 的差别：报价关心单价/损耗，不关心克重/码带。
+export const QUOTE_ITEM_FIELDS: SheetField[] = [
+  { key: 'itemName', label: '品名', keywords: /品名|材料|名称|面料|辅料|面里料|item/i, required: true },
+  { key: 'part', label: '部位', keywords: /位置|部位|part/i },
+  { key: 'width', label: '门幅', keywords: /门幅|幅宽|宽度|width/i },
+  { key: 'color', label: '颜色', keywords: /颜色|色组|配色|color/i },
+  { key: 'supplier', label: '供应商', keywords: /供应商|厂家|supplier/i },
+  { key: 'unit', label: '单位', keywords: /单位|unit/i },
+  { key: 'quoteUsage', label: '报价耗用', keywords: /报价耗用|单耗|耗用|用量|数量|qty/i },
+  { key: 'rmbPrice', label: '人民币单价', keywords: /人民币单价|单价|价格|price/i },
+  { key: 'lossRate', label: '损耗%', keywords: /损耗/i },
+  { key: 'remark', label: '备注', keywords: /备注|说明|remark/i },
+];
+
 /** 解析上传文件为行数组（整行空白已剔除）。xlsx 多工作表时自动挑「最像材料表」的一张（表头关键词命中最多） */
-export async function parseSheetFile(file: File): Promise<string[][]> {
+export async function parseSheetFile(file: File, fields: SheetField[] = MATERIAL_FIELDS): Promise<string[][]> {
   if (/\.xls$/i.test(file.name)) {
     throw new Error('.xls 是老格式（BIFF），解析不了——请用 Excel/WPS 另存为 .xlsx 后再导入');
   }
@@ -40,7 +55,7 @@ export async function parseSheetFile(file: File): Promise<string[][]> {
     let best: string[][] = sheets[0]?.rows ?? [];
     let bestHits = -1;
     for (const s of sheets) {
-      const hits = guessMapping(s.rows).hits;
+      const hits = guessMapping(s.rows, fields).hits;
       if (hits > bestHits) { bestHits = hits; best = s.rows; }
     }
     return best;
@@ -86,13 +101,13 @@ function readText(file: File): Promise<string> {
 
 /** 在前 5 行里找「最像表头」的一行（命中字段关键词最多），据此自动推断列映射。
  *  兼容工厂工艺单常见的第一行大标题/说明行（用户反馈：表头不在首行时映射全空、导入 0 行） */
-export function guessMapping(rows: string[][]): { mapping: Record<string, number>; hasHeader: boolean; headerRow: number; hits: number } {
+export function guessMapping(rows: string[][], fields: SheetField[] = MATERIAL_FIELDS): { mapping: Record<string, number>; hasHeader: boolean; headerRow: number; hits: number } {
   let best = { mapping: {} as Record<string, number>, headerRow: 0, hits: 0 };
   const limit = Math.min(rows.length, 5);
   for (let r = 0; r < limit; r++) {
     const mapping: Record<string, number> = {};
     let hits = 0;
-    for (const f of MATERIAL_FIELDS) {
+    for (const f of fields) {
       const idx = (rows[r] ?? []).findIndex((cell) => f.keywords.test(String(cell ?? '')));
       if (idx >= 0 && mapping[f.key] === undefined) { mapping[f.key] = idx; hits++; }
     }
@@ -104,19 +119,21 @@ export function guessMapping(rows: string[][]): { mapping: Record<string, number
 /** 原始行 → 材料行（按列映射；品名为空的行跳过——分区标题/空行自然滤掉）
  *  extraColorCols：除已映射颜色列外，其它「颜色」列号——一款多组颜色（颜色一/颜色二…），
  *  每列各成一个色组按序拼接（用户反馈：按源列结构分开，同值也不合并——她的表就是两列结构） */
-export function rowsToMaterials(rows: string[][], mapping: Record<string, number>, extraColorCols: number[] = []): any[] {
+export function rowsToMaterials(rows: string[][], mapping: Record<string, number>, extraColorCols: number[] = [], fields: SheetField[] = MATERIAL_FIELDS): any[] {
   const cell = (r: string[], key: string) => (mapping[key] != null ? String(r[mapping[key]] ?? '').trim() : '');
   return rows
     .map((r) => {
-      const out: any = Object.fromEntries(MATERIAL_FIELDS.map((f) => [f.key, cell(r, f.key)]));
+      const out: any = Object.fromEntries(fields.map((f) => [f.key, cell(r, f.key)]));
       // 色组按「源列」成组：一个源列恰好一个色组，**列内内容整体保留、绝不再拆**。
       // 【2026-08-04 Nina 反馈】此前只产出 colors 逗号串，下游 splitColors 再按 [，,] 拆一次——
       // 用户单元格里自己打的逗号就被误当成色组分隔符，一格「拉头古银，齿和码带黑色」被劈成两组。
       // 这里直接给出结构化的 colorGroups，导入路径不再经过二次拆分；
       // colors 逗号串照旧生成（落库字段没变、Helen 7-29/7-30 要的跨列分组也照旧成立）。
-      out.colorGroups = [out.colors, ...extraColorCols.map((i) => String(r[i] ?? '').trim())]
-        .filter(Boolean);
-      out.colors = out.colorGroups.join('，');
+      if ('colors' in out) {
+        out.colorGroups = [out.colors, ...extraColorCols.map((i) => String(r[i] ?? '').trim())]
+          .filter(Boolean);
+        out.colors = out.colorGroups.join('，');
+      }
       return out;
     })
     .filter((m: any) => m.itemName);

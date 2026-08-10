@@ -14,6 +14,7 @@
 // 公共事已收进 docExcel —— 合同、报价的导出也在用同一份，别再在这儿复制一遍。
 
 import { toDataUrl, splitDataUrl } from './docExcel';
+import { splitColorGroups, maxColorGroups, colorGroupLabel } from './colorGroups';
 
 const d10 = (v: unknown): string => (v ? String(v).slice(0, 10) : '');
 const val = (v: unknown): string => (v === null || v === undefined ? '' : String(v));
@@ -97,11 +98,22 @@ export async function exportSampleExcel(detail: any): Promise<void> {
 
   // ── 材料明细 ──
   ws.addRow([]);
-  titleRow('材料明细', 14);
-  headerRow(['#', '品名', '门幅', '颜色', '部位', '成份', '码带', '拉链长度', '数量', '克重', '尺寸', '实际耗用', '供应商', '备注']);
+  // 颜色按色组摊成多列（2026-08-10 Grace 反馈，附了工厂真实工艺单）：
+  // 工厂要横着看「每个色组下这条辅料用什么颜色」，全挤在一格里得自己数逗号，很容易对错行。
+  // 只有一个色组时保持单列，别让单色样衣平白多出空列。
+  const ng = maxColorGroups(mats);
+  const colorCols = ng > 1 ? Array.from({ length: ng }, (_, i) => colorGroupLabel(i)) : ['颜色'];
+  const colorVals = (m: any): string[] => {
+    const g = splitColorGroups(m.colors);
+    return ng > 1 ? Array.from({ length: ng }, (_, i) => val(g[i] ?? '')) : [val(m.colors)];
+  };
+  const head = ['#', '品名', '门幅', ...colorCols, '部位', '成份', '码带', '拉链长度',
+    '数量', '克重', '尺寸', '实际耗用', '供应商', '备注'];
+  titleRow('材料明细', head.length);
+  headerRow(head);
   if (mats.length) {
     mats.forEach((m, i) => bodyRow([
-      String(i + 1), val(m.item_name), val(m.width), val(m.colors), val(m.part), val(m.composition),
+      String(i + 1), val(m.item_name), val(m.width), ...colorVals(m), val(m.part), val(m.composition),
       val(m.code_band), val(m.zipper_length), val(m.qty), val(m.gram_weight), val(m.size),
       val(m.actual_usage), val(m.supplier_name), val(m.remark),
     ]));
