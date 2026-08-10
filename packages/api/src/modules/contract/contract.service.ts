@@ -858,6 +858,17 @@ export class ContractService {
     await this.repo.save(contract);
   }
 
+  /** 按「未驳回」的批次重算合同累计已发。幂等——多次调用结果一致，不会累加出错。 */
+  private async recalcShippedQty(contractId: number): Promise<number> {
+    const rows = await this.shipmentRepo.find({ where: { contract_id: contractId } });
+    const total = +rows
+      .filter((r) => r.approval_status !== 'REJECTED')
+      .reduce((s, r) => s + (+r.qty || 0), 0)
+      .toFixed(4);
+    await this.repo.update({ id: contractId }, { shipped_qty: total });
+    return total;
+  }
+
   // 发货批次业务审批（设计稿 门户 B2：每次发货提交走业务审批；对账只可勾选已审批批次）
   async approveShipment(contractId: number, shipmentId: number, approverId: number, approve: boolean): Promise<ContractShipment> {
     const shipment = await this.shipmentRepo.findOne({ where: { id: shipmentId, contract_id: contractId } });
@@ -867,6 +878,12 @@ export class ContractService {
     shipment.approved_by = approverId;
     shipment.approved_at = new Date();
     const saved = await this.shipmentRepo.save(shipment);
+    // 【驳回必须冲回累计已发】(2026-08-10 King 反馈引出，生产实证 HT-20260810-001：
+    // 唯一批次已被驳回，contract.shipped_qty 仍挂着 1895)。此前这里只改批次状态，
+    // 累计已发只增不减 → 被驳回的货永远算在已发里，数量差额/超发闸门全部失真，
+    // 用户只能想歪招（他试过在门户填「本次实发 -46」去冲，被后端挡下）。
+    // **按未驳回批次重算而不是做加减**：重算是幂等的，反复审批/驳回同一批次都不会算歪。
+    await this.recalcShippedQty(contractId);
     await this.logRepo.save(this.logRepo.create({
       contract_id: contractId,
       action: approve ? 'SHIP_APPROVE' : 'SHIP_REJECT',

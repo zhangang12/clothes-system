@@ -234,6 +234,13 @@ export class PortalService {
         unitPrice = qty > 0 ? +(amount / qty).toFixed(4) : null;
       }
     }
+    // 负数/零分开报：用户填 -46 想冲掉发多的量（2026-08-10 King 实际这么干了），
+    // 原来一律回「请填写本次实发数量」——他明明填了，等于没告诉他哪儿不对。
+    if (qty < 0) {
+      throw new BadRequestException(
+        '本次实发不能是负数。发多了/发错了请联系业务在系统里驳回该批次，驳回后累计已发会自动扣回，再重新发一次正确的数量',
+      );
+    }
     if (!(qty > 0)) throw new BadRequestException('请填写本次实发数量');
     if (!dto.express_company?.trim() || !dto.express_no?.trim()) {
       throw new BadRequestException('请填写物流信息（快递公司与单号）');

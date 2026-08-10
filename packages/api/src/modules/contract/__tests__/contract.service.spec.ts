@@ -36,6 +36,7 @@ const makeContract = (overrides = {}): any => ({
 
 const mockRepo = {
   create: jest.fn().mockImplementation((v) => v),
+  update: jest.fn().mockResolvedValue({ affected: 1 }), // 驳回批次后重算累计已发要用
   save: jest.fn().mockImplementation((v) => Promise.resolve({ ...v, id: v.id ?? 1 })),
   findOne: jest.fn(),
   findAndCount: jest.fn().mockResolvedValue([[], 0]),
@@ -935,6 +936,60 @@ describe('ContractService', () => {
       expect(a.m.createQueryBuilder).not.toHaveBeenCalled();
       const c = await run([{ order_material_id: 11 }], 7, { id: 7, name: '   ' });
       expect(c.m.createQueryBuilder).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── 驳回批次要冲回累计已发（2026-08-10，生产实证 HT-20260810-001 挂着已驳回的 1895）──
+  describe('approveShipment 后重算累计已发', () => {
+    const setup = (rows: any[]) => {
+      const ship = { id: 1, contract_id: 5, qty: 100, approval_status: 'PENDING', reconcile_id: null };
+      const shipRepo = {
+        findOne: jest.fn().mockResolvedValue(ship),
+        save: jest.fn().mockImplementation((v) => Promise.resolve(v)),
+        find: jest.fn().mockResolvedValue(rows),
+      };
+      (service as any).shipmentRepo = shipRepo;
+      return { ship, shipRepo };
+    };
+
+    it('驳回后累计已发按「未驳回批次」重算——不能再把驳回的算进去', async () => {
+      setup([
+        { qty: 1895, approval_status: 'REJECTED' },
+        { qty: 300, approval_status: 'APPROVED' },
+      ]);
+      await service.approveShipment(5, 1, 9, false);
+      expect(mockRepo.update).toHaveBeenCalledWith({ id: 5 }, { shipped_qty: 300 });
+    });
+
+    it('全部批次都被驳回时归零（正是生产上那张合同的情形）', async () => {
+      setup([{ qty: 1895, approval_status: 'REJECTED' }]);
+      await service.approveShipment(5, 1, 9, false);
+      expect(mockRepo.update).toHaveBeenCalledWith({ id: 5 }, { shipped_qty: 0 });
+    });
+
+    it('审批通过同样重算，PENDING 的批次照常计入（只有驳回才不算）', async () => {
+      setup([
+        { qty: 100, approval_status: 'APPROVED' },
+        { qty: 50, approval_status: 'PENDING' },
+        { qty: 999, approval_status: 'REJECTED' },
+      ]);
+      await service.approveShipment(5, 1, 9, true);
+      expect(mockRepo.update).toHaveBeenCalledWith({ id: 5 }, { shipped_qty: 150 });
+    });
+
+    it('重算是幂等的：连续驳回同一批次不会把数越算越歪', async () => {
+      setup([{ qty: 200, approval_status: 'APPROVED' }, { qty: 80, approval_status: 'REJECTED' }]);
+      await service.approveShipment(5, 1, 9, false);
+      await service.approveShipment(5, 1, 9, false);
+      const calls = mockRepo.update.mock.calls.filter((c: any[]) => c[1]?.shipped_qty !== undefined);
+      expect(calls.at(-1)).toEqual([{ id: 5 }, { shipped_qty: 200 }]);
+      expect(calls.at(-2)).toEqual([{ id: 5 }, { shipped_qty: 200 }]);
+    });
+
+    it('已被对账单引用的批次不许改审批状态，也就不会动累计已发', async () => {
+      const { shipRepo } = setup([]);
+      shipRepo.findOne.mockResolvedValue({ id: 1, contract_id: 5, qty: 10, reconcile_id: 7 });
+      await expect(service.approveShipment(5, 1, 9, false)).rejects.toThrow(BadRequestException);
     });
   });
 });
