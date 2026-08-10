@@ -110,6 +110,19 @@ export class PaymentController {
     return this.service.markPaid(id, dto.slip_url, req.user.id);
   }
 
+  // 改草稿（2026-08-10 King：非合同付款草稿建错了没法调）。放行 BUSINESS 但**只能改自己建的**，
+  // 不动既有角色矩阵——提交/审批/付款仍是财务/管理员
+  @Patch('requests/:id')
+  @Roles(UserRole.ADMIN, UserRole.FINANCE, UserRole.BUSINESS)
+  @ApiOperation({ summary: '修改草稿态付款申请（仅 DRAFT；业务限本人创建的）' })
+  updatePaymentRequest(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: Partial<CreatePaymentRequestDto>,
+    @Request() req: any,
+  ) {
+    return this.service.updatePaymentRequest(id, dto, { id: req.user.id, role: req.user.role });
+  }
+
   @Delete('requests/:id')
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: '删除付款申请（草稿状态，逻辑删除）' })

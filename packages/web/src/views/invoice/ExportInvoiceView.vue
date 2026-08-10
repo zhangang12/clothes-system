@@ -147,7 +147,7 @@
           </el-table-column>
           <el-table-column label="水单" width="70" align="center">
             <template #default="{ row }">
-              <el-link v-if="row.slip_url" type="primary" @click="openFile(row.slip_url)">查看</el-link>
+              <el-link v-if="row.slip_url" type="primary" @click="preview?.open(row.slip_url, '付款水单')">查看</el-link>
               <span v-else>—</span>
             </template>
           </el-table-column>
@@ -188,6 +188,8 @@
       </template>
     </el-dialog>
   </div>
+
+    <FilePreviewDialog ref="preview" />
 </template>
 
 <script setup lang="ts">
@@ -196,6 +198,7 @@ import { useRoute } from 'vue-router';
 import { ref, reactive, computed, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Search, Plus } from '@element-plus/icons-vue';
+import FilePreviewDialog from '@/components/FilePreviewDialog.vue';
 import { exportInvoiceApi } from '@/api/exportInvoice';
 import { orderApi } from '@/api/order';
 import { useAuthStore } from '@/stores/auth';
@@ -204,6 +207,7 @@ import FileUpload from '@/components/FileUpload.vue';
 import { openFile } from '@/utils/secureFile';
 
 const authStore = useAuthStore();
+const preview = ref<any>(null);
 const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
 const canEdit = computed(() => isAdmin.value || authStore.hasRole(UserRole.FINANCE) || authStore.hasRole(UserRole.BUSINESS));
 

@@ -14,6 +14,9 @@ export const paymentRequestApi = {
     http.get<unknown, any>('/payments/requests', { params }),
   create: (dto: Record<string, unknown>) =>
     http.post<unknown, any>('/payments/requests', dto),
+  // 改草稿（仅 DRAFT；业务限本人创建的）
+  update: (id: number, dto: Record<string, unknown>) =>
+    http.patch(`/payments/requests/${id}`, dto),
   submit: (id: number) =>
     http.patch<unknown, any>(`/payments/requests/${id}/submit`),
   approve: (id: number) =>

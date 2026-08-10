@@ -175,11 +175,23 @@
           <el-table-column label="操作" width="330" fixed="right">
             <template #default="{ row }">
               <el-button link size="small" @click="exportPRRow(row)">导出Excel</el-button>
+              <!-- 改草稿（2026-08-10 King：非合同付款草稿建错了没法调）。
+                   业务只能改自己建的，后端同样把关 -->
+              <el-button
+                v-if="row.approval_status === 'DRAFT' && canEditDraft(row)"
+                link type="primary" size="small"
+                @click="openEditPR(row)"
+              >编辑</el-button>
               <el-button
                 v-if="row.approval_status === 'DRAFT' && canEdit"
                 link type="primary" size="small"
                 @click="doSubmit(row)"
               >提交</el-button>
+              <!-- 无权提交时把原因说出来，别让草稿看起来是个死胡同 -->
+              <el-tooltip v-else-if="row.approval_status === 'DRAFT'" placement="top"
+                content="提交审批需要财务或管理员操作；你可以先编辑好内容，再请财务提交">
+                <span><el-button link size="small" disabled>提交（需财务）</el-button></span>
+              </el-tooltip>
               <el-button
                 v-if="row.approval_status === 'PENDING' && isAdmin"
                 link type="success" size="small"
@@ -257,7 +269,7 @@
     </el-dialog>
 
     <!-- 创建付款申请弹窗 -->
-    <el-dialog v-model="createPRVisible" title="新建付款申请" width="560px" destroy-on-close @closed="resetPRForm">
+    <el-dialog v-model="createPRVisible" :title="editingPRId ? '修改付款申请（草稿）' : '新建付款申请'" width="560px" destroy-on-close @closed="resetPRForm">
       <el-form ref="prFormRef" :model="prForm" :rules="prRules" label-width="100px">
         <el-form-item label="类型" prop="type">
           <el-select v-model="prForm.type" style="width:100%">
@@ -335,7 +347,7 @@
           <el-table-column label="方式" width="90"><template #default="{ row }">{{ payMethodLabel(row.pay_method) }}</template></el-table-column>
           <el-table-column prop="pay_date" label="付款日期" width="104" />
           <el-table-column prop="amount" label="金额" width="100" align="right"><template #default="{ row }">{{ (+row.amount).toFixed(2) }}</template></el-table-column>
-          <el-table-column label="水单" width="70" align="center"><template #default="{ row }"><el-link v-if="row.slip_url" type="primary" @click="openFile(row.slip_url)">查看</el-link><span v-else>—</span></template></el-table-column>
+          <el-table-column label="水单" width="70" align="center"><template #default="{ row }"><el-link v-if="row.slip_url" type="primary" @click="preview?.open(row.slip_url, '付款水单')">查看</el-link><span v-else>—</span></template></el-table-column>
           <el-table-column prop="remark" label="备注" min-width="90" />
         </el-table>
       </template>
@@ -385,6 +397,8 @@
       </template>
     </el-dialog>
   </div>
+
+    <FilePreviewDialog ref="preview" />
 </template>
 
 <script setup lang="ts">
@@ -394,6 +408,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { fmtDateTime } from '@/utils/format';
 import { Search, Refresh, Plus, UploadFilled } from '@element-plus/icons-vue';
+import FilePreviewDialog from '@/components/FilePreviewDialog.vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { prepaymentApi, paymentRequestApi } from '@/api/payment';
 import FactorySelect from '@/components/FactorySelect.vue';
@@ -405,6 +420,7 @@ import { useAuthStore } from '@/stores/auth';
 import { UserRole } from '@i9/types';
 
 const authStore = useAuthStore();
+const preview = ref<any>(null);
 const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
 const canEdit = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.FINANCE));
 // 「新建付款申请」单独放行 BUSINESS：后端 POST /payments/requests 是
@@ -665,8 +681,30 @@ const prRules: FormRules = {
 };
 // 有合同付款:按款号选合同带出工厂;无合同付款:直接用上方工厂选择器(两者都要)
 function onPrPickContract(c: any) { if (c?.factory_id) prForm.factory_id = Number(c.factory_id); }
-function openCreatePR() { createPRVisible.value = true; }
+const editingPRId = ref<number | null>(null);
+// 谁能改草稿：财务/管理员不限；业务能改**自己建的**——但前端拿不到当前用户 id
+// （auth store 只存 role/realName），所以这里不假装判断归属，统一放出入口，
+// 由后端 updatePaymentRequest 把关；越权时它返回的「只能修改自己创建的付款申请草稿」本身就是说明。
+const canEditDraft = (_row: any) => canEdit.value || authStore.hasRole(UserRole.BUSINESS);
+
+function openCreatePR() { editingPRId.value = null; createPRVisible.value = true; }
+function openEditPR(row: any) {
+  editingPRId.value = row.id;
+  Object.assign(prForm, {
+    type: row.type ?? 'CONTRACT',
+    factory_id: row.factory_id ?? undefined,
+    reconcile_id: row.reconcile_id ?? undefined,
+    amount: +row.amount || undefined,
+    prepay_offset: +row.prepay_offset || 0,
+    description: row.description ?? '',
+    bank_name: row.bank_name ?? '',
+    bank_account: row.bank_account ?? '',
+    related_style_no: row.related_style_no ?? '',
+  });
+  createPRVisible.value = true;
+}
 function resetPRForm() {
+  editingPRId.value = null; // 不清会让下次「新建」变成改上一条
   Object.assign(prForm, { type: 'CONTRACT', factory_id: undefined, reconcile_id: undefined, amount: undefined, prepay_offset: 0, description: '', bank_name: '', bank_account: '', related_style_no: '' });
   prPrepayBalance.value = 0;
 }
@@ -693,8 +731,13 @@ async function doCreatePR() {
   try {
     const dto: any = { ...prForm };
     for (const k of ['bank_name', 'bank_account', 'related_style_no']) if (!dto[k]) delete dto[k];
-    await paymentRequestApi.create(dto);
-    ElMessage.success('创建成功');
+    if (editingPRId.value) {
+      await paymentRequestApi.update(editingPRId.value, dto);
+      ElMessage.success('已保存修改');
+    } else {
+      await paymentRequestApi.create(dto);
+      ElMessage.success('创建成功');
+    }
     createPRVisible.value = false;
     loadPR();
   } finally { saving.value = false; }

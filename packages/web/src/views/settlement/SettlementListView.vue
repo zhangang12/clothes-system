@@ -293,7 +293,7 @@
           </el-table-column>
           <el-table-column label="水单" width="70" align="center">
             <template #default="{ row }">
-              <el-link v-if="row.slip_url" type="primary" @click="openFile(row.slip_url)">查看</el-link>
+              <el-link v-if="row.slip_url" type="primary" @click="preview?.open(row.slip_url, '付款水单')">查看</el-link>
               <span v-else class="muted">—</span>
             </template>
           </el-table-column>
@@ -554,6 +554,8 @@
       </template>
     </el-dialog>
   </div>
+
+    <FilePreviewDialog ref="preview" />
 </template>
 
 <script setup lang="ts">
@@ -563,6 +565,7 @@ import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { fmtDateTime } from '@/utils/format';
 import { Search, Refresh, Plus } from '@element-plus/icons-vue';
+import FilePreviewDialog from '@/components/FilePreviewDialog.vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { settlementApi } from '@/api/settlement';
 import { orderApi } from '@/api/order';
@@ -573,6 +576,7 @@ import { openFile } from '@/utils/secureFile';
 import { exportSettlementExcel } from '@/utils/settlementExcel';
 
 const authStore = useAuthStore();
+const preview = ref<any>(null);
 const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
 const canEdit = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.FINANCE));
 // 出货后业务可建结算单（结算串流程 rec）；确认/编辑仍限财务/管理

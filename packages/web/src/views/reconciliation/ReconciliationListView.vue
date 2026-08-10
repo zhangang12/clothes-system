@@ -71,7 +71,7 @@
         </el-table-column>
         <el-table-column prop="has_invoice" label="含发票" width="75" align="center">
           <template #default="{ row }">
-            <el-link v-if="row.invoice_url" type="primary" @click.stop="openFile(row.invoice_url)">查看</el-link>
+            <el-link v-if="row.invoice_url" type="primary" @click.stop="preview?.open(row.invoice_url, `发票 ${row.invoice_no || row.reconcile_no || ''}`)">查看</el-link>
             <el-tag v-else size="small" :type="row.has_invoice ? 'success' : 'info'">
               {{ row.has_invoice ? '是' : '否' }}
             </el-tag>
@@ -160,9 +160,10 @@
           <el-descriptions-item label="发票金额">{{ detailData.invoice_amount != null ? (+detailData.invoice_amount).toFixed(2) : '--' }}</el-descriptions-item>
           <el-descriptions-item label="发票差额">{{ detailData.invoice_diff != null ? (+detailData.invoice_diff).toFixed(2) : '--' }}</el-descriptions-item>
           <!-- 供应商上传的发票文件此前只入库、界面上没有任何入口（2026-08-08 King：「供应商上传发票后，在哪里看到呀？」）。
-               走 openFile 换短时签名链接：供应商上传一律落 private/，裸 URL 点开必 403 -->
+               在页面内预览（PDF 走 iframe）：开新标签页是否内联由浏览器说了算，国产浏览器多半直接下载。
+               预览组件内部会换短时签名链接——供应商上传一律落 private/，裸 URL 点开必 403 -->
           <el-descriptions-item label="发票附件">
-            <el-link v-if="detailData.invoice_url" type="primary" :icon="Paperclip" @click="openFile(detailData.invoice_url)">查看 / 下载</el-link>
+            <el-link v-if="detailData.invoice_url" type="primary" :icon="Paperclip" @click="preview?.open(detailData.invoice_url, `发票 ${detailData.invoice_no || ''}`)">查看 / 下载</el-link>
             <span v-else>--</span>
           </el-descriptions-item>
           <el-descriptions-item label="确认时间">{{ detailData.confirmed_at ?? '--' }}</el-descriptions-item>
@@ -383,6 +384,9 @@
       </template>
     </el-dialog>
   </div>
+
+    <!-- 发票等附件在页面内预览，不再靠浏览器开新标签（2026-08-10 King：能不能直接点开，不要下载）-->
+    <FilePreviewDialog ref="preview" />
 </template>
 
 <script setup lang="ts">
@@ -392,7 +396,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { fmtDateTime } from '@/utils/format';
 import { Search, Refresh, Plus, Coin, Paperclip } from '@element-plus/icons-vue';
-import { openFile } from '@/utils/secureFile';
+import FilePreviewDialog from '@/components/FilePreviewDialog.vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { reconciliationApi } from '@/api/reconciliation';
 import { exportReconciliationExcel } from '@/utils/reconciliationExcel';
@@ -407,6 +411,7 @@ import { UserRole } from '@i9/types';
 const authStore = useAuthStore();
 const route = useRoute();
 const router = useRouter();
+const preview = ref<any>(null);
 const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
 
 // 合同号可点跳合同页（对账付款串流程 B7/C12）。原先跳的是 Contracts?open=<id> 让列表开弹框，

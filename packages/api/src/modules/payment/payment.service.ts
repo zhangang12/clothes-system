@@ -1,5 +1,5 @@
 import {
-  Injectable, NotFoundException, BadRequestException,
+  Injectable, NotFoundException, BadRequestException, ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
@@ -8,7 +8,7 @@ import { PaymentRequest } from './payment-request.entity';
 import { PaymentRecord } from './payment-record.entity';
 import { Reconciliation, ReconciliationStatus } from '../reconciliation/reconciliation.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
-import { PaymentApprovalStatus, ReconcileType } from '@i9/types';
+import { PaymentApprovalStatus, ReconcileType, UserRole } from '@i9/types';
 import { CreatePrepaymentDto } from './dto/create-prepayment.dto';
 import { CreatePaymentRequestDto } from './dto/create-payment-request.dto';
 import { QueryPaymentRequestDto } from './dto/query-payment-request.dto';
@@ -349,6 +349,60 @@ export class PaymentService {
       }
       return saved;
     });
+  }
+
+  /**
+   * 修改草稿态付款申请（2026-08-10 King：「非合同付款草稿可以调整吗？」）。
+   *
+   * 【为什么此前一直改不了】付款申请从来只有「建/提交/审批/付款/删除」，**没有编辑端点**——
+   * 建错了只能删掉重建，而删除还是管理员限定，业务自己建的草稿等于卡死。
+   *
+   * 【只放行草稿】一旦提交进审批流，金额就是审批依据；已批准/已付款的更不能改，
+   * 否则「审的是 A、付的是 B」，且已付金额与申请金额的勾稽会当场断掉。
+   * 【业务只能改自己建的】不改动既有角色矩阵（提交/审批/付款仍是财务/管理员），
+   * 只是让创建者能收拾自己的草稿。
+   */
+  async updatePaymentRequest(
+    id: number,
+    dto: Partial<CreatePaymentRequestDto>,
+    user: { id: number; role?: string },
+  ): Promise<PaymentRequest> {
+    const pr = await this.prRepo.findOne({ where: { id, deleted: 0 } });
+    if (!pr) throw new NotFoundException(`付款申请 #${id} 不存在`);
+    if (pr.approval_status !== PaymentApprovalStatus.DRAFT) {
+      throw new BadRequestException(
+        `只有草稿状态可以修改（当前 ${pr.approval_status}）；已提交的请先驳回，已付款的不可修改`,
+      );
+    }
+    const privileged = user.role === UserRole.ADMIN || user.role === UserRole.FINANCE;
+    if (!privileged && Number(pr.created_by) !== Number(user.id)) {
+      throw new ForbiddenException('只能修改自己创建的付款申请草稿');
+    }
+    // 冲抵预付不能超过该工厂可用余额——与创建时同一道闸门，改单同样要过
+    const factoryId = dto.factory_id ?? pr.factory_id;
+    const offset = dto.prepay_offset ?? +pr.prepay_offset;
+    if (offset) {
+      const balance = await this.getAvailablePrepayBalance(factoryId);
+      if (offset > balance + 0.0001) {
+        throw new BadRequestException(`冲抵预付 ${offset} 超过该工厂可用预付余额 ${balance.toFixed(2)}`);
+      }
+    }
+    const amount = dto.amount ?? +pr.amount;
+    if (amount <= 0) throw new BadRequestException('申请金额须大于 0');
+
+    Object.assign(pr, {
+      factory_id: factoryId,
+      amount,
+      prepay_offset: offset,
+      actual_pay: +(amount - offset).toFixed(4),
+      description: dto.description ?? pr.description,
+      bank_name: dto.bank_name ?? pr.bank_name,
+      bank_account: dto.bank_account ?? pr.bank_account,
+      related_style_no: dto.related_style_no ?? pr.related_style_no,
+      account_period_days: dto.account_period_days ?? pr.account_period_days,
+      due_date: (dto.due_date ?? pr.due_date) as any,
+    });
+    return this.prRepo.save(pr);
   }
 
   async removePaymentRequest(id: number): Promise<void> {

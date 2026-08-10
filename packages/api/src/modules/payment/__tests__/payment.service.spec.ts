@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { PaymentService } from '../payment.service';
 import { Prepayment } from '../prepayment.entity';
@@ -180,6 +180,72 @@ describe('PaymentService', () => {
       expect(mockManager.create).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
         related_style_no: null,
       }));
+    });
+  });
+
+  // ── 改草稿（2026-08-10 King：非合同付款草稿建错了没法调）────────────────
+  // 此前付款申请只有 建/提交/审批/付款/删除，**没有编辑端点**；删除又是管理员限定，
+  // 业务自己建的草稿等于卡死。这组守住新加的编辑口和它的三道闸门。
+  describe('updatePaymentRequest 改草稿', () => {
+    const draft = (over: any = {}) => ({
+      id: 9, approval_status: 'DRAFT', created_by: 5, factory_id: 3,
+      amount: 1000, prepay_offset: 0, description: '旧', ...over,
+    });
+    const ADMIN = { id: 99, role: 'ADMIN' };
+    const OWNER = { id: 5, role: 'BUSINESS' };
+
+    it('草稿可改，actual_pay 跟着重算', async () => {
+      mockPrRepo.findOne.mockResolvedValue(draft());
+      mockPrepayRepo.find.mockResolvedValue([]);
+      await service.updatePaymentRequest(9, { amount: 800, prepay_offset: 0 } as any, ADMIN);
+      expect(mockPrRepo.save).toHaveBeenCalledWith(expect.objectContaining({
+        amount: 800, actual_pay: 800,
+      }));
+    });
+
+    it('非草稿一律拒绝——已提交的金额是审批依据，已付款的会让勾稽断掉', async () => {
+      for (const st of ['PENDING', 'APPROVED', 'PAID', 'REJECTED']) {
+        mockPrRepo.findOne.mockResolvedValue(draft({ approval_status: st }));
+        await expect(service.updatePaymentRequest(9, { amount: 1 } as any, ADMIN))
+          .rejects.toThrow(BadRequestException);
+      }
+    });
+
+    it('业务只能改自己建的草稿', async () => {
+      mockPrRepo.findOne.mockResolvedValue(draft({ created_by: 777 }));
+      await expect(service.updatePaymentRequest(9, { amount: 1 } as any, OWNER))
+        .rejects.toThrow(ForbiddenException);
+    });
+
+    it('本人改自己的草稿放行', async () => {
+      mockPrRepo.findOne.mockResolvedValue(draft({ created_by: 5 }));
+      mockPrepayRepo.find.mockResolvedValue([]);
+      await expect(service.updatePaymentRequest(9, { amount: 500 } as any, OWNER)).resolves.toBeDefined();
+    });
+
+    it('财务/管理员不受创建人限制', async () => {
+      mockPrRepo.findOne.mockResolvedValue(draft({ created_by: 777 }));
+      mockPrepayRepo.find.mockResolvedValue([]);
+      await expect(service.updatePaymentRequest(9, { amount: 500 } as any, ADMIN)).resolves.toBeDefined();
+    });
+
+    it('改单同样要过冲抵预付的余额闸门，不能绕过创建时的校验', async () => {
+      mockPrRepo.findOne.mockResolvedValue(draft());
+      mockPrepayRepo.find.mockResolvedValue([makePrepayment({ balance: 100 })]);
+      await expect(service.updatePaymentRequest(9, { prepay_offset: 500 } as any, ADMIN))
+        .rejects.toThrow(BadRequestException);
+    });
+
+    it('金额必须大于 0', async () => {
+      mockPrRepo.findOne.mockResolvedValue(draft());
+      mockPrepayRepo.find.mockResolvedValue([]);
+      await expect(service.updatePaymentRequest(9, { amount: 0 } as any, ADMIN))
+        .rejects.toThrow(BadRequestException);
+    });
+
+    it('不存在的申请报 404', async () => {
+      mockPrRepo.findOne.mockResolvedValue(null);
+      await expect(service.updatePaymentRequest(9, {} as any, ADMIN)).rejects.toThrow(NotFoundException);
     });
   });
 
