@@ -166,3 +166,45 @@ describe('rmbUpper 中文大写金额', () => {
     expect(rmbUpper(-5)).toBe('');
   });
 });
+
+// ── 数量搭配（供应商 s136 反馈：真实合同末尾有这张表，加工厂照着它按色按码投产）──
+describe('数量搭配矩阵', () => {
+  const WITH_MX = {
+    ...DETAIL,
+    orderDetail: {
+      size_matrix: {
+        pos: [{ po_no: 'MNBDA263RSIN' }, { po_no: 'MNBDA263RSREI' }],
+        rows: [
+          { style_no: 'MNA263M520', color: '黑色', article: 'WL-1', size: 'S', qtys: [55, 16] },
+          { style_no: 'MNA263M520', color: '黑色', article: 'WL-1', size: 'M', qtys: [115, 38] },
+        ],
+      },
+    },
+  };
+
+  it('导出里带上这张表，列头是各 PO 号', () => {
+    const html = captureExport(WITH_MX);
+    expect(html).toContain('数量搭配');
+    expect(html).toContain('MNBDA263RSIN');
+    expect(html).toContain('MNBDA263RSREI');
+  });
+
+  it('逐行给出款/色/码与各 PO 数量，并算出合计', () => {
+    const html = captureExport(WITH_MX);
+    expect(html).toContain('55');
+    expect(html).toContain('16');
+    expect(html).toContain('71');  // 55+16
+    expect(html).toContain('153'); // 115+38
+  });
+
+  it('没有矩阵数据时不印出一张空表', () => {
+    expect(captureExport(DETAIL)).not.toContain('数量搭配');
+    expect(captureExport({ ...DETAIL, orderDetail: { size_matrix: { pos: [], rows: [] } } })).not.toContain('数量搭配');
+  });
+
+  it('矩阵不影响原有区块（货物明细/发货批次照常）', () => {
+    const html = captureExport(WITH_MX);
+    expect(html).toContain('第一条　货物');
+    expect(html).toContain('发货批次');
+  });
+});

@@ -204,6 +204,26 @@ export function exportPortalContractExcel(detail: any): void {
     ]),
   );
 
+  // ── 数量搭配（色/码/PO 矩阵）────────────────────────────────────────
+  // 供应商 s136 反馈：真实合同末尾有这张表，加工厂要照着它按色按码投产。
+  // 数据是详情接口本就返回的 orderDetail.size_matrix（门户详情页已在用同一份），
+  // 不必新增接口。行=款·色·码，列=各 PO，末列合计。
+  const mx = detail.orderDetail?.size_matrix ?? null;
+  const mxPos: any[] = mx?.pos ?? [];
+  const mxRows: any[] = mx?.rows ?? [];
+  const rowTotal = (r: any) => (r?.qtys ?? []).reduce((sm: number, v: any) => sm + (Number(v) || 0), 0);
+  const matrix = mxRows.length
+    ? tableBlock(
+      '数量搭配（款/色/码 × PO）',
+      ['款号', '颜色', '洗标号', '尺码', ...mxPos.map((p: any, i: number) => String(p?.po_no || `PO${i + 1}`)), '合计'],
+      mxRows.map((r: any) => [
+        String(r?.style_no ?? ''), String(r?.color ?? ''), String(r?.article ?? ''), String(r?.size ?? ''),
+        ...mxPos.map((_p: any, i: number) => String(r?.qtys?.[i] ?? '')),
+        String(rowTotal(r) || ''),
+      ]),
+    )
+    : '';
+
   const sheetName = `合同${String(detail.contract_no ?? '')}`.slice(0, 31); // Excel 工作表名上限 31 字符
   const html = `${BOM}<html xmlns:x="urn:schemas-microsoft-com:office:excel">
 <head><meta charset="UTF-8">
@@ -214,6 +234,7 @@ export function exportPortalContractExcel(detail: any): void {
 ${base}
 <tr><td></td></tr>
 ${materials}
+${matrix ? `<tr><td></td></tr>${matrix}` : ''}
 ${shipments ? `<tr><td></td></tr>${shipments}` : ''}
 ${recons ? `<tr><td></td></tr>${recons}` : ''}
 </table></body></html>`;
