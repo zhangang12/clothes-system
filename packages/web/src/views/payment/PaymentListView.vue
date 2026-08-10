@@ -125,7 +125,12 @@
           <el-button v-if="canCreatePR" type="primary" :icon="Plus" @click="openCreatePR">新建付款申请</el-button>
         </div>
 
-        <el-table :data="prList" v-loading="prLoading" border stripe>
+        <div class="pr-legend">
+          <span class="lg lg-paid"></span>已付清
+          <span class="lg lg-partial"></span>部分付款
+          <span class="lg-tip">（按已付/应付判定，与审批状态无关）</span>
+        </div>
+        <el-table :data="prList" v-loading="prLoading" border stripe :row-class-name="prRowClass">
           <el-table-column prop="pr_no" label="申请编号" width="180" />
           <el-table-column prop="type" label="类型" width="110">
             <template #default="{ row }">
@@ -190,6 +195,12 @@
                 link type="primary" size="small"
                 @click="openMarkPaid(row)"
               >付款</el-button>
+              <!-- 未审批时也把入口露出来（禁用+说明）：此前这一列只剩「导出Excel」，
+                   财务看不出「付了多少填在哪儿」，误以为没这功能（2026-08-10 qiao 反馈） -->
+              <el-tooltip v-if="row.approval_status === 'PENDING' && canEdit" placement="top"
+                content="需先由管理员/主管批准这笔申请，批准后此处变为可点，即可登记付款金额并上传水单">
+                <span><el-button link size="small" disabled>付款（待批准）</el-button></span>
+              </el-tooltip>
               <el-button
                 v-if="row.approval_status === 'PAID' || +(row.paid_total ?? 0) > 0"
                 link size="small"
@@ -560,6 +571,14 @@ const slipUploading = ref(false);
 const payTarget = ref<any>(null);
 const payRecords = ref<any[]>([]);
 const payForm = reactive<any>({ pay_method: 'BANK', pay_date: new Date().toISOString().slice(0, 10), amount: undefined, remark: '' });
+// 行着色（2026-08-10 qiao：已付清的要标一个颜色，付了一部分的标另一个颜色）。
+// 判定按**金额**而不是状态：状态可能因为审批流还没流转到 PAID，但钱确实已经付清了，
+// 财务看的是钱。余额<=0.01 视为付清（分批付款的小数尾差）。
+function prRowClass({ row }: { row: any }): string {
+  const paid = +(row?.paid_total ?? 0);
+  if (paid <= 0) return '';
+  return prBalance(row) <= 0.01 ? 'pr-paid' : 'pr-partial';
+}
 const prBalance = (row: any) => +((+(row.actual_pay ?? row.amount ?? 0)) - (+(row.paid_total ?? 0))).toFixed(2);
 const isOverdue = (row: any) => {
   if (!row?.due_date || row.approval_status === 'PAID') return false;
@@ -718,6 +737,16 @@ function clearReconcileFilter() {
 </script>
 
 <style scoped>
+/* 已付清 / 部分付款 行底色（2026-08-10 qiao）。用浅色底而非文字色：
+   财务是扫一列看状态的，整行着色一眼能分堆 */
+:deep(.el-table .pr-paid) > td { background: #f0f9eb !important; }
+:deep(.el-table .pr-partial) > td { background: #fdf6ec !important; }
+.pr-legend { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--el-text-color-secondary); margin-bottom: 6px; }
+.lg { display: inline-block; width: 12px; height: 12px; border-radius: 2px; border: 1px solid var(--el-border-color); }
+.lg-paid { background: #f0f9eb; }
+.lg-partial { background: #fdf6ec; margin-left: 10px; }
+.lg-tip { margin-left: 4px; }
+
 .page-container { padding: 16px; }
 .search-card { border: none; }
 .search-card :deep(.el-card__body) { padding: 12px 12px 0; }

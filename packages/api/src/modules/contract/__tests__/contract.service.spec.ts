@@ -887,4 +887,54 @@ describe('ContractService', () => {
       expect(out[0]).toMatchObject({ qty: 99, qty_source: '采购量含损耗' });
     });
   });
+
+  // ── 合同供应商回填订单（2026-08-10 King：「生成了材料合同，可以在订单中自动带入供应商？」）──
+  describe('backfillOrderSupplier', () => {
+    const qb = () => {
+      const b: any = {};
+      b.update = jest.fn().mockReturnValue(b);
+      b.set = jest.fn().mockReturnValue(b);
+      b.where = jest.fn().mockReturnValue(b);
+      b.andWhere = jest.fn().mockReturnValue(b);
+      b.execute = jest.fn().mockResolvedValue({ affected: 1 });
+      return b;
+    };
+    const run = async (mats: any[], factoryId: any, factory: any = { id: 7, name: '昆山领威纺织品有限公司' }) => {
+      const b = qb();
+      const m: any = {
+        findOne: jest.fn().mockResolvedValue(factory),
+        createQueryBuilder: jest.fn().mockReturnValue(b),
+      };
+      await (service as any).backfillOrderSupplier(m, mats, factoryId);
+      return { m, b };
+    };
+
+    it('把工厂名回填到有溯源的订单材料行', async () => {
+      const { b } = await run([{ order_material_id: 11 }, { order_material_id: 12 }], 7);
+      expect(b.set).toHaveBeenCalledWith({ supplier: '昆山领威纺织品有限公司' });
+      expect(b.where).toHaveBeenCalledWith('id IN (:...ids)', { ids: [11, 12] });
+    });
+
+    it('【只填空的】已填供应商的行绝不覆盖——它决定了合同怎么拆单，被悄悄改掉没人知道', async () => {
+      const { b } = await run([{ order_material_id: 11 }], 7);
+      expect(b.andWhere).toHaveBeenCalledWith('(supplier IS NULL OR supplier = :empty)', { empty: '' });
+    });
+
+    it('同一条订单材料被拆成多行时去重，不重复 IN', async () => {
+      const { b } = await run([{ order_material_id: 11 }, { order_material_id: 11 }, { order_material_id: 12 }], 7);
+      expect(b.where).toHaveBeenCalledWith('id IN (:...ids)', { ids: [11, 12] });
+    });
+
+    it('没有溯源(手工填的合同行)就什么都不做', async () => {
+      const { m } = await run([{ order_material_id: null }, {}], 7);
+      expect(m.createQueryBuilder).not.toHaveBeenCalled();
+    });
+
+    it('没有工厂 / 工厂无名字时不写空供应商进去', async () => {
+      const a = await run([{ order_material_id: 11 }], null);
+      expect(a.m.createQueryBuilder).not.toHaveBeenCalled();
+      const c = await run([{ order_material_id: 11 }], 7, { id: 7, name: '   ' });
+      expect(c.m.createQueryBuilder).not.toHaveBeenCalled();
+    });
+  });
 });

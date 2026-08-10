@@ -167,6 +167,32 @@ export class ContractService {
     }];
   }
 
+  /**
+   * 把合同的供应商回填到订单用料核算（2026-08-10 King：「生成了材料合同，可以在订单中自动带入供应商？」）。
+   *
+   * 【只填空的，绝不覆盖】订单上的供应商是**业务自己选的、且决定了合同怎么拆单**。
+   * 如果一个已填供应商的行被合同反向改掉，等于系统悄悄改了业务的决策依据——
+   * 下次重新生成合同会拆成另一个样，且无人知道是谁改的。所以只补 NULL/空串的行。
+   */
+  private async backfillOrderSupplier(
+    m: EntityManager,
+    materials: Array<{ order_material_id?: number | null }>,
+    factoryId: number | null | undefined,
+  ): Promise<void> {
+    if (!factoryId) return;
+    const ids = [...new Set(materials.map((x) => x.order_material_id).filter((v): v is number => v != null))];
+    if (!ids.length) return;
+    const factory = await m.findOne(Factory, { where: { id: factoryId } });
+    const name = factory?.name?.trim();
+    if (!name) return;
+    await m.createQueryBuilder()
+      .update(OrderMaterial)
+      .set({ supplier: name })
+      .where('id IN (:...ids)', { ids })
+      .andWhere('(supplier IS NULL OR supplier = :empty)', { empty: '' })
+      .execute();
+  }
+
   private async getMatrixRows(orderId: number | null | undefined): Promise<any[]> {
     if (!orderId) return [];
     const matrix = await this.matrixRepo.findOne({ where: { order_id: orderId } });
@@ -384,6 +410,7 @@ export class ContractService {
         order_material_id: mi.order_material_id ?? null,
       }));
       await m.save(ContractMaterial, materials);
+      await this.backfillOrderSupplier(m, materials, dto.factory_id);
 
       // 最近交易日期回写（基础资料稿 §1.2：列表按最近交易超期标红——此前该字段无任何写入方，规则恒不触发）
       await m.update(Factory, { id: dto.factory_id }, { last_trade_date: new Date().toISOString().slice(0, 10) as any });

@@ -596,6 +596,9 @@ async function doImport() {
               style_no: od.style_no || '', unit: c.unit || '', qty: l.qty,
               unit_price: +c.raw?.unit_price || 0, delivery_date: dd, photo_url: '',
               qty_source: l.dim === 'color' ? '采购量·分色' : '采购量·分码',
+              // 行级溯源：不带这个，订单那边永远标不了「已订」绿底（2026-08-10 King 反馈）。
+              // 走「生成合同」的路径由后端 expandMaterialLines 写入，走本入口就得前端自己带。
+              order_material_id: c.raw?.id ?? undefined,
             });
           }
         } else {
@@ -605,6 +608,7 @@ async function doImport() {
             color: c.color || '', size: '', style_no: od.style_no || '',
             unit: c.unit || '', qty: +c.qty || 0,
             unit_price: +c.raw?.unit_price || 0, delivery_date: dd, photo_url: '', qty_source: '单耗×件数',
+            order_material_id: c.raw?.id ?? undefined, // 同上：订单标绿全靠它
           });
         }
       }
@@ -798,6 +802,8 @@ function applyDetail(d: any, opts: { asCopy?: boolean; zeroQty?: boolean } = {})
     qty: opts.zeroQty ? 0 : +m.qty, unit_price: +m.unit_price,
     delivery_date: m.delivery_date ? String(m.delivery_date).slice(0, 10) : '',
     photo_url: m.photo_url || '', qty_source: m.qty_source || '',
+    // 保留行级溯源：不带的话「打开合同 → 保存」会把订单那边的已订标记洗掉
+    order_material_id: m.order_material_id ?? undefined,
   }));
 }
 async function loadDetail(id: number) {
