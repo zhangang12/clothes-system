@@ -1,7 +1,7 @@
 // 材料电子表格导入（用户反馈：样衣材料管理需要可以上传电子表格）
 // 兼容工厂自有工艺单格式：不定列序、带表头/分区行——靠「列映射」而不是固定模板。
 // .xlsx 走 exceljs（动态 import，复用 sheetPreview 的解析）；.csv 按文本（逗号/制表符/分号）。
-import { parseXlsx } from './sheetPreview';
+import { parseXlsx, MAX_SHEET_BYTES } from './sheetPreview';
 
 export interface SheetField { key: string; label: string; keywords: RegExp; required?: boolean }
 
@@ -50,6 +50,16 @@ export async function parseSheetFile(file: File, fields: SheetField[] = MATERIAL
     throw new Error('.xls 是老格式（BIFF），解析不了——请用 Excel/WPS 另存为 .xlsx 后再导入');
   }
   if (/\.xlsx$/i.test(file.name)) {
+    // 先按文件大小拦一道：比读进内存再报错快，且能把实际大小和**可操作的办法**一起告诉用户。
+    // 别再落到 parseXlsx 里那句「请下载后查看」——那是给附件预览写的，导入时说不通。
+    if (file.size > MAX_SHEET_BYTES) {
+      const mb = (file.size / 1024 / 1024).toFixed(1);
+      throw new Error(
+        `文件 ${mb}MB，超过 ${Math.round(MAX_SHEET_BYTES / 1024 / 1024)}MB 上限，浏览器解析不了。`
+        + '通常是表里嵌了图片或有很多用不到的工作表——请在 Excel 里删掉多余内容后另存，'
+        + '或把明细单独另存为 .csv 再导入。',
+      );
+    }
     const buf = await file.arrayBuffer();
     const sheets = await parseXlsx(buf);
     let best: string[][] = sheets[0]?.rows ?? [];

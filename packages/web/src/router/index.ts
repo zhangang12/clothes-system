@@ -92,4 +92,33 @@ router.beforeEach((to) => {
   }
 });
 
+/**
+ * 懒加载 chunk 取不到时自动恢复（2026-08-11 白屏事故）。
+ *
+ * 【为什么会发生】路由是按需加载的，chunk 文件名带内容哈希，每次发版换一批新名字。
+ * 用户**已经开着的页面**手里是旧的 index.html，点进某个页面时仍按旧名字请求；
+ * 只要那个文件不在了就是 404，动态 import 抛错、Vue 渲染不出东西 → **整页白屏**，
+ * 而且后端一无所知（请求根本没到后端）。当天两位用户同时报「系统太不稳定」「一片白」，
+ * nginx 日志里是一串 assets/*.js 404。
+ *
+ * 【两道防线】① 发版不再删旧 chunk（见 infra/scripts/deploy-local.sh），旧标签页照常能取到；
+ * ② 万一还是取不到（比如超过保留期），这里兜底：整页重载一次去拿新的 index.html。
+ * 用 sessionStorage 打标记确保**只重载一次**——否则新版本真有问题时会变成无限刷新。
+ */
+const RELOAD_FLAG = 'i9.chunkReloaded';
+router.onError((err, to) => {
+  const msg = String((err as any)?.message ?? err);
+  const isChunkMiss = /dynamically imported module|Importing a module script failed|Failed to fetch/i.test(msg);
+  if (!isChunkMiss) return;
+  if (sessionStorage.getItem(RELOAD_FLAG)) {
+    // 已经重载过一次还是失败：别再刷了，明确告诉用户，免得陷入刷新循环
+    ElMessage.error('页面资源加载失败，请检查网络或联系管理员');
+    return;
+  }
+  sessionStorage.setItem(RELOAD_FLAG, '1');
+  window.location.assign(to.fullPath); // 用目标地址重载，用户停在他本来要去的页面
+});
+// 成功进入任意页面就清掉标记，让下次发版仍有一次自动恢复的机会
+router.afterEach(() => { sessionStorage.removeItem(RELOAD_FLAG); });
+
 export default router;

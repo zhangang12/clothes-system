@@ -10,7 +10,11 @@ export interface SheetData {
 
 const MAX_ROWS = 200;   // 预览而已，超大表截断，免得把页面卡死
 const MAX_COLS = 40;
-const MAX_BYTES = 15 * 1024 * 1024;
+// 这个上限是给「附件预览」定的（浏览器里解一个巨大的 xlsx 会把页面卡死）。
+// 导入路径也复用了 parseXlsx，所以一并导出，让导入侧能提前拦并给出**贴合导入场景**的说法
+// ——原来那句「请下载后查看」在导入时完全说不通（2026-08-11 EVA 反馈）。
+export const MAX_SHEET_BYTES = 15 * 1024 * 1024;
+const MAX_BYTES = MAX_SHEET_BYTES;
 
 export const isXlsxName = (name?: string) => /\.xlsx$/i.test(name || '');
 export const isLegacyXlsName = (name?: string) => /\.xls$/i.test(name || '');

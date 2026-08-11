@@ -65,9 +65,13 @@
         <p class="hint">仅预览前 5 行；未识别的列可导入后在表里补。</p>
       </template>
       <template #footer>
-        <el-button @click="xlsxDialog = false">取消</el-button>
-        <el-button :disabled="!xlsxRows.length" @click="applyXlsx(true)">替换现有明细</el-button>
-        <el-button type="primary" :disabled="!xlsxRows.length" @click="applyXlsx(false)">追加到明细</el-button>
+        <!-- 出错时只留「关闭」：此前照样摆着两个按不动的按钮，用户以为界面卡住了
+             （2026-08-11 EVA：「鼠标也是不可操作的状态」）-->
+        <el-button @click="xlsxDialog = false">{{ xlsxErr ? '关闭' : '取消' }}</el-button>
+        <template v-if="!xlsxErr">
+          <el-button :disabled="!xlsxRows.length" @click="applyXlsx(true)">替换现有明细</el-button>
+          <el-button type="primary" :disabled="!xlsxRows.length" @click="applyXlsx(false)">追加到明细</el-button>
+        </template>
       </template>
     </el-dialog>
 
