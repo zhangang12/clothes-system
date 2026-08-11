@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { ReconciliationService } from '../reconciliation.service';
 import { Reconciliation, ReconciliationStatus } from '../reconciliation.entity';
@@ -544,5 +544,45 @@ describe('ReconciliationService', () => {
     expect(recalcCalls).toHaveLength(2);
     expect(recalcCalls[0][1]).toEqual([11]);
     expect(recalcCalls[1][1]).toEqual([22]);
+  });
+
+  // ── 改草稿（2026-08-11 ZYT：草稿能不能改/删）────────────────────────
+  describe('updateDraft', () => {
+    const draft = (over: any = {}) => ({
+      id: 5, status: 'DRAFT', created_by: 7, total_amount: 1000,
+      invoice_no: null, invoice_amount: null, tax_rate: null, has_invoice: 0, ...over,
+    });
+    const ADMIN = { id: 1, role: 'ADMIN' };
+    const OWNER = { id: 7, role: 'BUSINESS' };
+
+    it('改发票金额时同步重算发票差额，不留旧值', async () => {
+      mockReconciliationRepo.findOne.mockResolvedValue(draft());
+      await service.updateDraft(5, { invoice_amount: 900 } as any, ADMIN);
+      expect(mockReconciliationRepo.save).toHaveBeenCalledWith(expect.objectContaining({ invoice_diff: -100 }));
+    });
+
+    it('改税率时同步重算税额', async () => {
+      mockReconciliationRepo.findOne.mockResolvedValue(draft());
+      await service.updateDraft(5, { tax_rate: 13 } as any, ADMIN);
+      expect(mockReconciliationRepo.save).toHaveBeenCalledWith(expect.objectContaining({ tax_amount: 130 }));
+    });
+
+    it('发票号空串归一为 NULL 并同步 has_invoice（唯一索引允许多张无票并存）', async () => {
+      mockReconciliationRepo.findOne.mockResolvedValue(draft({ invoice_no: 'FP-1', has_invoice: 1 }));
+      await service.updateDraft(5, { invoice_no: '' } as any, ADMIN);
+      expect(mockReconciliationRepo.save).toHaveBeenCalledWith(expect.objectContaining({ invoice_no: null, has_invoice: 0 }));
+    });
+
+    it('非草稿一律拒绝——已提交复核的金额是复核依据', async () => {
+      for (const st of ['PENDING', 'CONFIRMED', 'PAID']) {
+        mockReconciliationRepo.findOne.mockResolvedValue(draft({ status: st }));
+        await expect(service.updateDraft(5, { tax_rate: 1 } as any, ADMIN)).rejects.toThrow(BadRequestException);
+      }
+    });
+
+    it('业务只能改自己建的草稿', async () => {
+      mockReconciliationRepo.findOne.mockResolvedValue(draft({ created_by: 999 }));
+      await expect(service.updateDraft(5, { tax_rate: 1 } as any, OWNER)).rejects.toThrow(ForbiddenException);
+    });
   });
 });

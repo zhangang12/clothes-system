@@ -121,6 +121,18 @@
               content="提交复核需要业务/财务/管理员操作">
               <span><el-button link size="small" disabled>提交复核（无权限）</el-button></span>
             </el-tooltip>
+            <!-- 改草稿（2026-08-11 ZYT：草稿能不能改/删）。只放开发票/税率/说明，
+                 批次与费用行是结构性的、改动牵扯占用释放与金额重算，建错了删掉重建更稳 -->
+            <el-button
+              v-if="row.status === 'DRAFT'"
+              link type="primary" size="small"
+              @click="openEditDraft(row)"
+            >修改</el-button>
+            <!-- 无权删除时说清是谁的活，别只留一个看不见的入口 -->
+            <el-tooltip v-if="row.status === 'DRAFT' && !isAdmin" placement="top"
+              content="删除对账单需要管理员操作；你可以先「修改」，或请管理员删除">
+              <span><el-button link size="small" disabled>删除（需管理员）</el-button></span>
+            </el-tooltip>
             <el-popconfirm v-if="row.status === 'DRAFT' && isAdmin" title="确认删除？" @confirm="doRemove(row.id)">
               <template #reference>
                 <el-button link type="danger" size="small">删除</el-button>
@@ -210,7 +222,7 @@
         </template>
         <template v-else>
           <el-divider>出货明细（一单多合同·批次可跳来源合同）</el-divider>
-          <el-table :data="detailData.shipments ?? []" border size="small">
+          <el-table :data="shipmentDetailRows" border size="small" :row-class-name="shipRowClass">
             <el-table-column prop="shipment_id" label="出货单ID" width="90" />
             <el-table-column prop="contract_id" label="来源合同" min-width="140">
               <template #default="{ row }">
@@ -226,7 +238,14 @@
             <el-table-column prop="style_no" label="款号" width="90">
               <template #default="{ row }">{{ row.style_no ?? '—' }}</template>
             </el-table-column>
-            <el-table-column prop="item_name" label="品名" />
+            <el-table-column prop="item_name" label="品名">
+              <template #default="{ row }">
+                <!-- 逐品名行缩进显示；批次没按行填报时仍是整批一行（品名即发货单号）-->
+                <span :style="row._sub ? 'padding-left:14px;color:var(--el-text-color-regular)' : ''">
+                  {{ row._sub ? '└ ' : '' }}{{ row.item_name ?? '—' }}
+                </span>
+              </template>
+            </el-table-column>
             <el-table-column prop="snapshot_unit_price" label="单价" width="100" align="right">
               <template #default="{ row }">{{ (+row.snapshot_unit_price).toFixed(4) }}</template>
             </el-table-column>
@@ -397,6 +416,21 @@
   </div>
 
     <!-- 发票等附件在页面内预览，不再靠浏览器开新标签（2026-08-10 King：能不能直接点开，不要下载）-->
+    <!-- 改草稿：只放开非结构性字段 -->
+    <el-dialog v-model="editDraftVisible" title="修改对账单草稿" width="460px" destroy-on-close>
+      <el-form label-width="92px">
+        <el-form-item label="发票号"><el-input v-model="editDraftForm.invoice_no" placeholder="没有就留空" /></el-form-item>
+        <el-form-item label="发票金额"><el-input-number v-model="editDraftForm.invoice_amount" :min="0" :precision="2" :controls="false" style="width:100%" /></el-form-item>
+        <el-form-item label="税率(%)"><el-input-number v-model="editDraftForm.tax_rate" :min="0" :max="100" :precision="2" :controls="false" style="width:100%" /></el-form-item>
+        <el-form-item label="说明"><el-input v-model="editDraftForm.description" type="textarea" :rows="3" /></el-form-item>
+      </el-form>
+      <div class="hint">批次和费用明细属于结构性内容，改动牵扯批次占用与金额重算——需要改这些请删掉草稿重新建。</div>
+      <template #footer>
+        <el-button @click="editDraftVisible = false">取消</el-button>
+        <el-button type="primary" :loading="savingDraft" @click="doSaveDraft">保存</el-button>
+      </template>
+    </el-dialog>
+
     <FilePreviewDialog ref="preview" />
 </template>
 
@@ -423,6 +457,63 @@ const authStore = useAuthStore();
 const route = useRoute();
 const router = useRouter();
 const preview = ref<any>(null);
+// 改草稿
+const editDraftVisible = ref(false);
+const savingDraft = ref(false);
+const editDraftId = ref<number | null>(null);
+const editDraftForm = reactive<any>({ invoice_no: '', invoice_amount: undefined, tax_rate: undefined, description: '' });
+function openEditDraft(row: any) {
+  editDraftId.value = row.id;
+  Object.assign(editDraftForm, {
+    invoice_no: row.invoice_no ?? '',
+    invoice_amount: row.invoice_amount != null ? +row.invoice_amount : undefined,
+    tax_rate: row.tax_rate != null ? +row.tax_rate : undefined,
+    description: row.description ?? '',
+  });
+  editDraftVisible.value = true;
+}
+async function doSaveDraft() {
+  if (!editDraftId.value) return;
+  savingDraft.value = true;
+  try {
+    await reconciliationApi.updateDraft(editDraftId.value, { ...editDraftForm });
+    ElMessage.success('已保存');
+    editDraftVisible.value = false;
+    load();
+  } finally { savingDraft.value = false; }
+}
+
+/**
+ * 出货明细摊成「逐品名」行（2026-08-11 King：合同里多个品名、单价不同，
+ * 要按数量×单价一行一行列，不要一个平均价）。
+ *
+ * 对账行是**按发货批次**存的，单价取批次锁价——一个批次含多个品名时那就是加权平均
+ * （实证 DZ-MNA263M525-001：9941 × 15.3130，实际是 4 条不同单价的料，合计分毫不差）。
+ * 逐品名数据在批次的 items 里（后端详情已带出）。
+ * 【两种都要兼容】门户发货时「按物料行填写实发数」是可选的，只有部分批次有 items；
+ * 没有的批次照旧整批一行，不要因为摊开而把它们弄丢。
+ */
+const shipRowClass = ({ row }: { row: any }) => (row?._sub ? 'ship-sub' : '');
+const shipmentDetailRows = computed(() => {
+  const out: any[] = [];
+  for (const s of (detailData.value?.shipments ?? []) as any[]) {
+    const items: any[] = s.items ?? [];
+    if (!items.length) { out.push(s); continue; }
+    // 批次汇总行保留（看得到这一批总额），其下挂逐品名行
+    out.push({ ...s, _batch: true });
+    for (const it of items) {
+      out.push({
+        _sub: true,
+        shipment_id: '', contract_id: null, style_no: '',
+        item_name: it.item_name,
+        snapshot_unit_price: it.unit_price,
+        qty: it.qty,
+        amount: it.amount ?? (+it.unit_price || 0) * (+it.qty || 0),
+      });
+    }
+  }
+  return out;
+});
 const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
 
 // 合同号可点跳合同页（对账付款串流程 B7/C12）。原先跳的是 Contracts?open=<id> 让列表开弹框，
@@ -735,6 +826,9 @@ async function doGenerateLabor() {
 </script>
 
 <style scoped>
+/* 逐品名行淡一点，跟批次汇总行区分开 */
+:deep(.el-table .ship-sub) > td { background: var(--el-fill-color-lighter); }
+
 .page-container { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .search-card :deep(.el-card__body) { padding: 16px 16px 0; }
 .card-header { display: flex; justify-content: space-between; align-items: center; }

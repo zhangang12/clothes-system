@@ -66,6 +66,19 @@ export class ReconciliationController {
     return this.service.reject(id, remark);
   }
 
+  // 改草稿（2026-08-11 ZYT：草稿能不能改/删）。只放开非结构性字段——批次与费用行改动
+  // 牵扯占用释放与金额重算，风险高收益低，建错了删掉重建更稳
+  @Patch(':id')
+  @Roles(UserRole.ADMIN, UserRole.SUPERVISOR, UserRole.FINANCE, UserRole.BUSINESS)
+  @ApiOperation({ summary: '修改草稿态对账单（发票/税率/说明；业务限本人创建的）' })
+  updateDraft(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: { invoice_no?: string; invoice_amount?: number; tax_rate?: number; description?: string },
+    @Request() req: any,
+  ) {
+    return this.service.updateDraft(id, dto, { id: req.user.id, role: req.user.role });
+  }
+
   @Delete(':id')
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: '删除对账单（草稿状态，逻辑删除）' })

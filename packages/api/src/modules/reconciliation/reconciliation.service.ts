@@ -1,10 +1,11 @@
 import {
-  Injectable, NotFoundException, BadRequestException,
+  Injectable, NotFoundException, BadRequestException, ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, Like, In, DataSource, EntityManager } from 'typeorm';
 import { Reconciliation, ReconciliationStatus } from './reconciliation.entity';
 import { ReconciliationShipment } from './reconciliation-shipment.entity';
+import { ContractShipmentItem } from '../contract/contract-shipment-item.entity';
 import { ReconciliationLaborItem } from './reconciliation-labor-item.entity';
 import { ReconciliationExpenseItem } from './reconciliation-expense-item.entity';
 import { Contract } from '../contract/contract.entity';
@@ -12,7 +13,7 @@ import { ContractShipment } from '../contract/contract-shipment.entity';
 import { OrderMain } from '../order/order-main.entity';
 import { SampleGarment } from '../sample/sample-garment.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
-import { ReconcileType, ContractPortalStatus, OrderStatus, SampleStatus, ContractType } from '@i9/types';
+import { ReconcileType, ContractPortalStatus, OrderStatus, SampleStatus, ContractType, UserRole } from '@i9/types';
 import { CreateReconciliationDto } from './dto/create-reconciliation.dto';
 import { GenerateLaborDto } from './dto/generate-labor.dto';
 import { QueryReconciliationDto } from './dto/query-reconciliation.dto';
@@ -322,6 +323,23 @@ export class ReconciliationService {
     const reconciliation = await this.repo.findOne({ where: { id, deleted: 0 } });
     if (!reconciliation) throw new NotFoundException(`对账单 #${id} 不存在`);
     const shipments = await this.shipmentRepo.find({ where: { reconcile_id: id } });
+    // 逐品名明细（2026-08-11 King：「这个合同里面有多个品名，单价不同，要按数量×单价一行一行列出来，
+    // 不要一个平均价」）。对账行是**按发货批次**存的，单价取批次锁价——一个批次含多个品名时
+    // 那就是加权平均价（实证 DZ-MNA263M525-001：9941 件 × 15.3130，实际是 4 条不同单价的料）。
+    // 真实的逐品名数据一直在 contract_shipment_item 里，这里带出来给详情/导出用。
+    // 【注意】按物料行填报是可选的，只有部分批次有；没有的批次前端仍按整批展示。
+    if (shipments.length) {
+      const items = await this.dataSource.getRepository(ContractShipmentItem).find({
+        where: { shipment_id: In(shipments.map((s) => s.shipment_id)) },
+      });
+      const byShip = new Map<number, ContractShipmentItem[]>();
+      for (const it of items) {
+        const k = +it.shipment_id;
+        if (!byShip.has(k)) byShip.set(k, []);
+        byShip.get(k)!.push(it);
+      }
+      (shipments as any[]).forEach((s) => { (s as any).items = byShip.get(+s.shipment_id) ?? []; });
+    }
     // 工时对账带出多款明细（批次可点跳回样衣）
     const laborItems = reconciliation.type === ReconcileType.LABOR
       ? await this.laborItemRepo.find({ where: { reconcile_id: id } })
@@ -502,6 +520,54 @@ export class ReconciliationService {
 
       return saved;
     });
+  }
+
+  /**
+   * 修改草稿态对账单的**非结构性字段**（2026-08-11 ZYT：「对账管理在草稿状态可以选择修改或者删除吗？」）。
+   *
+   * 【为什么此前改不了】对账单只有 建/提交/复核/退回/删除，**没有编辑端点**；删除又限管理员，
+   * 业务自己建的草稿等于动不了（与付款申请当时是同一个毛病）。
+   *
+   * 【为什么只放开这几个字段】发票号/发票金额/税率/说明这些不影响单据结构；
+   * 而**批次与费用行是结构性的**——它们决定对账金额，还牵扯发货批次的占用/释放，
+   * 改一处要同步释放旧批次、校验新批次未被占用、重算金额，等于把创建逻辑再走一遍。
+   * 这条路风险高、收益低（建错了删掉重建更快更安全），所以不在这里做；
+   * 要改批次请删掉草稿重新建。
+   */
+  async updateDraft(
+    id: number,
+    dto: { invoice_no?: string; invoice_amount?: number; tax_rate?: number; description?: string },
+    user: { id: number; role?: string },
+  ): Promise<Reconciliation> {
+    const rec = await this.repo.findOne({ where: { id, deleted: 0 } });
+    if (!rec) throw new NotFoundException(`对账单 #${id} 不存在`);
+    if (rec.status !== ReconciliationStatus.DRAFT) {
+      throw new BadRequestException(
+        `只有草稿状态可以修改（当前 ${rec.status}）；已提交复核的请先「整单退回」再改`,
+      );
+    }
+    const privileged = user.role === UserRole.ADMIN || user.role === UserRole.SUPERVISOR
+      || user.role === UserRole.FINANCE;
+    if (!privileged && Number(rec.created_by) !== Number(user.id)) {
+      throw new ForbiddenException('只能修改自己创建的对账单草稿');
+    }
+    if (dto.invoice_no !== undefined) {
+      rec.invoice_no = dto.invoice_no || null as any;   // 空串归一为 NULL：唯一索引允许多张「无发票」并存
+      rec.has_invoice = dto.invoice_no ? 1 : 0;
+    }
+    if (dto.tax_rate !== undefined) {
+      rec.tax_rate = dto.tax_rate as any;
+      rec.tax_amount = (dto.tax_rate && rec.total_amount
+        ? +(+rec.total_amount * dto.tax_rate / 100).toFixed(4) : null) as any;
+    }
+    if (dto.invoice_amount !== undefined) {
+      rec.invoice_amount = dto.invoice_amount as any;
+      // 发票差额跟着重算，别让它停在改之前的值
+      rec.invoice_diff = (dto.invoice_amount != null
+        ? +(dto.invoice_amount - +rec.total_amount).toFixed(4) : null) as any;
+    }
+    if (dto.description !== undefined) rec.description = dto.description || null as any;
+    return this.repo.save(rec);
   }
 
   async remove(id: number): Promise<void> {
