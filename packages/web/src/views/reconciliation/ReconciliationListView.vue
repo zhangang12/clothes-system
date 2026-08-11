@@ -110,6 +110,17 @@
               link type="danger" size="small"
               @click="doReject(row)"
             >整单退回</el-button>
+            <!-- 无权复核时也把入口和原因露出来（2026-08-11 群里问「这个待复核从哪复核」）：
+                 此前非主管看到的操作列只有「详情/导出Excel」，既找不到入口、也不知道该找谁 -->
+            <el-tooltip v-if="row.status === 'PENDING' && !canReview" placement="top"
+              content="复核确认需要主管或管理员操作，请转交他们处理">
+              <span><el-button link size="small" disabled>复核确认（需主管）</el-button></span>
+            </el-tooltip>
+            <!-- 同理：草稿要先提交复核，无权时说清楚 -->
+            <el-tooltip v-if="row.status === 'DRAFT' && !canEdit" placement="top"
+              content="提交复核需要业务/财务/管理员操作">
+              <span><el-button link size="small" disabled>提交复核（无权限）</el-button></span>
+            </el-tooltip>
             <el-popconfirm v-if="row.status === 'DRAFT' && isAdmin" title="确认删除？" @confirm="doRemove(row.id)">
               <template #reference>
                 <el-button link type="danger" size="small">删除</el-button>
