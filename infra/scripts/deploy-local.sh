@@ -35,10 +35,24 @@ COMMIT=$(git rev-parse --short HEAD)
 log "本次发版：$COMMIT $(git log -1 --pretty=%s)"
 
 # ── ② 本地构建（types 必须先于 api）───────────────────────────
-log "构建类型包..."; pnpm --filter @i9/types build >/dev/null
-log "构建 API...";   pnpm --filter @i9/api build >/dev/null
-log "构建管理后台..."; pnpm --filter @i9/web build >/dev/null
-log "构建供应商门户..."; NODE_ENV=production pnpm --filter @i9/portal build >/dev/null
+# 【别再写 `pnpm ... >/dev/null`】构建失败时 pnpm 的报错走 stdout，被 /dev/null 吞掉，
+# 而 `set -e` 会当场退出、连 die 都来不及跑——屏幕上只剩「构建管理后台...」，
+# 一个字的原因都没有（2026-08-11 实测：tsc 报了个类型错，脚本静默死掉）。
+# 改成落进临时文件，成功就丢弃、失败就原样打出来。
+build_pkg() {
+  local name="$1" pkg="$2"; shift 2
+  local out; out=$(mktemp)
+  log "构建$name..."
+  if ! env "$@" pnpm --filter "$pkg" build >"$out" 2>&1; then
+    echo "----- $pkg 构建输出 -----"; cat "$out"; rm -f "$out"
+    die "$name 构建失败"
+  fi
+  rm -f "$out"
+}
+build_pkg "类型包"     @i9/types
+build_pkg "API"        @i9/api
+build_pkg "管理后台"   @i9/web
+build_pkg "供应商门户" @i9/portal NODE_ENV=production
 for d in packages/types/dist packages/api/dist packages/web/dist packages/portal/dist; do
   [[ -d "$d" ]] || die "构建产物缺失：$d"
 done
