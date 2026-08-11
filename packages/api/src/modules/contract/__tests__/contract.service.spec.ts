@@ -992,4 +992,58 @@ describe('ContractService', () => {
       await expect(service.approveShipment(5, 1, 9, false)).rejects.toThrow(BadRequestException);
     });
   });
+
+  // ——— 无订单材料合同（2026-08-11 King #75：公司挂卡/销样面料本来就没有订单）———
+  describe('无订单材料合同', () => {
+    const mgr = () => ({
+      create: jest.fn().mockImplementation((_: any, v: any) => v),
+      save: jest.fn().mockImplementation((_: any, v: any) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
+      findOne: jest.fn().mockResolvedValue(null),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+    });
+
+    it('UT-NOORD-01 材料合同不填订单也能建，order_id 落成 NULL 而不是 undefined', async () => {
+      const m = mgr();
+      mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(m));
+      await service.create({
+        type: 'MATERIAL', factory_id: 5,
+        materials: [{ item_name: '挂卡面料', unit_price: 20, qty: 10 }],
+      } as any, 1);
+      const saved = m.save.mock.calls.find((c: any[]) => c[1] && c[1].contract_no)?.[1];
+      expect(saved).toBeDefined();
+      expect(saved.order_id).toBeNull();
+    });
+
+    it('UT-NOORD-02 不填订单时绝不去"从订单带料"——那会把全库订单材料捞回来', async () => {
+      const m = mgr();
+      mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(m));
+      mockOrderMaterialRepo.find.mockClear();
+      await service.create({
+        type: 'MATERIAL', factory_id: 5,
+        materials: [{ item_name: '挂卡面料', unit_price: 20, qty: 10 }],
+      } as any, 1);
+      expect(mockOrderMaterialRepo.find).not.toHaveBeenCalled();
+    });
+
+    it('UT-NOORD-03 明细也没填时照旧拒绝，但话得说人话——不能提"该订单"，本来就没订单', async () => {
+      mockOrderMaterialRepo.find.mockClear();
+      await expect(service.create({ type: 'MATERIAL', factory_id: 5 } as any, 1))
+        .rejects.toThrow(/未关联订单的合同没有可带出的用料/);
+      expect(mockOrderMaterialRepo.find).not.toHaveBeenCalled();
+    });
+
+    it('UT-NOORD-04 加工合同不填订单直接拒绝（数量取自订单大货数，没订单无从建起）', async () => {
+      await expect(service.create({
+        type: 'PROCESS', factory_id: 5,
+        materials: [{ item_name: '加工费', unit_price: 20, qty: 10 }],
+      } as any, 1)).rejects.toThrow(BadRequestException);
+    });
+
+    it('UT-NOORD-05 补料合同不填订单同样拒绝', async () => {
+      await expect(service.create({
+        type: 'SUPPLEMENT', factory_id: 5, parent_id: 1,
+        materials: [{ item_name: '补料', unit_price: 20, qty: 10 }],
+      } as any, 1)).rejects.toThrow(BadRequestException);
+    });
+  });
 });

@@ -24,8 +24,10 @@ export class Contract {
   @Column({ type: 'bigint' })
   factory_id: number;
 
-  @Column({ type: 'bigint' })
-  order_id: number;
+  // 可空：公司挂卡/销样面料这类采购没有订单（2026-08-11 King #75）。
+  // 只有材料合同能不填；加工/补料合同在 service 里仍强制要求（见 create）
+  @Column({ type: 'bigint', nullable: true })
+  order_id: number | null;
 
   @Column({ type: 'decimal', precision: 15, scale: 4 })
   total_amount: number;

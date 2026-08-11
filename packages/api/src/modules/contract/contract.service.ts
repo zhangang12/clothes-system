@@ -296,6 +296,13 @@ export class ContractService {
       );
     }
 
+    // 无订单材料合同（2026-08-11 King #75：公司挂卡/销样面料本来就没有订单）。
+    // 【只放开材料合同】加工合同的数量取自订单大货数、补料合同挂在母合同+订单上，
+    // 这两类没有订单就无从建起，放开等于放进一批半残单据。
+    if (!dto.order_id && dto.type !== ContractType.MATERIAL) {
+      throw new BadRequestException('加工合同与补料合同必须关联订单；只有材料合同可以不关联（如挂卡、销样面料）');
+    }
+
     // 关联订单（编辑页默认值来源：款号/交期偏移；订单不存在不阻断——历史数据兼容）
     const order = dto.order_id
       ? await this.orderRepo.findOne({ where: { id: dto.order_id, deleted: 0 } })
@@ -314,7 +321,9 @@ export class ContractService {
     let materialInputs: Array<Record<string, any>> = dto.materials ?? [];
     // 材料合同：从订单用料核算带出，数量=采购量(含损耗)（设计稿 合同 A5/C3）；
     // 分色/分码材料按订单尺码矩阵拆行（设计稿 合同 A4）
-    if (materialInputs.length === 0 && dto.type === ContractType.MATERIAL) {
+    // 【dto.order_id 必须先判空】TypeORM 里 where: { order_id: undefined } 等于**不加这个条件**，
+    // 会把全库订单材料一股脑捞回来拼进合同——无订单合同正好会走到这里，不判就是一颗雷
+    if (materialInputs.length === 0 && dto.type === ContractType.MATERIAL && dto.order_id) {
       const orderMaterials = await this.orderMaterialRepo.find({
         where: { order_id: dto.order_id },
         order: { sort_order: 'ASC' },
@@ -339,7 +348,10 @@ export class ContractService {
       }
     }
     if (materialInputs.length === 0) {
-      throw new BadRequestException('材料明细不能为空（该订单无可带出的用料核算记录，请手动填写 materials）');
+      // 无订单合同走到这里时，"该订单无可带出的用料核算记录"是句听不懂的话——本来就没订单
+      throw new BadRequestException(dto.order_id
+        ? '材料明细不能为空（该订单无可带出的用料核算记录，请手动填写 materials）'
+        : '材料明细不能为空（未关联订单的合同没有可带出的用料，请手工添加明细行）');
     }
 
     const run = async (m: EntityManager): Promise<Contract> => {
@@ -362,7 +374,7 @@ export class ContractService {
         type: dto.type,
         parent_id: dto.parent_id,
         factory_id: dto.factory_id,
-        order_id: dto.order_id,
+        order_id: dto.order_id ?? null,
         total_amount: +totalAmount.toFixed(4),
         currency: dto.currency ?? 'CNY',
         deposit_ratio,

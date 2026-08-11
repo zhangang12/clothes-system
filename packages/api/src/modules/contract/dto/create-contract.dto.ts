@@ -111,11 +111,14 @@ export class CreateContractDto {
   @Min(1)
   factory_id: number;
 
-  @ApiProperty()
+  // 材料合同可不填（挂卡/销样面料无订单，#75）；加工/补料仍必填，由 service 校验——
+  // 放在 service 而不是 DTO，是因为这条规则依赖 type，DTO 层的条件校验写起来更绕且容易漏
+  @ApiPropertyOptional({ description: '关联订单；材料合同可不填（无订单采购）' })
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  order_id: number;
+  order_id?: number;
 
   @ApiPropertyOptional({ example: 'CNY' })
   @IsOptional()

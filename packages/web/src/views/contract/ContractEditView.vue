@@ -43,10 +43,19 @@
           <el-col :span="8"><el-form-item label="合同编号"><el-input :model-value="form.contract_no || '（保存后自动生成）'" disabled /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="合同类型"><el-input :model-value="typeLabel(form.type)" disabled /></el-form-item></el-col>
           <el-col :span="8">
-            <el-form-item label="关联订单" required>
-              <el-select v-model="form.order_id" filterable placeholder="选择订单" style="width:100%" :disabled="!!contractId || isSupplement" @change="onOrderChange">
+            <!-- 材料合同可以不关联订单（挂卡/销样面料本来就没订单，2026-08-11 King #75）；
+                 加工/补料合同仍然必填，后端也会挡 -->
+            <el-form-item label="关联订单" :required="!isMaterial">
+              <el-select
+                v-model="form.order_id" filterable clearable
+                :placeholder="isMaterial ? '选择订单；挂卡/销样等无订单采购可留空' : '选择订单'"
+                style="width:100%" :disabled="!!contractId || isSupplement" @change="onOrderChange"
+              >
                 <el-option v-for="o in orders" :key="o.id" :label="`${o.order_no} · ${o.style_no || ''}`" :value="o.id" />
               </el-select>
+              <div v-if="isMaterial && !form.order_id && !contractId" class="no-order-tip">
+                未关联订单：明细需手工填写，不会从订单带料
+              </div>
             </el-form-item>
           </el-col>
           <el-col :span="8"><el-form-item :label="isProcess ? '签订地址' : '签约地点'"><el-input v-model="form.sign_place" placeholder="默认本司地址" /></el-form-item></el-col>
@@ -116,7 +125,7 @@
 
     <!-- ▣ 关联款号（多选，D2） -->
     <div class="section-card">
-      <h3 class="sec-title">▣ 关联款号（多选） <span class="sec-sub">同一订单内多选款号，带出对应{{ isProcess ? '款式' : '材料' }}</span></h3>
+      <h3 class="sec-title">▣ 关联款号（多选） <span class="sec-sub">{{ form.order_id ? `同一订单内多选款号，带出对应${isProcess ? '款式' : '材料'}` : '未关联订单：款号可留空（挂卡/销样面料无款号），也可手工添加' }}</span></h3>
       <div class="style-tags">
         <el-tag v-for="s in styleNoList" :key="s" closable :disable-transitions="true" @close="removeStyleNo(s)" class="style-tag">☑ {{ s }}</el-tag>
         <el-input v-if="styleInputVisible" ref="styleInputRef" v-model="styleInputValue" size="small" style="width:160px" @keyup.enter="confirmStyleNo" @blur="confirmStyleNo" />
@@ -364,6 +373,7 @@ const draft = useFormDraft(`contract:${route.fullPath}`, form, {
 
 const isProcess = computed(() => form.type === 'PROCESS');
 const isSupplement = computed(() => form.type === 'SUPPLEMENT');
+const isMaterial = computed(() => form.type === 'MATERIAL');
 const editable = computed(() => form.portal_status === 'DRAFT');
 const pageTitle = computed(() =>
   ({ MATERIAL: '材料合同 · 编辑（原料/辅料购销协议）', PROCESS: '生产加工合同 · 编辑（委托加工合同）', SUPPLEMENT: '补料合同 · 编辑' } as any)[form.type] ?? '合同编辑');
@@ -671,8 +681,9 @@ function buildDto(): Record<string, unknown> {
 }
 function validateForm(): string | null {
   if (!form.factory_id) return isProcess.value ? '请选择受托方（加工厂）' : '请选择甲方（供方）';
-  if (!form.order_id) return '请选择关联订单';
-  if (!styleNoList.value.length) return '至少关联 1 个款号';
+  // 材料合同允许无订单（#75）；此时款号也不强制——挂卡、销样面料本就没有款号
+  if (!form.order_id && !isMaterial.value) return '请选择关联订单';
+  if (!styleNoList.value.length && form.order_id) return '至少关联 1 个款号';
   if (!form.materials.length) return '货物明细至少 1 行';
   const bad = form.materials.find((m: any) => !m.item_name || !(+m.qty > 0));
   if (bad) return '货物明细：品名必填、数量须大于 0';
@@ -838,6 +849,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.no-order-tip { font-size: 12px; color: var(--el-text-color-secondary); line-height: 1.4; margin-top: 2px; }
 .edit-page { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .toolbar-card, .section-card { background: var(--el-bg-color); border: 1px solid var(--el-border-color-light); border-radius: 6px; padding: 12px 16px; }
 .head-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }

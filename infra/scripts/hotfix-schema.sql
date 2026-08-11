@@ -114,6 +114,17 @@ CALL _i9_run_if_col('sample_garment','status',"UPDATE sample_garment SET status=
 CALL _i9_run_if_col('sample_garment','status',"UPDATE sample_garment SET status='DONE' WHERE status='CONFIRMED'");
 CALL _i9_run_if_col('sample_garment','status',"UPDATE sample_garment SET status='RETURNED' WHERE status='REJECTED'");
 
+-- ── NOT NULL → NULL 放宽(AUTO 段抓不到,必须手工)────────────────
+-- 【为什么 AUTO 段不管用】_i9_sync_col 只比 information_schema 的 COLUMN_TYPE，
+-- 而 COLUMN_TYPE 里**不含 NULL/NOT NULL**——`bigint` NOT NULL 与 `bigint` NULL 在它眼里一模一样，
+-- 判不出差异就不会 MODIFY，存量库会一直停在 NOT NULL，而新代码允许不填 → INSERT 报
+-- 「Field 'order_id' doesn't have a default value」，材料合同一建就 500。所以在这里手工放开。
+-- （同类隐患：customer.grade 也有可空性漂移，见 CLAUDE.md 待办；根治要改 _i9_sync_col 的比较口径，
+--   但那会让 677 列在首次执行时全量 MODIFY，风险另评估，本轮只精确处理这一列。）
+-- 材料合同可不关联订单（2026-08-11 King 反馈 #75：公司挂卡/销样面料本来就没有订单）。
+-- 幂等：MODIFY 成同样定义可重复执行；加工/补料合同仍由服务层强制要求订单。
+CALL _i9_modify_col('contract','order_id',"BIGINT NULL");
+
 -- ── 反向漂移孤儿列放宽(2026-07-14 生产事故根治:建样衣 POST /samples 必 500)────────────────
 -- 根因:重构(e5f6e21)把 sample_garment 旧列 style_name(款式名)换成 style_no,init.sql/实体均不再含该列;
 --       但「重构前」装机的生产库上仍残留 style_name VARCHAR(100) NOT NULL 无默认值。现行代码 INSERT 只给
@@ -647,7 +658,9 @@ CREATE TABLE IF NOT EXISTS `contract` (
   `type`                ENUM('MATERIAL','PROCESS','SUPPLEMENT') NOT NULL COMMENT '合同类型',
   `parent_id`           BIGINT         DEFAULT NULL COMMENT '补料合同的父合同',
   `factory_id`          BIGINT         NOT NULL,
-  `order_id`            BIGINT         NOT NULL,
+  -- 可空：公司挂卡 / 销样面料这类采购本来就没有订单（2026-08-11 King 反馈 #75）。
+  -- 加工合同与补料合同仍在服务层强制要求订单，放开的只是材料合同。
+  `order_id`            BIGINT         NULL,
   `total_amount`        DECIMAL(15,4)  NOT NULL COMMENT '合同总金额',
   `currency`            VARCHAR(5)     NOT NULL DEFAULT 'CNY',
   `deposit_ratio`       DECIMAL(5,2)   NOT NULL DEFAULT 30.00 COMMENT '定金比例%',
@@ -1873,8 +1886,8 @@ CALL _i9_add_col('contract','parent_id',"BIGINT         DEFAULT NULL COMMENT '�
 CALL _i9_sync_col('contract','parent_id',"BIGINT","BIGINT         DEFAULT NULL COMMENT '补料合同的父合同'");
 CALL _i9_add_col('contract','factory_id',"BIGINT         NOT NULL");
 CALL _i9_sync_col('contract','factory_id',"BIGINT","BIGINT         NOT NULL");
-CALL _i9_add_col('contract','order_id',"BIGINT         NOT NULL");
-CALL _i9_sync_col('contract','order_id',"BIGINT","BIGINT         NOT NULL");
+CALL _i9_add_col('contract','order_id',"BIGINT         NULL");
+CALL _i9_sync_col('contract','order_id',"BIGINT","BIGINT         NULL");
 CALL _i9_add_col('contract','total_amount',"DECIMAL(15,4)  NOT NULL COMMENT '合同总金额'");
 CALL _i9_sync_col('contract','total_amount',"DECIMAL(15,4)","DECIMAL(15,4)  NOT NULL COMMENT '合同总金额'");
 CALL _i9_add_col('contract','currency',"VARCHAR(5)     NOT NULL DEFAULT 'CNY'");

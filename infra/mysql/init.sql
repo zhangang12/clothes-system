@@ -557,7 +557,9 @@ CREATE TABLE IF NOT EXISTS `contract` (
   `type`                ENUM('MATERIAL','PROCESS','SUPPLEMENT') NOT NULL COMMENT '合同类型',
   `parent_id`           BIGINT         DEFAULT NULL COMMENT '补料合同的父合同',
   `factory_id`          BIGINT         NOT NULL,
-  `order_id`            BIGINT         NOT NULL,
+  -- 可空：公司挂卡 / 销样面料这类采购本来就没有订单（2026-08-11 King 反馈 #75）。
+  -- 加工合同与补料合同仍在服务层强制要求订单，放开的只是材料合同。
+  `order_id`            BIGINT         NULL,
   `total_amount`        DECIMAL(15,4)  NOT NULL COMMENT '合同总金额',
   `currency`            VARCHAR(5)     NOT NULL DEFAULT 'CNY',
   `deposit_ratio`       DECIMAL(5,2)   NOT NULL DEFAULT 30.00 COMMENT '定金比例%',
