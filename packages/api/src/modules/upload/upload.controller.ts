@@ -67,11 +67,19 @@ export class UploadController {
     if (!full) throw new NotFoundException('文件不存在');
     const contentType = this.fileService.contentTypeFor(relativePath);
     const inline = contentType.startsWith('image/') || contentType === 'application/pdf';
+    // 【缓存】文件名是 uuid，内容一旦写下就不会变，所以可以放心让浏览器长期缓存。
+    // 不加这条的后果是实测出来的：合同/样衣的材料明细每行一张照片，一页几十张，
+    // 每次进页面都要**逐张回源到 Node**（sendFile 默认 max-age=0，只能靠 ETag 走 304，
+    // 依然是几十次往返）。生产上单张图最大 1.9MB、48 张超 500KB，这就是"点开合同要转半天"的来源。
+    // private/ 用 `private` 而不是 `public`：签名链接不该被中间层/共享代理缓存下来给别人。
     res.sendFile(full, {
       headers: {
         'Content-Type': contentType,
         'X-Content-Type-Options': 'nosniff',
         'Content-Disposition': inline ? 'inline' : 'attachment',
+        'Cache-Control': this.fileService.isPrivate(relativePath)
+          ? 'private, max-age=300'          // 与签名令牌 5 分钟有效期对齐，过期后重新取签名
+          : 'public, max-age=31536000, immutable',
       },
     });
   }

@@ -190,7 +190,8 @@
         <el-table-column v-if="!isProcess" label="照片" width="96">
           <template #default="{ row }">
             <div class="photo-cell">
-              <el-image v-if="row.photo_url" :src="row.photo_url" :preview-src-list="[row.photo_url]" fit="cover" class="thumb-sm" />
+              <!-- lazy：材料明细一页几十行，不加的话进页面就并发拉几十张原图（单张最大 1.9MB） -->
+                <el-image v-if="row.photo_url" :src="row.photo_url" :preview-src-list="[row.photo_url]" fit="cover" class="thumb-sm" lazy />
               <el-upload v-if="editable" :show-file-list="false" :http-request="(o: any) => uploadTo(o, (url) => (row.photo_url = url))" accept="image/*">
                 <el-button size="small" link>📷</el-button>
               </el-upload>

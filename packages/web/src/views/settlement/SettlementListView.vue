@@ -590,7 +590,12 @@ const total = ref(0);
 const stats = reactive({ pending: 0, loss: 0, recalc: 0 });
 const onlyLoss = ref(false);
 const onlyRecalc = ref(false);
+// 徽标统计接口是 @Roles(ADMIN, FINANCE)。**先判角色再调**，别让别的角色每次打开结算页
+// 都白挨一个 403（生产日志实证：19 次 403 全来自同一个业务账号反复进这一页）。
+// catch 保留：角色矩阵将来若再收紧，这里也不该把整页拖挂。
+const canSeeStats = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.FINANCE));
 async function loadStats() {
+  if (!canSeeStats.value) return;
   try {
     const res: any = await settlementApi.stats();
     Object.assign(stats, res?.data ?? {});

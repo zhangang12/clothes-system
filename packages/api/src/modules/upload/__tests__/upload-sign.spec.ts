@@ -1,6 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -119,5 +119,75 @@ describe('UploadController sign(L9)', () => {
     const guards = Reflect.getMetadata(GUARDS_METADATA, UploadController.prototype.sign) ?? [];
     expect(guards).toContain(JwtAuthGuard);
     expect(guards).toContain(RolesGuard);
+  });
+});
+
+// 图片缓存（2026-08-12 性能）：上传文件名是 uuid、内容不会变，必须让浏览器缓存下来。
+// 之前没有 Cache-Control，sendFile 默认 max-age=0，合同/样衣的材料明细一页几十张图
+// 每次进页面都要逐张回源到 Node——这就是"点开合同要转半天"的来源。
+describe('UploadController getFile 缓存头', () => {
+  let controller: UploadController;
+  const mockFileService = {
+    isPrivate: jest.fn(),
+    verifyToken: jest.fn().mockReturnValue(true),
+    resolvePath: jest.fn().mockReturnValue('/data/uploads/misc/2026/08/x.png'),
+    contentTypeFor: jest.fn().mockReturnValue('image/png'),
+  };
+  /** 假 Response：只截住 sendFile 收到的 headers */
+  const makeRes = () => {
+    const captured: any = {};
+    return { res: { sendFile: (_p: string, opt: any) => { Object.assign(captured, opt?.headers ?? {}); } } as any, captured };
+  };
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    mockFileService.verifyToken.mockReturnValue(true);
+    mockFileService.resolvePath.mockReturnValue('/data/uploads/misc/2026/08/x.png');
+    mockFileService.contentTypeFor.mockReturnValue('image/png');
+    const module = await Test.createTestingModule({
+      controllers: [UploadController],
+      providers: [{ provide: FileService, useValue: mockFileService }],
+    }).compile();
+    controller = module.get(UploadController);
+  });
+
+  it('UT-UP-12: 公共文件长期强缓存(uuid 文件名，内容不会变)', () => {
+    mockFileService.isPrivate.mockReturnValue(false);
+    const { res, captured } = makeRes();
+    controller.getFile('misc/2026/08/x.png', undefined, res);
+    expect(captured['Cache-Control']).toBe('public, max-age=31536000, immutable');
+  });
+
+  it('UT-UP-13: 敏感附件只私有缓存且短，跟签名 5 分钟有效期对齐', () => {
+    mockFileService.isPrivate.mockReturnValue(true);
+    const { res, captured } = makeRes();
+    controller.getFile('private/2026/08/slip.png', 'tok', res);
+    // 不能是 public：签名链接被中间层/共享代理缓存下来就等于泄给了别人
+    expect(captured['Cache-Control']).toBe('private, max-age=300');
+    expect(captured['Cache-Control']).not.toContain('public');
+  });
+
+  it('UT-UP-14: 加缓存头没有把原来的安全头挤掉', () => {
+    mockFileService.isPrivate.mockReturnValue(false);
+    const { res, captured } = makeRes();
+    controller.getFile('misc/2026/08/x.png', undefined, res);
+    expect(captured['X-Content-Type-Options']).toBe('nosniff');
+    expect(captured['Content-Type']).toBe('image/png');
+    expect(captured['Content-Disposition']).toBe('inline');
+  });
+
+  it('UT-UP-15: 非图片/PDF 仍然强制下载，不因缓存改动被内联执行', () => {
+    mockFileService.isPrivate.mockReturnValue(false);
+    mockFileService.contentTypeFor.mockReturnValue('application/vnd.ms-excel');
+    const { res, captured } = makeRes();
+    controller.getFile('misc/2026/08/x.xls', undefined, res);
+    expect(captured['Content-Disposition']).toBe('attachment');
+  });
+
+  it('UT-UP-16: 敏感附件签名不对照旧 403，缓存头不能变成绕过口', () => {
+    mockFileService.isPrivate.mockReturnValue(true);
+    mockFileService.verifyToken.mockReturnValue(false);
+    const { res } = makeRes();
+    expect(() => controller.getFile('private/2026/08/slip.png', 'bad', res)).toThrow(ForbiddenException);
   });
 });

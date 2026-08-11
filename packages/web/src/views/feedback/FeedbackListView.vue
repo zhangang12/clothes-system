@@ -28,10 +28,12 @@
       <el-table-column label="图片" width="140">
         <template #default="{ row }">
           <div class="thumbs">
+            <!-- 用 row._imgs（已换好签名的地址），不要直接用 row.images：
+                 里面可能是 private/ 下的敏感附件，裸地址一律 403，缩略图会全变成裂图 -->
             <el-image
-              v-for="(u, i) in imgs(row.images)" :key="i" :src="u" :preview-src-list="imgs(row.images)" :initial-index="i"
-              fit="cover" class="thumb" preview-teleported />
-            <span v-if="!imgs(row.images).length" class="muted">—</span>
+              v-for="(u, i) in (row._imgs ?? [])" :key="i" :src="u" :preview-src-list="row._imgs" :initial-index="i"
+              fit="cover" class="thumb" preview-teleported lazy />
+            <span v-if="!(row._imgs ?? []).length" class="muted">—</span>
           </div>
         </template>
       </el-table-column>
@@ -93,6 +95,7 @@ import { ElMessage } from 'element-plus';
 import { Download } from '@element-plus/icons-vue';
 import { feedbackApi } from '../../api/feedback';
 import { downloadHtml } from '../../api/errorLog';
+import { signedUrl } from '@/utils/secureFile';
 
 const list = ref<any[]>([]);
 const total = ref(0);
@@ -109,7 +112,15 @@ async function load() {
   loading.value = true;
   try {
     const res: any = await feedbackApi.list({ ...query, status: query.status || undefined });
-    list.value = res.data ?? [];
+    const rows: any[] = res.data ?? [];
+    // 反馈附件大多在 misc/（公共），但也有落 private/ 的——那种裸地址点开必 403。
+    // 生产日志实证：有人对着同一张 private 图反复点了 8 次都打不开。
+    // 这里统一过一遍 signedUrl：公共地址原样返回，private 换成短时签名链接。
+    await Promise.all(rows.map(async (r) => {
+      const raw = imgs(r.images);
+      r._imgs = await Promise.all(raw.map((u) => signedUrl(u).catch(() => u)));
+    }));
+    list.value = rows;
     total.value = res.total ?? 0;
   } finally {
     loading.value = false;

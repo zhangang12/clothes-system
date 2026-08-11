@@ -160,7 +160,8 @@
             <el-table-column label="图片" width="88">
               <template #default="{ row }">
                 <div class="mat-photo">
-                  <el-image v-if="row.image" :src="row.image" :preview-src-list="[row.image]" fit="cover" class="mat-thumb" />
+                  <!-- lazy：同上，只加载视口内那几行的图 -->
+                  <el-image v-if="row.image" :src="row.image" :preview-src-list="[row.image]" fit="cover" class="mat-thumb" lazy />
                   <el-upload v-if="!bizDisabled || pmEnabled" :show-file-list="false" :http-request="(o: any) => uploadMatImage(o, row)" accept="image/*">
                     <el-button size="small" link>📷</el-button>
                   </el-upload>

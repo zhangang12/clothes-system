@@ -80,9 +80,15 @@ let timer: any = null;
 const fmt = (d: string) => (d ? new Date(d).toLocaleString('zh-CN') : '');
 
 async function refreshUnread() {
+  // 标签页在后台就别打了：这条一分钟一次，是全站请求量最大的接口之一，
+  // 而它查的是"有没有人回复我的反馈"——用户看不见的时候刷新没有任何意义。
+  // 回到前台时下面的 visibilitychange 会立刻补一次，红点不会迟到。
+  if (document.hidden) return;
   try { const r: any = await feedbackApi.unread(); unread.value = (r.data ?? r)?.count ?? 0; }
   catch { /* 未登录/无权限静默 */ }
 }
+
+function onVisible() { if (!document.hidden) refreshUnread(); }
 
 async function openPanel() {
   panelOpen.value = true;
@@ -99,8 +105,15 @@ async function openPanel() {
 
 function startNew() { panelOpen.value = false; open.value = true; }
 
-onMounted(() => { refreshUnread(); timer = setInterval(refreshUnread, 60000); });
-onBeforeUnmount(() => { if (timer) clearInterval(timer); });
+onMounted(() => {
+  refreshUnread();
+  timer = setInterval(refreshUnread, 60000);
+  document.addEventListener('visibilitychange', onVisible);
+});
+onBeforeUnmount(() => {
+  if (timer) clearInterval(timer);
+  document.removeEventListener('visibilitychange', onVisible); // 不摘会随组件反复挂载越积越多
+});
 
 function reset() {
   content.value = '';
