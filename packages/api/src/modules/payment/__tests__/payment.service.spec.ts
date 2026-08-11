@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, Between, In } from 'typeorm';
 import { PaymentService } from '../payment.service';
 import { Prepayment } from '../prepayment.entity';
 import { PaymentRequest } from '../payment-request.entity';
@@ -42,10 +42,17 @@ const mockPrRepo = {
   create: jest.fn().mockImplementation((v) => v),
   save: jest.fn().mockImplementation((v) => Promise.resolve(v)),
   findOne: jest.fn(),
+  find: jest.fn().mockResolvedValue([]),
   findAndCount: jest.fn().mockResolvedValue([[], 0]),
+};
+const mockRecordRepo = {
+  find: jest.fn().mockResolvedValue([]),
+  create: jest.fn().mockImplementation((v) => v),
+  save: jest.fn().mockImplementation((v) => Promise.resolve({ ...v, id: 1 })),
 };
 const mockReconcileRepo = {
   update: jest.fn().mockResolvedValue({ affected: 1 }),
+  find: jest.fn().mockResolvedValue([]),
 };
 const mockRedis = { eval: jest.fn().mockResolvedValue(1), incr: jest.fn().mockResolvedValue(1) };
 const mockManager = {
@@ -74,7 +81,7 @@ describe('PaymentService', () => {
         PaymentService,
         { provide: getRepositoryToken(Prepayment), useValue: mockPrepayRepo },
         { provide: getRepositoryToken(PaymentRequest), useValue: mockPrRepo },
-        { provide: getRepositoryToken(PaymentRecord), useValue: { find: jest.fn().mockResolvedValue([]), create: jest.fn().mockImplementation((v) => v), save: jest.fn().mockImplementation((v) => Promise.resolve({ ...v, id: 1 })) } },
+        { provide: getRepositoryToken(PaymentRecord), useValue: mockRecordRepo },
         { provide: getRepositoryToken(Reconciliation), useValue: mockReconcileRepo },
         { provide: NumberingService, useValue: new NumberingService(mockRedis as any) },
         { provide: DataSource, useValue: mockDataSource },
@@ -561,5 +568,108 @@ describe('PaymentService', () => {
     const recalcCall = manager.query.mock.calls.find((c: any[]) => String(c[0]).includes('order_main'));
     expect(recalcCall).toBeDefined();
     expect(recalcCall[1]).toEqual(['ST001']);
+  });
+
+  // ——— 工厂账单（2026-08-11 qiao：按工厂拉出该公司所有账单）———
+  describe('getFactoryStatement', () => {
+    /** 账单三类单据默认都空，各用例只塞自己关心的那一类 */
+    const armStatement = (opts: { prs?: any[]; prepays?: any[]; recs?: any[]; records?: any[] } = {}) => {
+      mockPrRepo.find.mockResolvedValue(opts.prs ?? []);
+      mockPrepayRepo.find.mockResolvedValue(opts.prepays ?? []);
+      mockReconcileRepo.find.mockResolvedValue(opts.recs ?? []);
+      mockRecordRepo.find.mockResolvedValue(opts.records ?? []);
+      // 第一条 query 是查工厂，后面的是补单号/合同号
+      mockDataSource.query.mockResolvedValue([{ id: 5, name: '苏州某某制衣有限公司', short_name: '苏州某某' }]);
+    };
+
+    it('UT-STMT-01 工厂不存在直接 404，不返回一份空账单让人以为这家没有往来', async () => {
+      mockDataSource.query.mockResolvedValue([]);
+      await expect(service.getFactoryStatement(999)).rejects.toThrow(NotFoundException);
+    });
+
+    it('UT-STMT-02 已驳回的申请明细里照列，但一分钱都不进合计', async () => {
+      armStatement({ prs: [
+        makePR({ id: 1, amount: 1000, actual_pay: 1000, approval_status: PaymentApprovalStatus.APPROVED }),
+        makePR({ id: 2, amount: 9999, actual_pay: 9999, approval_status: PaymentApprovalStatus.REJECTED }),
+      ] });
+      const st: any = await service.getFactoryStatement(5);
+      expect(st.requests).toHaveLength(2);            // 明细不能少行，否则跟系统里的条数对不上
+      expect(st.summary.rejected_count).toBe(1);
+      expect(st.summary.request_amount).toBe(1000);   // 9999 不算
+      expect(st.summary.payable_total).toBe(1000);
+    });
+
+    it('UT-STMT-03 应付只算已批准/已付款——草稿和待审批还不构成欠款', async () => {
+      armStatement({ prs: [
+        makePR({ id: 1, amount: 100, actual_pay: 100, approval_status: PaymentApprovalStatus.DRAFT }),
+        makePR({ id: 2, amount: 200, actual_pay: 200, approval_status: PaymentApprovalStatus.PENDING }),
+        makePR({ id: 3, amount: 300, actual_pay: 300, approval_status: PaymentApprovalStatus.APPROVED }),
+        makePR({ id: 4, amount: 400, actual_pay: 400, approval_status: PaymentApprovalStatus.PAID }),
+      ] });
+      const st: any = await service.getFactoryStatement(5);
+      expect(st.summary.request_amount).toBe(1000);   // 申请金额是全部（未驳回）
+      expect(st.summary.payable_total).toBe(700);     // 应付只有 300+400
+    });
+
+    it('UT-STMT-04 实付记录一次取回并按 pr_id 归位（不是每张申请查一次）', async () => {
+      armStatement({
+        prs: [makePR({ id: 1, actual_pay: 5000, approval_status: PaymentApprovalStatus.APPROVED }),
+              makePR({ id: 2, actual_pay: 3000, approval_status: PaymentApprovalStatus.APPROVED })],
+        records: [
+          { id: 1, pr_id: 1, amount: 2000, pay_date: '2026-08-01' },
+          { id: 2, pr_id: 1, amount: 1000, pay_date: '2026-08-05' },
+          { id: 3, pr_id: 2, amount: 500, pay_date: '2026-08-06' },
+        ],
+      });
+      const st: any = await service.getFactoryStatement(5);
+      expect(mockRecordRepo.find).toHaveBeenCalledTimes(1);
+      expect(mockRecordRepo.find).toHaveBeenCalledWith(expect.objectContaining({ where: { pr_id: In([1, 2]) } }));
+      expect(st.requests[0].records).toHaveLength(2);
+      expect(st.requests[0].paid_sum).toBe(3000);
+      expect(st.requests[1].paid_sum).toBe(500);
+      expect(st.summary.paid_total).toBe(3500);
+      expect(st.summary.unpaid_total).toBe(8000 - 3500);
+    });
+
+    it('UT-STMT-05 没有一张申请时不查付款记录（别拿空 IN () 去撞 SQL 语法错）', async () => {
+      armStatement({ prs: [] });
+      await service.getFactoryStatement(5);
+      expect(mockRecordRepo.find).not.toHaveBeenCalled();
+    });
+
+    it('UT-STMT-06 actual_pay 没落库时回落到 申请金额-冲抵预付，不当成 0', async () => {
+      armStatement({ prs: [makePR({ id: 1, amount: 1000, prepay_offset: 300, actual_pay: null, approval_status: PaymentApprovalStatus.APPROVED })] });
+      const st: any = await service.getFactoryStatement(5);
+      expect(st.summary.payable_total).toBe(700);
+    });
+
+    it('UT-STMT-07 区间过滤：datetime 列带时分秒、date 列不带（否则当天的单据整天漏掉）', async () => {
+      armStatement();
+      await service.getFactoryStatement(5, '2026-08-01', '2026-08-31');
+      expect(mockPrRepo.find).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ created_at: Between('2026-08-01 00:00:00', '2026-08-31 23:59:59') }),
+      }));
+      expect(mockPrepayRepo.find).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ pay_date: Between('2026-08-01', '2026-08-31') }),
+      }));
+    });
+
+    it('UT-STMT-08 不给区间就是「所有账单」——不能悄悄塞个默认区间把老单据滤掉', async () => {
+      armStatement();
+      await service.getFactoryStatement(5);
+      expect(mockPrRepo.find).toHaveBeenCalledWith({ where: { factory_id: 5, deleted: 0 }, order: { id: 'ASC' } });
+      expect(mockPrepayRepo.find).toHaveBeenCalledWith({ where: { factory_id: 5 }, order: { id: 'ASC' } });
+    });
+
+    it('UT-STMT-09 预付款汇总给出 金额/已用/余额 三个口径', async () => {
+      armStatement({ prepays: [
+        makePrepayment({ id: 1, amount: 1000, used_amount: 400, balance: 600 }),
+        makePrepayment({ id: 2, amount: 500, used_amount: 500, balance: 0 }),
+      ] });
+      const st: any = await service.getFactoryStatement(5);
+      expect(st.summary).toEqual(expect.objectContaining({
+        prepay_count: 2, prepay_amount: 1500, prepay_used: 900, prepay_balance: 600,
+      }));
+    });
   });
 });

@@ -12,6 +12,7 @@ import { CreatePrepaymentDto } from './dto/create-prepayment.dto';
 import { CreatePaymentRequestDto } from './dto/create-payment-request.dto';
 import { MarkPaidDto } from './dto/mark-paid.dto';
 import { QueryPaymentRequestDto } from './dto/query-payment-request.dto';
+import { QueryFactoryStatementDto } from './dto/query-factory-statement.dto';
 
 @ApiTags('付款管理')
 @ApiBearerAuth()
@@ -59,6 +60,14 @@ export class PaymentController {
   // 但日期/状态字段用 @IsString() 宽松校验——前端清空筛选项时发出空串 ''（不通过 IsDateString/IsEnum）
   findPaymentRequests(@Query() query: QueryPaymentRequestDto) {
     return this.service.findPaymentRequests(query);
+  }
+
+  // 工厂账单（2026-08-11 qiao）。**不额外加 @Roles**：内容与本页两个 Tab 列表逐字段一致，
+  // 只是按工厂汇到一起，没有新增任何暴露面；加了反而让业务看不到导出按钮、又来一条"找不到入口"。
+  @Get('factory-statement')
+  @ApiOperation({ summary: '工厂账单：某工厂的付款申请/实付记录/预付款/对账单 + 汇总（导出用）' })
+  getFactoryStatement(@Query() query: QueryFactoryStatementDto) {
+    return this.service.getFactoryStatement(query.factory_id, query.start_date, query.end_date);
   }
 
   @Patch('requests/:id/submit')

@@ -32,4 +32,7 @@ export const paymentRequestApi = {
     http.patch<unknown, any>(`/payments/requests/${id}/paid`, { slip_url: slipUrl }),
   remove: (id: number) =>
     http.delete(`/payments/requests/${id}`),
+  // 工厂往来账单：一次取齐付款申请/实付记录/预付款/对账单+汇总（导出用，避免前端 N+1）
+  factoryStatement: (params: { factory_id: number; start_date?: string; end_date?: string }) =>
+    http.get<unknown, any>('/payments/factory-statement', { params }),
 };

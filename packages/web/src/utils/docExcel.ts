@@ -39,11 +39,32 @@ export const imgCell = (url: string, box?: number, fallback?: string): ImageCell
 export const isImageCell = (c: unknown): c is ImageCell =>
   !!c && typeof c === 'object' && typeof (c as { img?: unknown }).img === 'string';
 
+/** 数字单元格：**xlsx 路径写成真数字**，Excel 里能直接 SUM / 排序 / 筛选。
+ *
+ *  【为什么需要它】本层给所有单元格钉了 `numFmt='@'`（文本）——款号形如 I27.230.03929，
+ *  不钉成文本会被 Excel 截成 27.23。代价是**金额也成了文本**，选中一列右下角不显示求和、
+ *  写 =SUM() 得 0。单据导出无所谓（一张单自己就带合计行），但「拉一家工厂所有账单」这种
+ *  是拿去二次加工的，金额必须是数字。
+ *
+ *  【空值仍然是空单元格】沿用 n2 的口径：未填 ≠ 0，别让"没填金额"在表里读成"金额为零"。 */
+export interface NumCell { num: number; fmt?: string }
+
+export const isNumCell = (c: unknown): c is NumCell =>
+  !!c && typeof c === 'object' && typeof (c as { num?: unknown }).num === 'number';
+
+export const numCell = (v: unknown, fmt = '#,##0.00'): NumCell | '' => {
+  if (v === null || v === undefined || v === '') return '';
+  const x = Number(v);
+  return Number.isFinite(x) ? { num: x, fmt } : '';
+};
+
 /** 空值渲染成空单元格而不是 "null"/"undefined" */
 export const val = (v: unknown): string => {
   // 图片单元格若走到 HTML 路径，String() 会渲染成 "[object Object]"。这里退回文字标注：
   // HTML 工作表本来就显示不了内联图（见文件头），与其给个看不见的 <img>，不如明说去哪儿看。
   if (isImageCell(v)) return esc(v.fallback ?? '图（系统内查看）');
+  // 数字单元格在 HTML 工作表里没有"真数字"可言（整表 mso-number-format 是文本），退回两位小数文本
+  if (isNumCell(v)) return esc(v.num.toFixed(2));
   return v === null || v === undefined ? '' : esc(v);
 };
 
@@ -274,13 +295,20 @@ export async function exportDocXlsx(opts: {
   const colPx: Record<number, number> = {};
 
   const addRow = (cells: unknown[]) => {
-    const row = ws.addRow(cells.map((c) => (isImageCell(c) ? '' : plain(c))));
+    const row = ws.addRow(cells.map((c) => (isImageCell(c) ? '' : isNumCell(c) ? c.num : plain(c))));
     for (let i = 0; i < cells.length; i++) {
       const c = row.getCell(i + 1);
-      c.numFmt = '@'; // 强制文本：款号形如 I27.230.03929，不强制会被 Excel 截断成 27.23
+      const src = cells[i];
+      if (isNumCell(src)) {
+        // 数字单元格例外：钉成文本就没法 SUM 了（见 NumCell 说明）
+        c.numFmt = src.fmt ?? '#,##0.00';
+        c.alignment = { vertical: 'middle', horizontal: 'right' };
+      } else {
+        c.numFmt = '@'; // 强制文本：款号形如 I27.230.03929，不强制会被 Excel 截断成 27.23
+        c.alignment = { vertical: 'middle', wrapText: true };
+      }
       c.border = BORDER as never;
-      c.alignment = { vertical: 'middle', wrapText: true };
-      if (isImageCell(cells[i])) pending.push({ cell: cells[i] as ImageCell, row: row.number, col: i + 1 });
+      if (isImageCell(src)) pending.push({ cell: src as ImageCell, row: row.number, col: i + 1 });
     }
     return row;
   };

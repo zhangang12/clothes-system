@@ -2,7 +2,7 @@ import {
   Injectable, NotFoundException, BadRequestException, ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
+import { Repository, DataSource, Between, MoreThanOrEqual, LessThanOrEqual, In } from 'typeorm';
 import { Prepayment } from './prepayment.entity';
 import { PaymentRequest } from './payment-request.entity';
 import { PaymentRecord } from './payment-record.entity';
@@ -272,6 +272,131 @@ export class PaymentService {
     });
     await this.enrichNames(items as any[]);
     return { items, total, page, size };
+  }
+
+  // ——————————————————————————————————————————
+  // 工厂账单（2026-08-11 qiao：「可以按工厂名称，下载EXCEL文件，拉出这个公司的所有账单吗」）
+  // ——————————————————————————————————————————
+  /**
+   * 一次取齐一家工厂的往来账：付款申请 + 每笔实付记录 + 预付款 + 对账单 + 汇总。
+   *
+   * 【为什么单开接口，不让前端循环调列表】列表分页上限 100，而「某张付款申请下的实付记录」
+   * 只有 `requests/:id/records` 这条按 ID 取的接口——前端要拼账单就是 N+1 次请求。
+   * 今天全库才 5 张申请看不出问题，一家供应商做满一年就是几百张，浏览器要发几百个请求。
+   *
+   * 【日期区间的口径】三类单据各按自己的自然日期过滤：付款申请按**申请日期**（created_at，
+   * 与列表检索同一口径）、预付款按**付款日期**（pay_date）、对账单按**创建日期**。
+   * 口径原样回给前端写进表头——否则业务拿着一份「7月账单」，不知道 7 月指的是谁的 7 月。
+   *
+   * 【合计只算数得上的那些】已驳回的申请一律不进合计（但明细里照列，否则对不上条数）；
+   * 「应付/未付」只算**已批准+已付款**——草稿和待审批还不构成欠款，混进去会把应付虚高。
+   */
+  async getFactoryStatement(factoryId: number, startDate?: string, endDate?: string) {
+    const [factory] = await this.dataSource.query(
+      'SELECT id, name, short_name FROM factory WHERE id = ?', [factoryId],
+    );
+    if (!factory) throw new NotFoundException(`工厂 #${factoryId} 不存在`);
+
+    // datetime 列要带时分秒（否则 `2026-08-11` 会把当天 00:00 之后的全漏掉），date 列不能带
+    const dtRange = () => {
+      if (startDate && endDate) return Between(`${startDate} 00:00:00`, `${endDate} 23:59:59`);
+      if (startDate) return MoreThanOrEqual(`${startDate} 00:00:00`);
+      if (endDate) return LessThanOrEqual(`${endDate} 23:59:59`);
+      return undefined;
+    };
+    const dRange = () => {
+      if (startDate && endDate) return Between(startDate, endDate);
+      if (startDate) return MoreThanOrEqual(startDate);
+      if (endDate) return LessThanOrEqual(endDate);
+      return undefined;
+    };
+
+    const prWhere: any = { factory_id: factoryId, deleted: 0 };
+    const dt = dtRange();
+    if (dt) prWhere.created_at = dt;
+    const requests: any[] = await this.prRepo.find({ where: prWhere, order: { id: 'ASC' } });
+
+    const prepayWhere: any = { factory_id: factoryId };
+    const d = dRange();
+    if (d) prepayWhere.pay_date = d;
+    const prepayments: any[] = await this.prepayRepo.find({ where: prepayWhere, order: { id: 'ASC' } });
+
+    const recWhere: any = { factory_id: factoryId, deleted: 0 };
+    if (dt) recWhere.created_at = dt;
+    const reconciliations: any[] = await this.reconcileRepo.find({ where: recWhere, order: { id: 'ASC' } });
+
+    // 实付记录一次取回按 pr_id 归位（N+1 就是在这里省掉的）
+    const prIds = requests.map((r) => +r.id);
+    const records: any[] = prIds.length
+      ? await this.recordRepo.find({ where: { pr_id: In(prIds) }, order: { id: 'ASC' } })
+      : [];
+    const byPr = new Map<number, any[]>();
+    for (const rec of records) {
+      const k = +rec.pr_id;
+      if (!byPr.has(k)) byPr.set(k, []);
+      byPr.get(k)!.push(rec);
+    }
+
+    // 付款申请上补对账单号/合同号/款号：账单要能顺着单号往回查，只给个 reconcile_id 没法用
+    const recIds = [...new Set(requests.map((r) => +r.reconcile_id).filter(Boolean))];
+    const recMeta = new Map<number, any>();
+    if (recIds.length) {
+      const rows = await this.dataSource.query(
+        'SELECT r.id, r.reconcile_no, r.style_no, c.contract_no FROM reconciliation r'
+        + ' LEFT JOIN contract c ON c.id = r.contract_id WHERE r.id IN (?)', [recIds],
+      );
+      rows.forEach((x: any) => recMeta.set(+x.id, x));
+    }
+    requests.forEach((r) => {
+      const meta = r.reconcile_id ? recMeta.get(+r.reconcile_id) : null;
+      r.reconcile_no = meta?.reconcile_no ?? null;
+      r.contract_no = meta?.contract_no ?? null;
+      r.style_no = r.related_style_no || meta?.style_no || null;
+      r.records = byPr.get(+r.id) ?? [];
+      r.paid_sum = +(r.records as any[]).reduce((sn: number, x: any) => sn + (Number(x.amount) || 0), 0).toFixed(2);
+    });
+
+    // 预付款/对账单的合同号
+    const cIds = [...new Set([...prepayments, ...reconciliations].map((r) => +r.contract_id).filter(Boolean))];
+    if (cIds.length) {
+      const rows = await this.dataSource.query('SELECT id, contract_no FROM contract WHERE id IN (?)', [cIds]);
+      const m = new Map(rows.map((x: any) => [+x.id, x.contract_no]));
+      [...prepayments, ...reconciliations].forEach((r) => {
+        r.contract_no = r.contract_id ? m.get(+r.contract_id) ?? null : null;
+      });
+    }
+
+    const n = (v: unknown) => Number(v) || 0;
+    const r2 = (x: number) => +x.toFixed(2);
+    const notRejected = requests.filter((r) => r.approval_status !== PaymentApprovalStatus.REJECTED);
+    const owed = requests.filter(
+      (r) => r.approval_status === PaymentApprovalStatus.APPROVED || r.approval_status === PaymentApprovalStatus.PAID,
+    );
+    const payableTotal = r2(owed.reduce((sm, r) => sm + (r.actual_pay != null ? n(r.actual_pay) : n(r.amount) - n(r.prepay_offset)), 0));
+    const paidTotal = r2(owed.reduce((sm, r) => sm + n(r.paid_sum), 0));
+
+    return {
+      factory: { id: +factory.id, name: factory.name, short_name: factory.short_name },
+      range: { start_date: startDate ?? null, end_date: endDate ?? null },
+      summary: {
+        request_count: requests.length,
+        rejected_count: requests.length - notRejected.length,
+        request_amount: r2(notRejected.reduce((sm, r) => sm + n(r.amount), 0)),
+        prepay_offset_total: r2(notRejected.reduce((sm, r) => sm + n(r.prepay_offset), 0)),
+        payable_total: payableTotal,
+        paid_total: paidTotal,
+        unpaid_total: r2(payableTotal - paidTotal),
+        prepay_count: prepayments.length,
+        prepay_amount: r2(prepayments.reduce((sm, r) => sm + n(r.amount), 0)),
+        prepay_used: r2(prepayments.reduce((sm, r) => sm + n(r.used_amount), 0)),
+        prepay_balance: r2(prepayments.reduce((sm, r) => sm + n(r.balance), 0)),
+        reconcile_count: reconciliations.length,
+        reconcile_amount: r2(reconciliations.reduce((sm, r) => sm + n(r.total_amount), 0)),
+      },
+      requests,
+      prepayments,
+      reconciliations,
+    };
   }
 
   async submitPaymentRequest(id: number, userId: number): Promise<PaymentRequest> {

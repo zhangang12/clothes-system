@@ -1,6 +1,10 @@
 <template>
   <div class="page-container">
     <RuleHint>付款<b>支持分批</b>,多次付款自动累计已付/未付,余额=0 整单转已付清;<b>付款须上传银行水单(必填)</b>;无合同付款须填收款银行/账号/相关款号;预付款可在付款申请时冲抵。</RuleHint>
+    <div class="page-toolbar">
+      <span class="toolbar-tip">按工厂一次拉齐该公司往来账：付款申请 + 实付记录 + 预付款 + 对账单</span>
+      <el-button type="primary" plain :icon="Download" @click="openStatement">导出工厂账单</el-button>
+    </div>
     <el-tabs v-model="activeTab" type="border-card">
       <!-- ====== 预付款 Tab ====== -->
       <el-tab-pane label="预付款管理" name="prepayment">
@@ -240,6 +244,33 @@
       </el-tab-pane>
     </el-tabs>
 
+    <!-- 工厂账单导出（2026-08-11 qiao 反馈） -->
+    <el-dialog v-model="stmtVisible" title="导出工厂账单" width="520px" destroy-on-close>
+      <el-form label-width="90px">
+        <el-form-item label="工厂" required>
+          <factory-select v-model="stmtForm.factory_id" placeholder="按名称/编号搜索工厂" />
+        </el-form-item>
+        <el-form-item label="账单区间">
+          <el-date-picker
+            v-model="stmtRange" type="daterange" value-format="YYYY-MM-DD"
+            range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期"
+            style="width:100%"
+          />
+        </el-form-item>
+        <!-- 口径必须当面说清：三类单据各按自己的自然日期过滤，不写出来业务会以为是同一个日期 -->
+        <el-alert type="info" :closable="false" show-icon>
+          <template #title>
+            <div>不选区间即导出<b>全部</b>历史账单。</div>
+            <div style="margin-top:4px">区间口径：付款申请按<b>申请日期</b>、预付款按<b>付款日期</b>、对账单按<b>创建日期</b>。</div>
+          </template>
+        </el-alert>
+      </el-form>
+      <template #footer>
+        <el-button @click="stmtVisible = false">取消</el-button>
+        <el-button type="primary" :loading="stmtLoading" @click="doExportStatement">导出 Excel</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 创建预付款弹窗 -->
     <el-dialog v-model="createPrepayVisible" title="创建预付款" width="480px" destroy-on-close @closed="resetPrepayForm">
       <el-form ref="prepayFormRef" :model="prepayForm" :rules="prepayRules" label-width="90px">
@@ -407,7 +438,7 @@ import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { fmtDateTime } from '@/utils/format';
-import { Search, Refresh, Plus, UploadFilled } from '@element-plus/icons-vue';
+import { Search, Refresh, Plus, UploadFilled, Download } from '@element-plus/icons-vue';
 import FilePreviewDialog from '@/components/FilePreviewDialog.vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { prepaymentApi, paymentRequestApi } from '@/api/payment';
@@ -416,6 +447,7 @@ import ContractPicker from '@/components/ContractPicker.vue';
 import { uploadApi } from '@/api/upload';
 import { openFile } from '@/utils/secureFile';
 import { exportPaymentRequestExcel, exportPrepaymentExcel } from '@/utils/paymentExcel';
+import { exportFactoryStatementExcel } from '@/utils/factoryStatementExcel';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole } from '@i9/types';
 
@@ -510,6 +542,42 @@ async function doCreatePrepay() {
 function exportPrepayRow(row: any) {
   try { exportPrepaymentExcel(row); }
   catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
+}
+
+// ====== 工厂账单导出（2026-08-11 qiao：「按工厂名称下载 EXCEL，拉出这个公司的所有账单」）======
+// 一次请求取齐四类单据（后端 /payments/factory-statement），前端只负责排版落盘。
+const stmtVisible = ref(false);
+const stmtLoading = ref(false);
+const stmtForm = reactive({ factory_id: undefined as number | undefined });
+const stmtRange = ref<[string, string] | null>(null);
+
+function openStatement() {
+  // 带上当前 Tab 已经筛好的工厂，省得再选一次
+  stmtForm.factory_id = (activeTab.value === 'prepayment' ? prepayQuery.factory_id : prQuery.factory_id) ?? undefined;
+  stmtRange.value = null;
+  stmtVisible.value = true;
+}
+
+async function doExportStatement() {
+  if (!stmtForm.factory_id) { ElMessage.warning('请先选择工厂'); return; }
+  stmtLoading.value = true;
+  try {
+    const params: { factory_id: number; start_date?: string; end_date?: string } = { factory_id: stmtForm.factory_id };
+    if (stmtRange.value?.length === 2) {
+      params.start_date = stmtRange.value[0];
+      params.end_date = stmtRange.value[1];
+    }
+    const res: any = await paymentRequestApi.factoryStatement(params);
+    const st = res?.data ?? res;
+    // 四类单据全空就别下发一张空表——用户看到一份什么都没有的 Excel 会以为是导出坏了，
+    // 明确告诉他"这家在这个区间内没有往来"更有用
+    const n = (st?.requests?.length ?? 0) + (st?.prepayments?.length ?? 0) + (st?.reconciliations?.length ?? 0);
+    if (!n) { ElMessage.warning('该工厂在所选区间内没有任何往来记录，未生成文件'); return; }
+    await exportFactoryStatementExcel(st, fmtDateTime(new Date()));
+    stmtVisible.value = false;
+  } catch (e: any) {
+    errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败');
+  } finally { stmtLoading.value = false; }
 }
 
 // ====== Payment Request ======
@@ -780,6 +848,8 @@ function clearReconcileFilter() {
 </script>
 
 <style scoped>
+.page-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 0; }
+.page-toolbar .toolbar-tip { font-size: 12px; color: var(--el-text-color-secondary); }
 /* 已付清 / 部分付款 行底色（2026-08-10 qiao）。用浅色底而非文字色：
    财务是扫一列看状态的，整行着色一眼能分堆 */
 :deep(.el-table .pr-paid) > td { background: #f0f9eb !important; }
