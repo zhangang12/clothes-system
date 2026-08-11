@@ -8,6 +8,7 @@ import './styles/theme.css';
 import RuleHint from './components/RuleHint.vue';
 import DocLinks from './components/DocLinks.vue';
 import { vKeynav } from './utils/tableKeynav';
+import { startVersionWatch } from './utils/versionCheck';
 import App from './App.vue';
 import router from './router';
 
@@ -27,3 +28,6 @@ app
   .use(router)
   .use(ElementPlus, { locale: zhCn })
   .mount('#app');
+
+// 发版后主动换到新版本：轮询构建标识，发现更新就提示 + 下次切页整页跳转
+startVersionWatch(router);

@@ -66,26 +66,18 @@ git push ecs main 2>&1 | tail -1
 
 # ── ⑤ 产物 rsync 上去（服务器不再构建）────────────────────────
 #
-# 【前端 assets 绝对不能带 --delete】(2026-08-11 白屏事故)
-# Vite 的 chunk 是内容哈希命名的，每次发版换一批新名字。用户**已经打开着的页面**
-# 手里是旧的 index.html，点进某个懒加载路由时仍按旧名字请求 —— 旧文件一旦被删就是 404，
-# 动态 import 失败 → **整页白屏**。实证：nginx 日志里 CsvImportDialog / QuoteListView /
-# ExportInvoiceView 等一串 404，两位用户同时报「系统太不稳定」「返回工作台一片白」。
-# 所以 assets 目录只增不删，让旧标签页还能把自己的 chunk 取到；
-# index.html 等非哈希文件仍然覆盖（它们必须是最新的）。旧 chunk 由下方定期清理。
+# 【为什么可以照常 --delete】(2026-08-11 白屏事故的最终解法)
+# 事故本身是：chunk 名带内容哈希，发版换一批新名字，用户**已打开的页面**手里是旧 index.html，
+# 点进某页时按旧名字请求 → 404 → 白屏。
+# 一度想用「保留旧文件不删」绕过去，但那只是让白屏不发生，代价是**用户可以一直跑在旧版本上**
+# ——今天修好的问题他明天照样遇到，还会再报一次，等于把问题藏起来。
+# 正解在前端：产物里带 version.json，页面轮询比对构建标识，发现发版就提示并在下次切页时
+# 整页跳转去取新资源（见 packages/web/src/utils/versionCheck.ts）；万一还是撞上竞态窗口，
+# router.onError 再兜底重载一次。所以这里恢复 --delete，不留旧文件、不掩盖问题。
 log "上传构建产物..."
-# types/api 是服务端产物，浏览器不缓存，照旧整目录同步
-for p in types api; do
+for p in types api web portal; do
   rsync -az --delete "packages/$p/dist/" "$REMOTE:$APP_DIR/packages/$p/dist/"
 done
-# web/portal：assets 只增不删（见上方说明），其余文件正常覆盖并清理
-# （--delete 不会删被 --exclude 排除掉的 assets，所以两条命令不打架）
-for p in web portal; do
-  rsync -az "packages/$p/dist/assets/" "$REMOTE:$APP_DIR/packages/$p/dist/assets/"
-  rsync -az --delete --exclude 'assets/***' "packages/$p/dist/" "$REMOTE:$APP_DIR/packages/$p/dist/"
-done
-# 清掉 14 天前的旧 chunk：留够时间给还开着的标签页，又不让 assets 无限长大
-ssh "$REMOTE" "find $APP_DIR/packages/web/dist/assets $APP_DIR/packages/portal/dist/assets -type f -mtime +14 -delete 2>/dev/null || true"
 
 # ── ⑥ 服务器只做：备份 → 结构升级 → 换静态 → 重启 → 体检 ──────
 log "服务器执行部署（跳过构建）..."
