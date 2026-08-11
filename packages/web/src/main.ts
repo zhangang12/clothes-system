@@ -9,6 +9,7 @@ import RuleHint from './components/RuleHint.vue';
 import DocLinks from './components/DocLinks.vue';
 import { vKeynav } from './utils/tableKeynav';
 import { startVersionWatch } from './utils/versionCheck';
+import { startErrorReport } from './utils/errorReport';
 import App from './App.vue';
 import router from './router';
 
@@ -26,8 +27,13 @@ app.directive('keynav', vKeynav);
 app
   .use(createPinia())
   .use(router)
-  .use(ElementPlus, { locale: zhCn })
-  .mount('#app');
+  .use(ElementPlus, { locale: zhCn });
+
+// 【必须在 mount 之前】错误上报要能抓到**首次渲染**就挂掉的情况——
+// 那正是「进页面直接白屏」最需要证据的时刻。挂在 mount 之后就漏掉了。
+startErrorReport(app, router);
+
+app.mount('#app');
 
 // 发版后主动换到新版本：轮询构建标识，发现更新就提示 + 下次切页整页跳转
 startVersionWatch(router);

@@ -55,11 +55,16 @@
       <TabsBar />
       <el-main class="main">
         <router-view v-slot="{ Component }">
-          <transition name="page" mode="out-in">
-            <!-- key 必须绑 fullPath：同一路由换 :id（如「编辑样衣 #5」切「#7」）时强制重建组件，
-                 否则 Vue 复用实例、onMounted 不重跑，表单残留上一张单据，保存即覆盖错单 -->
-            <component :is="Component" :key="$route.fullPath" />
-          </transition>
+          <!-- 【别再包 <transition mode="out-in">】(2026-08-12 白屏)
+               原来这里是 `<transition name="page" mode="out-in">`：旧页先淡出 180ms、再淡入新页。
+               问题是**在这 180ms 内再点一次菜单**，Vue 会把待入场的那个组件丢掉——
+               结果是侧栏、面包屑、标签页全都正常切过去了，**内容区却一直空着**，
+               而且没有任何网络错误、控制台也不一定有报错，看起来就是"白屏"。
+               用户报的「经常打开菜单、或者切换菜单就白屏」正是连续点菜单触发的。
+               这个过渡纯粹是装饰，去掉零功能损失，却消掉了一整类问题。
+               key 必须留：同一路由换 :id（如「编辑样衣 #5」切「#7」）时强制重建组件，
+               否则 Vue 复用实例、onMounted 不重跑，表单残留上一张单据，保存即覆盖错单。 -->
+          <component :is="Component" :key="$route.fullPath" />
         </router-view>
       </el-main>
     </el-container>
@@ -162,13 +167,7 @@ function logout() {
 /* 内容区：米白 */
 .main { background: var(--canvas); padding: 20px 24px; }
 
-/* 页面切换淡入过渡 */
-.page-enter-active, .page-leave-active { transition: opacity 0.18s ease, transform 0.18s ease; }
-.page-enter-from { opacity: 0; transform: translateY(6px); }
-.page-leave-to { opacity: 0; transform: translateY(-4px); }
 @media (prefers-reduced-motion: reduce) {
   .side { transition: none; }
-  .page-enter-active, .page-leave-active { transition: none; }
-  .page-enter-from, .page-leave-to { transform: none; }
 }
 </style>
