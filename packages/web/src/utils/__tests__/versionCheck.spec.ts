@@ -74,3 +74,33 @@ describe('发版后主动换新版本', () => {
     expect(opts).toMatchObject({ cache: 'no-store' });
   });
 });
+
+describe('组件内 import() 失败（不走路由那条）', () => {
+  it('认得出 chunk 加载失败的各种说法（各家浏览器文案不同）', async () => {
+    vi.resetModules();
+    vi.stubGlobal('__BUILD_ID__', 'A');
+    vi.stubGlobal('fetch', vi.fn());
+    const { isChunkLoadError } = await import('../versionCheck');
+    // Chrome / Firefox / Safari 对同一件事的三种说法，都得认
+    expect(isChunkLoadError(new Error('Failed to fetch dynamically imported module: /assets/x.js'))).toBe(true);
+    expect(isChunkLoadError(new Error('error loading dynamically imported module'))).toBe(true);
+    expect(isChunkLoadError(new Error('Importing a module script failed.'))).toBe(true);
+    // 普通业务错误不能被误判成"发版了"，否则一报错就刷页面
+    expect(isChunkLoadError(new Error('保存失败：款号已存在'))).toBe(false);
+    expect(isChunkLoadError(undefined)).toBe(false);
+  });
+
+  it('确认发过版才刷页面', async () => {
+    const { location } = await load('BUILD-B');
+    const { recoverFromChunkError } = await import('../versionCheck');
+    await expect(recoverFromChunkError()).resolves.toBe(true);
+    expect(location.reload).toHaveBeenCalled();
+  });
+
+  it('版本没变说明不是发版引起的——不刷，免得把真故障刷成无限循环', async () => {
+    const { location } = await load('BUILD-A');
+    const { recoverFromChunkError } = await import('../versionCheck');
+    await expect(recoverFromChunkError()).resolves.toBe(false);
+    expect(location.reload).not.toHaveBeenCalled();
+  });
+});

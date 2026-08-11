@@ -1,5 +1,5 @@
 import type { Router } from 'vue-router';
-import { ElNotification } from 'element-plus';
+import { ElNotification, ElMessage } from 'element-plus';
 
 /**
  * 发版后让浏览器主动换到新版本（2026-08-11）。
@@ -52,11 +52,43 @@ async function check(): Promise<void> {
   });
 }
 
+/**
+ * chunk 取不到（不管是路由的还是组件里 `import()` 的）统一走这一条：
+ * 立刻确认一次是不是发版了，是就整页跳到目标地址换新版本。
+ *
+ * 【为什么要单独导出】`router.onError` 只管**路由级**的懒加载。生产日志里 404 的还有
+ * `CsvImportDialog-*.js`、`sampleExcel-*.js`、`contractExcel-*.js`、`AiToolsView-*.js`——
+ * 这些是组件内部 `import()` 出去的，失败时是一条 unhandledrejection，路由完全不知情，
+ * 表现就是「点导入/导出没反应」。
+ */
+export function isChunkLoadError(e: unknown): boolean {
+  const msg = String((e as any)?.message ?? e ?? '');
+  return /dynamically imported module|Importing a module script failed|error loading dynamically imported|Failed to fetch/i.test(msg);
+}
+
+export async function recoverFromChunkError(): Promise<boolean> {
+  const remote = await fetchRemoteBuildId();
+  if (!remote || remote === __BUILD_ID__) return false; // 不是发版引起的，交给调用方按普通错误处理
+  pendingUpdate = true;
+  window.location.reload();
+  return true;
+}
+
 export function startVersionWatch(router: Router): void {
   check();
   setInterval(check, CHECK_MS);
   // 切回本标签页时再查一次：离开期间多半已经发过版
   document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+
+  // 组件内 import() 失败（不经路由）：多半就是发版把旧 chunk 删了，静默换新版本。
+  // 只有确认"确实发版了"才刷，避免把真正的网络故障刷成无限循环。
+  window.addEventListener('unhandledrejection', (ev) => {
+    if (!isChunkLoadError(ev.reason)) return;
+    ev.preventDefault(); // 别让它变成控制台里一条没人看的红字
+    recoverFromChunkError().then((handled) => {
+      if (!handled) ElMessage.error('这个功能的资源没加载出来，请刷新页面重试');
+    });
+  });
 
   router.beforeEach((to) => {
     if (!pendingUpdate) return true;

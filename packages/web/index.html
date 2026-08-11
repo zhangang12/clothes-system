@@ -5,9 +5,48 @@
     <link rel="icon" type="image/png" href="/datex-mark.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>DATEX 服装智造管理系统</title>
+    <style>
+      /* 加载骨架：内联，避免再等一个 CSS 文件才能画出来 */
+      .boot { position: fixed; inset: 0; display: flex; flex-direction: column;
+              align-items: center; justify-content: center; gap: 14px;
+              background: #FBF8F2; color: #1E3A5F; font-size: 14px;
+              font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif; }
+      .boot-mark { width: 44px; height: 44px; border-radius: 12px;
+                   border: 3px solid #D8E0EA; border-top-color: #2F7D6A;
+                   animation: boot-spin .9s linear infinite; }
+      .boot-name { font-size: 20px; font-weight: 700; letter-spacing: .18em; }
+      .boot-tip { color: #7C7F88; font-size: 13px; }
+      .boot-warn { color: #C04042; }
+      .boot-tip a { color: #2F7D6A; }
+      @keyframes boot-spin { to { transform: rotate(360deg); } }
+      @media (prefers-color-scheme: dark) { .boot { background: #13161B; color: #8FB4DE; } }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <!-- 【别把这个 div 清空】(2026-08-12 白屏)
+         用户报「打开菜单/切菜单就白屏」。查下来不是崩溃，是这里本来空着：
+         整页加载时在 JS 跑起来之前，屏幕上**什么都没有**——首屏要下 480KB JS，
+         冷缓存下就是好几秒纯白。而整页加载并不罕见：登录、刷新、发版后换新版本、
+         chunk 取不到后的自动恢复，全都会走整页加载。
+         这里放一屏骨架（纯内联 CSS，不依赖任何外部文件，跟 HTML 一起到达即可见），
+         Vue mount 时会自动把它清掉，不需要额外代码配合。 -->
+    <div id="app">
+      <div class="boot">
+        <div class="boot-mark"></div>
+        <div class="boot-name">DATEX</div>
+        <div class="boot-tip" id="boot-tip">正在加载…</div>
+      </div>
+    </div>
+    <script>
+      // 兜底：入口 JS 自己都取不到时（发版后旧 index.html 指向已删除的文件），
+      // 骨架会一直停在那儿。10 秒还没被 Vue 顶掉就给一条可操作的提示，别让人干等。
+      setTimeout(function () {
+        var t = document.getElementById('boot-tip');
+        if (!t) return; // 已经挂载成功，骨架被清掉了
+        t.innerHTML = '加载超时，可能是版本刚更新。<a href="javascript:location.reload(true)">点此重新加载</a>';
+        t.className = 'boot-tip boot-warn';
+      }, 10000);
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
