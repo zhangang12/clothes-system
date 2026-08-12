@@ -89,9 +89,9 @@ export function exportReconciliationExcel(detail: any): void {
     blocks.push({
       kind: 'table',
       title: isDeduction
-        ? '扣款明细（合同保持原样，调整只发生在对账）'
+        ? '费用 / 扣款调整（合同保持原样，调整只发生在对账）'
         : `费用明细${detail.sub_type ? `（${subTypeLabel(detail.sub_type)}）` : ''}`,
-      head: ['#', isDeduction ? '扣款事由' : '费用项目/事由', '相关款号', '金额', '附件'],
+      head: ['#', '事由', '相关款号', '金额', '附件'],
       rows: expenses.map((e, i) => [i + 1, e.expense_name, e.style_no, n2(e.amount), sensitiveMark(e.attach_url)]),
       foot: ['合计', '', '', n2(adjust), ''],
     });
@@ -103,7 +103,7 @@ export function exportReconciliationExcel(detail: any): void {
         perRow: 1,
         pairs: [
           ['发货金额', n2(goods)],
-          ['扣款合计', n2(adjust)],
+          [adjust < 0 ? '扣款合计' : '费用合计', n2(adjust)],
           ['对账金额', n2(goods + adjust)],
         ],
       });

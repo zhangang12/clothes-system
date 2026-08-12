@@ -200,6 +200,63 @@ export class ContractService {
   }
 
   // 供应商拆单：按订单材料的供应商分组，每个供应商生成一张材料合同（设计稿 合同 A1）
+  /**
+   * 手工建的材料合同也认回订单行（2026-08-12 #89）。
+   *
+   * 【问题】订单编辑页那一排绿底「已订」标记，认的是 `contract_material.order_material_id`。
+   * 走「生成合同→按供应商拆单」时这个字段是自动带的；但业务**一张张手工建合同**时
+   * 前端根本没有这个信息，字段就是 NULL，于是合同明明签了、订单里一行绿的都没有。
+   * 生产实证：订单 43 的 7 张材料合同分别建于 15:03~16:45（拆单生成是一个事务、时间几乎相同），
+   * 30 行 `order_material_id` 全是 NULL。King 报的「咋还是不行呢」就是这个。
+   *
+   * 【怎么匹配】只在合同挂了订单时做，按**品名**匹配（颜色/尺码在合同侧可能被拆开，
+   * 订单侧是一行，所以不能带进键里）。同名多行的按顺序一一对上，多出来的不猜——
+   * 宁可少标一行，也不能标错行：标错了业务会以为某个料已经订了而漏订。
+   *
+   * 顺带把**最终采购量**补上（King 同一条反馈里的「带入实际订单数量」）：只在原值为空或 0 时写，
+   * 不覆盖人工填过的数。
+   */
+  private async linkOrderMaterials(
+    m: EntityManager,
+    orderId: number | null,
+    rows: Array<{ item_name?: string; qty?: number; order_material_id?: number | null }>,
+  ): Promise<void> {
+    if (!orderId) return;
+    const pending = rows.filter((r) => r.order_material_id == null && r.item_name);
+    if (!pending.length) return;
+
+    const oms = await m.find(OrderMaterial, { where: { order_id: orderId }, order: { sort_order: 'ASC' } });
+    if (!oms.length) return;
+    const byName = new Map<string, OrderMaterial[]>();
+    for (const om of oms) {
+      const k = String(om.item_name ?? '').trim();
+      if (!k) continue;
+      if (!byName.has(k)) byName.set(k, []);
+      byName.get(k)!.push(om);
+    }
+
+    const qtyByOm = new Map<number, number>();
+    for (const r of pending) {
+      const list = byName.get(String(r.item_name).trim());
+      if (!list?.length) continue;      // 合同里有订单上没有的料（临时加料）——不猜
+      const om = list.shift()!;          // 同名多行按出现顺序一一对上
+      (r as any).order_material_id = om.id;
+      qtyByOm.set(+om.id, +(qtyByOm.get(+om.id) ?? 0) + (+(r.qty ?? 0) || 0));
+    }
+    const linked = pending.filter((r) => r.order_material_id != null);
+    if (!linked.length) return;
+    await m.save(ContractMaterial, linked as any);
+
+    // 最终采购量：只补空值，不覆盖人工填过的
+    for (const [omId, qty] of qtyByOm) {
+      if (!(qty > 0)) continue;
+      await m.createQueryBuilder().update(OrderMaterial)
+        .set({ final_purchase: +qty.toFixed(4) as any })
+        .where('id = :id AND (final_purchase IS NULL OR final_purchase = 0)', { id: omId })
+        .execute();
+    }
+  }
+
   async generateFromOrder(orderId: number, createdBy: number) {
     const order = await this.orderRepo.findOne({ where: { id: orderId, deleted: 0 } });
     if (!order) throw new NotFoundException(`订单 #${orderId} 不存在`);
@@ -422,6 +479,7 @@ export class ContractService {
         order_material_id: mi.order_material_id ?? null,
       }));
       await m.save(ContractMaterial, materials);
+      await this.linkOrderMaterials(m, dto.order_id ?? null, materials);
       await this.backfillOrderSupplier(m, materials, dto.factory_id);
 
       // 最近交易日期回写（基础资料稿 §1.2：列表按最近交易超期标红——此前该字段无任何写入方，规则恒不触发）
@@ -658,6 +716,8 @@ export class ContractService {
           order_material_id: m.order_material_id ?? prevSrc.get(srcKey(m)) ?? null,
         }));
         await manager.save(ContractMaterial, rows);
+        // 手工合同在编辑时才补齐明细的情况同样要认回订单行（#89），口径与新建一致
+        await this.linkOrderMaterials(manager, contract.order_id ?? null, rows as any);
         const newTotal = +rows.reduce((s, r) => s + +r.amount, 0).toFixed(4);
         // 金额变化则重置已通过的审批（防"审批后改金额"绕过阈值管控，同付款申请口径）
         if (Math.abs(newTotal - +contract.total_amount) > 0.0001

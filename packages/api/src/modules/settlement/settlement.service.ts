@@ -117,6 +117,29 @@ export class SettlementService {
   // 按【订单】从对账付款聚合总货款——合同(材料/加工/补料)挂订单，收入成本同口径，
   // 杜绝同款多订单每张结算单重复背整款成本（结算Q1）；无合同挂接的历史数据按款号兜底。
   // 仅已付款(PAID)计入总货款；已确认未付单独返回，前端灰显「未付·不计入」（结算Q8）。
+  /**
+   * 建单前预览「会自动聚合成什么成本」（#91 King：「选了款号，下面不是应该出来对账金额吗？为什么啥都没有」）。
+   *
+   * 【为什么会有这条反馈】聚合本来就有、而且是对的——只是它发生在**保存那一刻**，
+   * 建单弹窗里什么都不显示。而弹窗顶上写着「选择订单后系统自动聚合…可在下方人工覆盖」，
+   * 业务照着这句话等结果，等到的是一片空白，只能理解成"坏了"。
+   * 这里把同一份聚合结果提前给出来，界面照原样列出来即可，**不改变任何计算口径**。
+   */
+  async previewCosts(orderId: number) {
+    const order = await this.orderRepo.findOne({ where: { id: orderId, deleted: 0 } });
+    if (!order) throw new NotFoundException(`订单 #${orderId} 不存在`);
+    const vatRate = await this.config.getNumber('vat_rate', 13);
+    const agg = await this.aggregateGoods(order, vatRate);
+    return {
+      style_no: order.style_no ?? null,
+      currency: order.currency ?? 'CNY',
+      rows: agg.autoRows,
+      paid_tax: r4(agg.paidTax),
+      unpaid_tax: r4(agg.unpaidTax),
+      unpaid_count: agg.unpaidCount,
+    };
+  }
+
   private async aggregateGoods(order: OrderMain, vatRate: number): Promise<GoodsAgg> {
     const goodsType = ReconcileType.CONTRACT; // 无合同费用走期间费用，样衣工时(LABOR)排除
     const statuses = In([ReconciliationStatus.CONFIRMED, ReconciliationStatus.PAID]);
@@ -349,7 +372,7 @@ export class SettlementService {
         customer_name: order.middleman_name ?? null,
         shipped_qty: shippedQty,
         shipment_ids: scopeIds.length ? scopeIds.join(',') : null,
-        currency: order.currency ?? 'CNY',
+        currency: dto.currency || order.currency || 'CNY',   // #90：允许建单时指定，不传沿用订单币种
         exchange_rate: dto.exchange_rate ?? null,
         status: SettlementStatus.DRAFT,
         invoice_amount_usd: r4(dto.invoice_amount_usd ?? 0),

@@ -69,7 +69,7 @@
         <el-table-column prop="goods_amount_extax" label="不含税货款" width="106" align="right">
           <template #default="{ row }">{{ (+(row.goods_amount_extax ?? 0)).toFixed(2) }}</template>
         </el-table-column>
-        <el-table-column prop="receipt_usd" label="收汇$" width="92" align="right">
+        <el-table-column prop="receipt_usd" label="收汇金额" width="92" align="right">
           <template #default="{ row }">{{ (+(row.receipt_usd ?? 0)).toFixed(2) }}</template>
         </el-table-column>
         <el-table-column label="毛利/毛利率" width="118" align="right">
@@ -189,8 +189,8 @@
 
         <el-divider content-position="left">财务收汇 · 毛利对比</el-divider>
         <el-descriptions :column="3" border size="small">
-          <el-descriptions-item label="发票金额$">{{ money(detailData.invoice_amount_usd) }}</el-descriptions-item>
-          <el-descriptions-item label="实际收汇$">{{ money(detailData.receipt_usd) }}</el-descriptions-item>
+          <el-descriptions-item :label="`发票金额${detailSym}`">{{ money(detailData.invoice_amount_usd) }}</el-descriptions-item>
+          <el-descriptions-item :label="`实际收汇${detailSym}`">{{ money(detailData.receipt_usd) }}</el-descriptions-item>
           <el-descriptions-item label="结算金额¥">{{ money(detailData.settle_amount ?? detailData.revenue) }}</el-descriptions-item>
           <el-descriptions-item label="毛利">
             <span v-if="!+(detailData.profit_ready ?? 0)" class="muted">待补收汇/汇率</span>
@@ -276,7 +276,7 @@
         </div>
         <el-table :data="detailData.receipts ?? []" border size="small">
           <el-table-column prop="receipt_date" label="收汇日期" width="110" />
-          <el-table-column prop="amount" label="收汇金额$" width="110" align="right">
+          <el-table-column prop="amount" :label="`收汇金额${detailSym}`" width="110" align="right">
             <template #default="{ row }">{{ (+row.amount).toFixed(2) }}</template>
           </el-table-column>
           <el-table-column label="来源" width="110">
@@ -340,14 +340,14 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="发票金额$">
+            <el-form-item :label="`发票金额${detailSym}`">
               <el-input-number v-model="editForm.invoice_amount_usd" :min="0" :precision="2" style="width:100%" />
             </el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="实际收汇$">
+            <el-form-item :label="`实际收汇${detailSym}`">
               <el-input-number v-model="editForm.receipt_usd" :min="0" :precision="2" :disabled="hasReceiptRows" style="width:100%" />
             </el-form-item>
           </el-col>
@@ -404,14 +404,20 @@
           </div>
           <div class="hint-inline">分批结算（Q18）：勾选=只按所选批次出一次毛利（每批一张结算单）；不勾=全量累计</div>
         </el-form-item>
+        <el-form-item label="币种">
+          <el-select v-model="createForm.currency" style="width:160px">
+            <el-option v-for="c in CURRENCIES" :key="c.code" :label="`${c.code}（${c.symbol}）`" :value="c.code" />
+          </el-select>
+          <span class="hint-inline" style="margin-left:10px">默认取订单币种；下面的发票金额/收汇金额都按这个币种记</span>
+        </el-form-item>
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="发票金额$">
+            <el-form-item :label="`发票金额${createSym}`">
               <el-input-number v-model="createForm.invoice_amount_usd" :min="0" :precision="2" style="width:100%" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="实际收汇$">
+            <el-form-item :label="`实际收汇${createSym}`">
               <el-input-number v-model="createForm.receipt_usd" :min="0" :precision="2" style="width:100%" />
             </el-form-item>
           </el-col>
@@ -434,6 +440,34 @@
           <el-input v-model="createForm.description" type="textarea" :rows="2" />
         </el-form-item>
         <el-divider>成本明细（对账付款汇总·含税）</el-divider>
+        <!-- #91：选完订单先把自动聚合的结果摆出来，不要让人对着空白猜 -->
+        <div v-loading="previewLoading">
+          <template v-if="costPreview && costPreview.rows?.length">
+            <el-table :data="costPreview.rows" border size="small" max-height="220">
+              <el-table-column prop="cost_name" label="来源对账单" min-width="170" />
+              <el-table-column prop="qty" label="实发数" width="86" align="right">
+                <template #default="{ row }">{{ row.qty != null ? row.qty : '—' }}</template>
+              </el-table-column>
+              <el-table-column prop="amount" label="金额(含税)" width="116" align="right">
+                <template #default="{ row }">{{ (+row.amount).toFixed(2) }}</template>
+              </el-table-column>
+              <el-table-column label="状态" width="132">
+                <template #default="{ row }">
+                  <el-tag v-if="row.pay_status === 'PAID'" size="small" type="success">已付款·计入</el-tag>
+                  <el-tag v-else size="small" type="info">已确认未付·不计入</el-tag>
+                </template>
+              </el-table-column>
+            </el-table>
+            <div class="labor-sum">
+              自动聚合 {{ costPreview.rows.length }} 条，合计 ¥{{ previewTotal.toFixed(2) }}；
+              其中<b>已付款计入成本 ¥{{ (+costPreview.paid_tax).toFixed(2) }}</b>
+              <span v-if="costPreview.unpaid_count">，另有 {{ costPreview.unpaid_count }} 条已确认未付 ¥{{ (+costPreview.unpaid_tax).toFixed(2) }} 暂不计入</span>
+            </div>
+            <div class="hint-inline">保存时按上表自动写入；若在下方手工添加费用行，则<b>以手工填的为准</b>，上表不再自动带入。</div>
+          </template>
+          <el-empty v-else-if="createForm.order_id && !previewLoading" :image-size="46"
+            description="该订单名下还没有「已确认/已付款」的合同对账单，所以聚合不出成本。可在下方手工添加费用行。" />
+        </div>
         <div v-for="(c, idx) in createForm.costs" :key="idx" class="item-row">
           <el-row :gutter="8" align="middle">
             <el-col :span="6"><el-input v-model="c.cost_name" placeholder="费用名称" /></el-col>
@@ -509,7 +543,7 @@
         <el-table :data="aggData.items" border size="small" max-height="320">
           <el-table-column prop="settlement_no" label="结算单" width="170" />
           <el-table-column prop="shipped_qty" label="出货" width="80" align="right" />
-          <el-table-column prop="receipt_usd" label="收汇$" width="100" align="right">
+          <el-table-column prop="receipt_usd" label="收汇金额" width="100" align="right">
             <template #default="{ row }">{{ (+row.receipt_usd).toFixed(2) }}</template>
           </el-table-column>
           <el-table-column prop="net_profit" label="净利" width="110" align="right">
@@ -531,7 +565,7 @@
     <!-- 登记收汇弹窗（逐笔汇率+银行水单） -->
     <el-dialog v-model="addReceiptVisible" title="登记收汇" width="460px">
       <el-form ref="addReceiptFormRef" :model="receiptForm" :rules="receiptRules" label-width="90px">
-        <el-form-item label="收汇金额$" prop="amount">
+        <el-form-item :label="`收汇金额${detailSym}`" prop="amount">
           <el-input-number v-model="receiptForm.amount" :min="0.01" :precision="2" style="width:100%" />
         </el-form-item>
         <el-form-item label="收汇日期" prop="receipt_date">
@@ -797,6 +831,7 @@ const createForm = reactive({
   tax_refund: undefined as number | undefined,
   description: '',
   costs: [] as any[],
+  currency: 'USD',   // #90：结算币种，选订单后按订单币种带入
 });
 const createRules: FormRules = {
   order_id: [{ required: true, message: '请输入订单ID', trigger: 'blur' }],
@@ -807,14 +842,30 @@ function toggleBatch(id: number, on: boolean) {
   if (on && i < 0) createForm.shipment_ids.push(id);
   if (!on && i >= 0) createForm.shipment_ids.splice(i, 1);
 }
+// #91：把「保存时会自动聚合成什么」提前显示出来。弹窗顶上写着会自动聚合、却什么都不显示，
+// 业务只能理解成坏了（生产实证：该款号有 6 张已确认/已付款对账单、合计 3.7 万，界面一片空白）。
+// 这里不改任何计算口径，只是把同一份聚合结果提前展示。
+const costPreview = ref<any>(null);
+const previewLoading = ref(false);
+const previewTotal = computed(() => (costPreview.value?.rows ?? [])
+  .reduce((s: number, r: any) => s + (+r.amount || 0), 0));
+
 watch(() => createForm.order_id, async (oid) => {
   orderShipments.value = [];
   createForm.shipment_ids = [];
+  costPreview.value = null;
   if (!oid) return;
   try {
     const res: any = await orderApi.get(oid);
-    orderShipments.value = (res?.data ?? res)?.shipments ?? [];
+    const od = res?.data ?? res;
+    orderShipments.value = od?.shipments ?? [];
+    if (od?.currency) createForm.currency = od.currency;   // #90：币种默认跟订单走
   } catch { orderShipments.value = []; }
+  previewLoading.value = true;
+  try {
+    const r: any = await settlementApi.costPreview(oid);
+    costPreview.value = r?.data ?? r;
+  } catch { costPreview.value = null; } finally { previewLoading.value = false; }
 });
 
 // 同步发票收汇(Q12/Q3):按订单在各发票款项占比分摊逐笔收汇
@@ -842,11 +893,20 @@ function resetCreateForm() {
   Object.assign(createForm, {
     order_id: undefined, shipment_ids: [], exchange_rate: undefined, invoice_amount_usd: undefined, receipt_usd: undefined,
     freight_fee: undefined, express_fee: undefined, sample_fee: undefined, other_fee: undefined,
-    tax_refund: undefined, description: '', costs: [],
+    tax_refund: undefined, description: '', costs: [], currency: 'USD',
   });
 }
 // 展示辅助
 const money = (v: any) => (v == null ? '—' : (+v).toFixed(2));
+// 币种符号（#90 King：「结算里面的货币符号能选一下吗」）。
+// 列名 invoice_amount_usd / receipt_usd 带 usd 是历史命名，存的是本单币种的金额，只改显示不动表结构。
+const CURRENCIES = [
+  { code: 'USD', symbol: '$' }, { code: 'CNY', symbol: '¥' }, { code: 'EUR', symbol: '€' },
+  { code: 'GBP', symbol: '£' }, { code: 'JPY', symbol: 'JP¥' }, { code: 'HKD', symbol: 'HK$' },
+];
+const symbolOf = (code?: string) => CURRENCIES.find((c) => c.code === (code || 'USD'))?.symbol ?? (code || '');
+const detailSym = computed(() => symbolOf(detailData.value?.currency));
+const createSym = computed(() => symbolOf(createForm.currency));
 const num4 = (v: any) => (v == null ? '—' : (+v).toFixed(4));
 const periodFeeTotal = (d: any) =>
   (+(d?.freight_fee ?? 0)) + (+(d?.express_fee ?? 0)) + (+(d?.sample_fee ?? 0)) + (+(d?.other_fee ?? 0));

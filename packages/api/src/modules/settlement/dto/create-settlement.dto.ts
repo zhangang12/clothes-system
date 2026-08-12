@@ -1,4 +1,4 @@
-import { IsInt, IsPositive, IsNumber, IsOptional, IsString, IsArray, ValidateNested, IsIn, Min } from 'class-validator';
+import { IsInt, IsPositive, IsNumber, IsOptional, IsString, IsArray, ValidateNested, IsIn, Min, MaxLength } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -24,6 +24,15 @@ export class CreateCostLineDto {
 }
 
 export class CreateSettlementDto {
+  // 币种（#90 King：「结算里面的货币符号能选一下吗」）。不传时沿用订单币种，与既有行为一致。
+  // 注：invoice_amount_usd / receipt_usd 这两个列名带 usd 是历史命名，存的是**本单币种**的金额，
+  // 界面按 currency 显示对应符号；改列名要动表结构，收益不抵风险，故只改显示。
+  @ApiPropertyOptional({ description: '结算币种，默认取订单币种' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(5)
+  currency?: string;
+
   @ApiProperty({ description: '订单ID（带出款号/出货件数）' })
   @IsInt()
   @IsPositive()

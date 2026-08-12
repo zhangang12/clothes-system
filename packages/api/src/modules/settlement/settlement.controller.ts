@@ -42,6 +42,14 @@ export class SettlementController {
     return this.service.aggregate(styleNo || undefined, orderId ? +orderId : undefined);
   }
 
+  // 建单前预览自动聚合的成本行（#91）。只读、不落库；角色与 aggregate 一致。
+  @Get('cost-preview')
+  @Roles(UserRole.ADMIN, UserRole.FINANCE, UserRole.BUSINESS, UserRole.SUPERVISOR)
+  @ApiOperation({ summary: '新建结算单前预览：该订单会自动聚合成哪些成本行' })
+  costPreview(@Query('order_id', ParseIntPipe) orderId: number) {
+    return this.service.previewCosts(orderId);
+  }
+
   @Get('stats')
   @Roles(UserRole.ADMIN, UserRole.FINANCE)
   @ApiOperation({ summary: '列表徽标统计:待收汇/亏损预警/待重算(P2#26)' })

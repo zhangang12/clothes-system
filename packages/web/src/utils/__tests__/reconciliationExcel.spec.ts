@@ -26,19 +26,32 @@ const base = {
   shipments: [{ shipment_id: 1, item_name: '面料A', snapshot_unit_price: 10, qty: 200, amount: 2000 }],
 };
 
-describe('对账单导出·扣款明细（#74）', () => {
-  it('合同对账里这张子表叫「扣款」，不叫「费用」', () => {
+describe('对账单导出·费用/扣款调整（#74 打折退货 · #86 #88 运费版费）', () => {
+  it('合同对账里这张子表是「费用/扣款调整」，一张表两个方向都能装', () => {
     const html = exportAndRead({ ...base, expenseItems: [{ expense_name: '次品退货 20 件', amount: -500 }] });
-    expect(html).toContain('扣款明细');
-    expect(html).toContain('扣款事由');
-    expect(html).not.toContain('费用项目/事由');
+    expect(html).toContain('费用 / 扣款调整');
+    expect(html).not.toContain('费用项目/事由'); // 那是无合同对账的表头，别串了
+  });
+
+  it('加钱的场景（运费/版费，#86 #88）合计写「费用合计」，金额是加上去的', () => {
+    const html = exportAndRead({
+      ...base, total_amount: 2300,
+      expenseItems: [{ expense_name: '运费', amount: 200 }, { expense_name: '版费', amount: 100 }],
+    });
+    expect(html).toContain('费用合计');
+    expect(html).toContain('300.00');
+    expect(html).toContain('2300.00'); // 发货 2000 + 费用 300
+  });
+
+  it('减钱的场景合计写「扣款合计」', () => {
+    const html = exportAndRead({ ...base, expenseItems: [{ expense_name: '打折', amount: -500 }] });
+    expect(html).toContain('扣款合计');
   });
 
   it('把金额构成拆开列出来——只给一个总额，业务对不出为什么比发货金额少', () => {
     const html = exportAndRead({ ...base, expenseItems: [{ expense_name: '打折', amount: -500 }] });
     expect(html).toContain('发货金额');
     expect(html).toContain('2000.00');
-    expect(html).toContain('扣款合计');
     expect(html).toContain('-500.00');
     expect(html).toContain('对账金额');
     expect(html).toContain('1500.00');
@@ -50,13 +63,13 @@ describe('对账单导出·扣款明细（#74）', () => {
       expenseItems: [{ expense_name: '快递费', amount: 800 }],
     });
     expect(html).toContain('费用明细');
-    expect(html).not.toContain('扣款事由');
+    expect(html).not.toContain('费用 / 扣款调整');
     expect(html).not.toContain('金额构成');
   });
 
   it('没有扣款的合同对账，导出跟以前一模一样，不多出空表', () => {
     const html = exportAndRead({ ...base, expenseItems: [] });
-    expect(html).not.toContain('扣款明细');
+    expect(html).not.toContain('费用 / 扣款调整');
     expect(html).not.toContain('金额构成');
     expect(html).toContain('出货明细');
   });

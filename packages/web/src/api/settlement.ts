@@ -25,6 +25,9 @@ export const settlementApi = {
   pullInvoiceReceipts: (id: number) =>
     http.patch<unknown, any>(`/settlements/${id}/pull-invoice-receipts`),
   // 款号/订单累计汇总(Q18 分批结算)
+  // 建单前预览自动聚合的成本行（#91）
+  costPreview: (orderId: number) =>
+    http.get<unknown, any>('/settlements/cost-preview', { params: { order_id: orderId } }),
   aggregate: (params: { style_no?: string; order_id?: number }) =>
     http.get<unknown, any>('/settlements/aggregate', { params }),
   refundReceived: (id: number, amount?: number) =>

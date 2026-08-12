@@ -57,9 +57,11 @@ const mockOrderMaterialRepo = {
 };
 const mockMatrixRepo = {
   findOne: jest.fn().mockResolvedValue(null),
+  find: jest.fn().mockResolvedValue([]),   // #89：事务内会查订单材料行
 };
 const mockSupplierRepo = {
   findOne: jest.fn().mockResolvedValue({ id: 1, factory_id: 5, status: 1 }),
+  find: jest.fn().mockResolvedValue([]),   // #89：事务内会查订单材料行
   create: jest.fn().mockImplementation((v: any) => v),
   save: jest.fn().mockImplementation((v: any) => Promise.resolve({ ...v, id: 9 })),
 };
@@ -143,6 +145,7 @@ describe('ContractService', () => {
       create: jest.fn().mockImplementation((_, v) => v),
       save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
       findOne: jest.fn().mockResolvedValue(null),
+      find: jest.fn().mockResolvedValue([]),   // #89：事务内会查订单材料行
       update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
@@ -161,6 +164,7 @@ describe('ContractService', () => {
       create: jest.fn().mockImplementation((_, v) => v),
       save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
       findOne: jest.fn().mockResolvedValue(null),
+      find: jest.fn().mockResolvedValue([]),   // #89：事务内会查订单材料行
       update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
@@ -179,6 +183,7 @@ describe('ContractService', () => {
       create: jest.fn().mockImplementation((_, v) => v),
       save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
       findOne: jest.fn().mockResolvedValue(null),
+      find: jest.fn().mockResolvedValue([]),   // #89：事务内会查订单材料行
       update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
@@ -206,6 +211,7 @@ describe('ContractService', () => {
       create: jest.fn().mockImplementation((_, v) => v),
       save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
       findOne: jest.fn().mockResolvedValue(null),
+      find: jest.fn().mockResolvedValue([]),   // #89：事务内会查订单材料行
       update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
@@ -235,6 +241,7 @@ describe('ContractService', () => {
         .mockResolvedValueOnce({ id: 99, name: '待定供应商', deleted: 0 }) // 占位工厂查询(P3#41)
         .mockResolvedValue(null),                                        // create→OrderMain
       update: jest.fn().mockResolvedValue({ affected: 1 }),
+      find: jest.fn().mockResolvedValue([]),   // #89：事务内会查订单材料行
     };
     mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
     const result = await service.generateFromOrder(10, 1);
@@ -431,6 +438,7 @@ describe('ContractService', () => {
       findOne: jest.fn().mockResolvedValue(null),
       delete: jest.fn(),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
+      find: jest.fn().mockResolvedValue([]),   // #89：事务内会查订单材料行
     }));
     await service.create({
       type: ContractType.PROCESS, factory_id: 5, order_id: 10, guarantor: '丙方某',
@@ -467,6 +475,7 @@ describe('ContractService', () => {
       findOne: jest.fn().mockResolvedValue(null),
       delete: jest.fn(),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
+      find: jest.fn().mockResolvedValue([]),   // #89：事务内会查订单材料行
     }));
     await service.create({ type: ContractType.MATERIAL, factory_id: 5, order_id: 10 } as any, 1);
     expect(savedLines).toHaveLength(2); // 黑色 + 藏青 各一行
@@ -500,6 +509,7 @@ describe('ContractService', () => {
       findOne: jest.fn().mockResolvedValue(null),
       delete: jest.fn(),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
+      find: jest.fn().mockResolvedValue([]),   // #89：事务内会查订单材料行
     }));
     await service.create({ type: ContractType.MATERIAL, factory_id: 5, order_id: 10 } as any, 1);
     expect(savedLines).toHaveLength(2);
@@ -533,6 +543,7 @@ describe('ContractService', () => {
       findOne: jest.fn().mockResolvedValue(null),
       delete: jest.fn(),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
+      find: jest.fn().mockResolvedValue([]),   // #89：事务内会查订单材料行
     }));
     await service.create({ type: ContractType.MATERIAL, factory_id: 5, order_id: 10 } as any, 1);
     expect(savedLines).toHaveLength(4);
@@ -562,6 +573,7 @@ describe('ContractService', () => {
       findOne: jest.fn().mockResolvedValue(null),
       delete: jest.fn(),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
+      find: jest.fn().mockResolvedValue([]),   // #89：事务内会查订单材料行
     }));
     await service.create({ type: ContractType.MATERIAL, factory_id: 5, order_id: 10 } as any, 1);
     expect(savedLines).toHaveLength(2); // 各退回单行
@@ -642,7 +654,8 @@ describe('ContractService', () => {
     const manager = {
       create: jest.fn().mockImplementation((_: any, v: any) => v),
       save: jest.fn().mockImplementation((_: any, v: any) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
-      findOne: jest.fn().mockResolvedValue({ id: 2, contract_no: 'HT-20260701-001', deleted: 0 }), // 原合同
+      findOne: jest.fn().mockResolvedValue({ id: 2, contract_no: 'HT-20260701-001', deleted: 0 }),
+      find: jest.fn().mockResolvedValue([]),   // #89：事务内会查订单材料行 // 原合同
       count: jest.fn().mockResolvedValue(1), // 已有 1 张补料
       update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
@@ -665,6 +678,7 @@ describe('ContractService', () => {
       create: jest.fn().mockImplementation((_: any, v: any) => v),
       save: jest.fn().mockImplementation((_: any, v: any) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
       findOne: jest.fn().mockResolvedValue({ id: 2, contract_no: 'HT-20260701-001', deleted: 0 }),
+      find: jest.fn().mockResolvedValue([]),   // #89：事务内会查订单材料行
       count: jest.fn().mockResolvedValue(2), // 重试时序号 +1
       update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
@@ -709,6 +723,7 @@ describe('ContractService', () => {
       delete: jest.fn(),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
       count: jest.fn().mockResolvedValue(0),
+      find: jest.fn().mockResolvedValue([]),   // #89：事务内会查订单材料行
     }));
     await service.generateFromOrder(10, 1);
     expect(savedContracts[0].currency).toBe('CNY');   // 不是 'USD'
@@ -736,6 +751,7 @@ describe('ContractService', () => {
       findOne: jest.fn().mockResolvedValue(null),
       delete: jest.fn(),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
+      find: jest.fn().mockResolvedValue([]),   // #89：事务内会查订单材料行
     }));
     await service.create({ type: ContractType.MATERIAL, factory_id: 5, order_id: 10 } as any, 1);
     expect(savedLines).toHaveLength(2);
@@ -904,6 +920,7 @@ describe('ContractService', () => {
       const b = qb();
       const m: any = {
         findOne: jest.fn().mockResolvedValue(factory),
+        find: jest.fn().mockResolvedValue([]),   // #89：事务内会查订单材料行
         createQueryBuilder: jest.fn().mockReturnValue(b),
       };
       await (service as any).backfillOrderSupplier(m, mats, factoryId);
@@ -999,6 +1016,7 @@ describe('ContractService', () => {
       create: jest.fn().mockImplementation((_: any, v: any) => v),
       save: jest.fn().mockImplementation((_: any, v: any) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
       findOne: jest.fn().mockResolvedValue(null),
+      find: jest.fn().mockResolvedValue([]),   // #89：事务内会查订单材料行
       update: jest.fn().mockResolvedValue({ affected: 1 }),
     });
 
@@ -1044,6 +1062,74 @@ describe('ContractService', () => {
         type: 'SUPPLEMENT', factory_id: 5, parent_id: 1,
         materials: [{ item_name: '补料', unit_price: 20, qty: 10 }],
       } as any, 1)).rejects.toThrow(BadRequestException);
+    });
+  });
+
+
+  // ——— #89 手工建的材料合同也要能标绿（2026-08-12 King：「咋还是不行呢」）———
+  describe('linkOrderMaterials 按品名认回订单材料行', () => {
+    const qb = () => {
+      const b: any = {};
+      b.update = jest.fn().mockReturnValue(b);
+      b.set = jest.fn().mockReturnValue(b);
+      b.where = jest.fn().mockReturnValue(b);
+      b.execute = jest.fn().mockResolvedValue({ affected: 1 });
+      return b;
+    };
+    const run = async (orderId: any, rows: any[], oms: any[]) => {
+      const b = qb();
+      const m: any = {
+        find: jest.fn().mockResolvedValue(oms),
+        save: jest.fn().mockResolvedValue(rows),
+        createQueryBuilder: jest.fn().mockReturnValue(b),
+      };
+      await (service as any).linkOrderMaterials(m, orderId, rows);
+      return { m, b, rows };
+    };
+
+    it('UT-LINK-01 手工合同按品名对上订单材料行，订单侧就能标绿', async () => {
+      const rows = [{ item_name: '面料A', qty: 100 }, { item_name: '里布B', qty: 50 }];
+      await run(43, rows, [{ id: 11, item_name: '面料A' }, { id: 12, item_name: '里布B' }]);
+      expect(rows[0]).toMatchObject({ order_material_id: 11 });
+      expect(rows[1]).toMatchObject({ order_material_id: 12 });
+    });
+
+    it('UT-LINK-02 同名多行按顺序一一对上，不会都指到第一行', async () => {
+      const rows = [{ item_name: '面料A', qty: 10 }, { item_name: '面料A', qty: 20 }];
+      await run(43, rows, [{ id: 11, item_name: '面料A' }, { id: 12, item_name: '面料A' }]);
+      expect(rows.map((r: any) => r.order_material_id)).toEqual([11, 12]);
+    });
+
+    it('UT-LINK-03 订单上没有的料（临时加料）不猜——标错行比不标更糟', async () => {
+      const rows = [{ item_name: '临时加的辅料', qty: 5 }];
+      const { m } = await run(43, rows, [{ id: 11, item_name: '面料A' }]);
+      expect(rows[0]).not.toHaveProperty('order_material_id');
+      expect(m.save).not.toHaveBeenCalled();
+    });
+
+    it('UT-LINK-04 已经有溯源的行不动（拆单生成的合同不受影响）', async () => {
+      const rows = [{ item_name: '面料A', qty: 10, order_material_id: 99 }];
+      const { m } = await run(43, rows, [{ id: 11, item_name: '面料A' }]);
+      expect(rows[0].order_material_id).toBe(99);
+      expect(m.find).not.toHaveBeenCalled();
+    });
+
+    it('UT-LINK-05 没挂订单的合同（#75 材料合同可不关联订单）直接跳过', async () => {
+      const { m } = await run(null, [{ item_name: '面料A', qty: 10 }], []);
+      expect(m.find).not.toHaveBeenCalled();
+    });
+
+    it('UT-LINK-06 顺带回填最终采购量，同一条订单料被拆成多行时按合计', async () => {
+      const rows = [{ item_name: '面料A', qty: 30 }, { item_name: '面料A', qty: 20 }];
+      const { b } = await run(43, rows, [{ id: 11, item_name: '面料A' }, { id: 11, item_name: '面料A' }]);
+      expect(b.set).toHaveBeenCalledWith({ final_purchase: 50 });
+    });
+
+    it('UT-LINK-07 只补空的最终采购量，不覆盖人工填过的数', async () => {
+      const rows = [{ item_name: '面料A', qty: 30 }];
+      const { b } = await run(43, rows, [{ id: 11, item_name: '面料A' }]);
+      expect(b.where).toHaveBeenCalledWith(
+        expect.stringContaining('final_purchase IS NULL OR final_purchase = 0'), { id: 11 });
     });
   });
 });

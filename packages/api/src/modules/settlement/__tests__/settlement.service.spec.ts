@@ -3,6 +3,7 @@ import { ExportInvoiceService } from '../../invoice/export-invoice.service';
 import { ChangeLogService } from '../../../common/changelog/change-log.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { ReconciliationStatus } from '../../reconciliation/reconciliation.entity';
 import { DataSource } from 'typeorm';
 import { SettlementService } from '../settlement.service';
 import { Settlement } from '../settlement.entity';
@@ -492,6 +493,64 @@ describe('SettlementService', () => {
       express_fee: 60, // 快邮
       sample_fee: 40, // 打样
       other_fee: 100, // 头合计300−行合计200 的整单差额按首单描述兜底入其它
+    });
+  });
+
+
+  // ——— #91 建单前预览自动聚合的成本（King：「选了款号 下面啥都没有」）———
+  describe('previewCosts', () => {
+    // 这一组会把 contract/reconcile 仓储的返回值改成非空；不复位会漏给同文件其它用例
+    // （实测：不加这段，全量跑挂 12 条）
+    afterEach(() => {
+      mockContractRepo.find.mockResolvedValue([]);
+      mockReconcileRepo.find.mockResolvedValue([]);
+      mockOrderRepo.findOne.mockResolvedValue({ id: 10, style_no: 'V27.230', currency: 'USD', deleted: 0 });
+    });
+
+    const recon = (over: any = {}) => ({
+      id: 1, reconcile_no: 'DZ-M26DWCP087-001', factory_id: 5, total_amount: 5241.8,
+      tax_rate: 13, has_invoice: 1, status: ReconciliationStatus.PAID, deleted: 0, ...over,
+    });
+
+    it('UT-PREV-01 把该订单会聚合成的对账行原样列出来', async () => {
+      mockContractRepo.find.mockResolvedValue([{ id: 54 }]);
+      mockReconcileRepo.find.mockResolvedValue([recon(), recon({ id: 2, reconcile_no: 'DZ-002', total_amount: 4394 })]);
+      const res: any = await service.previewCosts(10);
+      expect(res.rows).toHaveLength(2);
+      expect(res.rows[0]).toMatchObject({ cost_name: '对账 DZ-M26DWCP087-001', amount: 5241.8 });
+    });
+
+    it('UT-PREV-02 已确认未付的单独算，不混进成本——口径与保存时完全一致', async () => {
+      mockContractRepo.find.mockResolvedValue([{ id: 54 }]);
+      mockReconcileRepo.find.mockResolvedValue([
+        recon({ total_amount: 1000, status: ReconciliationStatus.PAID }),
+        recon({ id: 2, reconcile_no: 'DZ-002', total_amount: 500, status: ReconciliationStatus.CONFIRMED }),
+      ]);
+      const res: any = await service.previewCosts(10);
+      expect(res.paid_tax).toBe(1000);
+      expect(res.unpaid_tax).toBe(500);
+      expect(res.unpaid_count).toBe(1);
+    });
+
+    it('UT-PREV-03 一条对账都没有时给空列表，让界面能说清「为什么是空的」', async () => {
+      mockContractRepo.find.mockResolvedValue([]);
+      mockReconcileRepo.find.mockResolvedValue([]);
+      const res: any = await service.previewCosts(10);
+      expect(res.rows).toEqual([]);
+      expect(res.paid_tax).toBe(0);
+    });
+
+    it('UT-PREV-04 带出订单币种，建单时按它显示货币符号（#90）', async () => {
+      mockContractRepo.find.mockResolvedValue([]);
+      mockReconcileRepo.find.mockResolvedValue([]);
+      const res: any = await service.previewCosts(10);
+      expect(res.currency).toBe('USD');
+      expect(res.style_no).toBe('V27.230');
+    });
+
+    it('UT-PREV-05 订单不存在直接 404，不返回一份空预览让人以为没成本', async () => {
+      mockOrderRepo.findOne.mockResolvedValueOnce(null);
+      await expect(service.previewCosts(999)).rejects.toThrow(NotFoundException);
     });
   });
 });

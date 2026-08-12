@@ -32,10 +32,10 @@ export class CreateExpenseLineDto {
 export class CreateDeductionLineDto {
   @IsString()
   @MaxLength(200) // 对齐 reconciliation_expense_item.expense_name 列宽
-  reason: string; // 扣款事由：次品退货 / 客户打折 / 数量短装…
+  reason: string; // 事由：运费 / 版费（正数，加钱）；次品退货 / 客户打折（负数，减钱）
 
   @IsNumber()
-  amount: number; // 带符号：扣款为负
+  amount: number; // 带符号：加钱为正（运费/版费，#86 #88），减钱为负（打折/退货，#74）
 
   @IsOptional() @IsString()
   style_no?: string;

@@ -223,9 +223,9 @@
         <template v-else>
           <!-- 有扣款才显示这一块，没有的单据不平白多一张空表 -->
           <template v-if="(detailData.expenseItems ?? []).length">
-            <el-divider>扣款明细（合同保持原样，调整只发生在对账）</el-divider>
+            <el-divider>费用 / 扣款调整（合同保持原样，调整只发生在对账）</el-divider>
             <el-table :data="detailData.expenseItems" border size="small">
-              <el-table-column prop="expense_name" label="扣款事由" min-width="180" />
+              <el-table-column prop="expense_name" label="事由" min-width="180" />
               <el-table-column prop="style_no" label="相关款号" width="110"><template #default="{ row }">{{ row.style_no || '—' }}</template></el-table-column>
               <el-table-column prop="amount" label="金额" width="120" align="right">
                 <template #default="{ row }"><span :class="+row.amount < 0 ? 'ded-minus' : 'ded-plus'">{{ (+row.amount).toFixed(2) }}</span></template>
@@ -243,7 +243,7 @@
             <div class="labor-sum">
               发货金额 ¥{{ (Number(detailData.total_amount) - detailDeductionTotal).toFixed(2) }}
               <span :class="detailDeductionTotal < 0 ? 'ded-minus' : 'ded-plus'">
-                {{ detailDeductionTotal < 0 ? '−' : '＋' }} ¥{{ Math.abs(detailDeductionTotal).toFixed(2) }}
+                {{ detailDeductionTotal < 0 ? '− 扣款' : '＋ 费用' }} ¥{{ Math.abs(detailDeductionTotal).toFixed(2) }}
               </span>
               ＝ 对账金额 <b>¥{{ Number(detailData.total_amount).toFixed(2) }}</b>
             </div>
@@ -419,24 +419,28 @@
           <el-button style="width:100%;margin-top:8px" @click="addShipment">+ 添加出货行</el-button>
 
           <!-- 扣款明细（#74）：已确认合同要打折/次品退货时，合同不动，在这里扣 -->
-          <el-divider>扣款明细（打折 / 次品退货 / 短装，可不填）</el-divider>
+          <el-divider>费用 / 扣款调整（可不填）</el-divider>
+          <div class="adj-hint">
+            <b>加钱填正数</b>：运费、版费、打样费等对方垫付的；
+            <b>减钱填负数</b>：打折、次品退货、短装扣款。合同不用改，调整只发生在对账。
+          </div>
           <div v-for="(d, idx) in createForm.deductions" :key="'d' + idx" class="item-row">
             <el-row :gutter="8" align="top">
-              <el-col :span="7"><el-input v-model="d.reason" placeholder="扣款事由，如：次品退货 20 件" /></el-col>
+              <el-col :span="7"><el-input v-model="d.reason" placeholder="事由，如：运费 / 次品退货 20 件" /></el-col>
               <el-col :span="5">
-                <el-input-number v-model="d.amount" :precision="2" :controls="false" placeholder="扣款填负数" style="width:100%" />
+                <el-input-number v-model="d.amount" :precision="2" :controls="false" placeholder="加钱正数/减钱负数" style="width:100%" />
               </el-col>
               <el-col :span="4"><el-input v-model="d.style_no" placeholder="相关款号(可空)" /></el-col>
               <el-col :span="6"><file-upload v-model="d.attach_url" :limit="3" multiple tip="照片/说明" /></el-col>
               <el-col :span="2"><el-button link type="danger" @click="removeDeduction(idx)">删</el-button></el-col>
             </el-row>
           </div>
-          <el-button style="width:100%;margin-top:8px" @click="addDeduction">+ 添加扣款行</el-button>
+          <el-button style="width:100%;margin-top:8px" @click="addDeduction">+ 添加费用 / 扣款行</el-button>
           <!-- 金额构成必须当场算给业务看：只显示一个总额，扣错了没人发现 -->
           <div v-if="createForm.deductions.length" class="labor-sum">
             发货金额 ¥{{ shipGoodsTotal.toFixed(2) }}
             <span :class="deductionTotal < 0 ? 'ded-minus' : 'ded-plus'">
-              {{ deductionTotal < 0 ? '−' : '＋' }} ¥{{ Math.abs(deductionTotal).toFixed(2) }}
+              {{ deductionTotal < 0 ? '− 扣款' : '＋ 费用' }} ¥{{ Math.abs(deductionTotal).toFixed(2) }}
             </span>
             ＝ 对账金额 <b>¥{{ (shipGoodsTotal + deductionTotal).toFixed(2) }}</b>
           </div>
@@ -840,8 +844,8 @@ async function doCreate() {
   // 扣款行：点了「添加扣款行」又没填的空行直接丢掉，别拿去撞后端校验；填了一半的拦下来说清楚
   const deductions = (createForm.deductions as any[]).filter((d) => d.reason?.trim() || d.amount != null);
   for (const d of deductions) {
-    if (!d.reason?.trim()) { ElMessage.warning('扣款行要写清事由（如「次品退货 20 件」），否则事后没人说得清这笔钱扣在哪'); return; }
-    if (!d.amount) { ElMessage.warning('扣款金额不能为空或 0；打折/退货请填负数，如 -500'); return; }
+    if (!d.reason?.trim()) { ElMessage.warning('每行都要写清事由（如「运费」「次品退货 20 件」），否则事后没人说得清这笔钱是怎么回事'); return; }
+    if (!d.amount) { ElMessage.warning('金额不能为空或 0：加钱（运费/版费）填正数，减钱（打折/退货）填负数'); return; }
   }
   saving.value = true;
   try {
@@ -893,6 +897,7 @@ async function doGenerateLabor() {
 </script>
 
 <style scoped>
+.adj-hint { font-size: 12px; color: var(--el-text-color-secondary); margin: -4px 0 8px; line-height: 1.7; }
 .ded-minus { color: var(--el-color-danger); font-weight: 600; }
 .ded-plus { color: var(--el-color-success); font-weight: 600; }
 /* 逐品名行淡一点，跟批次汇总行区分开 */
