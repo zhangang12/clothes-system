@@ -257,6 +257,30 @@ export class ContractService {
     }
   }
 
+  /**
+   * 材料合同的「发货地址」＝**该款加工厂的地址**（#87 Grace，2026-08-12）。
+   *
+   * 【为什么不是供应商自己的地址】材料合同上甲方（供方）就是那家材料供应商，他是**发货方**。
+   * 他问的是「布该送到哪儿」——答案是做这件衣服的**加工厂**，不是他自己。
+   * 原来前端那个默认值取的正是 `selectedFactory.address`（＝材料供应商本人），取错了对象；
+   * 而且只在「手动切换工厂」时才触发，材料合同基本都是从订单一键生成的，压根不会触发——
+   * 生产实证：24 张材料合同里 22 张这一栏是空的，打印出来是个「—」，供应商只能回来问。
+   *
+   * 【找法】同一订单下的加工合同 → 它的工厂 → 工厂档案地址。
+   * 找不到（还没建加工合同、或工厂没填地址）就**留空**，不拿别的地址凑数——
+   * 填错地址比留空危险得多，留空至少业务能看出来要补。
+   */
+  private async resolveShipToAddress(m: EntityManager, orderId: number | null): Promise<string | null> {
+    if (!orderId) return null;
+    const proc = await m.findOne(Contract, {
+      where: { order_id: orderId, type: ContractType.PROCESS, deleted: 0 },
+      order: { id: 'DESC' },
+    });
+    if (!proc?.factory_id) return null;
+    const f = await m.findOne(Factory, { where: { id: proc.factory_id, deleted: 0 } });
+    return f?.address?.trim() || null;
+  }
+
   async generateFromOrder(orderId: number, createdBy: number) {
     const order = await this.orderRepo.findOne({ where: { id: orderId, deleted: 0 } });
     if (!order) throw new NotFoundException(`订单 #${orderId} 不存在`);
@@ -480,6 +504,26 @@ export class ContractService {
       }));
       await m.save(ContractMaterial, materials);
       await this.linkOrderMaterials(m, dto.order_id ?? null, materials);
+      // 发货地址（#87）：材料合同没指定时自动带该款加工厂地址；已填的不覆盖
+      if (dto.type === ContractType.MATERIAL && !dto.ship_to_address) {
+        const addr = await this.resolveShipToAddress(m, dto.order_id ?? null);
+        if (addr) await m.update(Contract, { id: contract.id }, { ship_to_address: addr });
+      }
+      // 反过来：**加工合同往往比材料合同后建**（先订料、后定加工厂），
+      // 那时材料合同的发货地址还没处可取。所以建加工合同时回头把同一订单下
+      // 仍然空着的材料合同补上——否则先订料的那批永远是空的。
+      if (dto.type === ContractType.PROCESS && dto.order_id && dto.factory_id) {
+        const f = await m.findOne(Factory, { where: { id: dto.factory_id, deleted: 0 } });
+        const addr = f?.address?.trim();
+        if (addr) {
+          await m.createQueryBuilder().update(Contract)
+            .set({ ship_to_address: addr })
+            .where('order_id = :oid AND type = :t AND deleted = 0'
+              + ' AND (ship_to_address IS NULL OR ship_to_address = "")',
+            { oid: dto.order_id, t: ContractType.MATERIAL })
+            .execute();
+        }
+      }
       await this.backfillOrderSupplier(m, materials, dto.factory_id);
 
       // 最近交易日期回写（基础资料稿 §1.2：列表按最近交易超期标红——此前该字段无任何写入方，规则恒不触发）

@@ -34,7 +34,7 @@
          有 loading 时组件会把已拿到的 chip 一并藏起来),报价单须经订单中转故最晚到。 -->
     <DocLinks :links="docLinks" />
 
-    <RuleHint>合同分材料/加工两类,甲乙丙方按类型区分;<b>推送或盖章后关键字段锁定、仅备注可改</b>(需改先撤销推送回草稿);定金+中期+尾款须=100%;发货地址默认带加工厂地址、可改;<b>担保人身份证等敏感附件加密存储、限授权可见</b>。</RuleHint>
+    <RuleHint>合同分材料/加工两类,甲乙丙方按类型区分;<b>推送或盖章后关键字段锁定、仅备注可改</b>(需改先撤销推送回草稿);定金+中期+尾款须=100%;<b>发货地址＝该款加工厂地址</b>(材料从供应商直发加工厂;<b>该订单还没建加工合同时填不出来</b>,建好后自动补上,也可手填);<b>担保人身份证等敏感附件加密存储、限授权可见</b>。</RuleHint>
     <!-- ▣ 合同基础信息 -->
     <div class="section-card">
       <h3 class="sec-title">▣ 合同基础信息 <span class="sec-sub">{{ isProcess ? '受托方(加工厂) / 委托方(本司)' : '含甲方(供方) / 乙方(需方) / 丙方(担保)' }}</span></h3>
@@ -78,7 +78,7 @@
           </el-col>
           <el-col :span="8"><el-form-item :label="isProcess ? '委托方代表' : '乙方代表'"><el-input v-model="form.company_rep" placeholder="默认当前业务（登录人），可改" /></el-form-item></el-col>
           <el-col v-if="isProcess" :span="8"><el-form-item label="交货期限"><el-date-picker v-model="form.delivery_deadline" type="date" value-format="YYYY-MM-DD" style="width:100%" placeholder="默认=订单交期−10天" /></el-form-item></el-col>
-          <el-col v-else :span="8"><el-form-item label="发货地址"><el-input v-model="form.ship_to_address" placeholder="默认该款对应加工厂地址，可调整/手填（v1.3）" /></el-form-item></el-col>
+          <el-col v-else :span="8"><el-form-item label="发货地址"><el-input v-model="form.ship_to_address" placeholder="留空＝保存时自动带该款加工厂地址（需先建加工合同）；也可手填" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="担保人(丙方)"><el-input v-model="form.guarantor" placeholder="个人担保方，一般留空" /></el-form-item></el-col>
           <el-col :span="8">
             <el-form-item label="担保人身份证照片">
@@ -397,12 +397,12 @@ const filteredFactories = computed(() => {
   });
 });
 const selectedFactory = computed(() => factories.value.find((f: any) => f.id === form.factory_id));
-// 发货地址默认自动带加工厂地址(P3#31/rev2合同#1):为空时选厂即填,可改
-watch(() => form.factory_id, () => {
-  if (!form.ship_to_address && selectedFactory.value?.address) {
-    form.ship_to_address = selectedFactory.value.address;
-  }
-});
+// 【别在这里按 factory_id 自动填发货地址】(2026-08-12 #87 Grace)
+// 原来这里写的是 `form.ship_to_address = selectedFactory.address`——而材料合同的 factory_id
+// **是材料供应商（甲方/发货方）**，填的等于「把布发到卖布的人那儿」，取错了对象。
+// 正确的是「该款加工厂的地址」，且加工合同常常比材料合同后建，前端这时也拿不到。
+// 现在由后端在建单时统一带入（见 contract.service.ts resolveShipToAddress），
+// 建加工合同时还会回头补齐同订单下空着的材料合同。这里只保留手填。
 const factoryContact = computed(() => {
   const f = selectedFactory.value;
   return f ? [f.contact_name, f.contact_phone].filter(Boolean).join(' / ') || '—' : '—';

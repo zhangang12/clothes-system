@@ -233,13 +233,20 @@ describe('ContractService', () => {
     const manager = {
       create: jest.fn().mockImplementation((_: any, v: any) => v),
       save: jest.fn().mockImplementation((_: any, v: any) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
-      findOne: jest.fn()
-        .mockResolvedValueOnce({ id: 7, name: '面料厂A', deleted: 0 })   // 面料厂A 匹配
-        .mockResolvedValueOnce(null)                                     // create→OrderMain
-        .mockResolvedValueOnce({ id: 8, name: '辅料厂B', deleted: 0 })   // 辅料厂B 匹配
-        .mockResolvedValueOnce(null)                                     // create→OrderMain
-        .mockResolvedValueOnce({ id: 99, name: '待定供应商', deleted: 0 }) // 占位工厂查询(P3#41)
-        .mockResolvedValue(null),                                        // create→OrderMain
+      // 【按实体分发，别按调用顺序排】原来这里是一串 mockResolvedValueOnce，
+      // 事务里**多一次查询就全乱套**（#87 加了「查该款加工合同」后当场挂掉）。
+      findOne: jest.fn().mockImplementation((entity: any, opts: any) => {
+        if (entity === Factory) {
+          const name = opts?.where?.name;
+          const hit = [
+            { id: 7, name: '面料厂A', deleted: 0 },
+            { id: 8, name: '辅料厂B', deleted: 0 },
+            { id: 99, name: '待定供应商', deleted: 0 },
+          ].find((f) => f.name === name);
+          return Promise.resolve(hit ?? null);
+        }
+        return Promise.resolve(null);   // OrderMain / 加工合同查询等一律查不到
+      }),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
       find: jest.fn().mockResolvedValue([]),   // #89：事务内会查订单材料行
     };
@@ -1130,6 +1137,44 @@ describe('ContractService', () => {
       const { b } = await run(43, rows, [{ id: 11, item_name: '面料A' }]);
       expect(b.where).toHaveBeenCalledWith(
         expect.stringContaining('final_purchase IS NULL OR final_purchase = 0'), { id: 11 });
+    });
+  });
+
+
+  // ——— #87 材料合同的发货地址＝该款加工厂地址（Grace 2026-08-12）———
+  describe('resolveShipToAddress 发货地址取该款加工厂', () => {
+    // 桩要能分辨「查的是哪家工厂」——否则把"按加工合同的 factory_id 查"删掉，测试照样绿
+    const mk = (proc: any, factories: Record<number, any>) => ({
+      findOne: jest.fn().mockImplementation((e: any, opts: any) => Promise.resolve(
+        e === Factory ? (factories[opts?.where?.id] ?? null) : proc,
+      )),
+    });
+
+    it('UT-ADDR-01 取同订单加工合同对应工厂的地址，不是材料供应商自己的', async () => {
+      // 7 号是加工厂，5 号是材料供应商——取错人就会拿到"卖布那家"的地址
+      const m = mk({ id: 9, factory_id: 7 }, {
+        7: { id: 7, address: '苏州市吴江区盛泽镇南环二路1155号' },
+        5: { id: 5, address: '（材料供应商自己的地址，取到它就是错的）' },
+      });
+      const addr = await (service as any).resolveShipToAddress(m, 43);
+      expect(addr).toBe('苏州市吴江区盛泽镇南环二路1155号');
+      expect(m.findOne).toHaveBeenCalledWith(Factory, expect.objectContaining({ where: expect.objectContaining({ id: 7 }) }));
+    });
+
+    it('UT-ADDR-02 还没建加工合同时留空——不拿别的地址凑数', async () => {
+      const m = mk(null, {});
+      await expect((service as any).resolveShipToAddress(m, 43)).resolves.toBeNull();
+    });
+
+    it('UT-ADDR-03 加工厂档案没填地址也留空，填错比留空危险得多', async () => {
+      const m = mk({ id: 9, factory_id: 7 }, { 7: { id: 7, address: '   ' } });
+      await expect((service as any).resolveShipToAddress(m, 43)).resolves.toBeNull();
+    });
+
+    it('UT-ADDR-04 材料合同没挂订单（#75 允许不关联）时直接跳过', async () => {
+      const m = mk({ id: 9, factory_id: 7 }, { 7: { id: 7, address: 'X' } });
+      await expect((service as any).resolveShipToAddress(m, null)).resolves.toBeNull();
+      expect(m.findOne).not.toHaveBeenCalled();
     });
   });
 });
