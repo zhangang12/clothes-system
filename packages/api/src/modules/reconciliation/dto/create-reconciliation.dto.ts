@@ -18,6 +18,32 @@ export class CreateExpenseLineDto {
   attach_url?: string;
 }
 
+/**
+ * 合同类对账·扣款明细行（2026-08-12 #74，业务拍板：已确认合同要打折/次品退货怎么处理）。
+ *
+ * 【为什么不改合同】合同一旦确认就已推送给工厂、下游还挂着发货批次；为一次打折去改合同，
+ * 等于把已经成立的约定推翻重来。业务定的口径是**合同保持原样**，在对账环节挂一条扣款：
+ * 对账金额 = 发货金额 − 扣款，后面的付款、结算自然跟着这个数走。
+ *
+ * 【金额的符号】按业务原话「可填负数」——**这里填的就是带符号的调整额**：
+ * 打折/次品退货填负数（如 -500），少扣了要补回填正数。不做正负转换，
+ * 界面填什么、库里存什么、导出显示什么，三处一致，免得对账时对不上号。
+ */
+export class CreateDeductionLineDto {
+  @IsString()
+  @MaxLength(200) // 对齐 reconciliation_expense_item.expense_name 列宽
+  reason: string; // 扣款事由：次品退货 / 客户打折 / 数量短装…
+
+  @IsNumber()
+  amount: number; // 带符号：扣款为负
+
+  @IsOptional() @IsString()
+  style_no?: string;
+
+  @IsOptional() @IsString()
+  attach_url?: string; // 照片 / 说明附件
+}
+
 export class CreateShipmentLineDto {
   @IsNumber()
   shipment_id: number;
@@ -100,4 +126,13 @@ export class CreateReconciliationDto {
   @ValidateNested({ each: true })
   @Type(() => CreateExpenseLineDto)
   expenses?: CreateExpenseLineDto[];
+
+  // 合同类对账·扣款明细（#74）。与 expenses 共用 reconciliation_expense_item 表：
+  // 那张表本来就是「事由 + 金额 + 款号 + 附件」四件套，扣款需要的字段一个不差，
+  // 没必要为此再建一张表（也就不必走存量库结构升级）。
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateDeductionLineDto)
+  deductions?: CreateDeductionLineDto[];
 }

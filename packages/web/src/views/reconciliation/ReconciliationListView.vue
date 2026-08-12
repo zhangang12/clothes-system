@@ -221,6 +221,33 @@
           </el-table>
         </template>
         <template v-else>
+          <!-- 有扣款才显示这一块，没有的单据不平白多一张空表 -->
+          <template v-if="(detailData.expenseItems ?? []).length">
+            <el-divider>扣款明细（合同保持原样，调整只发生在对账）</el-divider>
+            <el-table :data="detailData.expenseItems" border size="small">
+              <el-table-column prop="expense_name" label="扣款事由" min-width="180" />
+              <el-table-column prop="style_no" label="相关款号" width="110"><template #default="{ row }">{{ row.style_no || '—' }}</template></el-table-column>
+              <el-table-column prop="amount" label="金额" width="120" align="right">
+                <template #default="{ row }"><span :class="+row.amount < 0 ? 'ded-minus' : 'ded-plus'">{{ (+row.amount).toFixed(2) }}</span></template>
+              </el-table-column>
+              <el-table-column label="附件" width="110">
+                <template #default="{ row }">
+                  <template v-if="row.attach_url">
+                    <el-link v-for="(u, i) in String(row.attach_url).split(',').filter(Boolean)" :key="i"
+                      type="primary" style="margin-right:6px" @click="preview?.open(u, '扣款附件')">图{{ i + 1 }}</el-link>
+                  </template>
+                  <span v-else>—</span>
+                </template>
+              </el-table-column>
+            </el-table>
+            <div class="labor-sum">
+              发货金额 ¥{{ (Number(detailData.total_amount) - detailDeductionTotal).toFixed(2) }}
+              <span :class="detailDeductionTotal < 0 ? 'ded-minus' : 'ded-plus'">
+                {{ detailDeductionTotal < 0 ? '−' : '＋' }} ¥{{ Math.abs(detailDeductionTotal).toFixed(2) }}
+              </span>
+              ＝ 对账金额 <b>¥{{ Number(detailData.total_amount).toFixed(2) }}</b>
+            </div>
+          </template>
           <el-divider>出货明细（一单多合同·批次可跳来源合同）</el-divider>
           <el-table :data="shipmentDetailRows" border size="small" :row-class-name="shipRowClass">
             <el-table-column prop="shipment_id" label="出货单ID" width="90" />
@@ -390,6 +417,29 @@
             </el-row>
           </div>
           <el-button style="width:100%;margin-top:8px" @click="addShipment">+ 添加出货行</el-button>
+
+          <!-- 扣款明细（#74）：已确认合同要打折/次品退货时，合同不动，在这里扣 -->
+          <el-divider>扣款明细（打折 / 次品退货 / 短装，可不填）</el-divider>
+          <div v-for="(d, idx) in createForm.deductions" :key="'d' + idx" class="item-row">
+            <el-row :gutter="8" align="top">
+              <el-col :span="7"><el-input v-model="d.reason" placeholder="扣款事由，如：次品退货 20 件" /></el-col>
+              <el-col :span="5">
+                <el-input-number v-model="d.amount" :precision="2" :controls="false" placeholder="扣款填负数" style="width:100%" />
+              </el-col>
+              <el-col :span="4"><el-input v-model="d.style_no" placeholder="相关款号(可空)" /></el-col>
+              <el-col :span="6"><file-upload v-model="d.attach_url" :limit="3" multiple tip="照片/说明" /></el-col>
+              <el-col :span="2"><el-button link type="danger" @click="removeDeduction(idx)">删</el-button></el-col>
+            </el-row>
+          </div>
+          <el-button style="width:100%;margin-top:8px" @click="addDeduction">+ 添加扣款行</el-button>
+          <!-- 金额构成必须当场算给业务看：只显示一个总额，扣错了没人发现 -->
+          <div v-if="createForm.deductions.length" class="labor-sum">
+            发货金额 ¥{{ shipGoodsTotal.toFixed(2) }}
+            <span :class="deductionTotal < 0 ? 'ded-minus' : 'ded-plus'">
+              {{ deductionTotal < 0 ? '−' : '＋' }} ¥{{ Math.abs(deductionTotal).toFixed(2) }}
+            </span>
+            ＝ 对账金额 <b>¥{{ (shipGoodsTotal + deductionTotal).toFixed(2) }}</b>
+          </div>
         </template>
 
         <!-- 无合同空白对账单：费用明细（费用项目/事由·金额·相关款号可空·附件） -->
@@ -442,6 +492,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { fmtDateTime } from '@/utils/format';
 import { Search, Refresh, Plus, Coin, Paperclip } from '@element-plus/icons-vue';
 import FilePreviewDialog from '@/components/FilePreviewDialog.vue';
+import FileUpload from '@/components/FileUpload.vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { reconciliationApi } from '@/api/reconciliation';
 import { exportReconciliationExcel } from '@/utils/reconciliationExcel';
@@ -713,8 +764,18 @@ const createForm = reactive({
   description: '',
   shipments: [] as any[],
   expenses: [] as any[],
+  deductions: [] as any[],
 });
 const expenseTotal = computed(() => createForm.expenses.reduce((s: number, e: any) => s + (+e.amount || 0), 0));
+// 扣款明细（#74）：金额带符号，扣款为负；界面填什么、库里存什么、导出显示什么，三处一致
+const deductionTotal = computed(() => createForm.deductions.reduce((s: number, d: any) => s + (+d.amount || 0), 0));
+const shipGoodsTotal = computed(() => createForm.shipments.reduce(
+  (s: number, x: any) => s + (+x.snapshot_unit_price || 0) * (+x.qty || 0), 0));
+function addDeduction() { createForm.deductions.push({ reason: '', amount: undefined, style_no: '', attach_url: '' }); }
+function removeDeduction(idx: number) { createForm.deductions.splice(idx, 1); }
+// 详情页的扣款合计：明细表在合同类对账里就是扣款（无合同类型走上面的费用分支）
+const detailDeductionTotal = computed(() => (detailData.value?.expenseItems ?? [])
+  .reduce((s: number, e: any) => s + (+e.amount || 0), 0));
 const createRules: FormRules = {
   type: [{ required: true, message: '请选择类型', trigger: 'change' }],
 };
@@ -750,7 +811,7 @@ function openCreate() { createVisible.value = true; }
 function resetCreateForm() {
   Object.assign(createForm, {
     type: 'CONTRACT', subType: 'EXPENSE', factory_id: undefined, contract_id: undefined,
-    tax_rate: undefined, invoice_no: '', invoice_amount: undefined, description: '', shipments: [], expenses: [], merge_into_parent: false,
+    tax_rate: undefined, invoice_no: '', invoice_amount: undefined, description: '', shipments: [], expenses: [], deductions: [], merge_into_parent: false,
   });
   styleSearch.value = '';
   styleContracts.value = [];
@@ -776,9 +837,15 @@ async function doCreate() {
     if (!createForm.contract_id) { ElMessage.warning('请先搜款号并选择合同'); return; }
     if (!createForm.shipments.length) { ElMessage.warning('请至少添加一条出货明细'); return; }
   }
+  // 扣款行：点了「添加扣款行」又没填的空行直接丢掉，别拿去撞后端校验；填了一半的拦下来说清楚
+  const deductions = (createForm.deductions as any[]).filter((d) => d.reason?.trim() || d.amount != null);
+  for (const d of deductions) {
+    if (!d.reason?.trim()) { ElMessage.warning('扣款行要写清事由（如「次品退货 20 件」），否则事后没人说得清这笔钱扣在哪'); return; }
+    if (!d.amount) { ElMessage.warning('扣款金额不能为空或 0；打折/退货请填负数，如 -500'); return; }
+  }
   saving.value = true;
   try {
-    await reconciliationApi.create(createForm as any);
+    await reconciliationApi.create({ ...createForm, deductions } as any);
     ElMessage.success('创建成功');
     createVisible.value = false;
     load();
@@ -826,6 +893,8 @@ async function doGenerateLabor() {
 </script>
 
 <style scoped>
+.ded-minus { color: var(--el-color-danger); font-weight: 600; }
+.ded-plus { color: var(--el-color-success); font-weight: 600; }
 /* 逐品名行淡一点，跟批次汇总行区分开 */
 :deep(.el-table .ship-sub) > td { background: var(--el-fill-color-lighter); }
 

@@ -81,13 +81,33 @@ export function exportReconciliationExcel(detail: any): void {
   }
 
   if (expenses.length) {
+    // 同一张子表在两种单据里是两种含义：无合同对账里是「费用」，合同对账里是「扣款」（#74）。
+    // 表头必须跟着变——把一列 -500 标成「费用」，看的人会以为是花出去的钱，不是从货款里扣的。
+    const isDeduction = detail.type === 'CONTRACT';
+    const goods = sum(ships, (r) => r.amount);
+    const adjust = sum(expenses, (r) => r.amount);
     blocks.push({
       kind: 'table',
-      title: `费用明细${detail.sub_type ? `（${subTypeLabel(detail.sub_type)}）` : ''}`,
-      head: ['#', '费用项目/事由', '相关款号', '金额', '附件'],
-      rows: expenses.map((e, i) => [i + 1, e.expense_name, e.style_no, n2(e.amount), e.attach_url]),
-      foot: ['合计', '', '', n2(sum(expenses, (r) => r.amount)), ''],
+      title: isDeduction
+        ? '扣款明细（合同保持原样，调整只发生在对账）'
+        : `费用明细${detail.sub_type ? `（${subTypeLabel(detail.sub_type)}）` : ''}`,
+      head: ['#', isDeduction ? '扣款事由' : '费用项目/事由', '相关款号', '金额', '附件'],
+      rows: expenses.map((e, i) => [i + 1, e.expense_name, e.style_no, n2(e.amount), sensitiveMark(e.attach_url)]),
+      foot: ['合计', '', '', n2(adjust), ''],
     });
+    // 金额构成单独列一块：只给一个总额，业务对不出「为什么比发货金额少」
+    if (isDeduction) {
+      blocks.push({
+        kind: 'kv',
+        title: '金额构成',
+        perRow: 1,
+        pairs: [
+          ['发货金额', n2(goods)],
+          ['扣款合计', n2(adjust)],
+          ['对账金额', n2(goods + adjust)],
+        ],
+      });
+    }
   }
 
   exportDocExcel({

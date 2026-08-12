@@ -214,4 +214,37 @@ describe('auth store', () => {
       expect(reloaded.canMenu('orders')).toBe(false);
     });
   });
+
+
+  // 2026-08-12 业务拍板：财务默认开通客户管理，其他角色维持"需主管配置"
+  describe('财务角色的默认菜单', () => {
+    it('财务默认能看到客户管理（开票、核对收汇抬头都要查客户资料）', () => {
+      const s = useAuthStore();
+      s.setAuth({ access_token: 't', role: UserRole.FINANCE, real_name: '财务' } as any);
+      expect(s.canMenu('customers')).toBe(true);
+    });
+
+    it('财务原有的几项一个都没丢', () => {
+      const s = useAuthStore();
+      s.setAuth({ access_token: 't', role: UserRole.FINANCE, real_name: '财务' } as any);
+      for (const k of ['dashboard', 'reconciliations', 'payments', 'settlements', 'export-invoices', 'reports']) {
+        expect(s.canMenu(k)).toBe(true);
+      }
+    });
+
+    it('财务仍然看不到样衣/报价这些跟他无关的菜单——这次只放客户管理', () => {
+      const s = useAuthStore();
+      s.setAuth({ access_token: 't', role: UserRole.FINANCE, real_name: '财务' } as any);
+      expect(s.canMenu('samples')).toBe(false);
+      expect(s.canMenu('quotes')).toBe(false);
+    });
+
+    it('已经被主管单独配过权限的账号，仍以配置为准，不受默认值变化影响', () => {
+      const s = useAuthStore();
+      // 生产上 qiao 就是这种：菜单是主管一项项配的
+      s.setAuth({ access_token: 't', role: UserRole.FINANCE, real_name: 'Jo', menu_keys: ['dashboard', 'payments'] } as any);
+      expect(s.canMenu('payments')).toBe(true);
+      expect(s.canMenu('customers')).toBe(false);
+    });
+  });
 });

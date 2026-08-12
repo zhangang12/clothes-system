@@ -585,4 +585,84 @@ describe('ReconciliationService', () => {
       await expect(service.updateDraft(5, { tax_rate: 1 } as any, OWNER)).rejects.toThrow(ForbiddenException);
     });
   });
+
+
+  // ——— #74 扣款明细（2026-08-12 业务拍板：已确认合同要打折/次品退货，合同不动、在对账扣）———
+  describe('合同类对账·扣款明细', () => {
+    const shipDto = (deductions?: any[]) => ({
+      type: ReconcileType.CONTRACT, factory_id: 5, contract_id: 10,
+      shipments: [{ shipment_id: 1, item_name: '面料A', snapshot_unit_price: 10, qty: 200 }],
+      ...(deductions ? { deductions } : {}),
+    });
+    const mgr = () => {
+      const m = makeManager(undefined, [{ id: 1, contract_id: 10, ship_no: 'FH-1', snapshot_unit_price: 10, reconcile_id: null }]);
+      mockDataSource.transaction.mockImplementationOnce((cb) => cb(m));
+      return m;
+    };
+
+    it('UT-REC-D1 对账金额 = 发货金额 − 扣款', async () => {
+      const m = mgr();
+      await service.create(shipDto([{ reason: '次品退货 20 件', amount: -500 }]) as any, 1);
+      expect(m.save.mock.calls[0][1]).toMatchObject({ total_amount: 1500 }); // 10×200 − 500
+    });
+
+    it('UT-REC-D2 多条扣款累加，正负都认（少扣了要补回就填正数）', async () => {
+      const m = mgr();
+      await service.create(shipDto([
+        { reason: '客户打折', amount: -300 },
+        { reason: '次品退货', amount: -200 },
+        { reason: '上次多扣退回', amount: 50 },
+      ]) as any, 1);
+      expect(m.save.mock.calls[0][1]).toMatchObject({ total_amount: 1550 }); // 2000 − 300 − 200 + 50
+    });
+
+    it('UT-REC-D3 扣款事由与附件都落库（事后要能说清这笔钱扣在哪）', async () => {
+      const m = mgr();
+      await service.create(shipDto([
+        { reason: '次品退货 20 件', amount: -500, style_no: 'ST001', attach_url: '/u/a.jpg,/u/b.jpg' },
+      ]) as any, 1);
+      const saved = m.save.mock.calls.find((c: any[]) => Array.isArray(c[1]) && c[1][0]?.expense_name);
+      expect(saved[1][0]).toMatchObject({
+        expense_name: '次品退货 20 件', amount: -500, style_no: 'ST001', attach_url: '/u/a.jpg,/u/b.jpg',
+      });
+    });
+
+    it('UT-REC-D4 扣款扣光或扣成负数直接拦下——放过去后面付款闸门和结算毛利全跟着错', async () => {
+      mgr();
+      await expect(service.create(shipDto([{ reason: '填错了', amount: -2000 }]) as any, 1))
+        .rejects.toThrow('对账金额不能为零或负数');
+      mgr();
+      await expect(service.create(shipDto([{ reason: '多填一位', amount: -5000 }]) as any, 1))
+        .rejects.toThrow(BadRequestException);
+    });
+
+    it('UT-REC-D5 不填扣款时行为一个字不变（老单据不受影响）', async () => {
+      const m = mgr();
+      await service.create(shipDto() as any, 1);
+      expect(m.save.mock.calls[0][1]).toMatchObject({ total_amount: 2000 });
+      const expenseSaves = m.save.mock.calls.filter((c: any[]) => Array.isArray(c[1]) && c[1][0]?.expense_name);
+      expect(expenseSaves).toHaveLength(0);
+    });
+
+    it('UT-REC-D6 税额与发票差额按扣完之后的金额算，不是按发货金额', async () => {
+      const m = mgr();
+      await service.create({ ...shipDto([{ reason: '打折', amount: -500 }]), tax_rate: 13, invoice_amount: 1500 } as any, 1);
+      expect(m.save.mock.calls[0][1]).toMatchObject({
+        total_amount: 1500,
+        tax_amount: 195,      // 1500 × 13%
+        invoice_diff: 0,      // 发票 1500 与扣后金额一致
+      });
+    });
+
+    it('UT-REC-D7 详情要把扣款明细带出来（此前只在无合同类型下查，合同对账看不见）', async () => {
+      mockReconciliationRepo.findOne.mockResolvedValue({
+        id: 1, type: ReconcileType.CONTRACT, contract_id: 10, factory_id: 5, total_amount: 1500, deleted: 0,
+      });
+      mockShipmentRepo.find.mockResolvedValue([]);
+      mockExpenseItemRepo.find.mockResolvedValue([{ id: 1, reconcile_id: 1, expense_name: '次品退货', amount: -500 }]);
+      const res: any = await service.findOne(1);
+      expect(res.expenseItems).toHaveLength(1);
+      expect(res.expenseItems[0]).toMatchObject({ expense_name: '次品退货', amount: -500 });
+    });
+  });
 });

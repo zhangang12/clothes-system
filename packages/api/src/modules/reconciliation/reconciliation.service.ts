@@ -54,9 +54,22 @@ export class ReconciliationService {
       const shipmentLines = dto.shipments ?? [];
       const expenseLines = dto.expenses ?? [];
       // 无合同空白对账单以费用明细求和；合同对账以出货批次求和（补充确认v1.1）
+      // 合同类对账的扣款明细（#74）：已确认合同要打折/次品退货时，合同保持原样不动，
+      // 在这里挂一条带符号的调整额（扣款为负），对账金额 = 发货金额 + Σ调整。
+      const deductionLines = dto.deductions ?? [];
+      const goodsAmount = shipmentLines.reduce((sum, s) => sum + s.snapshot_unit_price * s.qty, 0);
+      const deductionSum = deductionLines.reduce((sum, d) => sum + (+d.amount || 0), 0);
       const totalAmount = expenseLines.length
         ? expenseLines.reduce((sum, e) => sum + (+e.amount || 0), 0)
-        : shipmentLines.reduce((sum, s) => sum + s.snapshot_unit_price * s.qty, 0);
+        : goodsAmount + deductionSum;
+      // 扣光甚至扣成负数，几乎一定是填错了（多填一位、把总额当扣款填）。
+      // 放过去的话，后面付款申请的超付闸门、结算的毛利全跟着错，且很难回头查。
+      if (deductionLines.length && totalAmount <= 0) {
+        throw new BadRequestException(
+          `扣款合计 ${Math.abs(deductionSum).toFixed(2)} 已达到或超过发货金额 ${goodsAmount.toFixed(2)}，`
+          + '对账金额不能为零或负数，请核对扣款金额',
+        );
+      }
 
       // 一张对账单不允许混含材料+加工两类合同（补充确认v1.0 B3：仅同一类型）
       const batchContractIds = Array.from(new Set(
@@ -181,6 +194,19 @@ export class ReconciliationService {
           b.reconcile_id = reconciliation.id;
         }
         await manager.save(ContractShipment, heldBatches);
+      }
+
+      // 扣款明细落库（#74）。与费用明细同一张表：那张表就是「事由+金额+款号+附件」，
+      // 扣款要的字段一个不差，故不另建表、也就不涉及存量库结构升级。
+      if (deductionLines.length) {
+        await manager.save(ReconciliationExpenseItem, deductionLines.map((d) =>
+          manager.create(ReconciliationExpenseItem, {
+            reconcile_id: reconciliation.id,
+            expense_name: d.reason,
+            amount: +(+d.amount).toFixed(4),
+            style_no: d.style_no ?? null,
+            attach_url: d.attach_url ?? null,
+          })));
       }
 
       // 无合同空白对账单·费用明细落库（补充确认v1.1）
@@ -344,10 +370,12 @@ export class ReconciliationService {
     const laborItems = reconciliation.type === ReconcileType.LABOR
       ? await this.laborItemRepo.find({ where: { reconcile_id: id } })
       : [];
-    // 无合同空白对账单带出费用明细（补充确认v1.1）
-    const expenseItems = reconciliation.type === ReconcileType.NO_CONTRACT
-      ? await this.expenseItemRepo.find({ where: { reconcile_id: id } })
-      : [];
+    // 费用/扣款明细：无合同对账是「费用」，合同对账是「扣款」（#74），同一张表两种角色。
+    // 【别再写成只在 NO_CONTRACT 下查】否则合同对账挂了扣款，详情页和导出都看不见，
+    // 业务只会看到总额少了一笔却查不到为什么。
+    const expenseItems = reconciliation.type === ReconcileType.LABOR
+      ? []
+      : await this.expenseItemRepo.find({ where: { reconcile_id: id } });
     // 裸ID→名称/单据号回显（列表已补，详情此前未补导致导出显示「工厂#12」）：
     // 上游合同号（关联单据 chip）+ 工厂名；关联行已删→降级 null，不让详情 500
     let contract_no: string | null = null;

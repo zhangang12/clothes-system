@@ -75,7 +75,9 @@ export const ROLE_DEFAULT_MENUS: Record<UserRole, string[]> = {
   [UserRole.ADMIN]: ALL_MENUS,
   [UserRole.SUPERVISOR]: ALL_MENUS, // 主管权限视同 ADMIN
   [UserRole.BUSINESS]: BIZ_MENUS,
-  [UserRole.FINANCE]: ['dashboard', 'reconciliations', 'payments', 'settlements', 'export-invoices', 'reports'],
+  // 客户管理：2026-08-12 业务拍板「财务默认开通客户权限，其他角色仍需主管配置」。
+  // 财务开票、核对收汇抬头都要查客户资料，每来一个财务都让主管配一次没有意义。
+  [UserRole.FINANCE]: ['dashboard', 'customers', 'reconciliations', 'payments', 'settlements', 'export-invoices', 'reports'],
   [UserRole.PATTERNMAKER]: ['dashboard', 'factories', 'customers', 'samples', 'orders', 'contracts', 'reconciliations', 'payments', 'settlements', 'export-invoices'],
   [UserRole.SAMPLE_MAKER]: ['dashboard', 'factories', 'customers', 'samples', 'orders', 'contracts', 'reconciliations', 'payments', 'settlements', 'export-invoices'],
   // 船务默认带上 ai-tools：清关三件套（箱单/发票/装柜计划）本来就是船务的活
