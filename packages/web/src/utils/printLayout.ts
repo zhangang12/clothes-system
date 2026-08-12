@@ -13,6 +13,12 @@ export interface PrintLayout {
   blocks: LayoutBlock[]; // 数组顺序 = 打印顺序
   metaFields: string[];  // 基本信息里印哪些字段（有序）
   matCols: string[];     // 材料明细印哪些列（有序）
+  // 行高（表格单元格上下内边距，px）。2026-08-12 YSM：「打印面的行高不能调整吗？很浪费纸」
+  rowPad?: number;
+  // 逐列宽度覆盖（px）。「一个字一行」的根因就是列宽：内置宽度是写死的 px，
+  // 列一多，固定宽度加起来超过纸宽，品名/备注这种没设宽度的列被挤到十几 px，
+  // 一个汉字就占一行。给业务一个能自己调的口子，比我们猜多宽合适更可靠。
+  colWidths?: Record<string, number>;
 }
 
 const KEY = 'i9.printLayout.';
@@ -53,6 +59,16 @@ export function loadLayout(docKey: string, defaults: PrintLayout): PrintLayout {
     if (Number.isFinite(+v.fontSize) && +v.fontSize >= 8 && +v.fontSize <= 20) out.fontSize = +v.fontSize;
     if (isStrArr(v.metaFields) && v.metaFields.length) out.metaFields = v.metaFields;
     if (isStrArr(v.matCols) && v.matCols.length) out.matCols = v.matCols;
+    if (Number.isFinite(+v.rowPad) && +v.rowPad >= 0 && +v.rowPad <= 20) out.rowPad = +v.rowPad;
+    if (v.colWidths && typeof v.colWidths === 'object' && !Array.isArray(v.colWidths)) {
+      // 只收「数字且在合理范围」的项：存坏一项不该让整份配置作废
+      const w: Record<string, number> = {};
+      for (const [k, val] of Object.entries(v.colWidths)) {
+        const n = Number(val);
+        if (typeof k === 'string' && Number.isFinite(n) && n >= 20 && n <= 400) w[k] = Math.round(n);
+      }
+      if (Object.keys(w).length) out.colWidths = w;
+    }
     if (Array.isArray(v.blocks)) {
       const saved = v.blocks.filter((b: any) => b && typeof b.key === 'string');
       const known = new Set(defaults.blocks.map((b) => b.key));

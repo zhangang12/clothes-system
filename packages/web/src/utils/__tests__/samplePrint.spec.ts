@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   buildSampleHtml, printSample, resolveMatCols, resolveMetaFields,
   SAMPLE_MAT_COLS, SAMPLE_META_FIELDS, SAMPLE_BLOCKS, DEFAULT_SAMPLE_LAYOUT,
+  defaultColWidth,
 } from '../samplePrint';
 import { loadLayout, saveLayout, resetLayout, type PrintLayout } from '../printLayout';
 import { splitColorGroups, maxColorGroups, colorGroupLabel } from '../colorGroups';
@@ -265,5 +266,68 @@ describe('colorGroups 拆分口径', () => {
     expect(colorGroupLabel(0)).toBe('颜色一');
     expect(colorGroupLabel(9)).toBe('颜色十');
     expect(colorGroupLabel(10)).toBe('颜色11');
+  });
+});
+
+
+// ——— #85 行高与列宽可调（2026-08-12 YSM：「打印面的行高不能调整吗？一个字一行，很浪费纸」）———
+describe('打印排版·行高与列宽', () => {
+  it('默认列宽预算给品名/备注留得下（这就是「一个字一行」的根因）', () => {
+    // A4 竖版正文约 680px；默认 11 列里品名、备注不设宽度，靠剩余空间撑
+    const fixed = DEFAULT_SAMPLE_LAYOUT.matCols.reduce((s2, k) => s2 + defaultColWidth(k), 0);
+    const autoCols = DEFAULT_SAMPLE_LAYOUT.matCols.filter((k) => !defaultColWidth(k)).length;
+    const each = (680 - fixed) / autoCols;
+    expect(autoCols).toBe(2);                 // 品名 + 备注
+    expect(each).toBeGreaterThanOrEqual(80);  // 12px 字号下至少能排 6 个汉字，不会一个字一行
+  });
+
+  const base = { sample_no: 'S-001', materials: [{ item_name: '面料A', qty: 2 }] };
+  const L = (over: any = {}) => ({ ...DEFAULT_SAMPLE_LAYOUT, ...over });
+
+  it('不配行高时与改造前一致（padding:4px），老用户印出来不该变样', () => {
+    const html = buildSampleHtml(base, L({ rowPad: undefined }), false);
+    expect(html).toContain('padding:4px 6px');
+  });
+
+  it('行高可以调大调小', () => {
+    expect(buildSampleHtml(base, L({ rowPad: 8 }), false)).toContain('padding:8px 6px');
+    expect(buildSampleHtml(base, L({ rowPad: 1 }), false)).toContain('padding:1px 6px');
+  });
+
+  it('行高 0 是合法值（最省纸），不能被兜底成 4', () => {
+    const html = buildSampleHtml(base, L({ rowPad: 0 }), false);
+    expect(html).toContain('padding:0px 6px');
+    expect(html).not.toContain('padding:4px 6px');
+  });
+
+  it('行高超出范围时钳到边界，不把离谱值原样写进样式', () => {
+    expect(buildSampleHtml(base, L({ rowPad: 999 }), false)).toContain('padding:20px 6px');
+    expect(buildSampleHtml(base, L({ rowPad: -5 }), false)).toContain('padding:0px 6px');
+  });
+
+  it('用 table-layout:fixed —— 这是「一个字一行」的解药', () => {
+    // auto 布局下，写死 px 的列一多，剩给品名/备注的空间会被压到十几 px
+    expect(buildSampleHtml(base, L(), false)).toContain('table-layout: fixed');
+  });
+
+  it('列宽可以逐列覆盖内置默认值', () => {
+    const html = buildSampleHtml(base, L({ matCols: ['part'], colWidths: { part: 120 } }), false);
+    expect(html).toContain('width:120px');
+    expect(html).not.toContain(`width:${defaultColWidth('part')}px`);
+  });
+
+  it('没覆盖的列仍用内置宽度', () => {
+    // 不写死具体数字：内置宽度会随排版预算调整（见 SAMPLE_MAT_COLS 的说明）
+    const html = buildSampleHtml(base, L({ matCols: ['part'], colWidths: {} }), false);
+    expect(html).toContain(`width:${defaultColWidth('part')}px`);
+  });
+
+  it('把列宽设成 0 视为自适应，不输出 width（长文本列要留给它自己撑）', () => {
+    const html = buildSampleHtml(base, L({ matCols: ['part'], colWidths: { part: 0 } }), false);
+    expect(html).toContain(`width:${defaultColWidth('part')}px`);   // 0 → 回落到内置默认
+    // 品名本来就没有内置宽度：表头不应带 style（不能用整页 not.toContain('width:')，
+    // CSS 里还有 max-width 之类，那样断言等于没断言）
+    const html2 = buildSampleHtml(base, L({ matCols: ['item_name'], colWidths: {} }), false);
+    expect(html2).toContain('<th>品名</th>');
   });
 });

@@ -19,7 +19,20 @@
           <span class="pd-num">{{ layout.fontSize }}px</span>
         </div>
 
-        <p class="pd-tip">拖动 ⠿ 调顺序，取消勾选即不打印。<b>列越少越容易一行打完。</b></p>
+        <div class="pd-sec">
+          <label>行高</label>
+          <el-slider v-model="rowPad" :min="0" :max="10" :step="1" show-stops style="width:150px" />
+          <span class="pd-num">{{ rowPad }}px</span>
+        </div>
+
+        <p class="pd-tip">拖动 ⠿ 调顺序，取消勾选即不打印。<b>列越少越容易一行打完</b>；行高调小更省纸。</p>
+        <!-- 列宽超纸时给出可操作的提示：这正是「一个字一行」的成因 -->
+        <el-alert v-if="overWidth > 0" type="warning" :closable="false" show-icon style="margin:6px 0">
+          <template #title>
+            <div>各列宽度合计已超出纸宽约 <b>{{ overWidth }}px</b>，打出来会挤成「一个字一行」。</div>
+            <div style="margin-top:2px">可以：改<b>横版</b>、去掉几列、或把下面某几列的宽度调小。</div>
+          </template>
+        </el-alert>
 
         <!-- 区块 -->
         <div class="pd-group">
@@ -75,6 +88,12 @@
               <el-checkbox :model-value="colSet.has(k)" @change="(v: any) => toggle('cols', k, v)">
                 {{ colLabel(k) }}
               </el-checkbox>
+              <!-- 列宽（px）。留空＝自适应，适合品名/备注这类长文本 -->
+              <el-input-number
+                v-if="colSet.has(k)" :model-value="colWidthOf(k)" @update:model-value="(v: any) => setColWidth(k, v)"
+                :min="20" :max="400" :step="10" :controls="false" size="small" placeholder="自适应"
+                class="pd-w"
+              />
             </li>
           </ul>
         </div>
@@ -106,7 +125,7 @@ import { ref, computed, reactive, watch } from 'vue';
 import { Printer } from '@element-plus/icons-vue';
 import {
   SAMPLE_BLOCKS, SAMPLE_META_FIELDS, SAMPLE_MAT_COLS,
-  DEFAULT_SAMPLE_LAYOUT, buildSampleHtml,
+  DEFAULT_SAMPLE_LAYOUT, buildSampleHtml, defaultColWidth,
 } from '@/utils/samplePrint';
 import { loadLayout, saveLayout, resetLayout, type PrintLayout } from '@/utils/printLayout';
 
@@ -129,6 +148,36 @@ const metaOrder = ref<string[]>([]);
 const colOrder = ref<string[]>([]);
 const metaSet = computed(() => new Set(layout.metaFields));
 const colSet = computed(() => new Set(layout.matCols));
+
+// ── 行高与列宽（2026-08-12 YSM #85：「打印面的行高不能调整吗？一个字一行，很浪费纸」）──
+// 行高单独用一个 computed 包一层：0 是合法值（最省纸），直接 v-model 到可选字段上
+// 会因为 `|| 4` 之类的兜底把 0 变回 4。
+const rowPad = computed({
+  get: () => (Number.isFinite(Number(layout.rowPad)) ? Number(layout.rowPad) : 4),
+  set: (v: number) => { layout.rowPad = v; },
+});
+
+const colWidthOf = (k: string): number | undefined => {
+  const w = layout.colWidths?.[k];
+  return Number.isFinite(Number(w)) && Number(w) > 0 ? Number(w) : defaultColWidth(k) || undefined;
+};
+function setColWidth(k: string, v: any) {
+  if (!layout.colWidths) layout.colWidths = {};
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) delete layout.colWidths[k];   // 清空＝回到自适应
+  else layout.colWidths[k] = Math.round(n);
+}
+
+// 纸宽减去 14mm×2 页边距，按 96dpi 折算：A4 竖版约 680px、横版约 1017px。
+// 只是给个提醒，不做强制——业务自己知道要不要挤。
+const paperInnerPx = computed(() => (layout.paper === 'A4L' ? 1017 : 680));
+const overWidth = computed(() => {
+  const sum = layout.matCols.reduce((acc, k) => acc + (colWidthOf(k) ?? 0), 0);
+  // 有自适应列时至少给它们留 60px，否则"刚好等于纸宽"其实已经把长文本挤没了
+  const autoCount = layout.matCols.filter((k) => !colWidthOf(k)).length;
+  const need = sum + autoCount * 60;
+  return need > paperInnerPx.value ? Math.round(need - paperInnerPx.value) : 0;
+});
 const metaOn = computed(() => layout.metaFields);
 
 function reload() {
@@ -206,6 +255,8 @@ defineExpose({
 </script>
 
 <style scoped>
+.pd-w { width: 66px; margin-left: auto; }
+.pd-w :deep(.el-input__inner) { text-align: center; font-size: 12px; }
 .pd { display: flex; gap: 14px; height: 66vh; }
 .pd-panel { width: 300px; flex: none; overflow: auto; padding-right: 4px; }
 .pd-sec { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; }
