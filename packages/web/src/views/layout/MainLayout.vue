@@ -33,9 +33,14 @@
     <el-container>
       <el-header class="topbar">
         <div class="top-left">
-          <button class="side-toggle" :title="collapsed ? '展开菜单' : '收起菜单'" @click="toggleSide">
-            <el-icon><Expand v-if="collapsed" /><Fold v-else /></el-icon>
-          </button>
+          <!-- 【别用原生 title】(2026-08-12) 原生提示由浏览器画在元素**正下方**，
+               而这个按钮下面紧挨着就是标签栏——提示框会盖住第一个页签，看着像界面坏了。
+               改用 el-tooltip 放到右侧：位置可控、样式跟全站一致，也不挡任何可点的东西。 -->
+          <el-tooltip :content="collapsed ? '展开菜单' : '收起菜单'" placement="right" :show-after="400" :offset="6">
+            <button class="side-toggle" :aria-label="collapsed ? '展开菜单' : '收起菜单'" @click="toggleSide">
+              <el-icon><Expand v-if="collapsed" /><Fold v-else /></el-icon>
+            </button>
+          </el-tooltip>
           <div class="crumb"><span class="crumb-home">工作台</span><span v-if="pageTitle" class="crumb-sep">/</span>{{ pageTitle }}</div>
         </div>
         <el-dropdown>
