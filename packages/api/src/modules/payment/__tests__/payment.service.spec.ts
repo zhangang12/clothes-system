@@ -709,6 +709,26 @@ describe('PaymentService', () => {
       expect(saved.bank_name).toBe('中行');   // 没传的不动
     });
 
+    it('UT-PAY-SUP-01 主管能改别人建的付款草稿——权限视同管理员，别卡在服务层', async () => {
+      mockPrRepo.findOne.mockResolvedValue({
+        id: 1, approval_status: PaymentApprovalStatus.DRAFT, created_by: 999, factory_id: 5,
+        amount: 1000, prepay_offset: 0,
+      });
+      mockPrepayRepo.find.mockResolvedValue([]);
+      // 前端按 hasRole(ADMIN) 把「编辑」显示给主管、控制器也放行，服务层再挡就是"按钮点不动"
+      await expect(service.updatePaymentRequest(1, { description: 'x' } as any,
+        { id: 3, role: UserRole.SUPERVISOR })).resolves.toBeDefined();
+    });
+
+    it('UT-PAY-SUP-02 业务仍然只能改自己建的（这条闸门不能被上一条顺手放开）', async () => {
+      mockPrRepo.findOne.mockResolvedValue({
+        id: 1, approval_status: PaymentApprovalStatus.DRAFT, created_by: 999, factory_id: 5,
+        amount: 1000, prepay_offset: 0,
+      });
+      await expect(service.updatePaymentRequest(1, { description: 'x' } as any,
+        { id: 3, role: UserRole.BUSINESS })).rejects.toThrow(ForbiddenException);
+    });
+
     it('UT-PAY-INV-04 改草稿时没传发票，原来传过的票不能被清掉', async () => {
       mockPrRepo.findOne.mockResolvedValue({
         id: 1, approval_status: PaymentApprovalStatus.DRAFT, created_by: 3, factory_id: 5,

@@ -47,7 +47,10 @@ http.interceptors.response.use(
     progressDone();
     const status = err.response?.status;
     const onLogin = window.location.pathname.endsWith('/login');
-    if (status === 401 && !onLogin) {
+    // 遥测（前端错误上报）撞 401 时**不能**触发跳登录页：
+    // 那是后台旁路请求，把正在干活的人踹出去是本末倒置。
+    const isTelemetry = (err.config as any)?.telemetry === true;
+    if (status === 401 && !onLogin && !isTelemetry) {
       // 登录态失效:清理并跳登录。页签存 sessionStorage，整页刷新清不掉，
       // 必须显式 reset，否则换账号登录会看到上一个人开的页签。
       // （reset 幂等；pinia 未就绪的极端场景下静默跳过，不挡登出跳转）

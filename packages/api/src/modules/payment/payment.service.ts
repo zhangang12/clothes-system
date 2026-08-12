@@ -8,7 +8,7 @@ import { PaymentRequest } from './payment-request.entity';
 import { PaymentRecord } from './payment-record.entity';
 import { Reconciliation, ReconciliationStatus } from '../reconciliation/reconciliation.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
-import { PaymentApprovalStatus, ReconcileType, UserRole } from '@i9/types';
+import { PaymentApprovalStatus, ReconcileType, UserRole, isAdminRole } from '@i9/types';
 import { CreatePrepaymentDto } from './dto/create-prepayment.dto';
 import { CreatePaymentRequestDto } from './dto/create-payment-request.dto';
 import { QueryPaymentRequestDto } from './dto/query-payment-request.dto';
@@ -501,7 +501,11 @@ export class PaymentService {
         `只有草稿状态可以修改（当前 ${pr.approval_status}）；已提交的请先驳回，已付款的不可修改`,
       );
     }
-    const privileged = user.role === UserRole.ADMIN || user.role === UserRole.FINANCE;
+    // 【用 isAdminRole，别手写 role === ADMIN】主管权限视同 ADMIN（2026-07-22 拍板）；
+    // 手写比较会漏掉 SUPERVISOR：前端按 hasRole(ADMIN) 把「编辑」按钮显示给主管、
+    // 控制器的 RolesGuard 也放行，结果卡在这一行 403——按钮看得见、点不动。
+    // 2026-08-13 由前端错误上报抓到（主管点了 3 次）。
+    const privileged = isAdminRole(user.role) || user.role === UserRole.FINANCE;
     if (!privileged && Number(pr.created_by) !== Number(user.id)) {
       throw new ForbiddenException('只能修改自己创建的付款申请草稿');
     }

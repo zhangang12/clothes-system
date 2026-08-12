@@ -56,6 +56,26 @@ describe('前端错误上报', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
+  it('ResizeObserver 的告警不报——上线一天就 12 条，会把真问题埋掉', async () => {
+    const { app, listeners } = await load();
+    app.config.errorHandler(new Error('ResizeObserver loop completed with undelivered notifications.'), null, 'render');
+    listeners.error({ message: 'ResizeObserver loop limit exceeded' });
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('接口错误从 Vue 通道漏进来时也要挡住（后端已记，含 400 的具体原因）', async () => {
+    const { app } = await load();
+    app.config.errorHandler(new Error('Request failed with status code 403'), null, 'render');
+    app.config.errorHandler(new Error('Request failed with status code 400'), null, 'setup');
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('上报请求标了遥测标记——撞 401 时不能把正在干活的人踹到登录页', async () => {
+    const { app } = await load();
+    app.config.errorHandler(new Error('组件炸了'), null, 'render');
+    expect(post.mock.calls[0][2]).toMatchObject({ telemetry: true });
+  });
+
   it('接口错误不报——后端自己已经记了，重复上报会把错误表淹掉', async () => {
     const { listeners } = await load();
     listeners.unhandledrejection({ reason: { isAxiosError: true, message: '请求失败' } });

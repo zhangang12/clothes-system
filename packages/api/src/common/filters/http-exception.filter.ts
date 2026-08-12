@@ -50,7 +50,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
     }
 
     // 服务器异常(≥500)自动归档到系统报错记录(去重+上下文);fire-and-forget,不阻塞响应
-    if (status >= 500 && this.errorLog) {
+    // 【400 也要记】(2026-08-13) 原来只记 5xx，结果「点保存报 400、但没人知道为什么」这类问题
+    // 在服务器上一点痕迹都没有——King 建结算单连点两次 400，事后只能靠猜。
+    // 400 是「系统明确拒绝了用户」，正是最该留下原因的一类。
+    // 401/403 不记：那是正常的登录态与权限噪音，量大且无信息量（日志里一天几十条）。
+    if ((status >= 500 || status === 400) && this.errorLog) {
       const user = (request as any).user;
       void this.errorLog.record({
         method: request.method,

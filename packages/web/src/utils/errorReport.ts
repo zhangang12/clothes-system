@@ -35,12 +35,26 @@ function shouldSend(key: string): boolean {
   return true;
 }
 
+/** 已知的无害噪音：报了只会把错误表淹掉，真问题反而被埋 */
+function isNoise(message: string): boolean {
+  // ResizeObserver 那两条是浏览器自己的告警，不是错误：某个观察回调里改了布局、
+  // 浏览器把剩下的通知推到下一帧，规范上完全合法。Element Plus 的表格/下拉几乎必触发。
+  // 2026-08-13 实测：上线一天就报了 12 条，占了错误表一半以上。
+  if (/ResizeObserver loop/i.test(message)) return true;
+  // 接口错误：后端自己已经记了（含 400 的具体原因），前端再报一遍是重复
+  if (/Request failed with status code/i.test(message)) return true;
+  return false;
+}
+
 function report(kind: string, message: string, stack?: string): void {
   // chunk 加载失败已经有专门的恢复逻辑（发版换版本），不必再进错误表
   if (isChunkLoadError(message)) return;
+  if (isNoise(message)) return;
   const key = `${kind}|${message}`.slice(0, 200);
   if (!shouldSend(key)) return;
-  // 不 await、不 catch 出错提示：上报失败就算了，不能影响用户
+  // 不 await、不 catch 出错提示：上报失败就算了，不能影响用户。
+  // 【必须标记为遥测】否则上报本身撞上 401（token 刚好过期时最容易发生）会触发
+  // 全局拦截器的「跳登录页」——一个后台上报把正在干活的人踹出去，那是本末倒置。
   http.post('/error-logs/client', {
     kind,
     message: String(message ?? '').slice(0, 1000),
@@ -48,7 +62,7 @@ function report(kind: string, message: string, stack?: string): void {
     path: window.location.pathname + window.location.search,
     build_id: typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : undefined,
     ua: navigator.userAgent.slice(0, 200),
-  }).catch(() => { /* 旁路，静默 */ });
+  }, { telemetry: true } as any).catch(() => { /* 旁路，静默 */ });
 }
 
 export function startErrorReport(app: App, router: Router): void {

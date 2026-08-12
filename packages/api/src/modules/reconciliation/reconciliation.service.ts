@@ -13,7 +13,7 @@ import { ContractShipment } from '../contract/contract-shipment.entity';
 import { OrderMain } from '../order/order-main.entity';
 import { SampleGarment } from '../sample/sample-garment.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
-import { ReconcileType, ContractPortalStatus, OrderStatus, SampleStatus, ContractType, UserRole } from '@i9/types';
+import { ReconcileType, ContractPortalStatus, OrderStatus, SampleStatus, ContractType, UserRole, isAdminRole } from '@i9/types';
 import { CreateReconciliationDto } from './dto/create-reconciliation.dto';
 import { GenerateLaborDto } from './dto/generate-labor.dto';
 import { QueryReconciliationDto } from './dto/query-reconciliation.dto';
@@ -574,8 +574,7 @@ export class ReconciliationService {
         `只有草稿状态可以修改（当前 ${rec.status}）；已提交复核的请先「整单退回」再改`,
       );
     }
-    const privileged = user.role === UserRole.ADMIN || user.role === UserRole.SUPERVISOR
-      || user.role === UserRole.FINANCE;
+    const privileged = isAdminRole(user.role) || user.role === UserRole.FINANCE;   // 与付款侧同一口径
     if (!privileged && Number(rec.created_by) !== Number(user.id)) {
       throw new ForbiddenException('只能修改自己创建的对账单草稿');
     }
