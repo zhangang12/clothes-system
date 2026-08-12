@@ -8,7 +8,7 @@ import { PaymentRequest } from '../payment-request.entity';
 import { PaymentRecord } from '../payment-record.entity';
 import { Reconciliation, ReconciliationStatus } from '../../reconciliation/reconciliation.entity';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
-import { PaymentApprovalStatus, ReconcileType } from '@i9/types';
+import { PaymentApprovalStatus, ReconcileType, UserRole } from '@i9/types';
 
 const makePR = (overrides = {}) => ({
   id: 1,
@@ -670,6 +670,55 @@ describe('PaymentService', () => {
       expect(st.summary).toEqual(expect.objectContaining({
         prepay_count: 2, prepay_amount: 1500, prepay_used: 900, prepay_balance: 600,
       }));
+    });
+  });
+
+
+  // ——— #92 非合同付款自行登记/上传发票（King 2026-08-12）———
+  describe('付款申请上的发票', () => {
+    it('UT-PAY-INV-01 建单时带上发票号与附件', async () => {
+      mockPrepayRepo.find.mockResolvedValue([]);
+      await service.createPaymentRequest({
+        type: ReconcileType.NO_CONTRACT, factory_id: 5, amount: 1000,
+        invoice_no: 'INV-2026-001', invoice_url: '/u/a.jpg,/u/b.jpg',
+      } as any, 1);
+      expect(mockManager.create).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        invoice_no: 'INV-2026-001', invoice_url: '/u/a.jpg,/u/b.jpg',
+      }));
+    });
+
+    it('UT-PAY-INV-02 不填发票时存 null，不写空串（列表判空才靠得住）', async () => {
+      mockPrepayRepo.find.mockResolvedValue([]);
+      await service.createPaymentRequest({ type: ReconcileType.NO_CONTRACT, factory_id: 5, amount: 1000 } as any, 1);
+      expect(mockManager.create).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        invoice_no: null, invoice_url: null,
+      }));
+    });
+
+    it('UT-PAY-INV-03 改草稿能补票，没传的字段保持原值', async () => {
+      mockPrRepo.findOne.mockResolvedValue({
+        id: 1, approval_status: PaymentApprovalStatus.DRAFT, created_by: 3, factory_id: 5,
+        amount: 1000, prepay_offset: 0, invoice_no: null, invoice_url: null, bank_name: '中行',
+      });
+      mockPrepayRepo.find.mockResolvedValue([]);
+      // 断言「存进去的是什么」而不是返回值：save 的 mock 会被同文件其它用例改成固定返回，
+      // 拿返回值断言会在全量跑时莫名其妙地挂（实测踩过）
+      await service.updatePaymentRequest(1, { invoice_no: 'INV-9' } as any, { id: 3, role: UserRole.FINANCE });
+      const saved = mockPrRepo.save.mock.calls.at(-1)![0];
+      expect(saved.invoice_no).toBe('INV-9');
+      expect(saved.bank_name).toBe('中行');   // 没传的不动
+    });
+
+    it('UT-PAY-INV-04 改草稿时没传发票，原来传过的票不能被清掉', async () => {
+      mockPrRepo.findOne.mockResolvedValue({
+        id: 1, approval_status: PaymentApprovalStatus.DRAFT, created_by: 3, factory_id: 5,
+        amount: 1000, prepay_offset: 0, invoice_no: 'INV-旧', invoice_url: '/u/old.jpg',
+      });
+      mockPrepayRepo.find.mockResolvedValue([]);
+      await service.updatePaymentRequest(1, { description: '只改了说明' } as any, { id: 3, role: UserRole.FINANCE });
+      const saved = mockPrRepo.save.mock.calls.at(-1)![0];
+      expect(saved.invoice_no).toBe('INV-旧');
+      expect(saved.invoice_url).toBe('/u/old.jpg');
     });
   });
 });

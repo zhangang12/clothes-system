@@ -171,6 +171,15 @@
               {{ (+(row.paid_total ?? 0)).toFixed(2) }} / <b :class="{ 'text-danger': prBalance(row) > 0 && row.approval_status === 'APPROVED' }">{{ prBalance(row).toFixed(2) }}</b>
             </template>
           </el-table-column>
+          <el-table-column label="发票" width="72" align="center">
+            <template #default="{ row }">
+              <el-tooltip v-if="row.invoice_url" :content="row.invoice_no || '发票附件'" placement="top">
+                <el-link type="primary" @click="preview?.open(String(row.invoice_url).split(',')[0], '发票')">查看</el-link>
+              </el-tooltip>
+              <span v-else-if="row.invoice_no" class="mono">{{ row.invoice_no }}</span>
+              <span v-else class="muted">—</span>
+            </template>
+          </el-table-column>
           <el-table-column prop="approval_status" label="状态" width="90">
             <template #default="{ row }">
               <el-tag :type="prTagType(row.approval_status)" size="small">{{ prStatusLabel(row.approval_status) }}</el-tag>
@@ -326,6 +335,15 @@
             <el-button link type="primary" size="small" style="margin-left:8px" @click="applyPrepayOffset">一键冲抵</el-button>
           </template>
         </el-alert>
+        <!-- 发票（#92 King：「非合同付款可以我们自己上传发票吗？」）。
+             合同付款的发票在对账单上，这里主要给非合同付款用；不硬性按类型隐藏，
+             因为"对账时没票、付款时补票"确实存在，藏掉只会让业务绕路。 -->
+        <el-form-item label="发票号">
+          <el-input v-model="prForm.invoice_no" placeholder="选填；非合同付款可自行登记" />
+        </el-form-item>
+        <el-form-item label="发票附件">
+          <file-upload v-model="prForm.invoice_url" :limit="3" multiple accept="image/*,.pdf" tip="发票照片或 PDF" />
+        </el-form-item>
         <el-form-item label="对账单ID">
           <el-input-number v-model="prForm.reconcile_id" :min="1" style="width:100%" />
         </el-form-item>
@@ -440,6 +458,7 @@ import { ElMessage } from 'element-plus';
 import { fmtDateTime } from '@/utils/format';
 import { Search, Refresh, Plus, UploadFilled, Download } from '@element-plus/icons-vue';
 import FilePreviewDialog from '@/components/FilePreviewDialog.vue';
+import FileUpload from '@/components/FileUpload.vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { prepaymentApi, paymentRequestApi } from '@/api/payment';
 import FactorySelect from '@/components/FactorySelect.vue';
@@ -741,6 +760,7 @@ const prForm = reactive({
   prepay_offset: 0,
   description: '',
   bank_name: '', bank_account: '', related_style_no: '',
+  invoice_no: '', invoice_url: '',   // #92：非合同付款自行登记/上传发票
 });
 const prRules: FormRules = {
   type: [{ required: true, message: '请选择类型', trigger: 'change' }],
@@ -766,6 +786,7 @@ function openEditPR(row: any) {
     prepay_offset: +row.prepay_offset || 0,
     description: row.description ?? '',
     bank_name: row.bank_name ?? '',
+    invoice_no: row.invoice_no ?? '', invoice_url: row.invoice_url ?? '',   // #92：编辑草稿时带出已填的发票
     bank_account: row.bank_account ?? '',
     related_style_no: row.related_style_no ?? '',
   });
@@ -773,7 +794,7 @@ function openEditPR(row: any) {
 }
 function resetPRForm() {
   editingPRId.value = null; // 不清会让下次「新建」变成改上一条
-  Object.assign(prForm, { type: 'CONTRACT', factory_id: undefined, reconcile_id: undefined, amount: undefined, prepay_offset: 0, description: '', bank_name: '', bank_account: '', related_style_no: '' });
+  Object.assign(prForm, { type: 'CONTRACT', factory_id: undefined, reconcile_id: undefined, amount: undefined, prepay_offset: 0, description: '', bank_name: '', bank_account: '', related_style_no: '', invoice_no: '', invoice_url: '' });
   prPrepayBalance.value = 0;
 }
 // 选择工厂后自动提示是否存在可用预付款余额（付款申请设计稿：存在预付时提示冲抵）

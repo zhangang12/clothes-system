@@ -891,6 +891,8 @@ CREATE TABLE IF NOT EXISTS `payment_request` (
   `due_date`           DATE           DEFAULT NULL COMMENT '到期日=出货日+账期(逾期高亮)',
   `paid_total`         DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '已付总额(分批付款累计)',
   `slip_url`          VARCHAR(500)   DEFAULT NULL COMMENT '水单文件路径',
+  `invoice_no`      VARCHAR(100)  DEFAULT NULL COMMENT '发票号(非合同付款自行登记,#92)',
+  `invoice_url`     VARCHAR(500)  DEFAULT NULL COMMENT '发票附件(非合同付款自行上传;合同付款的发票在对账单上,#92)',
   `bank_name`       VARCHAR(100)  DEFAULT NULL COMMENT '收款银行(无合同付款,P3#40)',
   `bank_account`    VARCHAR(50)   DEFAULT NULL COMMENT '收款账号',
   `related_style_no` VARCHAR(200) DEFAULT NULL COMMENT '相关款号(结算按款号归集;宽度须>=reconciliation.style_no的200,否则带入时截断)',
@@ -2226,6 +2228,10 @@ CALL _i9_add_col('payment_request','paid_total',"DECIMAL(15,4)  NOT NULL DEFAULT
 CALL _i9_sync_col('payment_request','paid_total',"DECIMAL(15,4)","DECIMAL(15,4)  NOT NULL DEFAULT 0 COMMENT '已付总额(分批付款累计)'");
 CALL _i9_add_col('payment_request','slip_url',"VARCHAR(500)   DEFAULT NULL COMMENT '水单文件路径'");
 CALL _i9_sync_col('payment_request','slip_url',"VARCHAR(500)","VARCHAR(500)   DEFAULT NULL COMMENT '水单文件路径'");
+CALL _i9_add_col('payment_request','invoice_no',"VARCHAR(100)  DEFAULT NULL COMMENT '发票号(非合同付款自行登记,#92)'");
+CALL _i9_sync_col('payment_request','invoice_no',"VARCHAR(100)","VARCHAR(100)  DEFAULT NULL COMMENT '发票号(非合同付款自行登记,#92)'");
+CALL _i9_add_col('payment_request','invoice_url',"VARCHAR(500)  DEFAULT NULL COMMENT '发票附件(非合同付款自行上传;合同付款的发票在对账单上,#92)'");
+CALL _i9_sync_col('payment_request','invoice_url',"VARCHAR(500)","VARCHAR(500)  DEFAULT NULL COMMENT '发票附件(非合同付款自行上传;合同付款的发票在对账单上,#92)'");
 CALL _i9_add_col('payment_request','bank_name',"VARCHAR(100)  DEFAULT NULL COMMENT '收款银行(无合同付款,P3#40)'");
 CALL _i9_sync_col('payment_request','bank_name',"VARCHAR(100)","VARCHAR(100)  DEFAULT NULL COMMENT '收款银行(无合同付款,P3#40)'");
 CALL _i9_add_col('payment_request','bank_account',"VARCHAR(50)   DEFAULT NULL COMMENT '收款账号'");

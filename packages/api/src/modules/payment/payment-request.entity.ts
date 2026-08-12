@@ -41,6 +41,14 @@ export class PaymentRequest {
   @Column({ length: 500, nullable: true })
   slip_url: string;
 
+  // 非合同付款的发票（#92 King：「非合同付款可以我们自己上传发票吗？」）。
+  // 合同付款的发票挂在对账单上（reconciliation.invoice_no/invoice_url），不重复存这里。
+  @Column({ length: 100, nullable: true })
+  invoice_no: string;
+
+  @Column({ length: 500, nullable: true })
+  invoice_url: string;
+
   @Column({ length: 100, nullable: true })
   bank_name: string; // 收款银行（无合同付款补字段，P3#40/对账E3）
 

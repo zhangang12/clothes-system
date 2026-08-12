@@ -114,6 +114,10 @@
             <el-option v-for="f in factories" :key="f.id" :label="f.name" :value="f.id" />
           </el-select>
           <el-button size="small" :disabled="!batchSupplierId || !selMaterials.length" @click="applyBatchSupplier">应用到所选{{ selMaterials.length ? `(${selMaterials.length})` : '' }}</el-button>
+          <!-- 整列粘贴供应商（2026-08-12 daisy：「供应商这栏希望可以复制粘贴，不需要一个个去重复找再点」）。
+               「批量设置」只解决"几十行同一个供应商"；她的场景是**每行不同、名单在 Excel 里**，
+               所以要能把一整列贴进来。 -->
+          <el-button size="small" :disabled="bizDisabled" @click="pasteSuppliers">📋 粘贴供应商列</el-button>
           <span class="hint">勾选后「复制行」整行复制（品名/价格/供应商相同仅部位不同的场景）；品名每款单独录入；「实际耗用」「拉链长度」由版师填；支持上传工艺单电子表格（.xlsx/.csv）</span>
         </div>
         <div class="table-scroll">
@@ -288,6 +292,8 @@ import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted, h } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import { readClipboardText, CLIPBOARD_CANCELLED } from '@/utils/clipboard';
+import { parseSupplierColumn, applySupplierColumn } from '@/utils/supplierPaste';
 import type { FormInstance, FormRules } from 'element-plus';
 import { Back, Check, Plus, Minus, Promotion, CopyDocument, Printer, Delete, Download } from '@element-plus/icons-vue';
 import { sampleApi } from '@/api/sample';
@@ -543,6 +549,38 @@ async function doPurchase(row: any) {
 }
 
 function onSupplier(row: any, id: number) { row.supplierName = factories.value.find((f) => f.id === id)?.name ?? ''; }
+/**
+ * 从剪贴板粘贴一整列供应商（daisy 2026-08-12）。
+ *
+ * 【匹配口径】按工厂库的名称/简称匹配，依次尝试：完全相同 → 简称相同 → 去掉空格后相同 →
+ * 唯一包含。**匹配不到的行原样保留、不清空**，并在提示里逐行报出来——
+ * 静默跳过的话，业务会以为都贴上了，等到生成合同才发现有几行没供应商。
+ * 同名撞车（两家工厂名字互相包含）时也不猜，一并报出来让人自己选。
+ *
+ * 【从哪一行开始贴】勾了行就从第一个勾选行开始，没勾就从第一行开始——
+ * 与 Excel 里「点一个格子往下贴」的习惯一致。
+ */
+async function pasteSuppliers() {
+  let text = '';
+  try {
+    text = await readClipboardText();
+  } catch (e) {
+    if (e === CLIPBOARD_CANCELLED) return;
+    ElMessage.error('读取剪贴板失败，请手动粘贴');
+    return;
+  }
+  const names = parseSupplierColumn(text);
+  if (!names.length) { ElMessage.warning('没读到内容'); return; }
+  // 勾了行就从第一个勾选行开始，没勾就从第一行开始——与 Excel「点一个格子往下贴」的习惯一致
+  const startIdx = selMaterials.value.length ? form.materials.indexOf(selMaterials.value[0]) : 0;
+  const { ok, fails } = applySupplierColumn(names, form.materials as any, startIdx, factories.value as any);
+  if (!fails.length) { ElMessage.success(`已填入 ${ok} 行供应商`); return; }
+  ElMessageBox.alert(
+    `成功 ${ok} 行，以下没填上（原值保留，可手动选）：<br>${fails.map((x) => `· ${x}`).join('<br>')}`,
+    '粘贴供应商', { dangerouslyUseHTMLString: true, confirmButtonText: '知道了' },
+  );
+}
+
 // 批量设置供应商（用户反馈：滑雪服材料几十行都是同一供应商，一行行选太慢）
 const batchSupplierId = ref<number | undefined>(undefined);
 function applyBatchSupplier() {

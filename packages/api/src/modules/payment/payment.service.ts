@@ -165,6 +165,8 @@ export class PaymentService {
         created_by: createdBy,
         bank_name: dto.bank_name ?? null,
         bank_account: dto.bank_account ?? null,
+        invoice_no: dto.invoice_no ?? null,     // #92：非合同付款自行登记发票
+        invoice_url: dto.invoice_url ?? null,
         related_style_no: dto.related_style_no ?? recStyleNo ?? null, // 手填优先，没填就用对账单的款号
       });
       return manager.save(pr);
@@ -523,6 +525,8 @@ export class PaymentService {
       description: dto.description ?? pr.description,
       bank_name: dto.bank_name ?? pr.bank_name,
       bank_account: dto.bank_account ?? pr.bank_account,
+      invoice_no: dto.invoice_no ?? pr.invoice_no,     // #92
+      invoice_url: dto.invoice_url ?? pr.invoice_url,
       related_style_no: dto.related_style_no ?? pr.related_style_no,
       account_period_days: dto.account_period_days ?? pr.account_period_days,
       due_date: (dto.due_date ?? pr.due_date) as any,

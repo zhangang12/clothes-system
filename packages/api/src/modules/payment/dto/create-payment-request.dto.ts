@@ -55,4 +55,19 @@ export class CreatePaymentRequestDto {
   @IsDateString()
   due_date?: string;
 
+  // 发票（#92 King：「非合同付款可以我们自己上传发票吗？」）。
+  // 合同付款的发票在对账单上，这里主要服务无合同付款；两者都允许填，不做类型限制——
+  // 合同付款偶尔也有"对账时没票、付款时补票"的情况，卡死反而要业务绕路。
+  @ApiPropertyOptional({ description: '发票号（非合同付款自行登记）' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  invoice_no?: string;
+
+  @ApiPropertyOptional({ description: '发票附件（非合同付款自行上传）' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  invoice_url?: string;
+
 }
