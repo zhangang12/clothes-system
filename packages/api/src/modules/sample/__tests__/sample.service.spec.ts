@@ -113,6 +113,45 @@ describe('SampleService', () => {
         status: SampleStatus.SAMPLING, patternmaker_id: 5, material_ship_no: 'SF123',
       }));
     });
+
+    // #96 nina：材料常是先寄出、隔几天才有空录系统，一律写当天等于把日期记错
+    it('UT-SAM-24: 手填了寄出日期就用手填的，不覆盖成今天', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.PENDING, version: 1, deleted: 0 });
+      await service.pushPatternmaker(1, { materialShipNo: 'SF123', materialShipDate: '2026-08-01' } as any, 10);
+      expect(mockRepo.save).toHaveBeenCalledWith(expect.objectContaining({ material_ship_date: '2026-08-01' }));
+    });
+
+    it('UT-SAM-25: 没填才落当天（沿用原行为，不给业务添操作）', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.PENDING, version: 1, deleted: 0 });
+      await service.pushPatternmaker(1, { materialShipNo: 'SF123' } as any, 10);
+      const saved = mockRepo.save.mock.calls[0][0];
+      expect(saved.material_ship_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+  });
+
+  // #96：录错的寄出单号/日期原先落库后就改不动了（update 把这两个字段静默丢弃）
+  describe('update() 的材料寄出单号/日期', () => {
+    it('UT-SAM-26: 事后能改寄出日期', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.SAMPLING, version: 1, deleted: 0, material_ship_date: '2026-08-14' });
+      await service.update(1, { materialShipNo: 'SF999', materialShipDate: '2026-08-01' } as any, 10);
+      expect(mockManager.save).toHaveBeenCalledWith(SampleGarment, expect.objectContaining({
+        material_ship_no: 'SF999', material_ship_date: '2026-08-01',
+      }));
+    });
+
+    it('UT-SAM-27: 清空日期要存得回去，不能留着错的', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.SAMPLING, version: 1, deleted: 0, material_ship_date: '2026-08-14' });
+      await service.update(1, { materialShipDate: '' } as any, 10);
+      expect(mockManager.save).toHaveBeenCalledWith(SampleGarment, expect.objectContaining({ material_ship_date: null }));
+    });
+
+    it('UT-SAM-28: 没传这两个字段就不动原值（别的页面保存不该把日期抹了）', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.SAMPLING, version: 1, deleted: 0, material_ship_no: 'SF1', material_ship_date: '2026-08-01' });
+      await service.update(1, { recipient: '张三' } as any, 10);
+      expect(mockManager.save).toHaveBeenCalledWith(SampleGarment, expect.objectContaining({
+        material_ship_no: 'SF1', material_ship_date: '2026-08-01',
+      }));
+    });
   });
 
   describe('patternmakerSave()', () => {
@@ -173,6 +212,36 @@ describe('SampleService', () => {
       mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.RECONCILED, deleted: 0 });
       await service.complete(1);
       expect(mockRepo.save).toHaveBeenCalledWith(expect.objectContaining({ status: SampleStatus.DONE }));
+    });
+  });
+
+  // #95 nina：点错「标记已寄出」后退不回来，原先只能重开一张单
+  describe('undoShipped()', () => {
+    it('UT-SAM-20: 已寄出 → 退回打样中，并清掉寄样日期', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.SHIPPED, version: 2, deleted: 0, ship_sample_date: '2026-08-14' });
+      await service.undoShipped(1, 10);
+      expect(mockRepo.save).toHaveBeenCalledWith(expect.objectContaining({
+        status: SampleStatus.SAMPLING, ship_sample_date: null,
+      }));
+    });
+
+    it('UT-SAM-21: 只有「已寄出」能撤——已对账/已完成再退会把下游账搞乱', async () => {
+      for (const st of [SampleStatus.SAMPLING, SampleStatus.RECONCILED, SampleStatus.DONE, SampleStatus.PENDING]) {
+        mockRepo.findOne.mockResolvedValue({ id: 1, status: st, deleted: 0 });
+        await expect(service.undoShipped(1, 10)).rejects.toThrow(BadRequestException);
+      }
+      expect(mockRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('UT-SAM-22: 单据不存在报 404', async () => {
+      mockRepo.findOne.mockResolvedValue(null);
+      await expect(service.undoShipped(9, 10)).rejects.toThrow(NotFoundException);
+    });
+
+    it('UT-SAM-23: 记一条操作日志，事后查得到是谁撤的', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.SHIPPED, version: 2, deleted: 0 });
+      await service.undoShipped(1, 77);
+      expect(mockVersionRepo.save).toHaveBeenCalledWith(expect.objectContaining({ action: 'UNDO_SHIP', operator_id: 77 }));
     });
   });
 

@@ -16,6 +16,7 @@
           <el-button v-if="!readonly" type="primary" :icon="Check" :loading="saving" @click="save">保存</el-button>
           <el-button v-if="!readonly && editId" type="success" :icon="Promotion" @click="pushPatternmaker">推送版师</el-button>
           <el-button v-if="!readonly && editId && ['SAMPLING', 'SHIPPED'].includes(form.status)" type="warning" plain @click="markShipped">标记已寄出</el-button>
+          <el-button v-if="!readonly && editId && form.status === 'SHIPPED'" plain @click="undoShipped">撤销已寄出</el-button>
           <el-button v-if="!readonly && editId && ['RECONCILED', 'DONE'].includes(form.status)" type="success" plain @click="markComplete">标记完成</el-button>
           <el-button v-if="editId" :icon="CopyDocument" @click="copy">复制</el-button>
         </template>
@@ -194,7 +195,9 @@
       <section-block title="▣ 寄样跟踪" badge="多轮">
         <el-row :gutter="16">
           <el-col :span="8"><el-form-item label="材料寄出单号"><el-input v-model="form.materialShipNo" :disabled="bizDisabled" placeholder="填入触发推送版师" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="材料寄出日期"><el-input v-model="form.materialShipDate" readonly placeholder="自动" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="材料寄出日期">
+            <el-date-picker v-model="form.materialShipDate" type="date" value-format="YYYY-MM-DD" :disabled="bizDisabled" placeholder="不填按今天算" style="width:100%" />
+          </el-form-item></el-col>
         </el-row>
         <RuleHint tone="teal">样衣一轮打不完可分<b>多轮寄样</b>:每轮填 尺码/数量/寄样日期/单号;<b>寄回日期、工价单价由版师填</b>;各轮金额=数量×单价,<b>工价合计=各轮之和</b>自动进对账。</RuleHint>
         <div v-if="!readonly" class="subtable-ops">
@@ -726,6 +729,8 @@ function buildDto() {
     buyerId: form.buyerId ?? null, patternmakerId: form.patternmakerId || undefined,
     patternmakerName: form.patternmakerName || undefined, maker: form.maker || undefined,
     shipSampleDate: form.shipSampleDate || undefined, recipient: form.recipient || undefined,
+    // 空串照发（不是 undefined）：清空日期要能存回去，否则填错了永远删不掉
+    materialShipNo: form.materialShipNo ?? '', materialShipDate: form.materialShipDate ?? '',
     fileLocation: form.fileLocation || undefined, garmentRemark: form.garmentRemark || undefined,
     feedbackAttachments: form.feedbackAttachments ?? '',
     image1: form.image1 || undefined, image2: form.image2 || undefined, image3: form.image3 || undefined,
@@ -783,7 +788,7 @@ async function save() {
     const wasPending = editId.value ? form.status === 'PENDING' : true; // 新建后必为待派单
     if (id && form.materialShipNo && wasPending) {
       try {
-        await sampleApi.push(id, { materialShipNo: form.materialShipNo });
+        await sampleApi.push(id, { materialShipNo: form.materialShipNo, materialShipDate: form.materialShipDate || undefined });
         ElMessage.success('已自动推送版师(打样中)');
         if (editId.value) { await load(); return; } // 停留当前页并刷新
       } catch (e: any) {
@@ -802,6 +807,15 @@ async function markShipped() {
   try { await sampleApi.ship(editId.value); ElMessage.success('已标记寄出'); load(); }
   catch (e: any) { errToast(e?.response?.data?.msg ?? '操作失败'); }
 }
+// 误点「标记已寄出」原先无解：状态一进已寄出就退不回来，只能新建一张（#95 nina）
+async function undoShipped() {
+  if (!editId.value) return;
+  try {
+    await ElMessageBox.confirm('退回「打样中」，并清掉寄样日期。确定吗？', '撤销已寄出', { type: 'warning' });
+  } catch { return; }
+  try { await sampleApi.undoShip(editId.value); ElMessage.success('已退回打样中'); load(); }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? '操作失败'); }
+}
 async function markComplete() {
   if (!editId.value) return;
   try { await sampleApi.complete(editId.value); ElMessage.success('样衣已完成'); load(); }
@@ -818,7 +832,7 @@ async function uploadMatImage(option: any, row: any) {
 async function pushPatternmaker() {
   if (!editId.value) return;
   try {
-    await sampleApi.push(editId.value, { patternmakerName: form.patternmakerName || undefined, materialShipNo: form.materialShipNo || undefined });
+    await sampleApi.push(editId.value, { patternmakerName: form.patternmakerName || undefined, materialShipNo: form.materialShipNo || undefined, materialShipDate: form.materialShipDate || undefined });
     ElMessage.success('已推送版师工作台（状态→打样中）');
     load();
   } catch (e: any) { errToast(e?.response?.data?.msg ?? '推送失败'); }

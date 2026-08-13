@@ -80,6 +80,13 @@ export class SampleController {
     return this.service.markShipped(id, dto, req.user.id);
   }
 
+  @Patch(':id/undo-ship')
+  @Roles(UserRole.ADMIN, UserRole.BUSINESS)   // 与「标记已寄出」同一套角色：点得了就该撤得了
+  @ApiOperation({ summary: '撤销「已寄出」，退回打样中（误点可救，#95）' })
+  undoShip(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.service.undoShipped(id, req.user.id);
+  }
+
   @Patch(':id/complete')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
   @ApiOperation({ summary: '标记已完成' })

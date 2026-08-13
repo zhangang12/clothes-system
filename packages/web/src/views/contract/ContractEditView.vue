@@ -141,6 +141,9 @@
       <div v-if="editable" class="line-btns">
         <el-button size="small" @click="addLine">＋ 添加行</el-button>
         <el-button size="small" :disabled="!selectedLines.length" @click="removeSelectedLines">— 删除</el-button>
+        <el-tooltip placement="top" content="把勾中的行原样再来一份，插在它自己下面">
+          <el-button size="small" :disabled="!selectedLines.length" @click="copySelectedLines">⧉ 复制选中</el-button>
+        </el-tooltip>
         <el-button size="small" type="primary" plain @click="openImportDialog">📥 从订单带入</el-button>
       </div>
       <el-table :data="form.materials" border size="small" v-keynav @selection-change="(v: any[]) => (selectedLines = v)">
@@ -160,7 +163,13 @@
           <el-table-column label="货号" width="130"><template #default="{ row }"><el-input v-model="row.style_no" size="small" :disabled="!editable" /></template></el-table-column>
           <el-table-column label="品名及规格" min-width="160"><template #default="{ row }"><el-input v-model="row.item_name" size="small" :disabled="!editable" /></template></el-table-column>
         </template>
-        <el-table-column label="单位" width="76"><template #default="{ row }"><el-input v-model="row.unit" size="small" :disabled="!editable" /></template></el-table-column>
+        <el-table-column label="单位" width="92">
+          <template #default="{ row }">
+            <el-select v-model="row.unit" size="small" filterable allow-create default-first-option placeholder="选或输" style="width:100%" :disabled="!editable">
+              <el-option v-for="u in UNIT_OPTIONS" :key="u" :label="u" :value="u" />
+            </el-select>
+          </template>
+        </el-table-column>
         <el-table-column label="数量" width="110">
           <template #default="{ row }">
             <el-tooltip :content="`数量来源：${row.qty_source || '手填'}（可微调、不回写订单）`" placement="top">
@@ -196,6 +205,16 @@
                 <el-button size="small" link>📷</el-button>
               </el-upload>
             </div>
+          </template>
+        </el-table-column>
+        <el-table-column v-if="editable" label="操作" width="96" fixed="right">
+          <template #default="{ $index }">
+            <el-tooltip content="复制这一行，插到下面（同款不同色只改一两个字）" placement="top">
+              <el-button link size="small" @click="copyLine($index)">复制</el-button>
+            </el-tooltip>
+            <el-tooltip content="在这一行上面插一个空行（漏填的那行补在这儿）" placement="top">
+              <el-button link size="small" @click="insertLine($index)">插入</el-button>
+            </el-tooltip>
           </template>
         </el-table-column>
       </el-table>
@@ -324,6 +343,8 @@ import { fmtDateTime } from '@/utils/format';
 import { printContract } from '@/utils/contractPrint';
 import { exportContractExcel } from '@/utils/contractExcel';
 import { useAuthStore } from '@/stores/auth';
+import { UNIT_OPTIONS } from '@/constants/units';
+import { duplicateAt, insertAbove, duplicateSelected } from '@/utils/rowOps';
 
 const route = useRoute();
 const router = useRouter();
@@ -499,12 +520,33 @@ async function fetchPriceHint(row: any) {
 const lineAmount = (row: any) => (((+row.qty || 0) * (+row.unit_price || 0))).toFixed(2);
 const totalAmount = computed(() => form.materials.reduce((s: number, m: any) => s + (+m.qty || 0) * (+m.unit_price || 0), 0));
 const totalQty = computed(() => form.materials.reduce((s: number, m: any) => s + (+m.qty || 0), 0));
+const emptyLine = () => ({
+  item_name: '', spec: '', color: '', size: '', style_no: styleNoList.value[0] || '',
+  puller: '', zipper_teeth: '', code_band: '',
+  unit: isProcess.value ? '件' : '', qty: undefined, unit_price: undefined,
+  delivery_date: form.delivery_deadline || '', photo_url: '', qty_source: '',
+});
 function addLine() {
-  form.materials.push({ item_name: '', spec: '', color: '', size: '', style_no: styleNoList.value[0] || '', unit: isProcess.value ? '件' : '', qty: undefined, unit_price: undefined, delivery_date: form.delivery_deadline || '', photo_url: '', qty_source: '' });
+  form.materials.push(emptyLine());
 }
 function removeSelectedLines() {
   form.materials = form.materials.filter((m: any) => !selectedLines.value.includes(m));
   selectedLines.value = [];
+}
+/**
+ * 复制这一行，插到它下面（#97/#99 YSM）。
+ *
+ * 【为什么连 order_material_id 一起复制】它是这行对应订单里哪条料的凭据，订单页的「已订」
+ * 绿标认的就是它。拆成两行本来就是同一条料分批下单，订单侧是 GROUP BY 取的、不会重复计数；
+ * 反过来如果抹掉，这两行在订单里就都不算已订了。—— 整行浅拷贝即可，见 rowOps.duplicateAt。
+ */
+const copyLine = (idx: number) => { duplicateAt(form.materials, idx); };
+/** 在这一行上面插一个空行（#100，插入方向的理由见 rowOps.insertAbove） */
+const insertLine = (idx: number) => { insertAbove(form.materials, idx, emptyLine); };
+/** 复制勾选的行（#97：她是勾了行来找复制按钮的） */
+function copySelectedLines() {
+  const n = duplicateSelected(form.materials, selectedLines.value);
+  if (n) ElMessage.success(`已复制 ${n} 行`);
 }
 
 // 从订单带入（材料=勾选带入,数量默认 单耗×订单件数(用户反馈)；加工=款式/大货数/交期−10天）
@@ -671,6 +713,10 @@ function buildDto(): Record<string, unknown> {
       style_no: m.style_no || undefined, delivery_date: m.delivery_date || undefined, photo_url: m.photo_url || undefined,
       unit: m.unit || undefined, qty: +m.qty || 0, unit_price: +m.unit_price || 0,
       qty_source: m.qty_source || undefined, sort_order: idx,
+      // 拉链三件套此前只有「订单自动生成」那条路写得进去，页面上手改一直是白改
+      puller: m.puller || undefined, zipper_teeth: m.zipper_teeth || undefined, code_band: m.code_band || undefined,
+      // 行级溯源：订单页的「已订」绿标认这个，不回传等于每存一次就把标记洗一遍
+      order_material_id: m.order_material_id ?? undefined,
     })),
   };
   if (isProcess.value) {
@@ -811,6 +857,8 @@ function applyDetail(d: any, opts: { asCopy?: boolean; zeroQty?: boolean } = {})
   form.materials = (d.materials ?? []).map((m: any) => ({
     item_name: m.item_name, spec: m.spec || '', color: m.color || '', size: m.size || '',
     style_no: m.style_no || '', unit: m.unit || '',
+    // 拉链三件套：能填能存，但此前没读回来——打开合同再保存就把它们清空了
+    puller: m.puller || '', zipper_teeth: m.zipper_teeth || '', code_band: m.code_band || '',
     qty: opts.zeroQty ? 0 : +m.qty, unit_price: +m.unit_price,
     delivery_date: m.delivery_date ? String(m.delivery_date).slice(0, 10) : '',
     photo_url: m.photo_url || '', qty_source: m.qty_source || '',

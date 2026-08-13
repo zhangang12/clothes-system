@@ -8,6 +8,7 @@ import './styles/theme.css';
 import RuleHint from './components/RuleHint.vue';
 import DocLinks from './components/DocLinks.vue';
 import { vKeynav } from './utils/tableKeynav';
+import { vRowdrag } from './utils/tableRowDrag';
 import { startVersionWatch } from './utils/versionCheck';
 import { startErrorReport } from './utils/errorReport';
 import App from './App.vue';
@@ -23,6 +24,8 @@ app.component('RuleHint', RuleHint);
 app.component('DocLinks', DocLinks);
 // 表格键盘导航指令（材料清单等单元格 ↑↓←→ 移动）
 app.directive('keynav', vKeynav);
+// 明细行拖拽排序（报价/合同明细：↑↓ 一次只挪一格，挪很远时用拖的）
+app.directive('rowdrag', vRowdrag);
 
 app
   .use(createPinia())

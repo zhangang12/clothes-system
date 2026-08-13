@@ -167,7 +167,7 @@
           </span>
           <span class="hint">含损金额 = 人民币单价 × 报价耗用 × (1 + 损耗%)；{{ fxLabel }} = 人民币单价 / 汇率</span>
         </div>
-        <div class="table-scroll">
+        <div class="table-scroll" v-rowdrag="(from: number, to: number) => moveItem(form.items, from, to)">
           <el-table :data="form.items" size="small" border v-keynav @selection-change="(v: any[]) => selItems = v">
             <el-table-column type="selection" width="38" />
             <el-table-column label="品名" min-width="150" fixed>
@@ -181,15 +181,24 @@
             <el-table-column label="门幅" width="80"><template #default="{ row }"><el-input v-model="row.width" size="small" /></template></el-table-column>
             <el-table-column label="颜色" width="80"><template #default="{ row }"><el-input v-model="row.color" size="small" /></template></el-table-column>
             <el-table-column label="供应商" min-width="120"><template #default="{ row }"><el-input v-model="row.supplier" size="small" /></template></el-table-column>
-            <el-table-column label="单位" width="70"><template #default="{ row }"><el-input v-model="row.unit" size="small" /></template></el-table-column>
+            <el-table-column label="单位" width="92">
+              <template #default="{ row }">
+                <el-select v-model="row.unit" size="small" filterable allow-create default-first-option placeholder="选或输" style="width:100%">
+                  <el-option v-for="u in UNIT_OPTIONS" :key="u" :label="u" :value="u" />
+                </el-select>
+              </template>
+            </el-table-column>
             <el-table-column label="报价耗用" width="100"><template #default="{ row }"><el-input v-model="row.quoteUsage" size="small" /></template></el-table-column>
             <el-table-column label="人民币单价" width="110"><template #default="{ row }"><el-input v-model="row.rmbPrice" size="small" class="hl-input" /></template></el-table-column>
             <el-table-column :label="fxLabel" width="100"><template #default="{ row }">{{ usd(row.rmbPrice) }}</template></el-table-column>
             <el-table-column label="损耗%" width="80"><template #default="{ row }"><el-input v-model="row.lossRate" size="small" /></template></el-table-column>
             <el-table-column label="含损金额" width="110"><template #default="{ row }"><span class="calc">{{ lossAmt(row) }}</span></template></el-table-column>
             <el-table-column label="备注" min-width="100"><template #default="{ row }"><el-input v-model="row.remark" size="small" /></template></el-table-column>
-            <el-table-column v-if="!readonly" label="排序" width="76" align="center" fixed="right">
+            <el-table-column v-if="!readonly" label="排序" width="100" align="center" fixed="right">
               <template #default="{ $index }">
+                <el-tooltip placement="top" content="按住拖到目标位置（挪很远时比点箭头快）">
+                  <span class="row-drag-handle">⣿</span>
+                </el-tooltip>
                 <el-button link size="small" :disabled="$index === 0" @click="moveRow(form.items, $index, -1)">↑</el-button>
                 <el-button link size="small" :disabled="$index === form.items.length - 1" @click="moveRow(form.items, $index, 1)">↓</el-button>
               </template>
@@ -262,6 +271,8 @@ import FileUpload from '@/components/FileUpload.vue';
 import type { DocLink } from '@/components/DocLinks.vue'; // 仅取类型:组件已全局注册
 import { QUOTE_STATUS_LABEL } from '@i9/types';
 import { TRADE_COUNTRIES, DICT_PRICE_TERMS, DICT_SETTLEMENT } from '@/constants/regions';
+import { UNIT_OPTIONS } from '@/constants/units';
+import { moveItem } from '@/utils/tableRowDrag';
 import { fxPriceLabel } from '@/utils/currency';
 import { num, checkNumericCells, type NumCol } from '@/utils/numGuard';
 
@@ -803,4 +814,8 @@ onMounted(async () => { await loadRefs(); await load(); await draft.restorePromp
 .subtable-ops { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .subtable-ops .hint, .hint { font-size: 13px; color: var(--el-text-color-secondary); }
 .subtable-ops .hint { margin-left: auto; }
+/* 拖拽手柄与落点提示（v-rowdrag） */
+.row-drag-handle { cursor: grab; user-select: none; color: var(--el-text-color-placeholder); margin-right: 4px; }
+.row-drag-handle:active { cursor: grabbing; }
+:deep(tr.row-drag-over > td) { border-top: 2px solid var(--el-color-primary) !important; }
 </style>

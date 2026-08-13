@@ -270,15 +270,38 @@ export class ContractService {
    * 找不到（还没建加工合同、或工厂没填地址）就**留空**，不拿别的地址凑数——
    * 填错地址比留空危险得多，留空至少业务能看出来要补。
    */
-  private async resolveShipToAddress(m: EntityManager, orderId: number | null): Promise<string | null> {
-    if (!orderId) return null;
-    const proc = await m.findOne(Contract, {
-      where: { order_id: orderId, type: ContractType.PROCESS, deleted: 0 },
-      order: { id: 'DESC' },
-    });
-    if (!proc?.factory_id) return null;
-    const f = await m.findOne(Factory, { where: { id: proc.factory_id, deleted: 0 } });
-    return f?.address?.trim() || null;
+  private async resolveShipToAddress(
+    m: EntityManager,
+    orderId: number | null,
+    styleNos: string | null,
+  ): Promise<string | null> {
+    // 【按款号找，别按订单找】(2026-08-13 #94 Grace 用截图纠正)
+    // 上一版用 order_id 关联，生产上一张都命中不了：**一张加工合同常常合并多个款**
+    // （HT-20260811-002 一张覆盖 CHA271M502/503/500），它只挂在其中一个订单上；
+    // 而材料合同是按「订单 + 供应商」拆的，挂的是另一个订单。
+    // 同一个款号 CHA271M502 就这样挂在订单 33 和 34 两边，按订单永远对不上。
+    // 款号才是这两类合同真正的共同点。
+    const keys = String(styleNos ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+    if (!keys.length && orderId) {
+      const order = await m.findOne(OrderMain, { where: { id: orderId, deleted: 0 } });
+      if (order?.style_no) keys.push(String(order.style_no).trim());
+    }
+    if (!keys.length) return null;
+
+    const rows: Array<{ address: string | null }> = await m.query(
+      `SELECT DISTINCT f.address address
+         FROM contract c
+         JOIN factory f ON f.id = c.factory_id AND f.deleted = 0
+        WHERE c.type = ? AND c.deleted = 0
+          AND f.address IS NOT NULL AND f.address <> ''
+          AND (${keys.map(() => 'FIND_IN_SET(?, c.style_nos)').join(' OR ')})`,
+      [ContractType.PROCESS, ...keys],
+    ).catch(() => []);
+
+    const addrs = [...new Set(rows.map((r) => (r.address ?? '').trim()).filter(Boolean))];
+    // 命中多个不同加工厂时**不猜**：这批料真要分送两家，系统表达不了，
+    // 留空让业务自己写清楚，比替他选一家安全。
+    return addrs.length === 1 ? addrs[0] : null;
   }
 
   async generateFromOrder(orderId: number, createdBy: number) {
@@ -506,25 +529,26 @@ export class ContractService {
       await this.linkOrderMaterials(m, dto.order_id ?? null, materials);
       // 发货地址（#87）：材料合同没指定时自动带该款加工厂地址；已填的不覆盖
       if (dto.type === ContractType.MATERIAL && !dto.ship_to_address) {
-        const addr = await this.resolveShipToAddress(m, dto.order_id ?? null);
+        const addr = await this.resolveShipToAddress(m, dto.order_id ?? null, contract.style_nos ?? null);
         if (addr) await m.update(Contract, { id: contract.id }, { ship_to_address: addr });
       }
       // 反过来：**加工合同往往比材料合同后建**（先订料、后定加工厂），
-      // 那时材料合同的发货地址还没处可取。所以建加工合同时回头把同一订单下
-      // 仍然空着的材料合同补上——否则先订料的那批永远是空的。
-      if (dto.type === ContractType.PROCESS && dto.order_id && dto.factory_id) {
+      // 那时材料合同的发货地址还没处可取。所以建加工合同时回头把**同款号**下
+      // 仍然空着的材料合同补上——同样按款号，不按订单（见 resolveShipToAddress 的说明）。
+      if (dto.type === ContractType.PROCESS && dto.factory_id) {
         const f = await m.findOne(Factory, { where: { id: dto.factory_id, deleted: 0 } });
         const addr = f?.address?.trim();
-        if (addr) {
-          await m.createQueryBuilder().update(Contract)
-            .set({ ship_to_address: addr })
-            .where('order_id = :oid AND type = :t AND deleted = 0'
-              + ' AND (ship_to_address IS NULL OR ship_to_address = "")',
-            { oid: dto.order_id, t: ContractType.MATERIAL })
-            .execute();
+        const keys = String(contract.style_nos ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+        if (addr && keys.length) {
+          await m.query(
+            `UPDATE contract SET ship_to_address = ?
+              WHERE type = ? AND deleted = 0
+                AND (ship_to_address IS NULL OR ship_to_address = '')
+                AND (${keys.map(() => 'FIND_IN_SET(?, style_nos)').join(' OR ')})`,
+            [addr, ContractType.MATERIAL, ...keys],
+          ).catch(() => undefined);
         }
       }
-      await this.backfillOrderSupplier(m, materials, dto.factory_id);
 
       // 最近交易日期回写（基础资料稿 §1.2：列表按最近交易超期标红——此前该字段无任何写入方，规则恒不触发）
       await m.update(Factory, { id: dto.factory_id }, { last_trade_date: new Date().toISOString().slice(0, 10) as any });

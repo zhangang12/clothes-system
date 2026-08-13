@@ -18,7 +18,7 @@ import { ReconciliationExpenseItem } from '../reconciliation/reconciliation-expe
 import { Factory } from '../factory/factory.entity';
 import { ReconcileType } from '@i9/types';
 import { CustomerService } from '../customer/customer.service';
-import { SampleStatus, UserRole } from '@i9/types';
+import { SampleStatus, UserRole , SAMPLE_STATUS_LABEL } from '@i9/types';
 import { SysUser } from '../auth/sys-user.entity';
 import {
   CreateSampleDto, PushPatternmakerDto, PatternmakerSaveDto, ShipSampleDto, ImportSampleRowDto,
@@ -246,6 +246,9 @@ export class SampleService {
       if (dto.fileLocation !== undefined) entity.file_location = dto.fileLocation;
       if (dto.garmentRemark !== undefined) entity.garment_remark = dto.garmentRemark;
       if (dto.shipSampleDate !== undefined) entity.ship_sample_date = dto.shipSampleDate || null;
+      // 事后可改：推送版师时录错的单号/日期，原先在界面上是只读的，改不了（#96）
+      if (dto.materialShipNo !== undefined) entity.material_ship_no = dto.materialShipNo || null;
+      if (dto.materialShipDate !== undefined) entity.material_ship_date = dto.materialShipDate || null;
       if (dto.image1 !== undefined) entity.image1 = dto.image1;
       if (dto.image2 !== undefined) entity.image2 = dto.image2;
       if (dto.image3 !== undefined) entity.image3 = dto.image3;
@@ -385,7 +388,9 @@ export class SampleService {
     if (dto.patternmakerName !== undefined) entity.patternmaker_name = dto.patternmakerName;
     if (dto.materialShipNo) {
       entity.material_ship_no = dto.materialShipNo;
-      entity.material_ship_date = today();
+      // 手填优先，没填才落当天：材料常常是先寄出、隔几天才有空录系统，
+      // 一律写当天等于把寄出日期记错（#96 nina）。
+      entity.material_ship_date = dto.materialShipDate || today();
     }
     entity.status = SampleStatus.SAMPLING;
     const saved = await this.repo.save(entity);
@@ -463,6 +468,33 @@ export class SampleService {
     entity.status = SampleStatus.SHIPPED;
     const saved = await this.repo.save(entity);
     await this.log(id, entity.version, 'SHIP', operatorId ?? entity.created_by, entity.ship_sample_date);
+    return saved;
+  }
+
+  /**
+   * 撤销「已寄出」，退回打样中（2026-08-13 #95 Nina：「误点这个已寄出怎么取消？」）。
+   *
+   * 【为什么必须有这个】原来状态一进「已寄出」就锁死：基本信息改不了、也推不了版师，
+   * 界面上没有任何回头路。系统报错里同一天就留下 5 条——她试了改（4 次「该状态样衣不允许
+   * 修改基本信息」）、又试了推版师（1 次「当前状态不允许推送版师」）。**误点一下就卡住，
+   * 这不是状态机严谨，是没给出口。**
+   *
+   * 【只允许从 SHIPPED 退回】再往后（已寄回/已对账/已完成）就牵扯版师填的数据和对账单，
+   * 不能一键抹掉；那种情况仍然走人工。寄出日期一并清掉，否则退回后还挂着个假日期。
+   */
+  async undoShipped(id: number, operatorId?: number): Promise<SampleGarment> {
+    const entity = await this.repo.findOne({ where: { id, deleted: 0 } });
+    if (!entity) throw new NotFoundException(`样衣 #${id} 不存在`);
+    if (entity.status !== SampleStatus.SHIPPED) {
+      throw new BadRequestException(
+        `只有「已寄出」可以撤销（当前 ${SAMPLE_STATUS_LABEL[entity.status] ?? entity.status}）；`
+        + '已寄回之后的状态牵扯版师填的数据与对账单，请联系管理员处理',
+      );
+    }
+    entity.status = SampleStatus.SAMPLING;
+    entity.ship_sample_date = null as any;   // 退回后别留着一个假的寄出日期
+    const saved = await this.repo.save(entity);
+    await this.log(id, entity.version, 'UNDO_SHIP', operatorId ?? entity.created_by);
     return saved;
   }
 

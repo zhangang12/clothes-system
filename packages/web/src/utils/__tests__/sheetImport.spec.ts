@@ -246,3 +246,35 @@ describe('QUOTE_ITEM_FIELDS 报价明细字段表', () => {
     expect(MATERIAL_FIELDS.some((f) => f.key === 'gramWeight')).toBe(true);
   });
 });
+
+
+// #93 Nina（2026-08-13）：工艺单表头写「第一组色/第二组色」，字序与「色组」相反
+describe('色组列名的两种写法都要认', () => {
+  const colorsField = MATERIAL_FIELDS.find((f) => f.key === 'colors')!;
+  const hit = (h: string) => colorsField.keywords.test(h);
+
+  it('「第一组色 / 第二组色」这种写法能认出来（Nina 的工艺单就是它）', () => {
+    expect(hit('第一组色')).toBe(true);
+    expect(hit('第二组色')).toBe(true);
+  });
+
+  it('原来就认得的写法一个都不能丢', () => {
+    for (const h of ['颜色', '色组一', '色组二', '颜色（色组）', '配色', 'Color', 'COLOR']) {
+      expect(hit(h)).toBe(true);
+    }
+  });
+
+  it('不沾边的表头不能误命中——认多了会把别的列当色组导进来', () => {
+    for (const h of ['品名', '门幅', '单耗', '位置', '克重', '供应商', '备注']) {
+      expect(hit(h)).toBe(false);
+    }
+  });
+
+  it('两列色组都能各成一组（这正是「导不进第二组」的症结）', () => {
+    // 列2=第一组色（已映射到 colors），列3=第二组色（作为额外色组列）
+    const rows = [['面料A', '灰白印花', '棕色印花']];
+    const out = rowsToMaterials(rows, { itemName: 0, colors: 1 }, [2]);
+    expect(out[0].colorGroups).toEqual(['灰白印花', '棕色印花']);
+    expect(out[0].colors).toBe('灰白印花，棕色印花');
+  });
+});

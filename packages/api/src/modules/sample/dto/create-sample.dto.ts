@@ -64,6 +64,9 @@ export class CreateSampleDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) patternmakerName?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) maker?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() shipSampleDate?: string;
+  // 材料寄出单号/日期：此前只能在「推送版师」那一下写入，事后发现填错无从改（#96）
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) materialShipNo?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() materialShipDate?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) recipient?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) fileLocation?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() garmentRemark?: string;
@@ -88,6 +91,8 @@ export class PushPatternmakerDto {
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() patternmakerId?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) patternmakerName?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) materialShipNo?: string;
+  // 不传才落当天（#96 nina：「当天寄出当天来不及填系统，都是寄出后才有空填」——自动填今天等于填错）
+  @ApiPropertyOptional() @IsOptional() @IsString() materialShipDate?: string;
 }
 
 // 版师视图保存（仅：实际耗用/拉链长度 + 寄回单号 + 件数 + 工时单价）

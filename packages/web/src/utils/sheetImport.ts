@@ -10,11 +10,15 @@ export const MATERIAL_FIELDS: SheetField[] = [
   { key: 'itemName', label: '品名', keywords: /品名|材料|名称|面料|辅料|面里料|item/i, required: true },
   { key: 'arrangeDate', label: '安排日期', keywords: /安排日期|日期|date/i },
   { key: 'width', label: '门幅', keywords: /门幅|幅宽|宽度|width/i },
+  // 【「色组」和「组色」都要收】(2026-08-13 #93 Nina：「还是无法导入2个色组」)
+  // 她的工艺单表头写的是「第一组色 / 第二组色」——**字序和「色组」是反的**，
+  // 旧关键词 /颜色|色组|配色|color/ 一个都匹配不上，于是两列颜色只认出一列，
+  // 「多列颜色自动合并」那条规则根本没机会触发。中文里这两种写法都常见，一起收。
   // 关键词必须含「色组」：本系统自己的 UI 全都管它叫色组——材料表列头是「颜色（色组）」、
   // 按钮是「＋色组」、导入预览的列就叫「色组1」「色组2」。用户照着系统的叫法把工艺单列
   // 命名为「色组一/色组二」，此前却一个都匹配不上（旧关键词只有 /颜色|color/），
   // 于是「一个款号打两组色」永远只能导进一组（2026-08-06 Nina 反馈）。
-  { key: 'colors', label: '颜色', keywords: /颜色|色组|配色|color/i },
+  { key: 'colors', label: '颜色', keywords: /颜色|色组|组色|配色|color/i },
   { key: 'part', label: '部位/位置', keywords: /位置|部位|part/i },
   { key: 'composition', label: '成份', keywords: /成份|成分|composition/i },
   { key: 'codeBand', label: '码带', keywords: /码带|织带/i },
@@ -35,7 +39,7 @@ export const QUOTE_ITEM_FIELDS: SheetField[] = [
   { key: 'itemName', label: '品名', keywords: /品名|材料|名称|面料|辅料|面里料|item/i, required: true },
   { key: 'part', label: '部位', keywords: /位置|部位|part/i },
   { key: 'width', label: '门幅', keywords: /门幅|幅宽|宽度|width/i },
-  { key: 'color', label: '颜色', keywords: /颜色|色组|配色|color/i },
+  { key: 'color', label: '颜色', keywords: /颜色|色组|组色|配色|color/i },
   { key: 'supplier', label: '供应商', keywords: /供应商|厂家|supplier/i },
   { key: 'unit', label: '单位', keywords: /单位|unit/i },
   { key: 'quoteUsage', label: '报价耗用', keywords: /报价耗用|单耗|耗用|用量|数量|qty/i },
