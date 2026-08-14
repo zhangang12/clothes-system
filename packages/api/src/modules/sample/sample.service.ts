@@ -84,6 +84,18 @@ export class SampleService {
     };
   }
 
+  /**
+   * 各轮里最后一次寄样的日期（#104 nina：「填写了寄样时间，但是不显示」）。
+   *
+   * 列表那一列读的是顶层 `ship_sample_date`，而她填的是**多轮寄样子表**里的日期——
+   * 两边从来没打通，所以填了也永远显示「—」。取最后一轮而不是第一轮：那一列想回答的是
+   * 「这单最近一次是什么时候寄出去的」。
+   */
+  private latestShipDate(rounds: Array<{ ship_date?: string | null }>): string | null {
+    const dates = rounds.map((r) => (r.ship_date ?? '').trim()).filter(Boolean);
+    return dates.length ? dates.sort().at(-1)! : null;
+  }
+
   private async log(sampleId: number, version: number, action: string, operatorId: number, remark?: string) {
     await this.versionRepo.save(this.versionRepo.create({
       sample_id: sampleId, version, action, operator_id: operatorId, remark,
@@ -119,7 +131,8 @@ export class SampleService {
         buyer_id: dto.buyerId, buyer_name: buyerName, buyer_no: buyerNo,
         patternmaker_id: dto.patternmakerId, patternmaker_name: dto.patternmakerName,
         maker: dto.maker, make_date: today(),
-        ship_sample_date: dto.shipSampleDate || null, recipient: dto.recipient, file_location: dto.fileLocation,
+        // 顶层没填就用最后一轮的寄样日期兜底：列表「寄出日期」列读的是这一栏（#104）
+        ship_sample_date: dto.shipSampleDate || this.latestShipDate(rounds0), recipient: dto.recipient, file_location: dto.fileLocation,
         garment_remark: dto.garmentRemark, image1: dto.image1, image2: dto.image2, image3: dto.image3,
         feedback_attachments: dto.feedbackAttachments,
         // 多轮工价汇总回填(有多轮数据时覆盖单值,供对账/结算读取)
@@ -200,11 +213,16 @@ export class SampleService {
     const materials = await this.materialRepo.find({ where: { sample_id: id }, order: { sort_order: 'ASC' } });
     let shipRounds = await this.shipRoundRepo.find({ where: { sample_id: id }, order: { sort_order: 'ASC' } });
     // 存量兼容:无多轮记录但有旧单值寄样/工价字段 → 合成「第一轮」供前端显示(不落库,首存时前端会回传)
+    //
+    // 【数量与寄样日期也要带出来】(#103 nina：「快递运单号是根据上面填的自动生成的，
+    // 那数量和寄样时间是否也可以自动生成，这样就不用再填写一遍了」)——单号带了、尺码带了，
+    // 偏偏数量取的是版师才填的 piece_count、日期取的是顶层寄样日期，业务建单时这两个都还是空的，
+    // 于是页面上一行里三格有值两格空，只能照着上面再抄一遍。改为按「版师填的 → 业务填的」依次兜底。
     if (shipRounds.length === 0 && (entity.material_ship_no || entity.piece_count != null || entity.labor_amount != null || entity.return_no)) {
       shipRounds = [this.shipRoundRepo.create({
         sample_id: id, sort_order: 0, round_no: 1,
-        size: entity.sample_size, qty: entity.piece_count,
-        ship_date: entity.ship_sample_date, ship_no: entity.material_ship_no,
+        size: entity.sample_size, qty: entity.piece_count ?? entity.sample_qty,
+        ship_date: entity.ship_sample_date || entity.material_ship_date, ship_no: entity.material_ship_no,
         return_date: entity.return_date, labor_unit_price: entity.labor_unit_price,
         labor_amount: entity.labor_amount, remark: null as any,
       })];
@@ -266,6 +284,8 @@ export class SampleService {
         entity.piece_count = sum.piece_count as any;
         entity.labor_amount = sum.labor_amount as any;
         entity.labor_unit_price = sum.labor_unit_price as any;
+        // 顶层「寄样日期」空着时，用最后一轮的兜底——列表那一列读的是它（#104）
+        if (!entity.ship_sample_date) entity.ship_sample_date = this.latestShipDate(rounds) as any;
       }
       const updated = await manager.save(SampleGarment, entity);
       if (dto.materials !== undefined) {

@@ -258,12 +258,12 @@
     <el-dialog v-model="excelDialog" title="Excel 导入尺码数量搭配" width="680px">
       <div class="excel-steps">
         <p>① 下载固定模板（列：款号/颜色/洗标号/尺码 + 各「PO号|目的地|收货人」列），用 Excel 打开按客户排期填好；旧版无洗标号的模板仍可导入；</p>
-        <p>② 保存为 CSV（Excel 另存为 → CSV UTF-8）后上传；③ 系统校验（款号/尺码/数值，异常行红色标出）；④ 确认入库生成搭配表。</p>
+        <p>② <b>改完直接按保存</b>再上传即可（不用另存为 CSV）；手里的旧 CSV 模板照样能传；③ 系统校验（款号/尺码/数值，异常行红色标出）；④ 确认入库生成搭配表。</p>
       </div>
       <div class="excel-ops">
-        <el-button size="small" @click="downloadTemplate">📥 下载模板（含当前矩阵）</el-button>
-        <input ref="csvFileRef" type="file" accept=".csv,text/csv" style="display:none" @change="onCsvPicked" />
-        <el-button size="small" type="primary" plain @click="csvFileRef?.click()">📤 上传 CSV</el-button>
+        <el-button size="small" @click="downloadTemplate">📥 下载模板（Excel · 含当前矩阵）</el-button>
+        <input ref="csvFileRef" type="file" accept=".xlsx,.csv,.txt" style="display:none" @change="onCsvPicked" />
+        <el-button size="small" type="primary" plain @click="csvFileRef?.click()">📤 上传（Excel / CSV）</el-button>
       </div>
       <template v-if="excelPreview">
         <div class="excel-check" :class="{ bad: excelErrors.length }">
@@ -318,6 +318,7 @@ import { exportInvoiceApi } from '@/api/exportInvoice';
 import { factoryApi } from '@/api/factory';
 import FileUpload from '@/components/FileUpload.vue';
 import { ORDER_STATUS_LABEL } from '@i9/types';
+import { downloadBlob } from '@/utils/docExcel';
 
 const SectionBlock = (props: { title: string; badge?: string }, { slots }: any) =>
   h('div', { class: 'section-block' }, [
@@ -725,50 +726,58 @@ const csvFileRef = ref<HTMLInputElement>();
 const excelPreview = ref<{ pos: any[]; rows: any[] } | null>(null);
 const excelErrors = ref<string[]>([]);
 const excelTotal = computed(() => (excelPreview.value?.rows ?? []).reduce((s: number, r: any) => s + rowTotal(r), 0));
-const csvCell = (v: any) => {
-  const s = String(v ?? '');
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-};
-function downloadTemplate() {
-  const pos = form.matrix.pos.filter((p: any) => p.po_no) .length ? form.matrix.pos : [{ po_no: 'PO-0001', destination: '目的地', consignee: '收货人' }];
+/**
+ * 下载模板（2026-08-14 YSM #105：「表格下载保存不了原格式呢？所以订单也上传不了」）。
+ *
+ * 【原来为什么会卡住】模板发的是 CSV，页面还要求「Excel 另存为 CSV UTF-8」再传。
+ * 可她在 Excel 里改完直接按保存，Excel 会弹「CSV 不支持多工作表…」，多数人顺手存成 .xlsx——
+ * 而上传框只收 .csv，于是「下载下来的表，改完就传不回去」。中文 Windows 上还有第二个坑：
+ * 「另存为 CSV」默认写 GBK，我们按 UTF-8 读，整片乱码。
+ * 现在模板直接发 .xlsx：改完按保存就行，不用另存、也没有编码问题。
+ */
+async function downloadTemplate() {
+  const pos = form.matrix.pos.filter((p: any) => p.po_no).length ? form.matrix.pos : [{ po_no: 'PO-0001', destination: '目的地', consignee: '收货人' }];
   const head = ['款号', '颜色', '洗标号', '尺码', ...pos.map((p: any) => `${p.po_no || 'PO'}|${p.destination || ''}|${p.consignee || ''}`)];
   const dataRows = form.matrix.rows.filter((r: any) => r.style_no || rowTotal(r) > 0);
   const body = (dataRows.length ? dataRows : [{ style_no: form.styleNo || 'KH-0001', color: '黑色', article: '', size: 'S', qtys: [] }])
-    .map((r: any) => [r.style_no, r.color, r.article ?? '', r.size, ...pos.map((_: any, pi: number) => r.qtys?.[pi] ?? '')]);
-  const csv = '﻿' + [head, ...body].map((row) => row.map(csvCell).join(',')).join('\r\n');
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-  const a = document.createElement('a'); a.href = url; a.download = `尺码数量搭配-${form.styleNo || '模板'}.csv`; a.click();
-  URL.revokeObjectURL(url);
+    .map((r: any) => [r.style_no ?? '', r.color ?? '', r.article ?? '', r.size ?? '',
+      // 数量写成数字而不是文本，否则 Excel 里合计不出来、单元格还挂个绿角标
+      ...pos.map((_: any, pi: number) => (r.qtys?.[pi] === undefined || r.qtys?.[pi] === '' ? '' : Number(r.qtys[pi])))]);
+  const ExcelJS = await import('exceljs');
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('尺码数量搭配');
+  ws.addRow(head);
+  for (const r of body) ws.addRow(r);
+  ws.getRow(1).font = { bold: true };
+  ws.views = [{ state: 'frozen', ySplit: 1 }];   // 冻住表头，几十行时不用来回滚
+  ws.columns = head.map((_h: string, i: number) => ({ width: i < 4 ? 16 : 15 })) as any;
+  const buf = await wb.xlsx.writeBuffer();
+  downloadBlob(
+    new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+    `尺码数量搭配-${form.styleNo || '模板'}.xlsx`,
+  );
 }
-// 轻量 CSV 解析（支持引号包裹/转义引号）
-function parseCsv(text: string): string[][] {
-  const rows: string[][] = []; let cur = ''; let row: string[] = []; let inQ = false;
-  const src = text.replace(/^﻿/, '');
-  for (let i = 0; i < src.length; i++) {
-    const c = src[i];
-    if (inQ) {
-      if (c === '"') { if (src[i + 1] === '"') { cur += '"'; i++; } else inQ = false; }
-      else cur += c;
-    } else if (c === '"') inQ = true;
-    else if (c === ',') { row.push(cur); cur = ''; }
-    else if (c === '\n' || c === '\r') {
-      if (c === '\r' && src[i + 1] === '\n') i++;
-      row.push(cur); cur = '';
-      if (row.some((x) => x.trim() !== '')) rows.push(row);
-      row = [];
-    } else cur += c;
-  }
-  row.push(cur);
-  if (row.some((x) => x.trim() !== '')) rows.push(row);
-  return rows;
+/** 读文件成表格：xlsx / csv 都收（#105，口径与理由见 utils/sheetGrid.ts） */
+async function readGrid(file: File): Promise<string[][]> {
+  const { readGrid: read } = await import('@/utils/sheetGrid');
+  const { parseXlsx } = await import('@/utils/sheetPreview');
+  return read(file, parseXlsx);
 }
-function onCsvPicked(e: Event) {
-  const file = (e.target as HTMLInputElement).files?.[0];
+
+async function onCsvPicked(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';           // 先清空：同一个文件改完再传一次也要能触发 change
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    excelErrors.value = []; excelPreview.value = null;
-    const grid = parseCsv(String(reader.result ?? ''));
+  excelErrors.value = []; excelPreview.value = null;
+  let grid: string[][];
+  try {
+    grid = await readGrid(file);
+  } catch (err: any) {
+    excelErrors.value = [err?.message || '这个文件读不出来，请用「下载模板」导出的 xlsx 再试'];
+    return;
+  }
+  {
     if (grid.length < 2) { excelErrors.value = ['文件为空或只有表头']; return; }
     const head = grid[0].map((h) => h.trim());
     // 洗标号是后加的列：新模板为 款号/颜色/洗标号/尺码+PO…，老模板(无洗标号)仍须能导入，
@@ -805,9 +814,7 @@ function onCsvPicked(e: Event) {
     });
     if (!rows.some((r) => rowTotal(r) > 0)) excelErrors.value.push('至少 1 个数量格需大于 0');
     excelPreview.value = { pos, rows };
-  };
-  reader.readAsText(file, 'utf-8');
-  (e.target as HTMLInputElement).value = '';
+  }
 }
 function confirmExcel() {
   if (!excelPreview.value || excelErrors.value.length) return;

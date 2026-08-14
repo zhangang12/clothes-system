@@ -154,6 +154,84 @@ describe('SampleService', () => {
     });
   });
 
+  // #103 nina：单号带出来了，数量和寄样日期却是空的，只能照着上面再抄一遍
+  describe('findOne() 合成的第一轮', () => {
+    const base = { id: 1, deleted: 0, sample_size: 'M', material_ship_no: 'JDVB672', sample_qty: 3, material_ship_date: '2026-08-14' };
+
+    it('UT-SAM-29: 数量取业务填的样衣数量（版师还没填件数时）', async () => {
+      mockRepo.findOne.mockResolvedValue({ ...base, piece_count: null });
+      mockShipRoundRepo.find.mockResolvedValue([]);
+      const r: any = await service.findOne(1);
+      expect(r.shipRounds[0]).toMatchObject({ qty: 3, size: 'M', ship_no: 'JDVB672' });
+    });
+
+    it('UT-SAM-30: 版师填过件数就以版师的为准', async () => {
+      mockRepo.findOne.mockResolvedValue({ ...base, piece_count: 5 });
+      mockShipRoundRepo.find.mockResolvedValue([]);
+      const r: any = await service.findOne(1);
+      expect(r.shipRounds[0].qty).toBe(5);
+    });
+
+    it('UT-SAM-31: 寄样日期没填时用材料寄出日期兜底', async () => {
+      mockRepo.findOne.mockResolvedValue({ ...base, ship_sample_date: null });
+      mockShipRoundRepo.find.mockResolvedValue([]);
+      const r: any = await service.findOne(1);
+      expect(r.shipRounds[0].ship_date).toBe('2026-08-14');
+    });
+
+    it('UT-SAM-32: 顶层寄样日期填了就用它，不被材料寄出日期顶掉', async () => {
+      mockRepo.findOne.mockResolvedValue({ ...base, ship_sample_date: '2026-08-10' });
+      mockShipRoundRepo.find.mockResolvedValue([]);
+      const r: any = await service.findOne(1);
+      expect(r.shipRounds[0].ship_date).toBe('2026-08-10');
+    });
+
+    it('UT-SAM-33: 已经有真实轮次时不合成，别把库里的数据盖了', async () => {
+      mockRepo.findOne.mockResolvedValue({ ...base, piece_count: 9 });
+      mockShipRoundRepo.find.mockResolvedValue([{ id: 7, qty: 1, ship_date: '2026-08-02' }]);
+      const r: any = await service.findOne(1);
+      expect(r.shipRounds).toHaveLength(1);
+      expect(r.shipRounds[0].id).toBe(7);
+    });
+  });
+
+  // #104 nina：「填写了寄样时间，但是不显示」——列表那一列读的是顶层字段
+  describe('多轮寄样日期汇总回顶层', () => {
+    it('UT-SAM-34: 顶层没填时，取各轮里最后一次寄出的日期', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.SAMPLING, version: 1, deleted: 0, ship_sample_date: null });
+      await service.update(1, { shipRounds: [
+        { size: 'M', qty: 1, shipDate: '2026-08-02' },
+        { size: 'L', qty: 2, shipDate: '2026-08-09' },
+      ] } as any, 10);
+      expect(mockManager.save).toHaveBeenCalledWith(SampleGarment, expect.objectContaining({ ship_sample_date: '2026-08-09' }));
+    });
+
+    it('UT-SAM-35: 顶层自己填了就不动它——人填的优先于推出来的', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.SAMPLING, version: 1, deleted: 0 });
+      await service.update(1, {
+        shipSampleDate: '2026-08-20',
+        shipRounds: [{ size: 'M', qty: 1, shipDate: '2026-08-02' }],
+      } as any, 10);
+      expect(mockManager.save).toHaveBeenCalledWith(SampleGarment, expect.objectContaining({ ship_sample_date: '2026-08-20' }));
+    });
+
+    it('UT-SAM-36: 各轮都没填日期时，顶层保持为空，不瞎补一个', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.SAMPLING, version: 1, deleted: 0, ship_sample_date: null });
+      await service.update(1, { shipRounds: [{ size: 'M', qty: 1 }] } as any, 10);
+      const saved = mockManager.save.mock.calls.find((c: any[]) => c[0] === SampleGarment)![1];
+      expect(saved.ship_sample_date ?? null).toBeNull();
+    });
+
+    it('UT-SAM-37: 新建时同样兜底，列表当场就能看到寄出日期', async () => {
+      mockRedis.eval.mockResolvedValue(1);
+      await service.create({
+        middlemanId: 1, styleNo: 'X', categories: '外套', materials: MATERIALS,
+        shipRounds: [{ size: 'M', qty: 1, shipDate: '2026-08-05' }],
+      } as any, 9);
+      expect(mockManager.save.mock.calls[0][1]).toMatchObject({ ship_sample_date: '2026-08-05' });
+    });
+  });
+
   describe('patternmakerSave()', () => {
     it('UT-SAM-03: piece + unit price → labor amount + 已对账', async () => {
       mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.SAMPLING, version: 1, deleted: 0 });

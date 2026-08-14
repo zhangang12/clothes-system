@@ -728,7 +728,8 @@ function buildDto() {
     sampleQty: form.sampleQty === '' || form.sampleQty === null ? undefined : Number(form.sampleQty),
     buyerId: form.buyerId ?? null, patternmakerId: form.patternmakerId || undefined,
     patternmakerName: form.patternmakerName || undefined, maker: form.maker || undefined,
-    shipSampleDate: form.shipSampleDate || undefined, recipient: form.recipient || undefined,
+    // 空串照发：清空寄样日期要能存回去（与材料寄出日期同一处理，#96/#104）
+    shipSampleDate: form.shipSampleDate ?? '', recipient: form.recipient || undefined,
     // 空串照发（不是 undefined）：清空日期要能存回去，否则填错了永远删不掉
     materialShipNo: form.materialShipNo ?? '', materialShipDate: form.materialShipDate ?? '',
     fileLocation: form.fileLocation || undefined, garmentRemark: form.garmentRemark || undefined,
