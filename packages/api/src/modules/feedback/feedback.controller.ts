@@ -5,6 +5,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { MenuGuard, MenuAccess } from '../../common/guards/menu.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@i9/types';
 import { FeedbackService } from './feedback.service';
@@ -17,7 +18,7 @@ const INTERNAL_ROLES = [
 
 @ApiTags('用户反馈')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, MenuGuard)
 @Controller('feedbacks')
 export class FeedbackController {
   constructor(private readonly service: FeedbackService) {}
@@ -30,8 +31,11 @@ export class FeedbackController {
   }
 
   @Get()
-  @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: '反馈列表(管理员)' })
+  // 改为按「反馈管理」菜单授权（2026-08-15）：管理员/主管恒可见；
+  // 其他账号由管理员在「账号管理」里逐个勾选开通（业务提出要能查全量反馈，
+  // 但不能因此把整套管理权限一起给出去）。写操作仍限管理员，见下方 markHandled。
+  @MenuAccess('feedbacks')
+  @ApiOperation({ summary: '反馈列表(管理员/已开通「反馈管理」菜单的账号)' })
   findAll(@Query() query: { page?: number; size?: number; status?: string }) {
     return this.service.findAll(query);
   }
@@ -59,7 +63,7 @@ export class FeedbackController {
   }
 
   @Get('export')
-  @Roles(UserRole.ADMIN)
+  @MenuAccess('feedbacks')   // 与列表同档：都是「查」
   @ApiOperation({ summary: '导出 HTML(仅未处理)' })
   async export(@Res() res: Response) {
     const html = await this.service.exportHtml();
@@ -68,6 +72,7 @@ export class FeedbackController {
     res.send(html);
   }
 
+  // 回复 / 标记已处理是**写**操作，仍只给管理员与主管——开通查询权限不等于能替别人结案
   @Patch(':id/handled')
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: '标记已处理/未处理(可附回复)' })

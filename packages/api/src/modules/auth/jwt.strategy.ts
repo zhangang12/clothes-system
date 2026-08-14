@@ -43,13 +43,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
     const user = await this.userRepo.findOne({
       where: { id: payload.sub },
-      select: ['id', 'username', 'role', 'status'],
+      // menu_keys 一起取：账号级菜单权限要在**接口层**也认（见 MenuGuard）。
+      // 每次请求本来就查这一行，多带一列不额外增加查询；且改完菜单立刻生效，不必等重新登录。
+      select: ['id', 'username', 'role', 'status', 'menu_keys'],
     });
     if (!user || user.status !== 1) throw new UnauthorizedException('账号已被停用');
     return {
       id: Number(user.id),
       username: user.username,
       role: user.role,
+      menu_keys: user.menu_keys ?? null,
       type: 'admin' as const,
     };
   }

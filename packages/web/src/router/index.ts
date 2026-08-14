@@ -59,7 +59,9 @@ const routes: RouteRecordRaw[] = [
       { path: 'ai-tools/customs-docs', name: 'AiCustomsDocs', component: () => import('../views/aitools/CustomsDocsView.vue'), meta: { title: '清关单据生成', menu: 'ai-tools' } },
       { path: 'company-profiles', name: 'CompanyProfiles', component: () => import('../views/company/CompanyProfileView.vue'), meta: { title: '本司主体', menu: 'company-profiles' } },
       { path: 'dicts', name: 'DictManage', component: () => import('../views/dict/DictManageView.vue'), meta: { title: '字典维护', menu: 'dicts' } },
-      { path: 'feedbacks', name: 'Feedbacks', component: () => import('../views/feedback/FeedbackListView.vue'), meta: { admin: true, title: '反馈管理' } },
+      // 反馈管理不再写死 admin：改由账号级菜单权限管（2026-08-15，业务要给指定账号开通查全量反馈），
+      // 口径与侧栏 canMenu('feedbacks') 一致；页面内的「回复/标记已处理」仍只对管理级角色显示
+      { path: 'feedbacks', name: 'Feedbacks', component: () => import('../views/feedback/FeedbackListView.vue'), meta: { menu: 'feedbacks', title: '反馈管理' } },
       { path: 'error-logs', name: 'ErrorLogs', component: () => import('../views/system/ErrorLogListView.vue'), meta: { admin: true, title: '系统报错' } },
       // 账号管理对 ADMIN+SUPERVISOR 放行（SUPERVISOR 权限视同 ADMIN）；走菜单权限口径
       { path: 'accounts', name: 'Accounts', component: () => import('../views/system/AccountManageView.vue'), meta: { title: '账号管理', menu: 'accounts' } },

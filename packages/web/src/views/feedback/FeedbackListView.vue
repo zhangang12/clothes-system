@@ -53,7 +53,9 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="170" fixed="right">
+      <!-- 只读账号（开了「反馈管理」菜单的业务）不显示这一列：回复/结案仍是管理员与主管的事，
+           按钮摆在那儿点下去只会 403，不如不给 -->
+      <el-table-column v-if="canHandle" label="操作" width="170" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" @click="openReply(row)">{{ row.reply ? '改回复' : '回复' }}</el-button>
           <el-button v-if="row.status !== 'HANDLED'" link type="success" @click="setHandled(row, true)">标记已处理</el-button>
@@ -96,6 +98,11 @@ import { Download } from '@element-plus/icons-vue';
 import { feedbackApi } from '../../api/feedback';
 import { downloadHtml } from '../../api/errorLog';
 import { signedUrl } from '@/utils/secureFile';
+import { useAuthStore } from '@/stores/auth';
+import { UserRole } from '@i9/types';
+
+// 回复/结案是管理级角色（ADMIN/主管）的事；只开了「反馈管理」菜单的账号只能查
+const canHandle = useAuthStore().hasRole(UserRole.ADMIN);
 
 const list = ref<any[]>([]);
 const total = ref(0);
