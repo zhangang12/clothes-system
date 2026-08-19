@@ -22,6 +22,18 @@
             </el-dropdown-menu>
           </template>
         </el-dropdown>
+        <!-- 导出 Excel 与打印同一套脱敏口径（#106）：订单里同时有对客价和用料成本，
+             一把全量导出转手发给工厂就等于把两头的底价一起送出去 -->
+        <el-dropdown v-if="editId" trigger="click" @command="onExportOrder">
+          <el-button :icon="Download">导出Excel<el-icon><ArrowDown /></el-icon></el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="customer">对客确认单（无成本）</el-dropdown-item>
+              <el-dropdown-item command="factory">生产通知单（无客户/价格）</el-dropdown-item>
+              <el-dropdown-item command="internal">内部单据（全量）</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
         <el-dropdown
           v-if="editId && ['CONFIRMED', 'CONTRACTED', 'PRODUCING'].includes(form.status)"
           trigger="click" @command="onGenContract"
@@ -333,6 +345,14 @@ const route = useRoute();
 const router = useRouter();
 
 // 三套脱敏打印(P3#32)。弹窗被浏览器拦截时 printOrder 会抛错,须 catch 提示用户允许弹窗(同报价/样衣侧)
+async function onExportOrder(mode: string) {
+  if (!editId.value) return;
+  try {
+    const res: any = await orderApi.get(editId.value);
+    const { exportOrderExcel } = await import('@/utils/orderExcel');
+    await exportOrderExcel(res.data ?? res, mode as any);
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
+}
 async function onPrintOrder(mode: string) {
   if (!editId.value) return;
   try { const res: any = await orderApi.get(editId.value); printOrder(res.data ?? res, mode as any); }

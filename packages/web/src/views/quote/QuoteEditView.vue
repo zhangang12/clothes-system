@@ -235,9 +235,16 @@
 
     <!-- 从样衣导入对话框 -->
     <el-dialog v-model="importDialog" title="从样衣导入材料明细" width="480px">
-      <el-select v-model="importSampleId" filterable placeholder="选择样衣单" style="width:100%">
+      <!-- 远程搜索而不是本地过滤（#107 ZYT：「样衣管理里面搜款号能搜到，为什么报价管理从样衣导入搜不到」）。
+           原来只拉前 100 条样衣、filterable 在这 100 条里挑，生产上样衣已 158 条——
+           第 101 条之后的款号在这儿永远搜不出来，而样衣管理页是走后端搜的，所以那边找得到。 -->
+      <el-select
+        v-model="importSampleId" filterable remote reserve-keyword :remote-method="searchSamples"
+        :loading="sampleSearching" placeholder="输入款号 / 样衣编号搜索" style="width:100%"
+      >
         <el-option v-for="s in samples" :key="s.id" :label="`${s.sample_no} · ${s.style_no}`" :value="s.id" />
       </el-select>
+      <p class="hint" style="margin-top:6px">全库按款号或样衣编号搜索，不再只看最近 100 条。</p>
       <p class="hint" style="margin-top:8px">将把样衣材料明细复制到报价明细（部位/品名/门幅/颜色/供应商/耗用），覆盖现有明细。</p>
       <template #footer>
         <el-button @click="importDialog = false">取消</el-button>
@@ -544,6 +551,18 @@ async function exportExcel() {
   if (!editId.value) return;
   try { const res: any = await quoteApi.get(editId.value); await exportQuoteExcel(res.data ?? res); }
   catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
+}
+
+/** 按关键词到后端搜样衣（款号/样衣编号/中间商/买家/版师/制单人都能搜，口径与样衣管理页一致） */
+const sampleSearching = ref(false);
+async function searchSamples(kw: string) {
+  sampleSearching.value = true;
+  try {
+    // 关键词为空时回到「最近 100 条」，行为与打开弹窗那一刻一致
+    const res: any = await sampleApi.list({ page: 1, size: 100, ...(kw?.trim() ? { keyword: kw.trim() } : {}) });
+    samples.value = res.data ?? res ?? [];
+  } catch { /* 搜不动就保留上一次结果，别把已选项也清了 */ }
+  finally { sampleSearching.value = false; }
 }
 
 async function loadRefs() {
