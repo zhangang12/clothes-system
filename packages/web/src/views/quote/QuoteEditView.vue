@@ -84,7 +84,11 @@
           <el-col :span="8"><el-form-item label="询价日期" prop="inquiryDate"><el-date-picker v-model="form.inquiryDate" type="date" value-format="YYYY-MM-DD" style="width:100%" /></el-form-item></el-col>
           <el-col :span="8">
             <el-form-item label="关联样衣">
-              <el-select v-model="form.sampleId" filterable clearable placeholder="选择样衣" style="width:100%" @change="onSample">
+              <!-- 同一页里有三处选样衣，都必须是远程搜索（#108）：只写 filterable 就是本地过滤，等于没改 -->
+              <el-select
+                v-model="form.sampleId" filterable remote reserve-keyword :remote-method="searchSamples"
+                :loading="sampleSearching" clearable placeholder="输入款号 / 样衣编号搜索" style="width:100%" @change="onSample"
+              >
                 <el-option v-for="s in samples" :key="s.id" :label="`${s.sample_no} · ${s.style_no}`" :value="s.id" />
               </el-select>
             </el-form-item>
@@ -266,6 +270,7 @@ import { quoteApi } from '@/api/quote';
 import { useAuthStore } from '@/stores/auth';
 import { customerApi } from '@/api/customer';
 import { sampleApi } from '@/api/sample';
+import { useRemoteOptions, listParams } from '@/utils/remoteOptions';
 import { companyApi } from '@/api/company';
 import GlobalDictSelect from '@/components/DictSelect.vue';
 import { pasteRowsFromClipboard } from '@/utils/pasteRows';
@@ -553,17 +558,14 @@ async function exportExcel() {
   catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
 }
 
-/** 按关键词到后端搜样衣（款号/样衣编号/中间商/买家/版师/制单人都能搜，口径与样衣管理页一致） */
-const sampleSearching = ref(false);
-async function searchSamples(kw: string) {
-  sampleSearching.value = true;
-  try {
-    // 关键词为空时回到「最近 100 条」，行为与打开弹窗那一刻一致
-    const res: any = await sampleApi.list({ page: 1, size: 100, ...(kw?.trim() ? { keyword: kw.trim() } : {}) });
-    samples.value = res.data ?? res ?? [];
-  } catch { /* 搜不动就保留上一次结果，别把已选项也清了 */ }
-  finally { sampleSearching.value = false; }
-}
+/** 选样衣的下拉统一走远程搜索（口径与理由见 utils/remoteOptions.ts） */
+const { loading: sampleSearching, search: searchSamples } = useRemoteOptions<any>({
+  fetch: async (kw) => {
+    const rows = ((await sampleApi.list(listParams(kw))) as any).data ?? [];
+    samples.value = rows;      // 三个下拉共用同一份 samples
+    return rows;
+  },
+});
 
 async function loadRefs() {
   const [ms, bs, ss] = await Promise.all([

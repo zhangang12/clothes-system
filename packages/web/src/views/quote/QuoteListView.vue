@@ -106,9 +106,14 @@
 
     <!-- 从样衣建报价：选样衣 → 新建报价并导入样衣材料 → 跳编辑页 -->
     <el-dialog v-model="fromSampleDialog" title="从样衣建报价" width="480px">
-      <el-select v-model="fromSampleId" filterable placeholder="选择样衣单" style="width:100%">
+      <!-- 远程搜索（#108）：样衣已 175 条，本地过滤只能在前 100 条里找，第 101 条之后永远搜不到 -->
+      <el-select
+        v-model="fromSampleId" filterable remote reserve-keyword :remote-method="searchSamples"
+        :loading="sampleLoading" placeholder="输入款号 / 样衣编号搜索" style="width:100%"
+      >
         <el-option v-for="s in sampleOptions" :key="s.id" :label="`${s.sample_no} · ${s.style_no}`" :value="s.id" />
       </el-select>
+      <p class="hint" style="margin-top:6px">全库按款号或样衣编号搜索，不只看最近 100 条。</p>
       <p class="tip" style="margin-top:8px">将以该样衣的中间商/买家/款号新建报价（草稿），并自动导入样衣材料明细。</p>
       <template #footer>
         <el-button @click="fromSampleDialog = false">取消</el-button>
@@ -147,6 +152,7 @@ import { exportQuoteExcel } from '@/utils/quoteExcel';
 import { companyApi } from '@/api/company';
 import { quoteApi } from '@/api/quote';
 import { sampleApi } from '@/api/sample';
+import { useRemoteOptions, listParams } from '@/utils/remoteOptions';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole, QUOTE_STATUS_LABEL } from '@i9/types';
 import { currencySymbol } from '@/utils/currency';
@@ -302,14 +308,13 @@ async function batchPrint() {
 const fromSampleDialog = ref(false);
 const fromSampleId = ref<number>();
 const fromSampleLoading = ref(false);
-const sampleOptions = ref<any[]>([]);
+const { options: sampleOptions, loading: sampleLoading, search: searchSamples } = useRemoteOptions<any>({
+  fetch: async (kw) => ((await sampleApi.list(listParams(kw))) as any).data ?? [],
+});
 async function openFromSample() {
   fromSampleId.value = undefined;
   fromSampleDialog.value = true;
-  try {
-    const res: any = await sampleApi.list({ page: 1, size: 100 });
-    sampleOptions.value = res.data ?? [];
-  } catch { sampleOptions.value = []; }
+  await searchSamples('');   // 先摆一批最近的，输入时再按关键词去后端搜
 }
 async function createFromSample() {
   const sample = sampleOptions.value.find((s) => s.id === fromSampleId.value);

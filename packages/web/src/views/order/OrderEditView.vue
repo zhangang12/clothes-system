@@ -71,7 +71,10 @@
           <el-col :span="8"><el-form-item label="订单编号"><el-input v-model="form.orderNo" readonly placeholder="保存后自动 O-YYYYMMDD-序号" /></el-form-item></el-col>
           <el-col :span="8">
             <el-form-item label="关联报价单">
-              <el-select v-model="form.quoteId" filterable clearable placeholder="选择已生效报价" style="width:100%">
+              <el-select
+                v-model="form.quoteId" filterable remote reserve-keyword :remote-method="searchQuotes"
+                :loading="quoteSearching" clearable placeholder="输入报价单号 / 款号搜索" style="width:100%"
+              >
                 <el-option v-for="q in quotes" :key="q.id" :label="`${q.quote_no} · ${q.style_no || ''}`" :value="q.id" />
               </el-select>
             </el-form-item>
@@ -299,9 +302,14 @@
     </el-dialog>
 
     <el-dialog v-model="importDialog" title="从报价一键导入" width="480px">
-      <el-select v-model="importQuoteId" filterable placeholder="选择报价单" style="width:100%">
+      <!-- 远程搜索（同 #108）：报价已 117 条，本地过滤只能在前 100 条里找 -->
+      <el-select
+        v-model="importQuoteId" filterable remote reserve-keyword :remote-method="searchQuotes"
+        :loading="quoteSearching" placeholder="输入报价单号 / 款号搜索" style="width:100%"
+      >
         <el-option v-for="q in quotes" :key="q.id" :label="`${q.quote_no} · ${q.style_no || ''}`" :value="q.id" />
       </el-select>
+      <p class="hint" style="margin-top:6px">全库按报价单号或款号搜索，不只看最近 100 条。</p>
       <p class="hint" style="margin-top:8px">带出款号/客户/中间商/最终买家 + 复制报价明细到材料明细（单件耗用=报价耗用），快照。</p>
       <template #footer>
         <el-button @click="importDialog = false">取消</el-button>
@@ -325,6 +333,7 @@ import { num, checkNumericCells, type NumCol } from '@/utils/numGuard';
 import { useFormDraft } from '@/utils/formDraft';
 import { contractApi } from '@/api/contract';
 import { quoteApi } from '@/api/quote';
+import { useRemoteOptions, listParams } from '@/utils/remoteOptions';
 import { settlementApi } from '@/api/settlement';
 import { exportInvoiceApi } from '@/api/exportInvoice';
 import { factoryApi } from '@/api/factory';
@@ -395,6 +404,14 @@ const editId = computed(() => (route.params.id ? Number(route.params.id) : null)
 const modeLabel = computed(() => (readonly.value ? '查看' : editId.value ? '编辑' : '新建'));
 
 const quotes = ref<any[]>([]);
+// 报价下拉：远程搜索（口径与理由见 utils/remoteOptions.ts）
+const { loading: quoteSearching, search: searchQuotes } = useRemoteOptions<any>({
+  fetch: async (kw) => {
+    const rows = ((await quoteApi.list(listParams(kw))) as any).data ?? [];
+    quotes.value = rows;
+    return rows;
+  },
+});
 const factories = ref<any[]>([]);
 const supplierFactories = ref<any[]>([]);
 const INT_UNITS = ['个', '条', '只', '件', '粒', '套', '对', 'pcs', 'PCS', 'PC'];
@@ -543,12 +560,11 @@ function delMats() { form.materials = form.materials.filter((r: any) => !selMats
 
 async function loadRefs() {
   // 生产工厂只选「委外加工商」(设计稿 订单 B3)；材料供应商从工厂库全量点选(设计稿 订单 B9)
-  const [qs, fs, allF] = await Promise.all([
-    quoteApi.list({ page: 1, size: 100 }),
+  const [, fs, allF] = await Promise.all([
+    searchQuotes(''),                       // 报价下拉走远程搜索，这里只先摆最近一批
     factoryApi.select('OUTSOURCE'),
     factoryApi.select('FABRIC,ACCESSORY'), // 材料供应商只可从工厂库点选且限面/辅料(总览走查P1#13)
   ]);
-  quotes.value = (qs as any).data ?? [];
   factories.value = (((fs as any).data ?? fs) as any[]) ?? [];
   supplierFactories.value = (((allF as any).data ?? allF) as any[]) ?? [];
 }
