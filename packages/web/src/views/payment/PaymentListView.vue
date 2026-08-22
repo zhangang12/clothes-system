@@ -21,7 +21,9 @@
         </el-card>
 
         <div class="table-toolbar">
-          <div class="balance-info" v-if="prepayQuery.factory_id">
+          <!-- 余额接口限管理员/主管/财务：不加 canEdit 的话，业务或版师选个工厂就撞 403
+               （日志里这接口至今没被调过，属于还没爆的口子，2026-08-22 顺手补上） -->
+          <div class="balance-info" v-if="canEdit && prepayQuery.factory_id">
             工厂可用预付款余额：<strong class="balance-num">{{ prepayBalance.toFixed(2) }}</strong>
             <el-button link type="primary" size="small" style="margin-left:8px" @click="loadBalance">刷新余额</el-button>
           </div>
@@ -510,6 +512,7 @@ async function loadPrepay() {
 }
 
 async function loadBalance() {
+  if (!canEdit.value) return;          // 无权限的角色根本不发这个请求
   if (!prepayQuery.factory_id) return;
   const res = await prepaymentApi.getBalance(prepayQuery.factory_id);
   prepayBalance.value = res?.data ?? res ?? 0;
