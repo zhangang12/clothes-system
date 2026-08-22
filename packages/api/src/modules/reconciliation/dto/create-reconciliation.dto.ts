@@ -1,6 +1,6 @@
-import { IsEnum, IsNumber, IsOptional, IsString, IsArray, ValidateNested, Min, IsBoolean, MaxLength } from 'class-validator';
+import { IsEnum, IsNumber, IsOptional, IsString, IsArray, ValidateNested, Min, IsBoolean, MaxLength, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ReconcileType, ReconcileSubType } from '@i9/types';
+import { ReconcileType, ReconcileSubType, RECONCILE_SUBTYPE_OPTIONS } from '@i9/types';
 
 // 无合同空白对账单·费用明细行（补充确认v1.1）
 export class CreateExpenseLineDto {
@@ -76,9 +76,11 @@ export class CreateReconciliationDto {
   @IsEnum(ReconcileType)
   type: ReconcileType;
 
-  // 无合同空白对账单子类型：费用/现金无票/预付款（补充确认v1.1）
+  // 无合同空白对账单子类型：费用/现金无票（补充确认v1.1）
+  // 【PREPAY 已停用】校验只认 RECONCILE_SUBTYPE_OPTIONS，新建不再收「预付款」——
+  // 它与「付款管理·预付款」同名却互不相通，冲抵时算不进余额，见 types 里的 @deprecated。
   @IsOptional()
-  @IsEnum(ReconcileSubType)
+  @IsIn(RECONCILE_SUBTYPE_OPTIONS)
   subType?: ReconcileSubType;
 
   @IsOptional()

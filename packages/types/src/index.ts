@@ -219,18 +219,31 @@ export enum ReconcileType {
   LABOR = 'LABOR', // 样衣打样工时对账（版师/打样间，多款合并；独立于供应商对账）
 }
 
-// 无合同空白对账单子类型（补充确认v1.1：费用/现金无票/预付款 共用一张空白对账单，用类型区分）
+// 无合同空白对账单子类型（补充确认v1.1：费用/现金无票 共用一张空白对账单，用类型区分）
 export enum ReconcileSubType {
   EXPENSE = 'EXPENSE',                 // 费用
   CASH_NO_INVOICE = 'CASH_NO_INVOICE', // 现金无票
-  PREPAY = 'PREPAY',                   // 预付款
+  /**
+   * @deprecated 2026-08-22 停用：系统里「预付款」有两套且互不相通——
+   * 付款管理的预付款有余额、能在付款申请里冲抵；而这里的只是一张对账单，
+   * **冲抵时根本算不进余额**（`getAvailablePrepayBalance` 只读 prepayment 表），
+   * 业务却会以为能抵。已拍板只保留「付款管理 → 预付款管理」那条路。
+   * 枚举值保留**仅为显示历史数据**，新建时不再可选（见 RECONCILE_SUBTYPE_OPTIONS）。
+   */
+  PREPAY = 'PREPAY',
 }
 
 export const RECONCILE_SUBTYPE_LABEL: Record<ReconcileSubType, string> = {
   [ReconcileSubType.EXPENSE]: '费用',
   [ReconcileSubType.CASH_NO_INVOICE]: '现金无票',
-  [ReconcileSubType.PREPAY]: '预付款',
+  [ReconcileSubType.PREPAY]: '预付款（已停用）',
 };
+
+/** 新建时可选的子类型：PREPAY 已停用，不在此列（前端下拉与后端校验共用这一份） */
+export const RECONCILE_SUBTYPE_OPTIONS: ReconcileSubType[] = [
+  ReconcileSubType.EXPENSE,
+  ReconcileSubType.CASH_NO_INVOICE,
+];
 
 export enum PaymentApprovalStatus {
   DRAFT = 'DRAFT',

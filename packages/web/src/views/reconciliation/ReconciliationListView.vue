@@ -341,10 +341,10 @@
             </el-col>
             <el-col :span="8">
               <el-form-item label="费用类型">
+                <!-- 选项来自共享清单：「预付款」已停用（与付款管理的预付款同名却互不相通、
+                     冲抵时算不进余额），新建不再可选；历史单据仍能正常显示 -->
                 <el-select v-model="createForm.subType" style="width:100%">
-                  <el-option label="费用" value="EXPENSE" />
-                  <el-option label="现金无票" value="CASH_NO_INVOICE" />
-                  <el-option label="预付款" value="PREPAY" />
+                  <el-option v-for="t in RECONCILE_SUBTYPE_OPTIONS" :key="t" :label="RECONCILE_SUBTYPE_LABEL[t]" :value="t" />
                 </el-select>
               </el-form-item>
             </el-col>
@@ -506,7 +506,7 @@ import { paymentRequestApi } from '@/api/payment';
 import type { DocLink } from '@/components/DocLinks.vue';
 import FactorySelect from '@/components/FactorySelect.vue';
 import { useAuthStore } from '@/stores/auth';
-import { UserRole } from '@i9/types';
+import { UserRole, RECONCILE_SUBTYPE_OPTIONS, RECONCILE_SUBTYPE_LABEL } from '@i9/types';
 
 const authStore = useAuthStore();
 const route = useRoute();
@@ -614,8 +614,10 @@ function statusTagType(s: string): any {
 function typeLabel(t: string) {
   return { CONTRACT: '合同对账', NO_CONTRACT: '非合同对账', LABOR: '工时对账' }[t] ?? t;
 }
+// 用共享的标签表：历史单据里还有 PREPAY，要能显示（并带上「已停用」字样），
+// 但它已不在新建下拉里 —— 两处各写一份的话，退役一个值就会漏改一处
 function subTypeLabel(s: string) {
-  return { EXPENSE: '费用', CASH_NO_INVOICE: '现金无票', PREPAY: '预付款' }[s] ?? s;
+  return (RECONCILE_SUBTYPE_LABEL as Record<string, string>)[s] ?? s;
 }
 function typeTag(t: string): any {
   return { CONTRACT: '', NO_CONTRACT: 'warning', LABOR: 'success' }[t] ?? 'info';
