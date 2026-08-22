@@ -22,9 +22,12 @@ export class PaymentController {
   constructor(private readonly service: PaymentService) {}
 
   // ——— Prepayment ———
+  // 与「创建付款申请」同一档放开到业务（2026-08-22 用户拍板）：登记一笔预付本身是发起动作，
+  // 而这笔钱要真花出去，仍须走付款申请并由管理员/财务审批（冲抵就发生在 approve 那一步），
+  // 所以业务能登记、但动不了钱。审批/实付/删除维持只给管理员与财务。
   @Post('prepayments')
-  @Roles(UserRole.ADMIN, UserRole.FINANCE)
-  @ApiOperation({ summary: '创建预付款' })
+  @Roles(UserRole.ADMIN, UserRole.FINANCE, UserRole.BUSINESS)
+  @ApiOperation({ summary: '创建预付款（管理员/主管/财务/业务）' })
   createPrepayment(@Body() dto: CreatePrepaymentDto, @Request() req: any) {
     return this.service.createPrepayment(dto, req.user.id);
   }
@@ -39,9 +42,10 @@ export class PaymentController {
     return this.service.findPrepayments(factoryId ? Number(factoryId) : undefined, page, size);
   }
 
+  // 跟着创建一起放开：能登记预付却看不到余额，登记完就是一笔糊涂账
   @Get('prepayments/balance')
-  @Roles(UserRole.ADMIN, UserRole.FINANCE)
-  @ApiOperation({ summary: '查询工厂预付款余额' })
+  @Roles(UserRole.ADMIN, UserRole.FINANCE, UserRole.BUSINESS)
+  @ApiOperation({ summary: '查询工厂预付款余额（管理员/主管/财务/业务）' })
   getPrepayBalance(@Query('factory_id', ParseIntPipe) factoryId: number) {
     return this.service.getAvailablePrepayBalance(factoryId);
   }

@@ -228,9 +228,19 @@ describe('PaymentListView', () => {
     expect(wrapper.findAll('button').find((b) => b.text() === '新建付款申请')).toBeTruthy();
   });
 
-  it('BUSINESS 仍看不到「创建预付款」——那个端点是 ADMIN/FINANCE，放出来只会 403', async () => {
+  // 2026-08-22 用户拍板放开：后端 POST /payments/prepayments 已改为
+  // @Roles(ADMIN, FINANCE, BUSINESS)。登记一笔预付是发起动作，钱要真花出去仍须走
+  // 付款申请并被审批（冲抵发生在 approve 那一步），所以业务能登记、动不了钱。
+  it('BUSINESS 能看到「创建预付款」——已与「新建付款申请」放到同一档', async () => {
     mockPRList.mockResolvedValue({ data: [makePR()], total: 1 });
     const wrapper = mountView(UserRole.BUSINESS);
+    await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
+    expect(wrapper.findAll('button').find((b) => b.text() === '创建预付款')).toBeTruthy();
+  });
+
+  it('版师看不到「创建预付款」——放开只到业务，别顺手放给所有能进这页的角色', async () => {
+    mockPRList.mockResolvedValue({ data: [makePR()], total: 1 });
+    const wrapper = mountView(UserRole.PATTERNMAKER);
     await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
     expect(wrapper.findAll('button').find((b) => b.text() === '创建预付款')).toBeUndefined();
   });

@@ -21,13 +21,13 @@
         </el-card>
 
         <div class="table-toolbar">
-          <!-- 余额接口限管理员/主管/财务：不加 canEdit 的话，业务或版师选个工厂就撞 403
-               （日志里这接口至今没被调过，属于还没爆的口子，2026-08-22 顺手补上） -->
-          <div class="balance-info" v-if="canEdit && prepayQuery.factory_id">
+          <!-- 余额接口按角色开放（管理员/主管/财务/业务）：仍要挡住版师、打样间这些角色，
+               否则他们选个工厂就撞 403 -->
+          <div class="balance-info" v-if="canPrepay && prepayQuery.factory_id">
             工厂可用预付款余额：<strong class="balance-num">{{ prepayBalance.toFixed(2) }}</strong>
             <el-button link type="primary" size="small" style="margin-left:8px" @click="loadBalance">刷新余额</el-button>
           </div>
-          <el-button v-if="canEdit" type="primary" :icon="Plus" @click="openCreatePrepay">创建预付款</el-button>
+          <el-button v-if="canPrepay" type="primary" :icon="Plus" @click="openCreatePrepay">创建预付款</el-button>
         </div>
 
         <el-table :data="prepayList" v-loading="prepayLoading" border stripe>
@@ -479,9 +479,12 @@ const canEdit = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.ha
 // 「新建付款申请」单独放行 BUSINESS：后端 POST /payments/requests 是
 // @Roles(ADMIN, FINANCE, BUSINESS)，注释写明「业务可发起无合同付款」，
 // 前端却按 canEdit 关了入口 → 业务能进页面、能看列表，就是建不了单。
-// 注意别把 BUSINESS 塞进 canEdit 本体：创建预付款/提交/付款三个按钮后端都是
-// ADMIN/FINANCE，那样等于一次放出三条必 403 的路径。
+// 【别把 BUSINESS 塞进 canEdit 本体】提交/审批/登记实付/标记已付这几步后端仍是
+// ADMIN/FINANCE，塞进去等于一次放出几条必 403 的路径。要放开就单开一个计算属性。
 const canCreatePR = computed(() => canEdit.value || authStore.hasRole(UserRole.BUSINESS));
+// 预付款的登记与余额查询（2026-08-22 放开到业务，后端同步改成 ADMIN/FINANCE/BUSINESS）：
+// 登记一笔预付是发起动作，钱要真花出去仍得走付款申请、由管理员/财务审批时才冲抵
+const canPrepay = canCreatePR;
 
 const route = useRoute();
 const router = useRouter();
@@ -512,7 +515,7 @@ async function loadPrepay() {
 }
 
 async function loadBalance() {
-  if (!canEdit.value) return;          // 无权限的角色根本不发这个请求
+  if (!canPrepay.value) return;        // 无权限的角色根本不发这个请求
   if (!prepayQuery.factory_id) return;
   const res = await prepaymentApi.getBalance(prepayQuery.factory_id);
   prepayBalance.value = res?.data ?? res ?? 0;
@@ -803,9 +806,9 @@ function resetPRForm() {
 // 选择工厂后自动提示是否存在可用预付款余额（付款申请设计稿：存在预付时提示冲抵）
 watch(() => prForm.factory_id, async (fid) => {
   prPrepayBalance.value = 0;
-  // getBalance 是 @Roles(ADMIN, FINANCE)：BUSINESS 调用会被全局拦截器弹「需要权限」红字，
-  // 本地 catch 拦不住它，所以这里直接早退（业务本就用不到预付冲抵）
-  if (!createPRVisible.value || !fid || !canEdit.value) return;
+  // getBalance 现在是 @Roles(ADMIN, FINANCE, BUSINESS)；版师等角色仍会被拦截器弹红字、
+  // 本地 catch 拦不住，所以这里按同一份权限早退
+  if (!createPRVisible.value || !fid || !canPrepay.value) return;
   try {
     const res: any = await prepaymentApi.getBalance(fid);
     prPrepayBalance.value = +(res?.data ?? res ?? 0) || 0;
