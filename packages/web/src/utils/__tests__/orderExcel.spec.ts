@@ -5,16 +5,27 @@ vi.mock('../docExcel', async (orig) => ({ ...(await orig<any>()), exportDocXlsx 
 
 const { exportOrderExcel } = await import('../orderExcel');
 
+// 字段名照抄 order_main 真实列（make_date / qty_total / style_name…）——
+// 最初这份 fixture 用的是 order_date / total_qty，库里根本没这两列，
+// 于是导出来那几格全空而测试全绿（#110）。
 const DETAIL = {
-  order_no: 'O-20260818-004', style_no: 'WR02ADW3692', order_date: '2026-08-18T00:00:00',
-  delivery_date: '2026-10-01', total_qty: 500, currency: 'USD', unit_price: 12.5, total_amount: 6250,
-  customer_name: '中间商A', buyer_name: '最终买家B', customer_po: 'PO-77',
+  order_no: 'O-20260818-004', style_no: 'WR02ADW3692', style_name: '男式夹克',
+  make_date: '2026-08-18T00:00:00', salesperson: '姚霜梅',
+  delivery_date: '2026-10-01', qty_total: 500, currency: 'USD', unit_price: 12.5, total_amount: 6250,
+  middleman_name: '中间商A', buyer_name: '最终买家B', customer_po: 'PO-77',
+  // 【按接口真实形状写】/orders/:id 回的是 OrderSizeMatrix 实体，搭配数据在 matrix.matrix_data 里。
+  // 最初这份 fixture 被我写成了 { matrix: { pos, rows } }（少一层），于是导出器读错字段、
+  // 测试却全绿——真到线上导出来是一张空表（#109/#110）。fixture 跟着接口走，别跟着实现走。
   matrix: {
-    pos: [{ po_no: 'PO-1', destination: 'SERBIA' }, { po_no: 'PO-2', destination: '' }],
-    rows: [
-      { style_no: 'WR02ADW3692', color: '深咖', article: '', size: 'S', qtys: [60, 10] },
-      { style_no: 'WR02ADW3692', color: '米色', article: '', size: 'M', qtys: [84, 6] },
-    ],
+    id: 9,
+    order_id: 50,
+    matrix_data: {
+      pos: [{ po_no: 'PO-1', destination: 'SERBIA' }, { po_no: 'PO-2', destination: '' }],
+      rows: [
+        { style_no: 'WR02ADW3692', color: '深咖', article: '', size: 'S', qtys: [60, 10] },
+        { style_no: 'WR02ADW3692', color: '米色', article: '', size: 'M', qtys: [84, 6] },
+      ],
+    },
   },
   materials: [
     { item_name: '主面料', part: '大身', color: '深咖', supplier: '苏州某某纺织', unit: '米',
@@ -87,16 +98,32 @@ describe('订单导出 · 数量搭配', () => {
   });
 
   it('UT-ORD-X7: 有洗标号时才出这一列', async () => {
-    const d = { ...DETAIL, matrix: { ...DETAIL.matrix, rows: [{ ...DETAIL.matrix.rows[0], article: 'ART-9' }] } };
+    const d = { ...DETAIL, matrix: { ...DETAIL.matrix, matrix_data: { ...DETAIL.matrix.matrix_data, rows: [{ ...DETAIL.matrix.matrix_data.rows[0], article: 'ART-9' }] } } };
     await exportOrderExcel(d, 'internal');
     expect(tableTitled('数量搭配（按 PO）').head).toContain('洗标号');
   });
 
   it('UT-ORD-X8: 没有搭配数据时给一句话，不是一张空表', async () => {
-    await exportOrderExcel({ ...DETAIL, matrix: { pos: [], rows: [] } }, 'internal');
+    await exportOrderExcel({ ...DETAIL, matrix: { matrix_data: { pos: [], rows: [] } } }, 'internal');
     const t = tableTitled('数量搭配（按 PO）');
     expect(t.rows).toHaveLength(0);
     expect(t.empty).toContain('未填写');
+  });
+});
+
+describe('订单导出 · 抬头字段', () => {
+  // 【按字段名精确取值，别用 toContain 扫全串】最初这条写成 expect(s).toContain('500')，
+  // 而单价 12.5 会被格式化成「12.5000」——里面就含 500，于是把 qty_total 写成不存在的
+  // total_qty 时测试照样绿。断言要钉在那一格上。
+  const kvOf = (label: string) =>
+    (blocksOf().find((b) => b.kind === 'kv') as any).pairs.find((p: any[]) => p[0] === label)?.[1];
+
+  it('UT-ORD-X11b: 抬头几格取的是真列名，写错会静默变空', async () => {
+    await exportOrderExcel(DETAIL, 'internal');
+    expect(kvOf('大货总数')).toBe(500);            // qty_total，不是 total_qty
+    expect(String(kvOf('制单日期'))).toBe('2026-08-18'); // make_date，不是 order_date
+    expect(kvOf('品名')).toBe('男式夹克');
+    expect(kvOf('业务员')).toBe('姚霜梅');
   });
 });
 

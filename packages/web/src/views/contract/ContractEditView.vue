@@ -345,6 +345,7 @@ import { exportContractExcel } from '@/utils/contractExcel';
 import { useAuthStore } from '@/stores/auth';
 import { UNIT_OPTIONS } from '@/constants/units';
 import { duplicateAt, insertAbove, duplicateSelected } from '@/utils/rowOps';
+import { checkGoodsLines } from '@/utils/goodsLineCheck';
 
 const route = useRoute();
 const router = useRouter();
@@ -731,9 +732,9 @@ function validateForm(): string | null {
   // 材料合同允许无订单（#75）；此时款号也不强制——挂卡、销样面料本就没有款号
   if (!form.order_id && !isMaterial.value) return '请选择关联订单';
   if (!styleNoList.value.length && form.order_id) return '至少关联 1 个款号';
-  if (!form.materials.length) return '货物明细至少 1 行';
-  const bad = form.materials.find((m: any) => !m.item_name || !(+m.qty > 0));
-  if (bad) return '货物明细：品名必填、数量须大于 0';
+  // 点名到行（#111）：原来只说「品名必填、数量须大于 0」，二三十行里没人找得到是哪一行
+  const goodsErr = checkGoodsLines(form.materials);
+  if (goodsErr) return goodsErr;
   if (ratioSum.value !== 100) return '定金+中期+尾款须等于 100%';
   return null;
 }

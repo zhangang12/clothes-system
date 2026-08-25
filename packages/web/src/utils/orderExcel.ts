@@ -58,13 +58,18 @@ export async function exportOrderExcel(detail: any, mode: OrderExportMode): Prom
   const showCustomer = mode !== 'factory';
   const showPrice = mode !== 'factory';
 
+  // 【字段名以接口为准，别照着印象写】order_main 里没有 order_date（是 make_date）、
+  // 大货总数叫 qty_total 不是 total_qty——最初两处都写错，导出来这几格全是空的（#110）。
+  // 口径与 orderPrint.ts 保持一致。
   const pairs: Array<[string, unknown]> = [
     ['订单号', detail.order_no],
     ['单据类型', MODE_LABEL[mode]],
     ['款号', detail.style_no],
-    ['下单日期', d10(detail.order_date)],
+    ['品名', detail.style_name ?? '—'],
+    ['制单日期', d10(detail.make_date)],
     ['交货期', d10(detail.delivery_date)],
-    ['大货总数', detail.total_qty ?? '—'],
+    ['大货总数', detail.qty_total ?? 0],
+    ['业务员', detail.salesperson ?? '—'],
   ];
   if (showCustomer) {
     pairs.push(['客户', detail.customer_name ?? detail.middleman_name ?? '—']);
@@ -79,7 +84,10 @@ export async function exportOrderExcel(detail: any, mode: OrderExportMode): Prom
 
   const blocks: Block[] = [
     { kind: 'kv', pairs },
-    matrixBlock(detail.matrix),
+    // 【要多剥一层 matrix_data】接口回的是 OrderSizeMatrix 实体，搭配数据在 matrix.matrix_data 里，
+    // 直接读 detail.matrix 永远是 undefined → 导出来一张空表还不报错（#109/#110 YSM 实测）。
+    // 打印那边一直是对的（orderPrint 里写的就是 detail.matrix?.matrix_data），是我加导出时抄漏了。
+    matrixBlock(detail.matrix?.matrix_data),
     // 对客口径不出用料明细：那是成本与工艺，客户看的是款式与数量
     ...(mode === 'customer' ? [] : [materialBlock(detail.materials ?? [], mode)]),
     {
