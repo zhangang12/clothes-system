@@ -51,3 +51,42 @@ export function checkGoodsLines(rows: GoodsLine[]): string | null {
   if (bads.length) parts.push(bads.slice(0, 3).join('；') + (bads.length > 3 ? ` 等 ${bads.length} 处` : ''));
   return parts.length ? `货物明细：${parts.join('；')}` : null;
 }
+
+/**
+ * 「填了一半」的行号（1 起）：名称列空着，可别的列填了东西。
+ *
+ * 【为什么必须单独揪出来】报价与样衣保存时都是
+ * `form.items.filter((i) => i.itemName)` —— 没填品名的行**被静默丢弃**，
+ * 页面提示"保存成功"，那一行却没了，而且只有当**所有行**都没品名时才会报错。
+ * 空行被丢掉是对的（表单会自动补一行占位），但「填了数量/颜色/单价、只漏了品名」
+ * 显然是人还没填完，不该悄悄扔掉。
+ *
+ * @param nameField  名称列（品名）
+ * @param valueFields 用来判断"人是不是填过东西"的列——**别把有默认值的列放进来**
+ *                    （如报价的 lossRate 自带统一损耗%，放进来会把空行也判成填了一半）
+ */
+export function halfFilledRows(
+  rows: Array<Record<string, unknown>>,
+  nameField: string,
+  valueFields: string[],
+): number[] {
+  const out: number[] = [];
+  (rows ?? []).forEach((r, i) => {
+    if (!isBlank(r?.[nameField])) return;                 // 品名填了，不在此列
+    const touched = valueFields.some((f) => {
+      const v = r?.[f];
+      if (Array.isArray(v)) return v.length > 0;          // 色组这类数组：空数组才算没填
+      return !isBlank(v);
+    });
+    if (touched) out.push(i + 1);
+  });
+  return out;
+}
+
+/** 把行号列成一句能照做的话；没有则返回 null */
+export function halfFilledMessage(label: string, rows: number[]): string | null {
+  if (!rows.length) return null;
+  const head = rows.slice(0, 3).join('、');
+  const more = rows.length > 3 ? ` 等 ${rows.length} 行` : '';
+  return `${label}第 ${head} 行${more}填了内容但没填品名——补上品名，或勾选该行删除（不填品名保存会丢掉这几行）`;
+}

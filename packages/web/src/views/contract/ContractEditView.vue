@@ -345,7 +345,7 @@ import { exportContractExcel } from '@/utils/contractExcel';
 import { useAuthStore } from '@/stores/auth';
 import { UNIT_OPTIONS } from '@/constants/units';
 import { duplicateAt, insertAbove, duplicateSelected } from '@/utils/rowOps';
-import { checkGoodsLines } from '@/utils/goodsLineCheck';
+import { checkGoodsLines } from '@/utils/lineCheck';
 
 const route = useRoute();
 const router = useRouter();

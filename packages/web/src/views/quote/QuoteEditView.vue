@@ -284,6 +284,10 @@ import type { DocLink } from '@/components/DocLinks.vue'; // 仅取类型:组件
 import { QUOTE_STATUS_LABEL } from '@i9/types';
 import { TRADE_COUNTRIES, DICT_PRICE_TERMS, DICT_SETTLEMENT } from '@/constants/regions';
 import { UNIT_OPTIONS } from '@/constants/units';
+import { halfFilledRows, halfFilledMessage } from '@/utils/lineCheck';
+// 判断「这一行人填过东西没有」时看的列。**不含 lossRate**：它自带统一损耗%默认值，
+// 放进来会把纯空行也判成填了一半
+const QUOTE_ITEM_TOUCHED = ['part', 'width', 'color', 'supplier', 'unit', 'quoteUsage', 'rmbPrice', 'remark'];
 import { moveItem } from '@/utils/tableRowDrag';
 import { fxPriceLabel } from '@/utils/currency';
 import { num, checkNumericCells, type NumCol } from '@/utils/numGuard';
@@ -708,6 +712,10 @@ async function save() {
   if (numErr) { ElMessage.error(numErr); saving.value = false; return; }
   const dto = buildDto();
   // 明细可空的唯一例外：已关联样衣 → 创建后自动从样衣带入材料
+  // 没填品名的行会被 buildDto 的 filter 丢掉——空行丢掉是对的（表单自动补占位行），
+  // 但「填了数量/单价/颜色、只漏品名」是人没填完，静默扔掉等于丢数据（8-26 举一反三查出）
+  const halfItems = halfFilledMessage('报价明细', halfFilledRows(form.items, 'itemName', QUOTE_ITEM_TOUCHED));
+  if (halfItems) { ElMessage.error(halfItems); saving.value = false; return; }
   if (!dto.items.length && !(form.sampleId && !editId.value)) { ElMessage.error('报价明细至少 1 行且品名必填'); saving.value = false; return; }
   try {
     if (editId.value) {

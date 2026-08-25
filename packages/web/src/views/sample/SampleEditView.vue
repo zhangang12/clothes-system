@@ -295,6 +295,9 @@ import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted, h } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import { halfFilledRows, halfFilledMessage } from '@/utils/lineCheck';
+// colorGroups 是数组、由色组编辑同步而来，也算"填过"；不含有默认值的列
+const SAMPLE_MAT_TOUCHED = ['part', 'width', 'colors', 'colorGroups', 'composition', 'qty', 'refPrice', 'supplierName', 'remark'];
 import { readClipboardText, CLIPBOARD_CANCELLED } from '@/utils/clipboard';
 import { parseSupplierColumn, applySupplierColumn } from '@/utils/supplierPaste';
 import type { FormInstance, FormRules } from 'element-plus';
@@ -779,6 +782,9 @@ async function save() {
   const numErr = checkMaterialNumbers();
   if (numErr) { ElMessage.error(numErr); saving.value = false; return; }
   const dto = buildDto();
+  // 同报价：没填品名的行会被 filter 静默丢掉，填了一半的必须拦下来（8-26 举一反三查出）
+  const halfMats = halfFilledMessage('材料明细', halfFilledRows(form.materials, 'itemName', SAMPLE_MAT_TOUCHED));
+  if (halfMats) { ElMessage.error(halfMats); saving.value = false; return; }
   if (!dto.materials.length) { ElMessage.error('材料明细至少 1 行且品名必填'); saving.value = false; return; }
   try {
     let id = editId.value;
