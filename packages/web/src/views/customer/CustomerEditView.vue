@@ -171,6 +171,8 @@ const tradeCountries = TRADE_COUNTRIES;
 const dictPriceTerms = DICT_PRICE_TERMS, dictSettlement = DICT_SETTLEMENT, dictCooperation = DICT_COOPERATION;
 const dictSource = DICT_CUSTOMER_SOURCE, dictDept = DICT_DEPARTMENT, dictTitle = DICT_TITLE;
 
+import { droppedButFilledRows, droppedMessage } from '@/utils/lineCheck';
+
 const emptyContact = () => ({ name: '', department: '', gender: '', title: '', phone: '', mobile: '', mobile1: '', mobile2: '', email: '', remark: '' });
 const emptyBank = () => ({ accountName: '', bankName: '', bankAccount: '', bankAddress: '', currency: '', swiftCode: '', remark: '' });
 const emptyExpress = () => ({ company: '', account: '', payMethod: '', remark: '' });
@@ -262,6 +264,17 @@ async function load() {
 function buildDto() {
   const num = (v: any) => (v === '' || v == null ? undefined : Number(v));
   const clean = (arr: any[], keyFields: string[]) => arr.filter((r) => keyFields.some((k) => r[k]));
+  // 保存时 clean() 会把"关键字段全空"的整行丢掉。空行丢掉是对的（表单自动补占位行），
+  // 但「填了部门/邮箱/SWIFT 却没填姓名或银行名」是人没填完，静默扔掉等于丢数据。
+  // 同类问题一周内已在合同货物明细、报价明细、样衣材料上各踩一次（8-26 深度审查查出本处）。
+  const dropWarn =
+    droppedMessage('联系人', droppedButFilledRows(form.contacts, (r: any) => !!(r.name || r.mobile || r.phone),
+      ['department', 'gender', 'title', 'mobile1', 'mobile2', 'email', 'remark']), '缺姓名/手机/电话')
+    ?? droppedMessage('银行账户', droppedButFilledRows(form.banks, (r: any) => !!(r.bankName || r.bankAccount || r.accountName),
+      ['bankAddress', 'currency', 'swiftCode', 'remark']), '缺银行名称/账号/户名')
+    ?? droppedMessage('快递账号', droppedButFilledRows(form.expresses, (r: any) => !!(r.company || r.account),
+      ['payMethod', 'remark']), '缺快递公司/账号');
+  if (dropWarn) { ElMessage.error(dropWarn); return null; }
   return {
     name: form.name || undefined, type: form.type, relatedMiddleman: form.relatedMiddleman || undefined,
     tradeCountry: form.tradeCountry || undefined, countryRegion: form.countryRegion || undefined,
@@ -285,6 +298,7 @@ function buildDto() {
 async function save() {
   await formRef.value?.validate();
   const dto = buildDto();
+  if (!dto) return;                       // 有"填了一半会被丢掉"的行，已在 buildDto 里提示
   if (!dto.contacts.length) { ElMessage.error('联系人子表不能为空'); return; }
   saving.value = true;
   try {

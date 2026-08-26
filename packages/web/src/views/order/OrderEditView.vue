@@ -334,6 +334,9 @@ import { useFormDraft } from '@/utils/formDraft';
 import { contractApi } from '@/api/contract';
 import { quoteApi } from '@/api/quote';
 import { useRemoteOptions, listParams } from '@/utils/remoteOptions';
+import { halfFilledRows, halfFilledMessage } from '@/utils/lineCheck';
+// 判断"这行人填过东西没有"的列；不含 lossRate（有默认值 3）
+const ORDER_MAT_TOUCHED = ['part', 'width', 'color', 'composition', 'supplier', 'unit', 'unitPrice', 'netUsage', 'finalPurchase'];
 import { settlementApi } from '@/api/settlement';
 import { exportInvoiceApi } from '@/api/exportInvoice';
 import { factoryApi } from '@/api/factory';
@@ -695,6 +698,10 @@ const ORDER_MAT_NUM_COLS: NumCol[] = [
   ['unitPrice', '单价(元)'], ['netUsage', '单件耗用'], ['lossRate', '损耗%'], ['finalPurchase', '最终采购量'],
 ];
 function checkOrderNumbers(): string | null {
+  // 没填品名的材料行会被 buildDto 的 filter 静默丢掉——空行丢掉是对的，
+  // 但「填了供应商/耗用/单价却漏了品名」是人没填完（8-26 深度审查，同类第 7 处）
+  const half = halfFilledMessage('材料明细', halfFilledRows(form.materials, 'itemName', ORDER_MAT_TOUCHED));
+  if (half) return half;
   return checkNumericCells(form.materials.filter((m: any) => m.itemName), ORDER_MAT_NUM_COLS, '材料明细');
 }
 

@@ -110,3 +110,52 @@ describe('填了一半的明细行', () => {
     expect(halfFilledMessage('报价明细', [])).toBeNull();
   });
 });
+
+// ── 8-26 深度审查：按「保存时的保留条件」抽象，覆盖客户联系人/银行/快递、出口发票款项 ──
+import { droppedButFilledRows, droppedMessage } from '../lineCheck';
+
+describe('会被保存时丢掉、但人填了东西的行', () => {
+  const keptContact = (r: any) => !!(r.name || r.mobile || r.phone);
+  const CONTACT_TOUCHED = ['department', 'gender', 'title', 'mobile1', 'mobile2', 'email', 'remark'];
+
+  it('UT-DR-01: 联系人只填了部门和邮箱——会被丢，必须拦下来', () => {
+    const rows = [{ name: '张三', mobile: '138' }, { department: '采购', email: 'a@b.c' }];
+    expect(droppedButFilledRows(rows, keptContact, CONTACT_TOUCHED)).toEqual([2]);
+  });
+
+  it('UT-DR-02: 关键字段填了就不算丢（哪怕别的都空）', () => {
+    expect(droppedButFilledRows([{ mobile: '139' }], keptContact, CONTACT_TOUCHED)).toEqual([]);
+  });
+
+  it('UT-DR-03: 整行全空不算——表单会自动补占位行，丢掉是对的', () => {
+    expect(droppedButFilledRows([{ department: '', email: '' }], keptContact, CONTACT_TOUCHED)).toEqual([]);
+  });
+
+  it('UT-DR-04: 出口发票——选了订单/填了款号却没填金额，会被丢', () => {
+    const kept = (r: any) => Number(r.amount) > 0;
+    const rows = [{ amount: 100 }, { style_no: 'WR02', amount: 0 }, { order_id: 5 }];
+    expect(droppedButFilledRows(rows, kept, ['order_id', 'style_no'])).toEqual([2, 3]);
+  });
+
+  it('UT-DR-05: 金额是文本时按"留不住"处理，不能当成填好了', () => {
+    const kept = (r: any) => Number(r.amount) > 0;
+    expect(droppedButFilledRows([{ style_no: 'X', amount: '若干' }], kept, ['style_no'])).toEqual([1]);
+  });
+
+  it('UT-DR-06: 提示写明缺什么、以及不改会被丢掉', () => {
+    const msg = droppedMessage('联系人', [2], '缺姓名/手机/电话')!;
+    expect(msg).toContain('第 2 行');
+    expect(msg).toContain('缺姓名/手机/电话');
+    expect(msg).toContain('丢掉');
+  });
+
+  it('UT-DR-07: 超过 3 行只点前 3 行并给总数', () => {
+    const msg = droppedMessage('款项明细', [1, 2, 3, 4], '金额没填')!;
+    expect(msg).toContain('第 1、2、3 行');
+    expect(msg).toContain('4 行');
+  });
+
+  it('UT-DR-08: 没有问题行时不提示', () => {
+    expect(droppedMessage('联系人', [], '缺姓名')).toBeNull();
+  });
+});

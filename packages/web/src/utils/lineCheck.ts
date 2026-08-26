@@ -90,3 +90,41 @@ export function halfFilledMessage(label: string, rows: number[]): string | null 
   const more = rows.length > 3 ? ` 等 ${rows.length} 行` : '';
   return `${label}第 ${head} 行${more}填了内容但没填品名——补上品名，或勾选该行删除（不填品名保存会丢掉这几行）`;
 }
+
+/**
+ * 「会被保存时的 filter 丢掉、但人明明填了东西」的行号（1 起）。
+ *
+ * 【为什么再抽一层】`halfFilledRows` 只认「一个名称列为空」这一种形态，
+ * 可实际丢行的判据五花八门：客户联系人要「姓名/手机/电话 至少一个」、
+ * 银行要「银行名/账号/户名 至少一个」、出口发票要「金额 > 0」。
+ * 判据不同，但后果都一样——**填了一半的行在保存时被静默扔掉，页面还提示成功**。
+ * 一周内已在合同货物明细、报价明细、样衣材料上各踩一次，所以这里按「保留条件」抽象。
+ *
+ * @param keptWhen     保存时会保留这一行的判据（与 buildDto 里的 filter 用同一份口径）
+ * @param touchedFields 用来判断"人是不是填过东西"的列；**别放有默认值的列**
+ */
+export function droppedButFilledRows<T extends Record<string, unknown>>(
+  rows: T[],
+  keptWhen: (r: T) => boolean,
+  touchedFields: string[],
+): number[] {
+  const out: number[] = [];
+  (rows ?? []).forEach((r, i) => {
+    if (!r || keptWhen(r)) return;                       // 会被保留，不用管
+    const touched = touchedFields.some((f) => {
+      const v = r[f];
+      if (Array.isArray(v)) return v.length > 0;
+      return !isBlank(v);
+    });
+    if (touched) out.push(i + 1);
+  });
+  return out;
+}
+
+/** 与 halfFilledMessage 同风格，但把"缺什么才留得住"说出来 */
+export function droppedMessage(label: string, rows: number[], needHint: string): string | null {
+  if (!rows.length) return null;
+  const head = rows.slice(0, 3).join('、');
+  const more = rows.length > 3 ? ` 等 ${rows.length} 行` : '';
+  return `${label}第 ${head} 行${more}填了内容，但${needHint}——补上或删掉该行，否则保存时这几行会被丢掉`;
+}

@@ -196,6 +196,7 @@
 import { errToast } from '@/api';
 import { useRoute } from 'vue-router';
 import { ref, reactive, computed, onMounted } from 'vue';
+import { droppedButFilledRows, droppedMessage } from '@/utils/lineCheck';
 import { ElMessage } from 'element-plus';
 import { Search, Plus } from '@element-plus/icons-vue';
 import FilePreviewDialog from '@/components/FilePreviewDialog.vue';
@@ -260,6 +261,13 @@ function resetForm() {
 }
 async function doCreate() {
   if (!form.invoice_no.trim()) { ElMessage.warning('请填写发票号'); return; }
+  // 金额 ≤ 0 的行会被下面这句丢掉。全空的行丢掉是对的，但「选了订单/填了款号却没填金额」
+  // 是人没填完，静默扔掉等于丢数据——原来只有"一行都不剩"时才提示，部分行被丢时一声不吭
+  //（8-26 深度审查：同类问题一周内已在合同/报价/样衣上各踩一次）
+  const dropped = droppedMessage('款项明细',
+    droppedButFilledRows(form.items as any[], (it: any) => Number(it.amount) > 0, ['order_id', 'style_no']),
+    '金额没填或不大于 0');
+  if (dropped) { ElMessage.error(dropped); return; }
   const items = form.items.filter((it) => Number(it.amount) > 0);
   if (!items.length) { ElMessage.warning('请至少填写一行款项(金额>0)'); return; }
   saving.value = true;

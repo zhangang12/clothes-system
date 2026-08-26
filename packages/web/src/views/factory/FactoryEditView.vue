@@ -170,6 +170,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, h } from 'vue';
+import { droppedButFilledRows, droppedMessage } from '@/utils/lineCheck';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
@@ -279,6 +280,13 @@ async function load() {
 }
 
 function buildDto() {
+  // 联系人里「填了部门/邮箱却没填姓名手机」的行，下面的 filter 会静默丢掉（8-26 深度审查）
+  const dropWarn = droppedMessage('联系人',
+    droppedButFilledRows(form.contacts as any[], (c: any) => !!(c.name || c.mobile || c.phone),
+      ['department', 'gender', 'title', 'mobile1', 'mobile2', 'email', 'remark', 'wechat']),
+    '缺姓名/手机/电话');
+  if (dropWarn) { ElMessage.error(dropWarn); return null; }
+
   const num = (v: any) => (v === '' || v == null ? undefined : Number(v));
   return {
     type: form.type, extraTypes: form.extraTypes ?? [], canInvoice: form.canInvoice, name: form.name,
@@ -299,6 +307,8 @@ function buildDto() {
     // 门户账号仅新建时开通（编辑不重置）
     portalAccount: !editId.value ? (form.portalAccount || undefined) : undefined,
     portalPassword: !editId.value ? (form.portalPassword || undefined) : undefined,
+    // 关键字段全空的整行会被丢掉——空行丢掉是对的，但「填了部门/邮箱却没填姓名手机」
+    // 是人没填完，静默扔掉等于丢数据（8-26 深度审查，与客户页同因）
     contacts: form.contacts.filter((c: any) => c.name || c.mobile || c.phone),
   };
 }
@@ -306,6 +316,7 @@ function buildDto() {
 async function save() {
   await formRef.value?.validate();
   const dto = buildDto();
+  if (!dto) return;                       // 有"填了一半会被丢掉"的联系人行，已在 buildDto 里提示
   if (!dto.contacts.length) { ElMessage.error('必须输入至少一个联系人！'); return; }
   saving.value = true;
   try {
