@@ -9,7 +9,15 @@
 //   customer 对客   —— 不含用料成本与供应商
 //   factory  对工厂 —— 不含客户信息与对客价
 //   internal 内部   —— 全量
-import { exportDocXlsx, d10, n2, n4, type Block } from './docExcel';
+import { exportDocXlsx, d10, numCell, type Block } from './docExcel';
+
+// 【数量与金额必须包 numCell】docExcel 给所有单元格钉了文本格式（款号形如 I27.230.03929，
+// 不钉成文本会被 Excel 截成 27.23），代价是数字也成了文本——选中一列右下角「求和=0」，
+// 写 =SUM() 也是 0。YSM 实测反馈（#115）：导出的订单表选中数量列求和为 0，没法二次核算。
+// numCell 是这一层唯一的数值出口；空值仍返回空单元格（未填 ≠ 0）。
+const qty = (v: unknown) => numCell(v, '#,##0');      // 件数：整数
+const money4 = (v: unknown) => numCell(v, '#,##0.0000'); // 单价：4 位
+const money2 = (v: unknown) => numCell(v, '#,##0.00');   // 金额：2 位
 
 export type OrderExportMode = 'customer' | 'factory' | 'internal';
 
@@ -28,13 +36,13 @@ function matrixBlock(matrix: any): Block {
   const body = rows.map((r) => {
     const qtys: any[] = r.qtys ?? [];
     return [r.style_no, r.color, ...(withArticle ? [r.article || '—'] : []), r.size,
-      ...pos.map((_: any, i: number) => Number(qtys[i]) || 0),
-      qtys.reduce((s: number, q: any) => s + (Number(q) || 0), 0)];
+      ...pos.map((_: any, i: number) => qty(Number(qtys[i]) || 0)),
+      qty(qtys.reduce((s: number, q: any) => s + (Number(q) || 0), 0))];
   });
   const foot = body.length
     ? ['合计', '', ...(withArticle ? [''] : []), '',
-      ...pos.map((_: any, i: number) => rows.reduce((s: number, r: any) => s + (Number(r.qtys?.[i]) || 0), 0)),
-      rows.reduce((s: number, r: any) => s + (r.qtys ?? []).reduce((a: number, q: any) => a + (Number(q) || 0), 0), 0)]
+      ...pos.map((_: any, i: number) => qty(rows.reduce((s: number, r: any) => s + (Number(r.qtys?.[i]) || 0), 0))),
+      qty(rows.reduce((s: number, r: any) => s + (r.qtys ?? []).reduce((a: number, q: any) => a + (Number(q) || 0), 0), 0))]
     : undefined;
   return { kind: 'table', title: '数量搭配（按 PO）', head, rows: body, foot, empty: '（未填写数量搭配）' };
 }
@@ -48,8 +56,8 @@ function materialBlock(materials: any[], mode: OrderExportMode): Block {
   const rows = (materials ?? []).map((m, i) => [
     i + 1, m.item_name, m.part || '—', m.color || '—',
     ...(withSupplier ? [m.supplier || '—'] : []), m.unit || '—',
-    n4(m.net_usage), m.loss_rate ?? '—', m.final_purchase ?? m.total_purchase ?? '—',
-    ...(withCost ? [n4(m.unit_price), n2(m.budget)] : []),
+    money4(m.net_usage), numCell(m.loss_rate, '#,##0.##'), qty(m.final_purchase ?? m.total_purchase),
+    ...(withCost ? [money4(m.unit_price), money2(m.budget)] : []),
   ]);
   return { kind: 'table', title: '用料核算', head, rows, empty: '（无用料核算记录）' };
 }
@@ -68,7 +76,7 @@ export async function exportOrderExcel(detail: any, mode: OrderExportMode): Prom
     ['品名', detail.style_name ?? '—'],
     ['制单日期', d10(detail.make_date)],
     ['交货期', d10(detail.delivery_date)],
-    ['大货总数', detail.qty_total ?? 0],
+    ['大货总数', qty(detail.qty_total ?? 0)],
     ['业务员', detail.salesperson ?? '—'],
   ];
   if (showCustomer) {
@@ -78,8 +86,8 @@ export async function exportOrderExcel(detail: any, mode: OrderExportMode): Prom
   }
   if (showPrice) {
     pairs.push(['币种', detail.currency ?? '—']);
-    pairs.push(['单价', n4(detail.unit_price)]);
-    pairs.push(['金额', n2(detail.total_amount)]);
+    pairs.push(['单价', money4(detail.unit_price)]);
+    pairs.push(['金额', money2(detail.total_amount)]);
   }
 
   const blocks: Block[] = [

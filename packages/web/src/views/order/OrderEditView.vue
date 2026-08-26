@@ -722,7 +722,10 @@ function buildDto() {
       puller: m.puller || undefined, zipper_teeth: m.zipperTeeth || undefined, code_band: m.codeBand || undefined,
       supplier: m.supplier, unit: m.unit, unit_price: num(m.unitPrice), net_usage: num(m.netUsage), loss_rate: num(m.lossRate) ?? 3,
       split_mode: m.splitMode, final_purchase: num(m.finalPurchase),
-      size_specs: m.splitMode === 'BY_SIZE' && m.sizeSpecs && Object.values(m.sizeSpecs).some((v: any) => String(v ?? '').trim()) ? m.sizeSpecs : undefined,
+      // 【条件要与界面一致】界面按 hasSizeDim（BY_SIZE 或 BY_BOTH）显示「尺寸」列让人填，
+      // 这里却只发 BY_SIZE——选「颜色+尺码」时填的尺寸保存即丢，合同明细自然带不进尺寸（#113 YSM）。
+      // 后端本就支持：contract.service.ts 里写着「BY_BOTH 时按尺码维度取」。
+      size_specs: hasSizeDim(m.splitMode) && m.sizeSpecs && Object.values(m.sizeSpecs).some((v: any) => String(v ?? '').trim()) ? m.sizeSpecs : undefined,
       round_up: m.roundUp === 1 || m.roundUp === 0 ? m.roundUp : undefined, sort_order: i,
     })),
   };

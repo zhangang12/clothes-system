@@ -17,13 +17,14 @@ vi.mock('vue-router', () => ({
 
 // ── API mocks ────────────────────────────────────────────────────────────────
 const mockGet = vi.fn();
+const mockUpdate = vi.fn().mockResolvedValue({ data: { id: 1 } });
 vi.mock('@/api', () => ({ errToast: vi.fn() }));
 vi.mock('@/api/order', () => ({
   orderApi: {
     get: (...a: any[]) => mockGet(...a),
     list: vi.fn().mockResolvedValue({ data: [], total: 0 }),
     create: vi.fn(),
-    update: vi.fn(),
+    update: (...a: any[]) => mockUpdate(...a),
     importFromQuote: vi.fn(),
     advance: vi.fn(),
   },
@@ -148,5 +149,45 @@ describe('OrderEditView · 尺码矩阵表尾合计（H3 回归）', () => {
     const wrapper = mountView();
     // 列序：款号 颜色 洗标号 尺码 | PO-A PO-B | TOTAL
     expect(await summaryTexts(wrapper, '10')).toEqual(['各PO合计', '', '', '', '4', '6', '10']);
+  });
+});
+
+
+// ── #113：拆分选「颜色+尺码」时，界面让填的「尺寸」保存时被丢掉 ──────────────
+// 界面按 hasSizeDim（BY_SIZE 或 BY_BOTH）显示尺寸列，而 buildDto 里只发 BY_SIZE，
+// 于是选「颜色+尺码」填的尺寸存不进去，合同明细带不出尺寸（YSM 实测）。
+// 后端本就支持：contract.service.ts 写着「BY_BOTH 时按尺码维度取」。
+describe('用料核算 · 各码尺寸的保存', () => {
+  const orderWith = (split: string) => ({
+    data: {
+      id: 1, order_no: 'O-1', style_no: 'WR02ADM4420', qty_total: 100, split_mode: 'NONE',
+      matrix: { matrix_data: { pos: [{ po_no: 'PO-1' }], rows: [{ style_no: 'WR02ADM4420', color: '黑色', size: 'S', qtys: [100] }] } },
+      materials: [{ id: 7, item_name: '拉链1', split_mode: split, size_specs: { S: '18cm' }, net_usage: 1, loss_rate: 1.5 }],
+      shipments: [],
+    },
+  });
+
+  const savedMaterial = async (split: string) => {
+    mockUpdate.mockClear();
+    mockGet.mockResolvedValue(orderWith(split));
+    const w = mountView();
+    await vi.waitFor(() => expect(mockGet).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
+    const btn = w.findAll('button').find((b) => b.text() === '保存');
+    await btn!.trigger('click');
+    await vi.waitFor(() => expect(mockUpdate).toHaveBeenCalled());
+    return (mockUpdate.mock.calls.at(-1)![1] as any).materials?.[0];
+  };
+
+  it('UT-ORD-SS1: 拆分=颜色+尺码 时，各码尺寸要存下去', async () => {
+    expect((await savedMaterial('BY_BOTH'))?.size_specs).toEqual({ S: '18cm' });
+  });
+
+  it('UT-ORD-SS2: 拆分=按尺码 时照旧能存（别把老路走坏）', async () => {
+    expect((await savedMaterial('BY_SIZE'))?.size_specs).toEqual({ S: '18cm' });
+  });
+
+  it('UT-ORD-SS3: 不拆分时不发尺寸——那一列界面上根本不显示', async () => {
+    expect((await savedMaterial('NONE'))?.size_specs).toBeUndefined();
   });
 });

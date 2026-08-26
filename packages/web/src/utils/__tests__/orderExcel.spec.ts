@@ -34,6 +34,9 @@ const DETAIL = {
 };
 
 const blocksOf = () => exportDocXlsx.mock.calls.at(-1)![0].blocks as any[];
+/** 数值单元格取值：docExcel 里数字必须包成 { num, fmt }，直接给裸数字会被写成文本
+ *  （#115 YSM：导出的订单表选中数量列，Excel 右下角求和=0） */
+const numOf = (c: any) => (c && typeof c === 'object' && 'num' in c ? c.num : c);
 const flat = () => JSON.stringify(blocksOf());
 const tableTitled = (t: string) => blocksOf().find((b) => b.kind === 'table' && b.title === t);
 
@@ -86,10 +89,10 @@ describe('订单导出 · 数量搭配', () => {
   it('UT-ORD-X5: 每行有小计、末行有各 PO 合计', async () => {
     await exportOrderExcel(DETAIL, 'internal');
     const t = tableTitled('数量搭配（按 PO）');
-    expect(t.rows[0].at(-1)).toBe(70);   // 60+10
-    expect(t.rows[1].at(-1)).toBe(90);   // 84+6
-    expect(t.foot.at(-1)).toBe(160);
-    expect(t.foot.slice(-3, -1)).toEqual([144, 16]); // PO-1 / PO-2 各自合计
+    expect(numOf(t.rows[0].at(-1))).toBe(70);   // 60+10
+    expect(numOf(t.rows[1].at(-1))).toBe(90);   // 84+6
+    expect(numOf(t.foot.at(-1))).toBe(160);
+    expect(t.foot.slice(-3, -1).map(numOf)).toEqual([144, 16]); // PO-1 / PO-2 各自合计
   });
 
   it('UT-ORD-X6: 洗标号整列为空时不占版面（老订单没填过这列）', async () => {
@@ -120,10 +123,49 @@ describe('订单导出 · 抬头字段', () => {
 
   it('UT-ORD-X11b: 抬头几格取的是真列名，写错会静默变空', async () => {
     await exportOrderExcel(DETAIL, 'internal');
-    expect(kvOf('大货总数')).toBe(500);            // qty_total，不是 total_qty
+    expect(numOf(kvOf('大货总数'))).toBe(500);     // qty_total，不是 total_qty
     expect(String(kvOf('制单日期'))).toBe('2026-08-18'); // make_date，不是 order_date
     expect(kvOf('品名')).toBe('男式夹克');
     expect(kvOf('业务员')).toBe('姚霜梅');
+  });
+});
+
+describe('订单导出 · 数字要是数字', () => {
+  // #115：docExcel 把所有单元格钉成文本（款号 I27.230.03929 不能被截成 27.23），
+  // 数字必须走 numCell 这个唯一出口，否则 Excel 里选中一列「求和=0」，没法二次核算。
+  const isNumCell = (c: any) => !!c && typeof c === 'object' && typeof c.num === 'number';
+
+  it('UT-ORD-X12: 搭配表里每个 PO 的数量都是数值单元格，不是文本', async () => {
+    await exportOrderExcel(DETAIL, 'internal');
+    const t = tableTitled('数量搭配（按 PO）');
+    expect(isNumCell(t.rows[0][4])).toBe(true);
+    expect(isNumCell(t.rows[0].at(-1))).toBe(true);
+    expect(t.foot.slice(-3).every(isNumCell)).toBe(true);
+  });
+
+  it('UT-ORD-X13: 用料核算的耗用/采购量/单价/预算也都是数值', async () => {
+    await exportOrderExcel(DETAIL, 'internal');
+    const t = tableTitled('用料核算');
+    const row = t.rows[0];
+    expect(row.filter(isNumCell).length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('UT-ORD-X14: 款号、颜色仍是原文本——包成数值会变空或被 Excel 截断', async () => {
+    await exportOrderExcel(DETAIL, 'internal');
+    const t = tableTitled('数量搭配（按 PO）');
+    // 钉死原值：只断言 typeof 是 string 会被骗——numCell('WR02ADW3692') 返回的空串也是 string
+    expect(t.rows[0][0]).toBe('WR02ADW3692');
+    expect(t.rows[0][1]).toBe('深咖');
+  });
+
+  it('UT-ORD-X15: 没填的数值给空单元格，不是 0——未填 ≠ 用量为零', async () => {
+    await exportOrderExcel({ ...DETAIL, materials: [{ item_name: '面料' }] }, 'internal');
+    const t = tableTitled('用料核算');
+    // 逐格钉住，别用 some(...==='')：随便哪一格空着都能骗过去
+    const i = t.head.indexOf('单件耗用');
+    expect(i).toBeGreaterThan(0);
+    expect(t.rows[0][i]).toBe('');
+    expect(t.rows[0][t.head.indexOf('单价')]).toBe('');
   });
 });
 

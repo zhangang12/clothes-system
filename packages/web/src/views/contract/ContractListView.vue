@@ -15,7 +15,7 @@
           <el-select v-model="query.type" clearable placeholder="全部类型" style="width:130px" @change="load">
             <el-option label="材料合同" value="MATERIAL" /><el-option label="加工合同" value="PROCESS" /><el-option label="补料合同" value="SUPPLEMENT" />
           </el-select>
-          <el-select v-model="query.portal_status" clearable placeholder="门户状态" style="width:120px" @change="load">
+          <el-select v-model="query.portal_status" clearable placeholder="门户状态（当前停在哪一步）" style="width:150px" @change="load">
             <el-option v-for="s in portalStatuses" :key="s.v" :label="s.l" :value="s.v" />
           </el-select>
           <el-button type="primary" @click="load">搜索</el-button>
@@ -247,7 +247,11 @@ function isOverdue(row: any): boolean {
   const due = new Date(String(row.due_date).slice(0, 10));
   return !isNaN(due.getTime()) && due < new Date() && row.portal_status !== 'RECONCILED';
 }
-const portalStatuses = [{ v: 'DRAFT', l: '草稿' }, { v: 'PUSHED', l: '已推送' }, { v: 'STAMPED', l: '已盖章' }, { v: 'SHIPPING', l: '出货中' }, { v: 'RECONCILED', l: '已对账' }, { v: 'COMPLETED', l: '已完成' }];
+// 【筛选按「当前停在哪一步」精确匹配，不是「走过哪一步」】门户状态是条流水线：
+// 草稿→已推送→已盖章→出货中→已对账→已完成。选「已盖章」只会列出**正停在**这一步的，
+// 已经发货的那张虽然也盖过章，但不会出现——YSM 就是这么以为合同"不显示"的（#114）。
+// 所以把待办阶段写进选项文案，让"当前状态"这层意思一眼可见。
+const portalStatuses = [{ v: 'DRAFT', l: '草稿' }, { v: 'PUSHED', l: '已推送（待盖章）' }, { v: 'STAMPED', l: '已盖章（待发货）' }, { v: 'SHIPPING', l: '出货中' }, { v: 'RECONCILED', l: '已对账' }, { v: 'COMPLETED', l: '已完成' }];
 const typeLabel = (t: string) => ({ MATERIAL: '材料合同', PROCESS: '加工合同', SUPPLEMENT: '补料合同' } as any)[t] ?? t;
 const portalLabel = (s: string) => ({ DRAFT: '草稿', PUSHED: '已推送', STAMPED: '已盖章', SHIPPING: '出货中', RECONCILED: '已对账', COMPLETED: '已完成' } as any)[s] ?? s;
 const portalTagType = (s: string): any => ({ DRAFT: 'info', PUSHED: 'warning', STAMPED: 'primary', SHIPPING: 'success', RECONCILED: 'success', COMPLETED: 'success' } as any)[s] ?? 'info';
