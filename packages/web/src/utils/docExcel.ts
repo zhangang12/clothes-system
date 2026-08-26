@@ -58,6 +58,17 @@ export const numCell = (v: unknown, fmt = '#,##0.00'): NumCell | '' => {
   return Number.isFinite(x) ? { num: x, fmt } : '';
 };
 
+/**
+ * 「能转就转数值，转不了保留原文」——给**自由文本的数字列**用（样衣材料的数量/克重、
+ * 报价耗用这类）。numCell 对转不动的值返回空串，用在这些列上会把「3条」「若干」直接丢掉；
+ * 这里退回原文，数字照样可求和、历史脏值一个不丢（#115 收尾时的口径）。
+ */
+export const numOr = (v: unknown, fmt = '#,##0.00'): NumCell | string => {
+  if (v === null || v === undefined || v === '') return '';
+  const x = Number(v);
+  return Number.isFinite(x) ? { num: x, fmt } : String(v);
+};
+
 /** 空值渲染成空单元格而不是 "null"/"undefined" */
 export const val = (v: unknown): string => {
   // 图片单元格若走到 HTML 路径，String() 会渲染成 "[object Object]"。这里退回文字标注：

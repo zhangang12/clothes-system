@@ -5,7 +5,12 @@
 // 【走 exportDocXlsx 而不是 exportDocExcel】带款图。原来内联成 <img src="data:...">
 // 塞进 HTML 工作表的 .xls，Excel 打开时那张图根本不渲染（和合同导出同一个病，2026-08-06 一并修）。
 
-import { exportDocXlsx, d10, n2, n4, sum, imgCell, type Block } from './docExcel';
+import { exportDocXlsx, d10, numOr, sum, imgCell, type Block } from './docExcel';
+
+// 数值单元格（#115 同口径，理由见 contractExcel.ts）：耗用/单价 4 位、金额 2 位、数量 General
+const qty = (v: unknown) => numOr(v, 'General');
+const money2 = (v: unknown) => numOr(v, '#,##0.00');
+const money4 = (v: unknown) => numOr(v, '#,##0.0000');
 
 export async function exportQuoteExcel(detail: any): Promise<void> {
   const items: any[] = detail.items ?? [];
@@ -24,14 +29,14 @@ export async function exportQuoteExcel(detail: any): Promise<void> {
         ['样衣编号', detail.sample_no],
         ['状态', detail.status],
         ['币种', detail.currency],
-        ['汇率', n4(detail.exchange_rate)],
+        ['汇率', money4(detail.exchange_rate)],
         ['贸易国别', detail.trade_country],
         ['结汇方式', detail.settlement_method],
         ['价格条款', detail.price_terms],
-        ['数量', detail.quote_qty],
+        ['数量', qty(detail.quote_qty)],
         ['利润率', detail.profit_rate != null ? `${detail.profit_rate}%` : ''],
-        ['人民币合计(含利润率)', n2(detail.rmb_total)],
-        ['美金合计', n2(detail.usd_total)],
+        ['人民币合计(含利润率)', money2(detail.rmb_total)],
+        ['美金合计', money2(detail.usd_total)],
         ['备注说明', detail.total_remark],
       ],
     },
@@ -41,9 +46,9 @@ export async function exportQuoteExcel(detail: any): Promise<void> {
       head: ['#', '部位', '品名', '门幅', '颜色', '单位', '报价耗用', '单价', '含损金额'],
       rows: items.map((it, i) => [
         i + 1, it.part, it.item_name, it.width, it.color, it.unit,
-        n4(it.quote_usage), n4(it.rmb_price), n2(it.loss_amount),
+        money4(it.quote_usage), money4(it.rmb_price), money2(it.loss_amount),
       ]),
-      foot: ['合计', '', '', '', '', '', '', '', n2(sum(items, (it) => it.loss_amount))],
+      foot: ['合计', '', '', '', '', '', '', '', money2(sum(items, (it) => it.loss_amount))],
       empty: '（无报价明细）',
     },
   ];
@@ -55,10 +60,10 @@ export async function exportQuoteExcel(detail: any): Promise<void> {
       head: ['#', '费用项目', '单价', '数量', '金额'],
       // 费用金额是算出来的、库里不存:与 quotePrint.ts 口径一致(单价 × 数量,数量缺省按 1)
       rows: fees.map((f, i) => [
-        i + 1, f.fee_name, n2(f.rmb_price), n2(f.quote_usage ?? 1),
-        n2((Number(f.rmb_price) || 0) * (Number(f.quote_usage ?? 1) || 0)),
+        i + 1, f.fee_name, money2(f.rmb_price), qty(f.quote_usage ?? 1),
+        money2((Number(f.rmb_price) || 0) * (Number(f.quote_usage ?? 1) || 0)),
       ]),
-      foot: ['合计', '', '', '', n2(sum(fees, (f) => (Number(f.rmb_price) || 0) * (Number(f.quote_usage ?? 1) || 0)))],
+      foot: ['合计', '', '', '', money2(sum(fees, (f) => (Number(f.rmb_price) || 0) * (Number(f.quote_usage ?? 1) || 0)))],
     });
   }
 

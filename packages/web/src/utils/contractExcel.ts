@@ -6,7 +6,14 @@
 // <img src="data:..."> 塞进 HTML 工作表的 .xls——**Excel 根本不渲染 data: URI 图片**，
 // 文件下下来照片就是不显示、还不报错。真 .xlsx 才能把图打包进去。详见 docExcel.ts 文件头。
 
-import { exportDocXlsx, d10, n2, n4, sum, sensitiveMark, imgCell, type Block } from './docExcel';
+import { exportDocXlsx, d10, numOr, sum, sensitiveMark, imgCell, type Block } from './docExcel';
+
+// 【数量与金额必须是数值单元格】docExcel 为保住款号把所有单元格钉成文本，
+// 代价是 Excel 里选中一列「求和=0」（#115 YSM，订单那张已先修，这里同口径收尾）。
+// 数量用 General（合同数量可带 2 位小数，钉死小数位会平白多出 .00）；金额 2 位、单价 4 位。
+const qty = (v: unknown) => numOr(v, 'General');
+const money2 = (v: unknown) => numOr(v, '#,##0.00');
+const money4 = (v: unknown) => numOr(v, '#,##0.0000');
 
 const typeLabel = (t: string): string =>
   ({ MATERIAL: '材料合同', PROCESS: '加工合同', SUPPLEMENT: '补料合同' } as Record<string, string>)[t] ?? t;
@@ -37,7 +44,7 @@ export async function exportContractExcel(detail: any): Promise<void> {
     ['关联款号', detail.style_nos],
     ['母合同 ID', detail.parent_id],
     ['币种', detail.currency],
-    ['合同金额', n2(detail.total_amount)],
+    ['合同金额', money2(detail.total_amount)],
     ['定金比例(%)', detail.deposit_ratio],
     ['中期款比例(%)', detail.mid_ratio],
     ['尾款比例(%)', detail.final_ratio],
@@ -65,9 +72,9 @@ export async function exportContractExcel(detail: any): Promise<void> {
     ['盖章供应商', detail.stamped_by_supplier],
     ['盖章时间', d10(detail.stamped_at)],
     ['纸质盖章照片', sensitiveMark(detail.stamp_paper_url)],
-    ['合同量', qs.contractQty],
-    ['累计实发', qs.shippedQty ?? detail.shipped_qty],
-    ['数量差额', qs.diffQty],
+    ['合同量', qty(qs.contractQty)],
+    ['累计实发', qty(qs.shippedQty ?? detail.shipped_qty)],
+    ['数量差额', qty(qs.diffQty)],
     ['最后发货日', d10(detail.last_ship_date)],
     ['发货完成时间', d10(detail.ship_done_at)],
     ['源订单已变更', detail.source_order_changed ? '是，请核对材料明细' : '否'],
@@ -78,7 +85,7 @@ export async function exportContractExcel(detail: any): Promise<void> {
   // 材料照片（公开上传）：真正嵌进 xlsx 的缩略图，离线可看；抓不到/超 2MB 由公共层退回可点链接
   const matRows: unknown[][] = mats.map((m, i) => [
     i + 1, m.item_name, m.spec, m.color, m.size, m.style_no, m.unit,
-    m.qty, m.qty_source, n4(m.unit_price), n2(m.amount), d10(m.delivery_date),
+    qty(m.qty), m.qty_source, money4(m.unit_price), money2(m.amount), d10(m.delivery_date),
     m.photo_url ? imgCell(m.photo_url, 110, '图（系统内查看）') : '', m.remark,
   ]);
 
@@ -89,7 +96,7 @@ export async function exportContractExcel(detail: any): Promise<void> {
       title: isProcess ? '加工明细' : '材料明细',
       head: ['#', '品名', '规格', '颜色', '尺码', '款号', '单位', '数量', '数量来源', '单价', '小计', '交货期限', '照片', '备注'],
       rows: matRows,
-      foot: ['合计', '', '', '', '', '', '', sum(mats, (m) => m.qty), '', '', n2(sum(mats, (m) => m.amount)), '', ''],
+      foot: ['合计', '', '', '', '', '', '', qty(sum(mats, (m) => m.qty)), '', '', money2(sum(mats, (m) => m.amount)), '', ''],
       empty: '（无货物明细）',
     },
   ];
@@ -100,13 +107,13 @@ export async function exportContractExcel(detail: any): Promise<void> {
       title: '发货批次（逐批锁价）',
       head: ['#', '发货单号', '发货日期', '数量', '锁定单价', '金额', '审批状态', '对账状态', '快递公司', '快递单号', '收货地址', '合并组', '物料行', '操作人'],
       rows: ships.map((b, i) => [
-        i + 1, b.ship_no, d10(b.ship_date), b.qty, n4(b.snapshot_unit_price), n2(b.amount),
+        i + 1, b.ship_no, d10(b.ship_date), qty(b.qty), money4(b.snapshot_unit_price), money2(b.amount),
         approvalLabel(b.approval_status), b.reconcile_id ? `已对账（对账单#${b.reconcile_id}）` : '未对账',
         b.express_company, b.express_no, b.ship_address, b.merge_no,
         (b.items ?? []).map((it: any) => `${it.item_name ?? '行'}×${+it.qty}`).join(' / '),
         b.operator,
       ]),
-      foot: ['合计', '', '', sum(ships, (b) => b.qty), '', n2(sum(ships, (b) => b.amount)), '', '', '', '', '', '', '', ''],
+      foot: ['合计', '', '', qty(sum(ships, (b) => b.qty)), '', money2(sum(ships, (b) => b.amount)), '', '', '', '', '', '', '', ''],
     });
   }
 

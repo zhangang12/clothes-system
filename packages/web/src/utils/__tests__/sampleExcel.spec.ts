@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { exportSampleExcel } from '../sampleExcel';
-import { exportToXlsx, flatten, imageCount, stubImageOk, stubImageFail } from './xlsxTestKit';
+import { exportToXlsx, flatten, imageCount, stubImageOk, stubImageFail, numericCells } from './xlsxTestKit';
 
 // 读回 xlsx 的夹具统一收在 xlsxTestKit（合同/报价导出的用例也在用同一份）
 const exportAndRead = (detail: any) => exportToXlsx(() => exportSampleExcel(detail));
@@ -75,5 +75,26 @@ describe('样衣导出 Excel（真 .xlsx）', () => {
   it('无材料明细也能正常导出', async () => {
     const { ws } = await exportAndRead({ ...base, materials: [] });
     expect(flatten(ws)).toContain('（无材料明细）');
+  });
+});
+
+
+// ── #115 收尾：数量/工价必须是数值单元格，历史脏值保原文，款号保文本 ──
+describe('数字要是数字（#115）', () => {
+  it('寄样轮次的件数、工价与合计都是数值——Excel 里选中就能求和', async () => {
+    const { ws } = await exportAndRead({ ...base, shipRounds: rounds });
+    const nums = numericCells(ws);
+    for (const n of [2, 3, 30, 60, 90, 5, 150]) expect(nums).toContain(n); // 5=件数合计 150=金额合计
+  });
+
+  it('材料数量是数值；款号仍是文本不被截成 27.23', async () => {
+    const { ws } = await exportAndRead(base);
+    expect(numericCells(ws)).toContain(3);
+    expect(flatten(ws)).toContain('I27.230.03929');
+  });
+
+  it('历史脏值「3条」保留原文，不许因为转不成数字被丢成空格', async () => {
+    const { ws } = await exportAndRead({ ...base, materials: [{ item_name: '拉链', qty: '3条' }] });
+    expect(flatten(ws)).toContain('3条');
   });
 });

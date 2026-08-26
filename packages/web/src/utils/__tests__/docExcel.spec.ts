@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { buildDocXls, sum, n2, d10, val, imgCell, isImageCell, imageSize, type Block } from '../docExcel';
 import { exportQuoteExcel } from '../quoteExcel';
-import { exportToXlsx, flatten, imageCount, stubImageOk, stubImageFail, stubImageTooBig, pngHeader, jpegHeader, gifHeader } from './xlsxTestKit';
+import { exportToXlsx, flatten, numericCells, imageCount, stubImageOk, stubImageFail, stubImageTooBig, pngHeader, jpegHeader, gifHeader } from './xlsxTestKit';
 
 // 抓取写入 Blob 的内容，断言 .xls(HTML) 路径实际写了什么
 async function exportedHtml(fn: () => Promise<void> | void): Promise<string> {
@@ -123,7 +123,8 @@ describe('报价单导出 Excel（真 .xlsx）', () => {
     const all = flatten(ws);
     expect(all).toContain('面料A');
     expect(all).toContain('里布B');
-    expect(all).toContain('44.00'); // 36 + 8
+    // #115 后金额是数值单元格（否则 Excel 选中一列求和=0），断言落在数值集合里
+    expect(numericCells(ws)).toContain(44); // 36 + 8
   });
 
   it('业务要求全量不脱敏：中间商/买家/利润率都在导出件里', async () => {
@@ -140,7 +141,7 @@ describe('报价单导出 Excel（真 .xlsx）', () => {
     }));
     const all = flatten(ws);
     expect(all).toContain('费用明细');
-    expect(all).toContain('250.00'); // 50×1 + 100×2
+    expect(numericCells(ws)).toContain(250); // 50×1 + 100×2
   });
 
   it('无费用时不输出空的费用明细表', async () => {

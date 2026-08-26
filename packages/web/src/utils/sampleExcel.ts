@@ -13,7 +13,7 @@
 // 注意：本表的版式是手写的（不走 docExcel 的 Block 声明式排版），但抓图/解 data URI 这两件
 // 公共事已收进 docExcel —— 合同、报价的导出也在用同一份，别再在这儿复制一遍。
 
-import { toDataUrl, splitDataUrl } from './docExcel';
+import { toDataUrl, splitDataUrl, numOr, isNumCell } from './docExcel';
 import { splitColorGroups, maxColorGroups, colorGroupLabel } from './colorGroups';
 
 const d10 = (v: unknown): string => (v ? String(v).slice(0, 10) : '');
@@ -58,9 +58,15 @@ export async function exportSampleExcel(detail: any): Promise<void> {
     return row;
   };
   const bodyRow = (cells: any[]) => {
-    const row = ws.addRow(cells);
-    // 一律文本格式：款号形如 I27.230.03929，不强制会被 Excel 当数字截断成 27.23
-    row.eachCell((c) => { c.numFmt = '@'; c.border = BORDER as any; });
+    // 数值格走 numOr 包装（{num,fmt}），其余一律文本：款号形如 I27.230.03929，
+    // 不钉文本会被 Excel 截成 27.23；可全钉文本又会让数量/金额「求和=0」（#115）。
+    const row = ws.addRow(cells.map((c) => (isNumCell(c) ? c.num : c)));
+    cells.forEach((src, i) => {
+      const c = row.getCell(i + 1);
+      c.numFmt = isNumCell(src) ? (src.fmt ?? '#,##0.00') : '@';
+      c.border = BORDER as any;
+      if (isNumCell(src)) c.alignment = { vertical: 'middle', horizontal: 'right' };
+    });
     return row;
   };
 
@@ -69,14 +75,14 @@ export async function exportSampleExcel(detail: any): Promise<void> {
   for (const [k1, v1, k2, v2] of [
     ['样衣编号', detail.sample_no, '客户款号', detail.style_no],
     ['样衣类别', cats, '样衣尺码', detail.sample_size],
-    ['样衣数量', detail.sample_qty, '中间商', detail.middleman_name],
+    ['样衣数量', numOr(detail.sample_qty, 'General'), '中间商', detail.middleman_name],
     ['最终买家', detail.buyer_name, '制版师', detail.patternmaker_name],
     ['制单人', detail.maker, '制单日期', d10(detail.make_date)],
     ['寄样日期', d10(shipDate), '收件人', detail.recipient],
     ['材料寄出单号', shipNo, '寄回单号', detail.return_no],
-    ['件数', detail.piece_count, '成衣备注', detail.garment_remark],
+    ['件数', numOr(detail.piece_count, 'General'), '成衣备注', detail.garment_remark],
   ] as any[][]) {
-    const row = bodyRow([val(k1), val(v1), val(k2), val(v2)]);
+    const row = bodyRow([val(k1), isNumCell(v1) ? v1 : val(v1), val(k2), isNumCell(v2) ? v2 : val(v2)]);
     row.getCell(1).fill = KEY_FILL as any; row.getCell(1).font = { bold: true };
     row.getCell(3).fill = KEY_FILL as any; row.getCell(3).font = { bold: true };
   }
@@ -87,12 +93,12 @@ export async function exportSampleExcel(detail: any): Promise<void> {
     titleRow('寄样跟踪', 9);
     headerRow(['轮次', '尺码', '件数', '寄出日期', '寄出单号', '寄回日期', '工价单价', '工价金额', '备注']);
     rounds.forEach((r, i) => bodyRow([
-      val(r.round_no ?? i + 1), val(r.size), val(r.qty), d10(r.ship_date), val(r.ship_no),
-      d10(r.return_date), val(r.labor_unit_price), val(r.labor_amount), val(r.remark),
+      val(r.round_no ?? i + 1), val(r.size), numOr(r.qty, 'General'), d10(r.ship_date), val(r.ship_no),
+      d10(r.return_date), numOr(r.labor_unit_price, '#,##0.00'), numOr(r.labor_amount, '#,##0.00'), val(r.remark),
     ]));
     const qtySum = rounds.reduce((s, r) => s + (Number(r.qty) || 0), 0);
     const amtSum = +rounds.reduce((s, r) => s + (Number(r.labor_amount) || 0), 0).toFixed(2);
-    const sumRow = bodyRow(['合计', '', String(qtySum), '', '', '', '', String(amtSum), '']);
+    const sumRow = bodyRow(['合计', '', numOr(qtySum, 'General'), '', '', '', '', numOr(amtSum, '#,##0.00'), '']);
     sumRow.eachCell((c) => { c.font = { bold: true }; });
   }
 
@@ -114,8 +120,8 @@ export async function exportSampleExcel(detail: any): Promise<void> {
   if (mats.length) {
     mats.forEach((m, i) => bodyRow([
       String(i + 1), val(m.item_name), val(m.width), ...colorVals(m), val(m.part), val(m.composition),
-      val(m.code_band), val(m.zipper_length), val(m.qty), val(m.gram_weight), val(m.size),
-      val(m.actual_usage), val(m.supplier_name), val(m.remark),
+      val(m.code_band), val(m.zipper_length), numOr(m.qty, 'General'), numOr(m.gram_weight, 'General'), val(m.size),
+      numOr(m.actual_usage, 'General'), val(m.supplier_name), val(m.remark),
     ]));
   } else {
     bodyRow(['（无材料明细）']);

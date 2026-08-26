@@ -92,3 +92,12 @@ export function stubImageTooBig(): void {
     blob: async () => ({ size: 3 * 1024 * 1024, type: 'image/png' }),
   }));
 }
+
+/** 数值单元格集合（value 是 number 且 numFmt 不是文本 '@'）——#115 后金额/数量必须落在这里 */
+export function numericCells(ws: ExcelJS.Worksheet): number[] {
+  const out: number[] = [];
+  ws.eachRow((row) => row.eachCell((c) => {
+    if (typeof c.value === 'number' && c.numFmt !== '@') out.push(c.value);
+  }));
+  return out;
+}

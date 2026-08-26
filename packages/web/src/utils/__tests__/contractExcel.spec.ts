@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { exportContractExcel } from '../contractExcel';
-import { exportToXlsx, flatten, imageCount, stubImageOk, stubImageFail } from './xlsxTestKit';
+import { exportToXlsx, flatten, imageCount, stubImageOk, stubImageFail, numericCells } from './xlsxTestKit';
 
 const base: any = {
   contract_no: 'CG20260806001',
@@ -36,7 +36,9 @@ describe('合同导出 Excel（真 .xlsx）', () => {
     expect(all).toContain('苏州市坤业纺织有限公司');
     expect(all).toContain('400消光春亚纺');
     expect(all).toContain('700');       // 数量合计 200+500
-    expect(all).toContain('12800.00');  // 金额合计 2500+10300
+    // 12800 出现两次：kv「合同金额」+ 明细合计行——都得是数值。只断 contain 会被 kv 那格顶包，
+    // 明细合计退回文本时照样绿（变异实测踩过），所以按出现次数钉
+    expect(numericCells(ws).filter((n) => n === 12800).length).toBeGreaterThanOrEqual(2);
   });
 
   it('款号按文本存，不会被 Excel 当数字截断成 27.23', async () => {
@@ -108,7 +110,7 @@ describe('合同导出 Excel（真 .xlsx）', () => {
     expect(all).toContain('发货批次（逐批锁价）');
     expect(all).toContain('FH-001');
     expect(all).toContain('200');      // 120+80
-    expect(all).toContain('2500.00');  // 1500+1000
+    expect(numericCells(ws)).toContain(2500);  // 1500+1000（数值单元格）
     expect(flatten((await exportToXlsx(() => exportContractExcel(base))).ws)).not.toContain('发货批次');
   });
 
