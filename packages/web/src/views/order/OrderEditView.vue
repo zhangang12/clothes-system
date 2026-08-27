@@ -9,7 +9,9 @@
       </div>
       <div class="ops">
         <el-button v-if="!readonly" type="primary" :icon="Check" :loading="saving" @click="save">保存</el-button>
-        <el-button v-if="!readonly && editId" :icon="Download" @click="importDialog = true">从报价导入</el-button>
+        <!-- 新建时也要有（#116/#117：两个人都在新建页找不到导入，Grace 还以为"系统不稳定"——
+             其实是旧条件要求先保存草稿按钮才出现，但没人知道要先保存） -->
+        <el-button v-if="!readonly" :icon="Download" @click="importDialog = true">从报价导入</el-button>
         <el-button v-if="!readonly && editId && form.status !== 'DONE'" type="success" :icon="Promotion" @click="advance">推进状态</el-button>
         <el-button v-if="editId && form.status === 'CONFIRMED'" type="warning" :icon="RefreshLeft" @click="revert">撤回下单</el-button>
         <el-dropdown v-if="editId" trigger="click" @command="onPrintOrder">
@@ -310,7 +312,7 @@
         <el-option v-for="q in quotes" :key="q.id" :label="`${q.quote_no} · ${q.style_no || ''}`" :value="q.id" />
       </el-select>
       <p class="hint" style="margin-top:6px">全库按报价单号或款号搜索，不只看最近 100 条。</p>
-      <p class="hint" style="margin-top:8px">带出款号/客户/中间商/最终买家 + 复制报价明细到材料明细（单件耗用=报价耗用），快照。</p>
+      <p class="hint" style="margin-top:8px">带出款号/客户/中间商/最终买家 + 复制报价明细到材料明细（单件耗用=报价耗用），快照。新建页导入会先按该报价建立草稿订单。</p>
       <template #footer>
         <el-button @click="importDialog = false">取消</el-button>
         <el-button type="primary" :disabled="!importQuoteId" @click="doImport">导入</el-button>
@@ -907,9 +909,27 @@ function fillPoFromMatrix(opts: { silent?: boolean } = {}) {
 }
 
 async function doImport() {
-  if (!editId.value || !importQuoteId.value) return;
-  try { await orderApi.importFromQuote(editId.value, importQuoteId.value); ElMessage.success('已从报价导入'); importDialog.value = false; load(); }
-  catch (e: any) { errToast(e?.response?.data?.msg ?? '导入失败'); }
+  if (!importQuoteId.value) return;
+  try {
+    let id = editId.value;
+    const isNew = !id;
+    if (isNew) {
+      // 新建页：后端导入接口需要订单 id，而字段映射（quote_item_id 关联、「源报价已变更」水位、
+      // 材料行展开）只在后端有一份——前端照抄一遍必然漂移（本周 #109/#110 就是这么错的）。
+      // 所以先用所选报价静默建一张草稿，**先跳到草稿编辑页再导入**：万一导入被拒
+      // （比如选了草稿态报价），人已经站在草稿上，重试不会再建一张单。
+      const q: any = (await quoteApi.get(importQuoteId.value)) as any;
+      const qd = q?.data ?? q;
+      const res: any = await orderApi.create({ quote_id: importQuoteId.value, customer_id: qd?.customer_id, style_no: qd?.style_no || undefined });
+      id = Number((res?.data ?? res)?.id);
+      if (!id) throw new Error('草稿订单创建失败');
+      await router.replace({ name: 'OrderEdit', params: { id } }); // 同组件不同路由不重挂载，下面手动 load
+    }
+    await orderApi.importFromQuote(id!, importQuoteId.value);
+    importDialog.value = false;
+    ElMessage.success(isNew ? '已按报价建立草稿订单并导入明细' : '已从报价导入');
+    await load(); if (isNew) void loadDocLinks();
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导入失败'); }
 }
 async function advance() {
   if (!editId.value) return;
