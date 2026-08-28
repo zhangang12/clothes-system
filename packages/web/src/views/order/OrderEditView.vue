@@ -253,6 +253,13 @@
               </template>
             </el-table-column>
             <el-table-column label="备注" min-width="100"><template #default="{ row }"><el-input v-model="row.remark" size="small" /></template></el-table-column>
+            <el-table-column v-if="!readonly" label="操作" width="60" fixed="right">
+              <template #default="{ $index }">
+                <el-tooltip content="复制这一行插到下面（#118：同一种料多个颜色，复制后只改颜色）" placement="top">
+                  <el-button link size="small" @click="copyMatLine($index)">复制</el-button>
+                </el-tooltip>
+              </template>
+            </el-table-column>
           </el-table>
         </div>
       </section-block>
@@ -560,6 +567,18 @@ function applyBatchMats() {
     if (batchField.loss !== '') r.lossRate = batchField.loss;
   }
   ElMessage.success(`已批量设置 ${selMats.value.length} 行`);
+}
+/**
+ * 复制材料行（#118 daisy：「TC底PU 下合同有黑/酒红/咖三色，报价只有黑色」——
+ * 复制整行改个颜色，别逐格重打）。
+ * 【必须剥掉 id 和已订标记】行上的 id 是数据库行主键，后端按 id **原地更新**：
+ * 带着 id 复制等于两行写同一条记录，后存的覆盖先存的、静默丢一行；
+ * contracted/contracts 是「已订」绿标，新行还没下过单，继承过来会误导。
+ */
+function copyMatLine(idx: number) {
+  const src = form.materials[idx];
+  if (!src) return;
+  form.materials.splice(idx + 1, 0, { ...src, id: undefined, contracted: false, contracts: [] });
 }
 function delMats() { form.materials = form.materials.filter((r: any) => !selMats.value.includes(r)); if (!form.materials.length) form.materials.push(emptyMat()); }
 

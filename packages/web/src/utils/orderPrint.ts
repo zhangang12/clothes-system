@@ -53,6 +53,62 @@ function matrixTable(matrix: any): string {
   return `<table><thead>${head}</thead><tbody>${body}</tbody></table>`;
 }
 
+/**
+ * 生产通知单的数量搭配：**每 PO 一行、尺码作列**（#118 daisy 给了工厂实际在用的样张）。
+ *
+ * 【为什么转置】默认的 matrixTable 是「行 = 款·色·码，列 = 各 PO」——3 色 4 码 6 个 PO
+ * 就是 12 行 × 6 列数量格，工厂对着 PO 裁剪/包装时要在整张表里跳着找；她的样张是
+ * 每 PO 一行（PO# / 洗标号 / 颜色 / 各码数量 / 合计），6 行看完，纸也省。
+ * 只用于 factory（生产通知单）；对客/内部维持原版式，那两份的读者是按款·色·码核数的。
+ *
+ * 【船期列没做】她样张里有「船期」，但系统的 PO 维度只存 目的地/收货人，船期只有
+ * 订单级 delivery_date——没有的数据不能编，列上不出，回复里说明。
+ */
+export function matrixPivotRows(matrix: any): { head: string[]; rows: (string | number)[][]; foot: (string | number)[] } | null {
+  const pos: any[] = matrix?.pos ?? [];
+  const rows: any[] = matrix?.rows ?? [];
+  if (!pos.length || !rows.length) return null;
+  const sizes: string[] = [...new Set(rows.map((r) => String(r.size ?? '')))];
+  const withArticle = rows.some((r) => String(r.article ?? '').trim());
+  const withDest = pos.some((p) => String(p.destination ?? '').trim());
+
+  const out: (string | number)[][] = [];
+  pos.forEach((p, pi) => {
+    // 同一 PO 内按 颜色+洗标号 分组（她的样张一 PO 一色；多色 PO 自然摊成多行）
+    const groups = new Map<string, any[]>();
+    for (const r of rows) {
+      const key = `${r.color ?? ''}\u0001${r.article ?? ''}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(r);
+    }
+    for (const [key, grs] of groups) {
+      const [color, article] = key.split('\u0001');
+      const bySize = (sz: string) => grs.filter((r) => String(r.size ?? '') === sz)
+        .reduce((t, r) => t + (Number(r.qtys?.[pi]) || 0), 0);
+      const nums = sizes.map(bySize);
+      const total = nums.reduce((a, b) => a + b, 0);
+      if (!total) continue;               // 这个 PO 没这组颜色的量，不出空行
+      out.push([p.po_no || `PO${pi + 1}`, ...(withArticle ? [article] : []), color, ...nums, total,
+        ...(withDest ? [p.destination ?? ''] : [])]);
+    }
+  });
+  if (!out.length) return null;
+
+  const head = ['PO#', ...(withArticle ? ['洗标号'] : []), '颜色', ...sizes, '合计', ...(withDest ? ['目的地'] : [])];
+  const base = 2 + (withArticle ? 1 : 0);   // 数量列起始下标
+  const colSum = (ci: number) => out.reduce((t, r) => t + (Number(r[base + ci]) || 0), 0);
+  const foot = ['合计', ...(withArticle ? [''] : []), '', ...sizes.map((_, ci) => colSum(ci)),
+    out.reduce((t, r) => t + (Number(r[base + sizes.length]) || 0), 0), ...(withDest ? [''] : [])];
+  return { head, rows: out, foot };
+}
+
+function matrixPivotTable(matrix: any): string {
+  const p = matrixPivotRows(matrix);
+  if (!p) return '<div class="tip">（未填写数量搭配）</div>';
+  const tr = (cells: (string | number)[], tag = 'td') => `<tr>${cells.map((c) => `<${tag}>${esc(String(c))}</${tag}>`).join('')}</tr>`;
+  return `<table><thead>${tr(p.head, 'th')}</thead><tbody>${p.rows.map((r) => tr(r)).join('')}${tr(p.foot.map((c, i) => (i === 0 ? c : c || '')) as any)}</tbody></table>`;
+}
+
 function materialTable(materials: any[], mode: OrderPrintMode): string {
   if (!materials?.length) return '<div class="tip">（无用料核算记录）</div>';
   const withCost = mode === 'internal';
@@ -132,8 +188,8 @@ export function printOrder(detail: any, mode: OrderPrintMode): void {
     <div class="badge">ORDER · ${esc(detail.order_no)}</div>
   </div>
   <div class="meta">${meta.join('')}</div>
-  <h3>数量搭配（色/码/PO）</h3>
-  ${matrixTable(detail.matrix?.matrix_data)}
+  <h3>${mode === 'factory' ? '数量搭配（按 PO · 工厂裁剪/包装对照）' : '数量搭配（色/码/PO）'}</h3>
+  ${mode === 'factory' ? matrixPivotTable(detail.matrix?.matrix_data) : matrixTable(detail.matrix?.matrix_data)}
   ${showMaterials ? `<h3>用料核算</h3>${materialTable(detail.materials ?? [], mode)}` : ''}
   ${attBlock}
   ${totals}
