@@ -316,10 +316,12 @@
         v-model="importQuoteId" filterable remote reserve-keyword :remote-method="searchQuotes"
         :loading="quoteSearching" placeholder="输入报价单号 / 款号搜索" style="width:100%"
       >
-        <el-option v-for="q in quotes" :key="q.id" :label="`${q.quote_no} · ${q.style_no || ''}`" :value="q.id" />
+        <!-- 只列可导入状态（与后端 A7 同口径）：昨天有人选了草稿报价、被拒后原地重试 10 次
+             ——列一个必然被拒的选项还不说原因，等于给人挖坑（error_log id=16 实证）-->
+        <el-option v-for="q in importableQuotes" :key="q.id" :label="`${q.quote_no} · ${q.style_no || ''}（${QUOTE_STATUS_LABEL[q.status as QuoteStatus] ?? q.status}）`" :value="q.id" />
       </el-select>
       <p class="hint" style="margin-top:6px">全库按报价单号或款号搜索，不只看最近 100 条。</p>
-      <p class="hint" style="margin-top:8px">带出款号/客户/中间商/最终买家 + 复制报价明细到材料明细（单件耗用=报价耗用），快照。新建页导入会先按该报价建立草稿订单。</p>
+      <p class="hint" style="margin-top:8px">带出款号/客户/中间商/最终买家 + 复制报价明细到材料明细（单件耗用=报价耗用），快照。新建页导入会先按该报价建立草稿订单。只列「已报价」及之后状态的报价；草稿报价请先在报价页发出。</p>
       <template #footer>
         <el-button @click="importDialog = false">取消</el-button>
         <el-button type="primary" :disabled="!importQuoteId" @click="doImport">导入</el-button>
@@ -350,7 +352,7 @@ import { settlementApi } from '@/api/settlement';
 import { exportInvoiceApi } from '@/api/exportInvoice';
 import { factoryApi } from '@/api/factory';
 import FileUpload from '@/components/FileUpload.vue';
-import { ORDER_STATUS_LABEL } from '@i9/types';
+import { ORDER_STATUS_LABEL, QuoteStatus, QUOTE_STATUS_LABEL } from '@i9/types';
 import { downloadBlob } from '@/utils/docExcel';
 
 const SectionBlock = (props: { title: string; badge?: string }, { slots }: any) =>
@@ -535,7 +537,11 @@ async function checkDeviation(row: any) {
 const formRef = ref<FormInstance>();
 const saving = ref(false);
 const selSizes = ref<any[]>([]); const selMats = ref<any[]>([]);
-const importDialog = ref(false); const importQuoteId = ref<number>();
+const importDialog = ref(false);
+// 可导入的报价（与后端 importFromQuote 的 A7 校验同一份口径：QUOTED/ADJUSTING/ORDERED）。
+// 草稿报价不列——列出来也必被后端拒，只会让人反复撞墙
+const IMPORTABLE_QUOTE_STATUSES: string[] = [QuoteStatus.QUOTED, QuoteStatus.ADJUSTING, QuoteStatus.ORDERED];
+const importableQuotes = computed(() => quotes.value.filter((q: any) => IMPORTABLE_QUOTE_STATUSES.includes(q.status))); const importQuoteId = ref<number>();
 const rules: FormRules = {
   customerPo: [{ required: true, message: '请输入客户PO号', trigger: 'blur' }],
   styleNo: [{ required: true, message: '请输入客户款号', trigger: 'blur' }],
