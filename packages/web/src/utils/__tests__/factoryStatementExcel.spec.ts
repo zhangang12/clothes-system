@@ -176,3 +176,48 @@ describe('工厂往来账单导出', () => {
     expect(row[10].text).toBe('');
   });
 });
+
+// ── #119 qiao：「用款申请看不到是哪个业务申请的」──
+describe('付款申请的「申请人」列（#119）', () => {
+  const st = base({
+    requests: [makeReq({ created_by_name: '姚霜梅' }), makeReq({ id: 2, pr_no: 'FK20260801002', created_by_name: '' })],
+    summary: { ...base().summary, request_count: 2, request_amount: 20000 },
+  });
+
+  it('申请人跟着申请行出现在导出里', async () => {
+    const { ws } = await exportToXlsx(() => exportFactoryStatementExcel(st, '2026-08-31 20:00'));
+    expect(flatten(ws)).toContain('姚霜梅');
+  });
+
+  it('「申请人」紧跟在「申请日期」后面——位置错了就对不上下面的数据', async () => {
+    const { ws } = await exportToXlsx(() => exportFactoryStatementExcel(st, '2026-08-31 20:00'));
+    const head = rowStartingWith(ws, '申请编号').map((c) => String(c.text ?? '').trim());
+    expect(head[head.indexOf('申请日期') + 1]).toBe('申请人');
+  });
+
+  it('表头/数据/合计三行列数一致——加列最容易漏掉表尾占位，一漏整行错位', async () => {
+    const { ws } = await exportToXlsx(() => exportFactoryStatementExcel(st, '2026-08-31 20:00'));
+    const width = (label: string) => {
+      const cells = rowStartingWith(ws, label);
+      let last = 0;
+      cells.forEach((c, i) => { if (String(c.text ?? '').trim() !== '') last = i + 1; });
+      return { cells: cells.length, last };
+    };
+    const head = rowStartingWith(ws, '申请编号').filter((c) => String(c.text ?? '').trim() !== '').length;
+    const foot = width('合计（不含已驳回）').cells;
+    expect(foot).toBeGreaterThanOrEqual(head);   // 合计行至少铺满表头宽度
+    // 明细行的申请人格必须落在表头「申请人」那一列上
+    const headCells = rowStartingWith(ws, '申请编号').map((c) => String(c.text ?? '').trim());
+    const col = headCells.indexOf('申请人') + 1;
+    const dataRow = rowStartingWith(ws, 'FK20260801001');
+    expect(String(dataRow[col - 1].text ?? '').trim()).toBe('姚霜梅');
+  });
+
+  it('查不到账号时留空，不伪造名字', async () => {
+    const { ws } = await exportToXlsx(() => exportFactoryStatementExcel(st, '2026-08-31 20:00'));
+    const headCells = rowStartingWith(ws, '申请编号').map((c) => String(c.text ?? '').trim());
+    const col = headCells.indexOf('申请人') + 1;
+    const row2 = rowStartingWith(ws, 'FK20260801002');
+    expect(String(row2[col - 1].text ?? '').trim()).toBe('');
+  });
+});

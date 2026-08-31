@@ -148,6 +148,11 @@
           <el-table-column label="工厂" min-width="120" show-overflow-tooltip>
             <template #default="{ row }">{{ row.factory_name || ('工厂#' + row.factory_id) }}</template>
           </el-table-column>
+          <!-- 申请人（#119 qiao：财务审批时不知道该找谁核对）。created_by 一直有存，
+               只是从没带出来过；查不到账号时显示「—」，不伪造名字 -->
+          <el-table-column label="申请人" width="90" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.created_by_name || '—' }}</template>
+          </el-table-column>
           <el-table-column prop="amount" label="申请金额" width="110" align="right">
             <template #default="{ row }">{{ (+row.amount).toFixed(2) }}</template>
           </el-table-column>

@@ -742,3 +742,60 @@ describe('PaymentService', () => {
     });
   });
 });
+
+// ── #119 qiao：「用款申请看不到是哪个业务申请的」──
+// created_by 一直在存，只是列表接口从没把人名带出来
+describe('付款申请列表补出申请人（#119）', () => {
+  let svc: PaymentService;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    mockDataSource.transaction.mockImplementation((cb: any) => cb(mockManager));
+    const m: TestingModule = await Test.createTestingModule({
+      providers: [
+        PaymentService,
+        { provide: getRepositoryToken(Prepayment), useValue: mockPrepayRepo },
+        { provide: getRepositoryToken(PaymentRequest), useValue: mockPrRepo },
+        { provide: getRepositoryToken(PaymentRecord), useValue: mockRecordRepo },
+        { provide: getRepositoryToken(Reconciliation), useValue: mockReconcileRepo },
+        { provide: NumberingService, useValue: new NumberingService(mockRedis as any) },
+        { provide: DataSource, useValue: mockDataSource },
+        { provide: REDIS_CLIENT, useValue: mockRedis },
+      ],
+    }).compile();
+    svc = m.get(PaymentService);
+  });
+
+  it('UT-PR-NAME-1: 优先用真名，没真名退回账号名', async () => {
+    mockPrRepo.findAndCount.mockResolvedValue([[{ id: 1, created_by: 9 }, { id: 2, created_by: 10 }], 2]);
+    mockDataSource.query.mockImplementation(async (sql: string) =>
+      (sql.includes('sys_user') ? [{ id: 9, nm: '姚霜梅' }, { id: 10, nm: 'business_user' }] : []));
+    const r: any = await svc.findPaymentRequests({} as any);
+    expect(r.items.map((x: any) => x.created_by_name)).toEqual(['姚霜梅', 'business_user']);
+  });
+
+  it('UT-PR-NAME-2: 一次批量查，不按行逐条查账号（列表最多 100 行）', async () => {
+    mockPrRepo.findAndCount.mockResolvedValue([
+      [{ id: 1, created_by: 9 }, { id: 2, created_by: 9 }, { id: 3, created_by: 10 }], 3]);
+    mockDataSource.query.mockImplementation(async (sql: string) =>
+      (sql.includes('sys_user') ? [{ id: 9, nm: 'A' }, { id: 10, nm: 'B' }] : []));
+    await svc.findPaymentRequests({} as any);
+    const userQueries = mockDataSource.query.mock.calls.filter((c: any[]) => String(c[0]).includes('sys_user'));
+    expect(userQueries).toHaveLength(1);
+    expect(userQueries[0][1][0]).toEqual([9, 10]);   // 去重后只查两个 id
+  });
+
+  it('UT-PR-NAME-3: 账号被删/查不到时给 null，不伪造成「未知用户」', async () => {
+    mockPrRepo.findAndCount.mockResolvedValue([[{ id: 1, created_by: 999 }], 1]);
+    mockDataSource.query.mockResolvedValue([]);
+    const r: any = await svc.findPaymentRequests({} as any);
+    expect(r.items[0].created_by_name).toBeNull();
+  });
+
+  it('UT-PR-NAME-4: 没有 created_by 的历史行不炸、给 null', async () => {
+    mockPrRepo.findAndCount.mockResolvedValue([[{ id: 1, created_by: null }], 1]);
+    mockDataSource.query.mockResolvedValue([]);
+    const r: any = await svc.findPaymentRequests({} as any);
+    expect(r.items[0].created_by_name).toBeNull();
+  });
+});

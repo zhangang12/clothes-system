@@ -57,6 +57,21 @@ export class PaymentService {
       const m = new Map(rows.map((x: any) => [+x.id, x.contract_no]));
       items.forEach((r) => { r.contract_no = r.contract_id ? m.get(+r.contract_id) ?? null : null; });
     }
+    // 申请人（2026-08-31 qiao：「用款申请看不到是哪个业务申请的」）。
+    // created_by 一直在存，只是从没带出来过——财务审批时不知道该找谁核对。
+    // 与上面两段一样走一次性批量查，别在循环里逐条查账号（列表最多 100 行）。
+    const uids = [...new Set(items.map((r) => +r.created_by).filter(Boolean))];
+    // 【无条件赋值，别放进 if 里】早期数据 created_by 可能为空，uids 就是空数组；
+    // 若跳过赋值，这些行连 created_by_name 这个键都没有，前端拿到 undefined
+    // 而不是 null——列渲染与「查不到就显示 —」的口径就不一致了（单测 UT-PR-NAME-4 实测踩到）
+    const nameOf = new Map<number, string>();
+    if (uids.length) {
+      const rows = await this.dataSource.query(
+        'SELECT id, COALESCE(NULLIF(real_name, \'\'), username) nm FROM sys_user WHERE id IN (?)', [uids]);
+      for (const x of rows) nameOf.set(+x.id, x.nm);
+    }
+    // 账号被删/查不到时留 null，让前端显示「—」，不要伪造成"未知用户"
+    items.forEach((r) => { r.created_by_name = r.created_by ? nameOf.get(+r.created_by) ?? null : null; });
   }
 
   async findPrepayments(factoryId?: number, page = 1, size = 20) {

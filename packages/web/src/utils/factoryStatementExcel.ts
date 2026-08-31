@@ -88,8 +88,10 @@ export async function exportFactoryStatementExcel(st: FactoryStatement, exported
     {
       kind: 'table',
       title: '一、付款申请明细',
+      // 「申请人」列（#119 qiao：对账时得知道找谁核）。加在「申请日期」后面，
+      // 表尾合计行的占位数量要跟着 +1，否则合计整体错位一列
       head: ['申请编号', '类型', '状态', '对账单号', '合同号', '款号', '申请金额', '冲抵预付',
-        '应付', '已付', '未付', '账期(天)', '到期日', '申请日期', '收款银行', '收款账号', '备注说明'],
+        '应付', '已付', '未付', '账期(天)', '到期日', '申请日期', '申请人', '收款银行', '收款账号', '备注说明'],
       rows: st.requests.map((r) => {
         const payable = payableOf(r);
         const paid = +(r.paid_sum ?? r.paid_total ?? 0);
@@ -104,13 +106,14 @@ export async function exportFactoryStatementExcel(st: FactoryStatement, exported
           rejected ? '' : numCell(paid),
           rejected ? '' : numCell(payable - paid),
           r.account_period_days ?? '', d10(r.due_date), d10(r.created_at),
+          r.created_by_name || '',
           r.bank_name || '', r.bank_account || '', r.description || '',
         ];
       }),
       foot: ['合计（不含已驳回）', '', '', '', '', '',
         numCell(sm.request_amount), numCell(sm.prepay_offset_total),
         numCell(sm.payable_total), numCell(sm.paid_total), numCell(sm.unpaid_total),
-        '', '', '', '', '', ''],
+        '', '', '', '', '', '', ''],
       empty: '（该区间内无付款申请）',
     },
     {
