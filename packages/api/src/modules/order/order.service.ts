@@ -13,7 +13,7 @@ import { SampleMaterial } from '../sample/sample-material.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { CustomerService } from '../customer/customer.service';
 import { SysConfigService } from '../../common/config/sys-config.service';
-import { OrderStatus, QuoteStatus, ApprovalStatus, APPROVAL_THRESHOLD_KEYS } from '@i9/types';
+import { OrderStatus, QuoteStatus, ApprovalStatus, APPROVAL_THRESHOLD_KEYS, findSplitDupConflicts } from '@i9/types';
 import { CreateOrderDto, CreateOrderMaterialDto, AddShipmentDto } from './dto/create-order.dto';
 import { QueryOrderDto } from './dto/query-order.dto';
 
@@ -54,6 +54,19 @@ export class OrderService {
   ) {}
 
   private buildMaterials(orderId: number, qtyTotal: number, materials: CreateOrderMaterialDto[]): OrderMaterial[] {
+    // 【#120 防线·保存闸】同名材料多行且标了拆分：生成合同时每行都把矩阵拆一遍，行数×组数翻倍
+    // （订单 73 因此多签 20.2 万）。前端保存前有同样的提示，但复制订单、API 直写不经过前端——
+    // 这里是 create/update/importFromQuote 三条路的共同漏斗，拦一处即全覆盖。
+    // 规则与前端、生成合同共用 @i9/types.findSplitDupConflicts（按部位分摊的正当用法会放行）。
+    const dup = findSplitDupConflicts(materials.map((m) => ({
+      name: m.item_name ?? '', part: m.part ?? '', color: m.color ?? '', mode: m.split_mode ?? 'NONE',
+    })));
+    if (dup.length) {
+      const g = dup[0];
+      throw new BadRequestException(
+        `材料「${g.name}」第 ${g.rowNos.join('、')} 行重复且标了拆分：${g.reason}。请删掉多余行或改为「不拆」`,
+      );
+    }
     return materials.map((m, idx) => {
       const lossRate = m.loss_rate ?? 3;
       const roundOverride = m.round_up == null ? undefined : m.round_up === 1;

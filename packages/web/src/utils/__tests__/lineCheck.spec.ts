@@ -160,21 +160,25 @@ describe('会被保存时丢掉、但人填了东西的行', () => {
   });
 });
 
-// ── #120 B改良版：同名材料多行 + 标了拆分 → 保存前必拦 ──
+// ── #120：同名材料多行 + 标了拆分 → 保存前必拦（规则本体在 @i9/types，前后端共用） ──
 import { duplicateSplitGroups, duplicateSplitMessage } from '../lineCheck';
+import { findSplitDupConflicts } from '@i9/types';
 
 describe('同名拆分行防呆（#120）', () => {
-  // fixture 按订单 O-20260901-001 真实数据：金属丝底PU 两行都 BY_COLOR，合同因此翻倍多签 20.2 万
+  // fixture 按订单 O-20260901-001 真实数据：金属丝底PU 各行填了不同颜色，合同翻倍多签 20.2 万
   const rows = [
-    { itemName: '金属丝底PU', splitMode: 'BY_COLOR' },
-    { itemName: '中斜纹', splitMode: 'BY_COLOR' },
-    { itemName: '金属丝底PU', splitMode: 'BY_COLOR' },
-    { itemName: '30G有胶衬', splitMode: 'NONE' },
+    { itemName: '金属丝底PU', color: '米白', splitMode: 'BY_COLOR' },
+    { itemName: '中斜纹', color: '', splitMode: 'BY_COLOR' },
+    { itemName: '金属丝底PU', color: '咖色', splitMode: 'BY_COLOR' },
+    { itemName: '30G有胶衬', color: '', splitMode: 'NONE' },
   ];
 
-  it('UT-DS-01: 同名且带拆分的多行要被点名（含行号）', () => {
-    const g = duplicateSplitGroups(rows, 'itemName', 'splitMode');
-    expect(g).toEqual([{ name: '金属丝底PU', rowNos: [1, 3] }]);
+  it('UT-DS-01: 订单73版型（一色一行）要被点名，含行号与原因', () => {
+    const g = duplicateSplitGroups(rows, 'itemName', 'splitMode', 'part', 'color');
+    expect(g).toHaveLength(1);
+    expect(g[0].name).toBe('金属丝底PU');
+    expect(g[0].rowNos).toEqual([1, 3]);
+    expect(g[0].reason).toContain('不同颜色');
   });
 
   it('UT-DS-02: 同名但全是「不拆」不拦——一料两部位/两供应商是正常用法', () => {
@@ -197,14 +201,58 @@ describe('同名拆分行防呆（#120）', () => {
     expect(duplicateSplitGroups([{ itemName: '', splitMode: 'BY_COLOR' }, { itemName: ' ', splitMode: 'BY_COLOR' }], 'itemName', 'splitMode')).toEqual([]);
   });
 
-  it('UT-DS-05: 文案说清楚翻倍后果和两条出路', () => {
-    const msg = duplicateSplitMessage('材料明细', [{ name: '金属丝底PU', rowNos: [1, 3] }])!;
+  it('UT-DS-05: 订单42版型（部位互异非空+颜色全空=按部位分摊净耗）必须放行', () => {
+    const o42 = [
+      { itemName: '双面呢', part: '前胸后背', color: '', splitMode: 'BY_COLOR' },
+      { itemName: '双面呢', part: '大袖', color: '', splitMode: 'BY_COLOR' },
+      { itemName: '双面呢', part: '前下片', color: '', splitMode: 'BY_COLOR' },
+    ];
+    expect(duplicateSplitGroups(o42, 'itemName', 'splitMode', 'part', 'color')).toEqual([]);
+  });
+
+  it('UT-DS-06: 部位互异但有一行填了颜色 → 不再是纯部位分摊，要拦', () => {
+    const g = findSplitDupConflicts([
+      { name: '双面呢', part: '前胸后背', color: '黑色', mode: 'BY_COLOR' },
+      { name: '双面呢', part: '大袖', color: '', mode: 'BY_COLOR' },
+    ]);
+    expect(g).toHaveLength(1);
+  });
+
+  it('UT-DS-07: 部位重复+颜色全空 → 看起来是誊行，拦并说明', () => {
+    const g = findSplitDupConflicts([
+      { name: '里布', part: '', color: '', mode: 'BY_SIZE' },
+      { name: '里布', part: '', color: '', mode: 'BY_SIZE' },
+    ]);
+    expect(g).toHaveLength(1);
+    expect(g[0].reason).toContain('誊');
+  });
+
+  it('UT-DS-07b: 部位非空但重复（两行都写「大袖」）→ 不是按部位分摊，拦', () => {
+    const g = findSplitDupConflicts([
+      { name: '双面呢', part: '大袖', color: '', mode: 'BY_COLOR' },
+      { name: '双面呢', part: '大袖', color: '', mode: 'BY_COLOR' },
+    ]);
+    expect(g).toHaveLength(1);
+  });
+
+  it('UT-DS-08: 各行颜色相同的誊行，文案不能说成「不同颜色」', () => {
+    const g = findSplitDupConflicts([
+      { name: '拉链', part: '', color: '黑色', mode: 'BY_COLOR' },
+      { name: '拉链', part: '', color: '黑色', mode: 'BY_COLOR' },
+    ]);
+    expect(g).toHaveLength(1);
+    expect(g[0].reason).toContain('颜色相同');
+    expect(g[0].reason).not.toContain('不同颜色');
+  });
+
+  it('UT-DS-09: 文案带原因和两条出路', () => {
+    const msg = duplicateSplitMessage('材料明细', [{ name: '金属丝底PU', rowNos: [1, 3], reason: '各行填了不同颜色' }])!;
     expect(msg).toContain('第 1、3 行');
-    expect(msg).toContain('翻倍');
+    expect(msg).toContain('不同颜色');
     expect(msg).toContain('不拆');
   });
 
-  it('UT-DS-06: 多组问题时报第一组并给总数', () => {
+  it('UT-DS-10: 多组问题时报第一组并给总数', () => {
     const msg = duplicateSplitMessage('材料明细', [
       { name: 'A', rowNos: [1, 2] }, { name: 'B', rowNos: [3, 4] },
     ])!;
@@ -212,7 +260,7 @@ describe('同名拆分行防呆（#120）', () => {
     expect(msg).toContain('另有 1 组');
   });
 
-  it('UT-DS-07: 没问题时不打扰', () => {
+  it('UT-DS-11: 没问题时不打扰', () => {
     expect(duplicateSplitMessage('材料明细', [])).toBeNull();
   });
 });

@@ -76,6 +76,19 @@ describe('订单导出 · 脱敏口径', () => {
     expect(JSON.stringify(t)).not.toContain('18.6');
   });
 
+  it('UT-ORD-X12: 分色材料的颜色列导「自动分色」——残留单色会误导工厂（#120 审计）', async () => {
+    const d = { ...DETAIL, materials: [
+      { item_name: '金属丝底PU', part: '', color: '米白', split_mode: 'BY_COLOR', unit: '米',
+        net_usage: 1, loss_rate: 3, final_purchase: 0, total_purchase: 880 },
+    ] };
+    await exportOrderExcel(d, 'factory');
+    const t = tableTitled('用料核算');
+    expect(JSON.stringify(t)).toContain('自动分色');
+    expect(JSON.stringify(t)).not.toContain('米白');
+    // final_purchase=0 是「未微调」，采购量要退到 total_purchase，不能导出 0
+    expect(JSON.stringify(t)).toContain('880');
+  });
+
   it('UT-ORD-X4: 内部单据才是全量', async () => {
     await exportOrderExcel(DETAIL, 'internal');
     const s = flat();

@@ -54,9 +54,11 @@ function materialBlock(materials: any[], mode: OrderExportMode): Block {
   const head = ['#', '品名', '部位', '颜色', ...(withSupplier ? ['供应商'] : []), '单位',
     '单件耗用', '损耗%', '采购量', ...(withCost ? ['单价', '预算'] : [])];
   const rows = (materials ?? []).map((m, i) => [
-    i + 1, m.item_name, m.part || '—', m.color || '—',
+    i + 1, m.item_name, m.part || '—',
+    // 同 orderPrint：分色行颜色由矩阵自动分，导残留单色会误导（#120 审计）
+    (m.split_mode === 'BY_COLOR' || m.split_mode === 'BY_BOTH') ? '自动分色' : (m.color || '—'),
     ...(withSupplier ? [m.supplier || '—'] : []), m.unit || '—',
-    money4(m.net_usage), numCell(m.loss_rate, '#,##0.##'), qty(m.final_purchase ?? m.total_purchase),
+    money4(m.net_usage), numCell(m.loss_rate, '#,##0.##'), qty(+m.final_purchase > 0 ? m.final_purchase : m.total_purchase),
     ...(withCost ? [money4(m.unit_price), money2(m.budget)] : []),
   ]);
   return { kind: 'table', title: '用料核算', head, rows, empty: '（无用料核算记录）' };

@@ -19,7 +19,7 @@ import { Prepayment } from '../payment/prepayment.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { ChangeLogService } from '../../common/changelog/change-log.service';
 import { SysConfigService } from '../../common/config/sys-config.service';
-import { ContractPortalStatus, ContractType, OrderStatus, ApprovalStatus, APPROVAL_THRESHOLD_KEYS } from '@i9/types';
+import { ContractPortalStatus, ContractType, OrderStatus, ApprovalStatus, APPROVAL_THRESHOLD_KEYS, findSplitDupConflicts } from '@i9/types';
 
 // 账期规则（06-对账付款设计稿 v1.4「v1.3 业务定」+ 补充确认清单 C）：材料 = 发货日+90天，加工 = 发货日+45天（可人工改）
 const DEFAULT_ACCOUNT_PERIOD_DAYS: Record<ContractType, number> = {
@@ -135,7 +135,9 @@ export class ContractService {
         const per = +om.net_usage || 0;
         const loss = 1 + (+om.loss_rate || 0) / 100;
         const totalGroupQty = [...groups.values()].reduce((a, b) => a + b, 0);
-        const fallbackBase = +(om.final_purchase ?? om.total_purchase) || 0;
+        // 【0 不是有效值】生产 543/800 行 final_purchase 存的是 0 而非 NULL，?? 跳不过 0——
+        // 视 0 为「未微调」退到 total_purchase（与 updateMatrix 里 wasAuto 的语义一致）
+        const fallbackBase = (+om.final_purchase! > 0 ? +om.final_purchase! : +om.total_purchase!) || 0;
         const round = om.round_up === 1
           || (om.round_up == null && INT_UNITS.includes(om.unit ?? ''));
         return [...groups].map(([key, groupQty]) => {
@@ -159,11 +161,15 @@ export class ContractService {
         });
       }
     }
+    // 标了拆分却走到这里 = 矩阵没分出组（缺矩阵/维度不全），整单一行兜底。
+    // qty_source 必须留痕区分——否则「按整单计的兜底」和「本来就不拆」在合同上长得一模一样，
+    // 业务看不出这行其实没拆成（#120 审计：无声降级是比报错更糟的失败方式）
+    const degraded = mode === 'BY_COLOR' || mode === 'BY_SIZE' || mode === 'BY_BOTH';
     return [{
       ...base,
       color: om.color || undefined,
-      qty: +(om.final_purchase ?? om.total_purchase) || 0,
-      qty_source: '采购量含损耗',
+      qty: (+om.final_purchase! > 0 ? +om.final_purchase! : +om.total_purchase!) || 0,
+      qty_source: degraded ? '采购量含损耗·矩阵未分组' : '采购量含损耗',
     }];
   }
 
@@ -318,6 +324,22 @@ export class ContractService {
     const materials = await this.orderMaterialRepo.find({ where: { order_id: orderId }, order: { sort_order: 'ASC' } });
     if (!materials.length) throw new BadRequestException('订单无用料核算记录，无法生成合同');
 
+    // 【#120 防线·后端闸】同名材料多行且标了拆分：每行都会把矩阵拆一遍，行数×组数翻倍
+    // （订单 73 因此多签 20.2 万）。前端保存时已有同一规则的提示，但**出事的动作是生成合同**：
+    // 存量脏数据、复制出来的订单、API 直写都不经过前端保存——必须在这里再拦一次。
+    // 规则与前端共用 @i9/types.findSplitDupConflicts：按部位分摊（部位互异非空+颜色全空，
+    // 如订单 42 的面料三段式净耗）是正当用法，放行；誊行式（颜色互异或部位相同）才拦。
+    const dupConflicts = findSplitDupConflicts(materials.map((m) => ({
+      name: m.item_name ?? '', part: m.part ?? '', color: m.color ?? '', mode: m.split_mode ?? 'NONE',
+    })));
+    if (dupConflicts.length) {
+      const g = dupConflicts[0];
+      throw new BadRequestException(
+        `材料「${g.name}」有 ${g.rowNos.length} 行且标了拆分（第 ${g.rowNos.join('、')} 行）：${g.reason}。`
+        + '生成合同会按行数翻倍，请先在订单里删掉多余行或改为「不拆」',
+      );
+    }
+
     // 按供应商名分组
     const groups = new Map<string, OrderMaterial[]>();
     for (const m of materials) {
@@ -432,6 +454,17 @@ export class ContractService {
         where: { order_id: dto.order_id },
         order: { sort_order: 'ASC' },
       });
+      // 【#120 防线】同 generateFromOrder：手建材料合同选了订单自动带出，也是一扇钱的门，
+      // 同名多行+拆分在这里一样会按行数翻倍，用同一把闸
+      const dup = findSplitDupConflicts(orderMaterials.map((m) => ({
+        name: m.item_name ?? '', part: m.part ?? '', color: m.color ?? '', mode: m.split_mode ?? 'NONE',
+      })));
+      if (dup.length) {
+        const g = dup[0];
+        throw new BadRequestException(
+          `订单材料「${g.name}」第 ${g.rowNos.join('、')} 行重复且标了拆分：${g.reason}。请先在订单里删掉多余行或改为「不拆」`,
+        );
+      }
       const matrixRows = await this.getMatrixRows(dto.order_id);
       materialInputs = orderMaterials.flatMap((om) =>
         this.expandMaterialLines(om, matrixRows, order?.style_no ?? null, deliveryDeadline));

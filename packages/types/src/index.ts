@@ -710,3 +710,51 @@ export interface PortalContractStep {
   status: 'done' | 'active' | 'locked';
   completedAt?: string;
 }
+
+// ---------- 材料拆分行的重复判定（#120 事故防线，前后端共用这一份） ----------
+/**
+ * 「同名材料多行 + 标了拆分」什么时候是事故、什么时候是正当用法（2026-09-02 审计定型）：
+ *
+ * 【事故形态·订单73】同一整单耗用被按颜色誊成多行（米白一行、咖色一行，net_usage 相同），
+ * 每行生成合同时都把整张矩阵拆一遍 → 行数×色数翻倍，多签过 20.2 万。特征：颜色非空且互异，
+ * 或部位相同/为空（誊行的人不会改部位）。
+ *
+ * 【正当形态·订单42】同一种面料按【部位】分摊净耗（前胸后背 0.83 / 大袖 0.35 / 前下片 0.31），
+ * 每行各自按矩阵分色在数学上完全正确、不翻倍。特征：各行部位互异且非空、颜色全空。
+ *
+ * 规则：同名且任一行拆分时——各行部位互异非空 且 颜色全空 → 放行；否则拦。
+ * 拦截必须做在「生成合同」的后端入口（钱的最后一道门，覆盖存量脏数据/复制订单/API 直写），
+ * 前端保存拦截只是第一道提示。
+ */
+export interface SplitDupRow { name: string; part: string; color: string; mode: string }
+export interface SplitDupConflict { name: string; rowNos: number[]; reason: string }
+
+export function findSplitDupConflicts(rows: SplitDupRow[]): SplitDupConflict[] {
+  const byName = new Map<string, number[]>();
+  rows.forEach((r, i) => {
+    const name = (r.name ?? '').trim();
+    if (!name) return;
+    if (!byName.has(name)) byName.set(name, []);
+    byName.get(name)!.push(i);
+  });
+  const out: SplitDupConflict[] = [];
+  for (const [name, idxs] of byName) {
+    if (idxs.length < 2) continue;
+    if (!idxs.some((i) => (rows[i].mode ?? 'NONE') !== 'NONE')) continue;   // 全不拆：一料两部位正常
+    const parts = idxs.map((i) => (rows[i].part ?? '').trim());
+    const colors = idxs.map((i) => (rows[i].color ?? '').trim());
+    const partsDistinctNonEmpty = parts.every(Boolean) && new Set(parts).size === parts.length;
+    const colorsAllEmpty = colors.every((c) => !c);
+    if (partsDistinctNonEmpty && colorsAllEmpty) continue;                  // 订单42：按部位分摊，放行
+    out.push({
+      name,
+      rowNos: idxs.map((i) => i + 1),
+      reason: colorsAllEmpty
+        ? '各行部位相同或为空——看起来是同一份耗用誊了多行'
+        : (new Set(colors.filter(Boolean)).size > 1
+          ? '各行填了不同颜色——拆分料的颜色由矩阵自动分，一色一行会按行数翻倍'
+          : '各行颜色相同——看起来是同一份耗用誊了多行'),
+    });
+  }
+  return out;
+}

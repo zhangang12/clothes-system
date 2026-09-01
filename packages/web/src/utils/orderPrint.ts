@@ -122,8 +122,11 @@ function materialTable(materials: any[], mode: OrderPrintMode): string {
     if (!parts.length) return '';
     return `<tr class="sub"><td></td><td colspan="${cols - 1}">各码尺寸：${parts.map(([k, v]) => `${esc(k)}=${esc(String(v))}`).join(' / ')}</td></tr>`;
   };
+  // 分色/分色分码的行，颜色由矩阵自动分——印残留的单色会误导工厂（#120 审计，订单 73 实发）
+  const matColor = (m: any) =>
+    (m.split_mode === 'BY_COLOR' || m.split_mode === 'BY_BOTH') ? '自动分色' : (esc(m.color) || '—');
   const body = materials.map((m, i) =>
-    `<tr><td>${i + 1}</td><td>${esc(m.item_name)}</td><td>${esc(m.part) || '—'}</td><td>${esc(m.color) || '—'}</td>${withSupplier ? `<td>${esc(m.supplier) || '—'}</td>` : ''}<td>${esc(m.unit) || '—'}</td><td>${n4(m.net_usage)}</td><td>${m.loss_rate ?? '—'}</td><td>${m.final_purchase ?? m.total_purchase ?? '—'}</td>${withCost ? `<td>${n4(m.unit_price)}</td><td>${n2(m.budget)}</td>` : ''}</tr>`
+    `<tr><td>${i + 1}</td><td>${esc(m.item_name)}</td><td>${esc(m.part) || '—'}</td><td>${matColor(m)}</td>${withSupplier ? `<td>${esc(m.supplier) || '—'}</td>` : ''}<td>${esc(m.unit) || '—'}</td><td>${n4(m.net_usage)}</td><td>${m.loss_rate ?? '—'}</td><td>${(+m.final_purchase > 0 ? m.final_purchase : m.total_purchase) ?? '—'}</td>${withCost ? `<td>${n4(m.unit_price)}</td><td>${n2(m.budget)}</td>` : ''}</tr>`
     + sizeSpecsRow(m),
   ).join('');
   return `<table><thead>${head}</thead><tbody>${body}</tbody></table>`;

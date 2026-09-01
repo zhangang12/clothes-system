@@ -371,4 +371,57 @@ describe('OrderService', () => {
     const saved = manager.save.mock.calls.find((c) => Array.isArray(c[1]))?.[1];
     expect(saved[0].id).toBeUndefined();
   });
+
+  // ===== #120 防线·保存闸：同名材料多行 + 标了拆分（buildMaterials 是 create/update/importFromQuote 共同漏斗） =====
+
+  it('UT-ORD-DS-01 create 拦订单73版型：同名多行各填一色 + BY_COLOR', async () => {
+    const dto = {
+      customer_id: 3, style_name: 'T', qty_total: 800, unit_price: 1,
+      materials: [
+        { item_name: '金属丝底PU', color: '米白', split_mode: 'BY_COLOR', net_usage: 1 },
+        { item_name: '金属丝底PU', color: '咖色', split_mode: 'BY_COLOR', net_usage: 1 },
+      ],
+    };
+    const manager = {
+      create: jest.fn().mockImplementation((_, v) => v),
+      save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
+    };
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await expect(service.create(dto as any, 1)).rejects.toThrow(/金属丝底PU.*拆分/);
+  });
+
+  it('UT-ORD-DS-02 create 放行订单42版型：部位互异非空 + 颜色全空（按部位分摊净耗）', async () => {
+    const dto = {
+      customer_id: 3, style_name: 'T', qty_total: 500, unit_price: 1,
+      materials: [
+        { item_name: '双面呢', part: '前胸后背', color: '', split_mode: 'BY_COLOR', net_usage: 0.5 },
+        { item_name: '双面呢', part: '大袖', color: '', split_mode: 'BY_COLOR', net_usage: 0.3 },
+        { item_name: '双面呢', part: '前下片', color: '', split_mode: 'BY_COLOR', net_usage: 0.2 },
+      ],
+    };
+    const manager = {
+      create: jest.fn().mockImplementation((_, v) => v),
+      save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
+    };
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await expect(service.create(dto as any, 1)).resolves.toBeTruthy();
+  });
+
+  it('UT-ORD-DS-03 update 也过同一把闸（同漏斗）', async () => {
+    mockOrderRepo.findOne.mockResolvedValueOnce({ id: 9, qty_total: 800, status: OrderStatus.DRAFT, deleted: 0 });
+    const manager = {
+      create: jest.fn().mockImplementation((_, v) => v),
+      save: jest.fn().mockImplementation((_, v) => Promise.resolve(v)),
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn().mockResolvedValue(null),
+      delete: jest.fn(),
+    };
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await expect(service.update(9, {
+      materials: [
+        { item_name: '拉链', color: '黑色', split_mode: 'BY_COLOR', net_usage: 1 },
+        { item_name: '拉链', color: '黑色', split_mode: 'BY_COLOR', net_usage: 1 },
+      ],
+    } as any)).rejects.toThrow(/拉链/);
+  });
 });

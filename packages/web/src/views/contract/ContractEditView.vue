@@ -584,7 +584,8 @@ function splitLinesOf(m: any): Array<{ key: string; qty: number; dim: 'color' | 
   const per = +m.net_usage || 0;
   const loss = 1 + (+m.loss_rate || 0) / 100;
   const totalGroupQty = [...groups.values()].reduce((a, b) => a + b, 0);
-  const fallbackBase = +(m.final_purchase ?? m.total_purchase) || 0;
+  // 0 不是有效值：生产 543/800 行 final_purchase 存 0 而非 NULL，?? 跳不过 0
+  const fallbackBase = (+m.final_purchase > 0 ? +m.final_purchase : +m.total_purchase) || 0;
   const round = m.round_up === 1 || (m.round_up == null && INT_UNITS.includes(m.unit ?? ''));
   const dim = mode === 'BY_COLOR' ? 'color' : mode === 'BY_SIZE' ? 'size' : 'both';
   return [...groups].map(([key, groupQty]) => {
@@ -627,7 +628,9 @@ async function loadImportMaterials() {
       split_mode: m.split_mode || 'NONE',
       // 【默认量取已核算的采购量】原来写 net_usage×orderQty，连 (1+损耗%) 都没乘也不取整——
       // 带入的量总是偏小，业务不改就按缺的量签（8-31 深挖实锤）。final_purchase 是人工确认过的，优先
-      qty: +(m.final_purchase ?? m.total_purchase ?? 0) || +((+m.net_usage || 0) * orderQty).toFixed(2),
+      qty: (+m.final_purchase > 0 ? +m.final_purchase : +m.total_purchase) || +((+m.net_usage || 0) * orderQty).toFixed(2),
+      // qty 实际取了哪条链：带入行的 qty_source 要如实写，不能一律标「单耗×件数」（8-31 审计）
+      qty_from_purchase: ((+m.final_purchase > 0 ? +m.final_purchase : +m.total_purchase) || 0) > 0,
     }));
   } catch (e: any) { errToast(e?.response?.data?.msg ?? '加载订单材料失败'); }
   finally { importing.value = false; }
@@ -674,7 +677,7 @@ async function doImport() {
             spec: c.spec,
             color: c.color || '', size: '', style_no: od.style_no || '',
             unit: c.unit || '', qty: +c.qty || 0,
-            unit_price: +c.raw?.unit_price || 0, delivery_date: dd, photo_url: '', qty_source: '单耗×件数',
+            unit_price: +c.raw?.unit_price || 0, delivery_date: dd, photo_url: '', qty_source: c.qty_from_purchase ? '采购量含损耗' : '单耗×件数',
             order_material_id: c.raw?.id ?? undefined, // 同上：订单标绿全靠它
           });
         }

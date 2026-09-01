@@ -1,3 +1,4 @@
+import { findSplitDupConflicts } from '@i9/types';
 // 货物明细的行级校验（2026-08-25 YSM #111：合同保存不了，报「品名必填、数量须大于 0」，
 // 可她截图里第一行明明填着「门襟拉链 / 105」——她的原话是「这咋处理的呢」）。
 //
@@ -130,41 +131,30 @@ export function droppedMessage(label: string, rows: number[], needHint: string):
 }
 
 /**
- * 「同名材料多行 + 标了拆分」检测（#120 B改良版的防呆闸）。
- *
- * 【为什么必须拦】拆分（按颜色/按尺码/色码）的语义是「一行代表整单，系统按矩阵自动拆」。
- * 同名材料建了多行、每行还标着拆分，生成合同时**每一行都把整张矩阵拆一遍**：
- * 行数 × 组数 = 合同行数——订单 O-20260901-001 就这样把三张材料合同签多了 20.2 万。
- * 表面看不出翻倍（每行的数字各自都"对"），所以只能在保存时拦，不能指望人看出来。
- *
- * 同名但都「不拆」的行不拦：同一种料分两个部位/两个供应商是正常用法。
+ * 「同名材料多行 + 标了拆分」检测（#120 防线，规则本体在 @i9/types 前后端共用一份）。
+ * 2026-09-02 审计细化：按【部位】分摊净耗（各行部位互异非空、颜色全空，如订单 42
+ * 前胸后背/大袖/前下片）是正当用法，放行；誊行式（颜色互异或部位相同）才拦。
  */
 export function duplicateSplitGroups(
   rows: Array<Record<string, unknown>>,
   nameField: string,
   modeField: string,
-): Array<{ name: string; rowNos: number[] }> {
-  const byName = new Map<string, number[]>();
-  (rows ?? []).forEach((r, i) => {
-    const name = String(r?.[nameField] ?? '').trim();
-    if (!name) return;
-    if (!byName.has(name)) byName.set(name, []);
-    byName.get(name)!.push(i);
-  });
-  const out: Array<{ name: string; rowNos: number[] }> = [];
-  for (const [name, idxs] of byName) {
-    if (idxs.length < 2) continue;
-    const hasSplit = idxs.some((i) => String(rows[i]?.[modeField] ?? 'NONE') !== 'NONE');
-    if (hasSplit) out.push({ name, rowNos: idxs.map((i) => i + 1) });
-  }
-  return out;
+  partField = 'part',
+  colorField = 'color',
+): Array<{ name: string; rowNos: number[]; reason: string }> {
+  return findSplitDupConflicts((rows ?? []).map((r) => ({
+    name: String(r?.[nameField] ?? ''),
+    part: String(r?.[partField] ?? ''),
+    color: String(r?.[colorField] ?? ''),
+    mode: String(r?.[modeField] ?? 'NONE'),
+  })));
 }
 
 /** 拦截文案：说清楚为什么、以及两条出路（删多余行 / 改为不拆） */
-export function duplicateSplitMessage(label: string, groups: Array<{ name: string; rowNos: number[] }>): string | null {
+export function duplicateSplitMessage(label: string, groups: Array<{ name: string; rowNos: number[]; reason?: string }>): string | null {
   if (!groups.length) return null;
   const g = groups[0];
   const more = groups.length > 1 ? `（另有 ${groups.length - 1} 组同类问题）` : '';
-  return `${label}第 ${g.rowNos.join('、')} 行「${g.name}」重复且标了拆分——拆分的料会按矩阵自动分行，`
-    + `多建一行就多算一整份（合同数量翻倍）。请删掉多余行，或把拆分改成「不拆」${more}`;
+  return `${label}第 ${g.rowNos.join('、')} 行「${g.name}」重复且标了拆分：${g.reason ?? ''}`
+    + `——生成合同时每行都会把矩阵拆一遍。请删掉多余行，或把拆分改成「不拆」${more}`;
 }

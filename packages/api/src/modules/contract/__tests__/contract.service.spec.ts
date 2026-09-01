@@ -919,10 +919,10 @@ describe('ContractService', () => {
       expect(bySize[0].qty_source).toBe('采购量·分码');
     });
 
-    it('矩阵为空时退回整单单行，不因新模式炸掉', () => {
+    it('矩阵为空时退回整单单行，不因新模式炸掉；qty_source 留「矩阵未分组」痕迹（#120 审计）', () => {
       const out = expand({ ...MAT, split_mode: 'BY_BOTH', final_purchase: 99 }, []);
       expect(out).toHaveLength(1);
-      expect(out[0]).toMatchObject({ qty: 99, qty_source: '采购量含损耗' });
+      expect(out[0]).toMatchObject({ qty: 99, qty_source: '采购量含损耗·矩阵未分组' });
     });
   });
 
@@ -1209,5 +1209,117 @@ describe('ContractService', () => {
       const m = { query: jest.fn().mockRejectedValue(new Error('db down')), findOne: jest.fn() };
       await expect((service as any).resolveShipToAddress(m, 34, 'A001')).resolves.toBeNull();
     });
+  });
+
+  // ===== #120 防线·后端闸：同名材料多行 + 标了拆分，两扇钱的门都要拦 =====
+
+  it('UT-CON-36 generateFromOrder 拦订单73版型（同名多行各填一色+BY_COLOR）', async () => {
+    mockOrderRepo.findOne.mockResolvedValueOnce({ id: 10, currency: 'CNY', deleted: 0 });
+    mockRepo.count.mockResolvedValueOnce(0);
+    mockOrderMaterialRepo.find.mockResolvedValueOnce([
+      { item_name: '金属丝底PU', color: '米白', split_mode: 'BY_COLOR', supplier: 'A厂', sort_order: 0 },
+      { item_name: '金属丝底PU', color: '咖色', split_mode: 'BY_COLOR', supplier: 'A厂', sort_order: 1 },
+    ]);
+    await expect(service.generateFromOrder(10, 1)).rejects.toThrow(/金属丝底PU.*第 1、2 行/);
+  });
+
+  it('UT-CON-37 手建材料合同选订单自动带出，同样拦（create 这扇门此前没闸）', async () => {
+    mockRedis.eval.mockResolvedValue('HT-20260902-001');
+    mockOrderRepo.findOne.mockResolvedValue({ id: 10, style_no: 'M525', delivery_date: null, deleted: 0 });
+    mockOrderMaterialRepo.find.mockResolvedValue([
+      { item_name: '拉链', color: '黑色', split_mode: 'BY_BOTH', sort_order: 0 },
+      { item_name: '拉链', color: '黑色', split_mode: 'BY_BOTH', sort_order: 1 },
+    ]);
+    // 闸在进事务之前就抛——这里不排队 transaction mock，否则会串染后面的用例
+    await expect(service.create({ type: ContractType.MATERIAL, factory_id: 5, order_id: 10 } as any, 1))
+      .rejects.toThrow(/拉链.*颜色相同/);
+    expect(mockDataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('UT-CON-38 订单42版型（部位互异+颜色全空）放行且各行独立按矩阵拆色', async () => {
+    mockRedis.eval.mockResolvedValue('HT-20260902-002');
+    mockOrderRepo.findOne.mockResolvedValue({ id: 10, style_no: 'M525', delivery_date: null, deleted: 0 });
+    mockOrderMaterialRepo.find.mockResolvedValue([
+      { item_name: '双面呢', part: '前胸后背', color: '', unit: '米', net_usage: 0.5, loss_rate: 0, split_mode: 'BY_COLOR', sort_order: 0 },
+      { item_name: '双面呢', part: '大袖', color: '', unit: '米', net_usage: 0.3, loss_rate: 0, split_mode: 'BY_COLOR', sort_order: 1 },
+    ]);
+    mockMatrixRepo.findOne.mockResolvedValue({ matrix_data: { rows: [
+      { color: '黑色', size: 'S', qtys: [100] },
+      { color: '藏青', size: 'M', qtys: [100] },
+    ] } });
+    const savedLines: any[] = [];
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb({
+      create: jest.fn().mockImplementation((_: any, v: any) => v),
+      save: jest.fn().mockImplementation((_: any, v: any) => {
+        if (Array.isArray(v)) savedLines.push(...v);
+        return Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 });
+      }),
+      findOne: jest.fn().mockResolvedValue(null),
+      delete: jest.fn(),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+      find: jest.fn().mockResolvedValue([]),
+      query: jest.fn().mockResolvedValue([]),
+    }));
+    await service.create({ type: ContractType.MATERIAL, factory_id: 5, order_id: 10 } as any, 1);
+    expect(savedLines).toHaveLength(4); // 2 部位 × 2 色
+    const chest = savedLines.filter((l) => l.qty === 50);  // 前胸后背 100×0.5
+    expect(chest).toHaveLength(2);
+  });
+
+  it('UT-CON-39 final_purchase=0 不是有效值：按占比分摊要退到 total_purchase（生产 543/800 行存 0）', async () => {
+    mockRedis.eval.mockResolvedValue('HT-20260902-003');
+    mockOrderRepo.findOne.mockResolvedValue({ id: 10, style_no: 'M525', delivery_date: null, deleted: 0 });
+    mockOrderMaterialRepo.find.mockResolvedValue([{
+      item_name: '织带', unit: '米', net_usage: 0, loss_rate: 0,
+      final_purchase: 0, total_purchase: 500, split_mode: 'BY_COLOR', sort_order: 0,
+    }]);
+    mockMatrixRepo.findOne.mockResolvedValue({ matrix_data: { rows: [
+      { color: '黑色', size: 'S', qtys: [60] },
+      { color: '藏青', size: 'M', qtys: [40] },
+    ] } });
+    const savedLines: any[] = [];
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb({
+      create: jest.fn().mockImplementation((_: any, v: any) => v),
+      save: jest.fn().mockImplementation((_: any, v: any) => {
+        if (Array.isArray(v)) savedLines.push(...v);
+        return Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 });
+      }),
+      findOne: jest.fn().mockResolvedValue(null),
+      delete: jest.fn(),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+      find: jest.fn().mockResolvedValue([]),
+      query: jest.fn().mockResolvedValue([]),
+    }));
+    await service.create({ type: ContractType.MATERIAL, factory_id: 5, order_id: 10 } as any, 1);
+    expect(savedLines.map((l) => l.qty).sort((a, b) => a - b)).toEqual([200, 300]); // 500 按 40/60 分，不是 0
+  });
+
+  it('UT-CON-40 标了拆分却没矩阵：整单兜底行的 qty_source 要留「矩阵未分组」痕迹，且 fp=0 退 total', async () => {
+    mockRedis.eval.mockResolvedValue('HT-20260902-004');
+    mockOrderRepo.findOne.mockResolvedValue({ id: 10, style_no: 'M525', delivery_date: null, deleted: 0 });
+    mockOrderMaterialRepo.find.mockResolvedValue([
+      { item_name: '胶标', unit: '个', final_purchase: 0, total_purchase: 500, split_mode: 'BY_COLOR', sort_order: 0 },
+      { item_name: '主标', unit: '个', final_purchase: 0, total_purchase: 300, split_mode: 'NONE', sort_order: 1 },
+    ]);
+    mockMatrixRepo.findOne.mockResolvedValue(null); // 无矩阵
+    const savedLines: any[] = [];
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb({
+      create: jest.fn().mockImplementation((_: any, v: any) => v),
+      save: jest.fn().mockImplementation((_: any, v: any) => {
+        if (Array.isArray(v)) savedLines.push(...v);
+        return Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 });
+      }),
+      findOne: jest.fn().mockResolvedValue(null),
+      delete: jest.fn(),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+      find: jest.fn().mockResolvedValue([]),
+      query: jest.fn().mockResolvedValue([]),
+    }));
+    await service.create({ type: ContractType.MATERIAL, factory_id: 5, order_id: 10 } as any, 1);
+    const glue = savedLines.find((l) => l.item_name === '胶标');
+    const label = savedLines.find((l) => l.item_name === '主标');
+    expect(glue.qty).toBe(500);                                  // 0 击穿修复
+    expect(glue.qty_source).toBe('采购量含损耗·矩阵未分组');       // 无声降级要留痕
+    expect(label.qty_source).toBe('采购量含损耗');                 // 本来就不拆的不背这个标
   });
 });
