@@ -191,7 +191,11 @@
           <span class="hint">采购量 = 大货总数 × 单件耗用 × (1+损耗%)；个/条向上取整；最终采购量偏离>±10%需确认</span>
         </div>
         <div class="table-scroll">
-          <el-table :data="form.materials" size="small" border v-keynav :row-class-name="matRowClass" @selection-change="(v: any[]) => selMats = v">
+          <!-- 【row-key 必须有】（#121）：el-table 对 :data 是 deep watch，展开面板里每敲一个字符
+               （尺寸列写 row.sizeSpecs）都会触发 setData→updateExpandRows；element-plus 源码里
+               无 rowKey 的分支是 expandRows=[] 直接清空——面板应声关闭、输入框连焦点一起没了，
+               填 57.5 要重新点开 4 次。有 rowKey 则按键保留展开状态（store/expand.ts 实证）。 -->
+          <el-table :data="form.materials" :row-key="matRowKey" size="small" border v-keynav :row-class-name="matRowClass" @selection-change="(v: any[]) => selMats = v">
             <el-table-column type="expand" width="30">
               <template #default="{ row }">
                 <div class="split-preview">
@@ -581,6 +585,16 @@ function applyBatchMats() {
  * 带着 id 复制等于两行写同一条记录，后存的覆盖先存的、静默丢一行；
  * contracted/contracts 是「已订」绿标，新行还没下过单，继承过来会误导。
  */
+// 材料行的稳定 row-key：用 WeakMap 发号，不往行对象塞字段——塞了会进保存载荷/复制逻辑，
+// 而且渲染期改响应式对象有触发重渲染循环的风险。新建/带入/复制出的新对象自动拿到新号。
+const matUidMap = new WeakMap<object, number>();
+let matUidSeq = 0;
+function matRowKey(r: object): string {
+  let u = matUidMap.get(r);
+  if (!u) { u = ++matUidSeq; matUidMap.set(r, u); }
+  return String(u);
+}
+
 function copyMatLine(idx: number) {
   const src = form.materials[idx];
   if (!src) return;

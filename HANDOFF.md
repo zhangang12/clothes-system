@@ -12,7 +12,11 @@
 > 【为什么不是简单放开角色】改成 `@Roles(BUSINESS)` 等于所有业务都能看；把他提成主管等于把整套管理权限一起给出去。系统里其实早有账号级开关 `sys_user.menu_keys`（账号管理里逐项勾选），但它**只管前端**——菜单给了、点进去仍 403。
 > 【做法】新增 `MenuGuard` + `@MenuAccess('feedbacks')`，把**同一套** `resolveMenuKeys` 口径接到接口层（两处规则一旦分叉就会出现「侧栏有、点进去没有」）；`JwtStrategy` 的 `select` 顺带取 `menu_keys`（本来每请求就查这一行，不增加查询，且改完菜单**立刻生效**不必重登）；路由 `/feedbacks` 由 `meta.admin` 改为 `meta.menu='feedbacks'`。**只开「查」**：列表与导出走菜单授权，**回复 / 标记已处理仍限 ADMIN/主管**，页面上对只读账号直接不渲染那一列（按钮摆着点下去只会 403）。King 的账号菜单已在生产配好（业务默认菜单 + `feedbacks`）。api jest **465**（+9）；**变异测试 4 次**全部如期变红。
 
-> 最新：**#119 qiao「用款申请看不到是哪个业务申请的」——数据一直在，只是从没带出来过**。`payment_request.created_by` 从建表起就在写，但列表接口 `enrichNames()` 只补了工厂名与合同号，没补申请人；页面自然没有这一列，财务审批时不知道找谁核对。
+> 最新：**9-01 两条反馈（#120/#121，均 daisy），#121 已修，#120 等口径**。
+> **#121 分码尺寸输入框每敲一个字符就关**——根因在 element-plus 源码里逐行核实过：`el-table` 对 `:data` 是 **deep watch**（table/style-helper.ts），展开面板里写 `row.sizeSpecs` 每敲一键都触发 `setData → updateExpandRows`，而 **无 rowKey 的分支是 `expandRows.value = []` 直接清空**（store/expand.ts）——面板应声关闭、焦点没了，填 57.5 要重新点开 4 次。修法：材料表加 `:row-key="matRowKey"`，用 **WeakMap 发号**（不往行对象塞字段——会进保存载荷，且渲染期改响应式对象有重渲染循环风险；复制/新建的新对象天然拿新号）。全仓扫过：另一处带展开列的表（CustomsDocsView）面板纯展示无输入，不受影响。**新增守卫** `expand-rowkey-guard.spec.ts`：展开面板里有 v-model 的表必须声明 row-key（变异实测：拿掉 row-key 守卫即红）。web vitest **555**（+2）。
+> **#120 两问都还没动，等拍板**：①**采购量分色算错**（订单 O-20260901-001 三张草稿材料合同**多签 202,094.40 元**，未推送供应商；根因是「一行=一个颜色」vs「一行=全订单」两套心智模型相撞，前后端共 8 处同根因）——修法取决于业务口径：同名材料分色多行时，每行到底出该色的量还是全部颜色的量？需问 daisy 或用户拍板；三张错合同怎么处理也待定。②**船期列**：审查确认 `matrix_data` 是 JSON 列、**零 schema 变更**即可加，但前端保存时 pos 是白名单映射（OrderEditView:748 只发 po_no/destination/consignee），不改那行填了会静默丢——用户昨天说不做，daisy 今天又提，待用户重新表态。
+
+> 前一轮：**#119 qiao「用款申请看不到是哪个业务申请的」——数据一直在，只是从没带出来过**。`payment_request.created_by` 从建表起就在写，但列表接口 `enrichNames()` 只补了工厂名与合同号，没补申请人；页面自然没有这一列，财务审批时不知道找谁核对。
 > 【改法】`enrichNames()` 里加一次**批量**查账号（与工厂名/合同号同一路子，列表最多 100 行，绝不逐行查）；`COALESCE(NULLIF(real_name,''), username)` 取真名、没真名退账号名；查不到留 `null` 让前端显示「—」，**不伪造成"未知用户"**。该函数同时服务预付款列表，那边一并有了。前端付款申请表在「工厂」后加「申请人」列；**工厂账单导出**也加了这一列（qiao 就是靠它对账），插在「申请日期」之后。
 > 【单测抓到一个真缺陷】UT-PR-NAME-4 一开始是红的：早期数据 `created_by` 为空时 `uids` 是空数组，原写法把赋值放在 `if (uids.length)` 里，这些行**连 `created_by_name` 这个键都没有**（undefined 而非 null），与「查不到显示 —」的口径不一致。改为无条件赋值。
 > 【构建 tsc 比 vitest 严】新加的 4 处 `exportFactoryStatementExcel(st)` 漏了第二个参数（导出时间戳），vitest 跑得过、`pnpm build` 直接失败——已补。
@@ -244,6 +248,7 @@
 
 ## 最近变更（新→旧，保留最近若干条）
 
+- （本次·**#121 展开面板输入框失焦**）`fix(web)` 材料表加 `:row-key`（WeakMap 发号，不污染行数据）。根因在 element-plus 源码逐行核实：deep watch → setData → updateExpandRows，无 rowKey 分支直接清空 expandRows。新增守卫 `expand-rowkey-guard.spec.ts`（展开面板含 v-model 必须有 row-key，变异实测有效）。web vitest **555**（+2）。**#120 未动**：采购量分色口径与船期均待用户拍板（多签 20.2 万的三张合同还是草稿，不急但别拖）。**零后端改动、零 DB 结构变更**。
 - （本次·**#119 付款申请显示申请人**）`feat(api,web)` `created_by` 一直在存、只是没带出来：`enrichNames()` 加一次批量查账号（真名优先、退账号名、查不到给 null 不伪造），付款申请列表与工厂账单导出各加「申请人」列。单测 UT-PR-NAME-4 抓出「历史行 created_by 为空时该键缺失（undefined≠null）」并已修；构建 tsc 抓出测试漏传导出时间戳参数（vitest 放行、build 失败）。api jest **479**（+4）/ web **553**（+4）；变异 6 次全红。**零 DB 结构变更**。
 - （本次·**导入弹窗不再列草稿报价**）`fix(web)` error_log 实证有人对着「必被 A7 拒」的草稿报价重试 10 次（同一订单，无重复建单——上一轮的顺序设计兑现）。弹窗改列 `importableQuotes`（QUOTED/ADJUSTING/ORDERED，与后端同口径）并带状态字样；「关联报价单」下拉保持不过滤（老订单会挂任意状态报价）。web 549 全绿。**零后端改动**。
 - （本次·**#118 生产通知单按 PO 转置 + 材料行复制**）`fix(web)` factory 打印的数量搭配改「每 PO 一行、尺码作列」（`matrixPivotRows`，fixture 用 daisy 样张真实数字核到分毫不差；空组合不出行、洗标号空列不占位；船期列因 PO 维度无此数据未做、涉及 schema 等拍板）；订单材料明细加行内「复制」，**剥掉 id 与已订标记**（id 是行主键、后端原地更新，带着复制＝两行写同一条记录）。web vitest **549**（+8）；变异 4 次全红。**零后端改动、零 DB 结构变更**。
