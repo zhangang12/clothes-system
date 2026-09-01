@@ -13,7 +13,7 @@ import { Quotation } from '../../quote/quotation.entity';
 import { QuotationItem } from '../../quote/quotation-item.entity';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
 import { SysConfigService } from '../../../common/config/sys-config.service';
-import { OrderStatus, ApprovalStatus } from '@i9/types';
+import { OrderStatus, QuoteStatus, ApprovalStatus } from '@i9/types';
 
 const makeOrder = (overrides = {}): any => ({
   id: 1,
@@ -423,5 +423,80 @@ describe('OrderService', () => {
         { item_name: '拉链', color: '黑色', split_mode: 'BY_COLOR', net_usage: 1 },
       ],
     } as any)).rejects.toThrow(/拉链/);
+  });
+
+  // ===== importFromQuote：重导拦截与拆分设置保留（cm#41 悬空事故的根治） =====
+
+  const IMP_ORDER = { id: 32, status: OrderStatus.DRAFT, qty_total: 900, deleted: 0, style_no: 'M1' };
+  const IMP_QUOTE = { id: 7, status: QuoteStatus.QUOTED, customer_id: 3, rmb_total: 12 };
+  const impManager = () => ({
+    create: jest.fn().mockImplementation((_, v) => v),
+    save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
+    find: jest.fn().mockResolvedValue([]),
+    delete: jest.fn(),
+  });
+
+  it('UT-IMP-01 已生成合同的订单拒绝重导——整表重插会把合同行的溯源打断（生产 cm#41 实发）', async () => {
+    mockOrderRepo.findOne.mockResolvedValueOnce({ ...IMP_ORDER });
+    mockQuoteRepo.findOne.mockResolvedValueOnce({ ...IMP_QUOTE });
+    mockQuoteItemRepo.find.mockResolvedValueOnce([]);
+    mockDataSource.query.mockResolvedValueOnce([{ contract_no: 'HT-20260724-001' }]);
+    mockDataSource.transaction.mockClear();
+    await expect(service.importFromQuote(32, 7)).rejects.toThrow(/HT-20260724-001.*删除相关合同/);
+    expect(mockDataSource.transaction).not.toHaveBeenCalled(); // 一行都没动
+  });
+
+  it('UT-IMP-02 没有合同时照常重导：先清旧行再插新行', async () => {
+    mockOrderRepo.findOne.mockResolvedValueOnce({ ...IMP_ORDER });
+    mockQuoteRepo.findOne.mockResolvedValueOnce({ ...IMP_QUOTE });
+    mockQuoteItemRepo.find.mockResolvedValueOnce([
+      { id: 71, item_name: '主面料', quote_usage: 1.2, loss_rate: 3, rmb_price: 8 },
+    ]);
+    mockDataSource.query.mockResolvedValueOnce([]); // 无合同
+    const m = impManager();
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(m));
+    await service.importFromQuote(32, 7);
+    expect(m.delete).toHaveBeenCalledWith(expect.anything(), { order_id: 32 });
+    const saved = m.save.mock.calls.find((c) => Array.isArray(c[1]))![1];
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({ item_name: '主面料', quote_item_id: 71, split_mode: 'NONE' });
+  });
+
+  it('UT-IMP-03 重导保留拆分设置：品名唯一对应的行，split_mode 与 size_specs 原样带过去', async () => {
+    mockOrderRepo.findOne.mockResolvedValueOnce({ ...IMP_ORDER });
+    mockQuoteRepo.findOne.mockResolvedValueOnce({ ...IMP_QUOTE });
+    mockQuoteItemRepo.find.mockResolvedValueOnce([
+      { id: 71, item_name: '拉链', quote_usage: 1, loss_rate: 3 },
+      { id: 72, item_name: '主面料', quote_usage: 1.2, loss_rate: 3 },
+    ]);
+    mockDataSource.query.mockResolvedValueOnce([]);
+    const m = impManager();
+    m.find.mockResolvedValueOnce([
+      { item_name: '拉链', split_mode: 'BY_SIZE', size_specs: { S: '50', M: '55' } },
+      { item_name: '主面料', split_mode: 'NONE', size_specs: null },
+    ]);
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(m));
+    await service.importFromQuote(32, 7);
+    const saved = m.save.mock.calls.find((c) => Array.isArray(c[1]))![1];
+    const zip = saved.find((r: any) => r.item_name === '拉链');
+    const fab = saved.find((r: any) => r.item_name === '主面料');
+    expect(zip).toMatchObject({ split_mode: 'BY_SIZE', size_specs: { S: '50', M: '55' } });
+    expect(fab.split_mode).toBe('NONE'); // 本来没拆的不凭空带
+  });
+
+  it('UT-IMP-04 品名对不唯一就不猜：报价里两行同名时不携带旧拆分设置', async () => {
+    mockOrderRepo.findOne.mockResolvedValueOnce({ ...IMP_ORDER });
+    mockQuoteRepo.findOne.mockResolvedValueOnce({ ...IMP_QUOTE });
+    mockQuoteItemRepo.find.mockResolvedValueOnce([
+      { id: 71, item_name: '拉链', part: '门襟', quote_usage: 1, loss_rate: 3 },
+      { id: 72, item_name: '拉链', part: '口袋', quote_usage: 0.5, loss_rate: 3 },
+    ]);
+    mockDataSource.query.mockResolvedValueOnce([]);
+    const m = impManager();
+    m.find.mockResolvedValueOnce([{ item_name: '拉链', split_mode: 'BY_COLOR', size_specs: null }]);
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(m));
+    await service.importFromQuote(32, 7);
+    const saved = m.save.mock.calls.find((c) => Array.isArray(c[1]))![1];
+    expect(saved.every((r: any) => r.split_mode === 'NONE')).toBe(true);
   });
 });

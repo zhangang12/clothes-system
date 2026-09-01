@@ -283,6 +283,19 @@ export class OrderService {
     }
     const items = await this.quoteItemRepo.find({ where: { quote_id: quoteId }, order: { sort_order: 'ASC' } });
 
+    // 【拦截：已生成合同的订单不许重导】重导走整表 delete+重插，行 ID 全换，
+    // contract_material.order_material_id 当场悬空、「已订」标记全丢——生产 cm#41 就是这么来的
+    // （订单 32 生成 HT-20260724-001 后重导，合同行指着已删除的 om#221 挂了一个月）。
+    // 与 generateFromOrder 的幂等守卫同一哲学：合同已经签在这些材料行上，底下的行不能整表换血。
+    const contracts: Array<{ contract_no: string }> = await this.dataSource.query(
+      'SELECT contract_no FROM contract WHERE order_id = ? AND deleted = 0', [id]);
+    if (contracts.length) {
+      throw new BadRequestException(
+        `该订单已生成合同（${contracts.map((c) => c.contract_no).join('、')}），重新导入会打断合同与材料行的关联。`
+        + '如确需重导，请先删除相关合同',
+      );
+    }
+
     return this.dataSource.transaction(async (manager) => {
       order.quote_id = quoteId;
       order.customer_id = quote.customer_id;
@@ -298,12 +311,33 @@ export class OrderService {
       order.approval_status = ApprovalStatus.NONE; // 导入改金额:清审批,避免绕过阈值
       order.quote_synced_at = new Date(); // 「源报价已变更」= quote.content_updated_at > 此值(P2#20)
       await manager.save(OrderMain, order);
+      // 【重导别清掉拆分设置】split_mode/size_specs 是订单侧的决策，报价里没有对应物，
+      // 原来整表重插一律落 NONE——业务设好「按颜色拆」再刷新报价，设置就静默没了。
+      // 只在品名两边都唯一时携带（多行同名对不准是谁的设置，宁可不带也不猜）。
+      const prevRows = await manager.find(OrderMaterial, { where: { order_id: id } });
+      const nameOf = (v: unknown) => String(v ?? '').trim();
+      const countBy = (names: string[]) => {
+        const m = new Map<string, number>();
+        for (const n of names) { if (n) m.set(n, (m.get(n) ?? 0) + 1); }
+        return m;
+      };
+      const prevCount = countBy(prevRows.map((r) => nameOf(r.item_name)));
+      const nextCount = countBy(items.map((it) => nameOf(it.item_name)));
+      const carry = new Map<string, { split_mode: string; size_specs: Record<string, string> | null }>();
+      for (const r of prevRows) {
+        const n = nameOf(r.item_name);
+        if (n && prevCount.get(n) === 1 && nextCount.get(n) === 1 && (r.split_mode ?? 'NONE') !== 'NONE') {
+          carry.set(n, { split_mode: r.split_mode!, size_specs: r.size_specs ?? null });
+        }
+      }
       await manager.delete(OrderMaterial, { order_id: id });
       const materials = this.buildMaterials(id, order.qty_total, items.map((it) => ({
         item_name: it.item_name, part: it.part, width: it.width, color: it.color, supplier: it.supplier,
         puller: it.puller, zipper_teeth: it.zipper_teeth, code_band: it.code_band,
         unit: it.unit, net_usage: +it.quote_usage || 0, loss_rate: +it.loss_rate || 3, unit_price: +it.rmb_price || undefined,
         quote_item_id: it.id,
+        split_mode: carry.get(nameOf(it.item_name))?.split_mode,
+        size_specs: carry.get(nameOf(it.item_name))?.size_specs ?? undefined,
       } as CreateOrderMaterialDto)));
       if (materials.length) await manager.save(OrderMaterial, materials);
       return order;
