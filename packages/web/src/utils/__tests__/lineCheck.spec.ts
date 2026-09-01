@@ -159,3 +159,60 @@ describe('会被保存时丢掉、但人填了东西的行', () => {
     expect(droppedMessage('联系人', [], '缺姓名')).toBeNull();
   });
 });
+
+// ── #120 B改良版：同名材料多行 + 标了拆分 → 保存前必拦 ──
+import { duplicateSplitGroups, duplicateSplitMessage } from '../lineCheck';
+
+describe('同名拆分行防呆（#120）', () => {
+  // fixture 按订单 O-20260901-001 真实数据：金属丝底PU 两行都 BY_COLOR，合同因此翻倍多签 20.2 万
+  const rows = [
+    { itemName: '金属丝底PU', splitMode: 'BY_COLOR' },
+    { itemName: '中斜纹', splitMode: 'BY_COLOR' },
+    { itemName: '金属丝底PU', splitMode: 'BY_COLOR' },
+    { itemName: '30G有胶衬', splitMode: 'NONE' },
+  ];
+
+  it('UT-DS-01: 同名且带拆分的多行要被点名（含行号）', () => {
+    const g = duplicateSplitGroups(rows, 'itemName', 'splitMode');
+    expect(g).toEqual([{ name: '金属丝底PU', rowNos: [1, 3] }]);
+  });
+
+  it('UT-DS-02: 同名但全是「不拆」不拦——一料两部位/两供应商是正常用法', () => {
+    const ok = [
+      { itemName: '主标', splitMode: 'NONE' },
+      { itemName: '主标', splitMode: 'NONE' },
+    ];
+    expect(duplicateSplitGroups(ok, 'itemName', 'splitMode')).toEqual([]);
+  });
+
+  it('UT-DS-03: 只要有一行标了拆分就拦（另一行 NONE 也一样翻倍）', () => {
+    const mixed = [
+      { itemName: '拉链', splitMode: 'NONE' },
+      { itemName: '拉链', splitMode: 'BY_BOTH' },
+    ];
+    expect(duplicateSplitGroups(mixed, 'itemName', 'splitMode')).toHaveLength(1);
+  });
+
+  it('UT-DS-04: 品名空的行不参与比对（占位空行别误报）', () => {
+    expect(duplicateSplitGroups([{ itemName: '', splitMode: 'BY_COLOR' }, { itemName: ' ', splitMode: 'BY_COLOR' }], 'itemName', 'splitMode')).toEqual([]);
+  });
+
+  it('UT-DS-05: 文案说清楚翻倍后果和两条出路', () => {
+    const msg = duplicateSplitMessage('材料明细', [{ name: '金属丝底PU', rowNos: [1, 3] }])!;
+    expect(msg).toContain('第 1、3 行');
+    expect(msg).toContain('翻倍');
+    expect(msg).toContain('不拆');
+  });
+
+  it('UT-DS-06: 多组问题时报第一组并给总数', () => {
+    const msg = duplicateSplitMessage('材料明细', [
+      { name: 'A', rowNos: [1, 2] }, { name: 'B', rowNos: [3, 4] },
+    ])!;
+    expect(msg).toContain('A');
+    expect(msg).toContain('另有 1 组');
+  });
+
+  it('UT-DS-07: 没问题时不打扰', () => {
+    expect(duplicateSplitMessage('材料明细', [])).toBeNull();
+  });
+});

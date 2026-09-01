@@ -237,7 +237,16 @@
             </el-table-column>
             <el-table-column label="部位" width="90"><template #default="{ row }"><el-input v-model="row.part" size="small" /></template></el-table-column>
             <el-table-column label="门幅/尺寸" width="100"><template #default="{ row }"><el-input v-model="row.width" size="small" /></template></el-table-column>
-            <el-table-column label="颜色" width="90"><template #default="{ row }"><el-input v-model="row.color" size="small" /></template></el-table-column>
+            <el-table-column label="颜色" width="96">
+              <template #default="{ row }">
+                <!-- 按颜色/色码拆的行：颜色由矩阵决定，这格手填会误导（daisy 填的「咖色」≠矩阵的「浅棕18-1048」）-->
+                <el-tooltip v-if="row.splitMode === 'BY_COLOR' || row.splitMode === 'BY_BOTH'" placement="top"
+                  content="该料按数量搭配矩阵自动分色，颜色以矩阵为准，不用手填">
+                  <el-tag size="small" effect="plain" type="success">自动分色</el-tag>
+                </el-tooltip>
+                <el-input v-else v-model="row.color" size="small" />
+              </template>
+            </el-table-column>
             <el-table-column label="成份" width="100"><template #default="{ row }"><el-input v-model="row.composition" size="small" /></template></el-table-column>
             <!-- 拉链三件套：报价带入、此处可改，生成合同时快照进合同行（供应商合同按真实版式各自成列）-->
             <el-table-column label="拉头" width="88"><template #default="{ row }"><el-input v-model="row.puller" size="small" /></template></el-table-column>
@@ -250,7 +259,15 @@
             <el-table-column label="单件耗用" width="90"><template #default="{ row }"><el-input v-model="row.netUsage" size="small" /></template></el-table-column>
             <el-table-column label="损耗%" width="80"><template #default="{ row }"><el-input v-model="row.lossRate" size="small" /></template></el-table-column>
             <el-table-column label="拆分" width="100"><template #default="{ row }"><el-select v-model="row.splitMode" size="small" style="width:100%"><el-option label="不拆" value="NONE" /><el-option label="按尺码" value="BY_SIZE" /><el-option label="按颜色" value="BY_COLOR" /><el-option label="颜色+尺码" value="BY_BOTH" /></el-select></template></el-table-column>
-            <el-table-column label="系统采购量" width="110"><template #default="{ row }"><span class="calc">{{ sysPurchase(row) }}</span></template></el-table-column>
+            <!-- 【分色要摆在面上】（#120 B改良版）：系统一直在按矩阵分色，但这列只显示整单总数，
+                 分组藏在展开面板里——daisy 以为没分色，自己一色建一行，合同翻倍多签 20.2 万。
+                 现在拆分行直接把各组量写在总数下面；矩阵分不出组时也明说，不再无声退回整单。 -->
+            <el-table-column label="系统采购量" width="150">
+              <template #default="{ row }">
+                <span class="calc">{{ sysPurchase(row) }}</span>
+                <div v-if="row.splitMode !== 'NONE'" class="split-mini" :class="{ warn: !splitPreview(row).length }">{{ splitSummary(row) }}</div>
+              </template>
+            </el-table-column>
             <el-table-column label="最终采购量" width="120">
               <template #default="{ row }">
                 <el-input v-model="row.finalPurchase" size="small" :class="{ 'dev-warn': deviated(row) }" @blur="checkDeviation(row)" />
@@ -349,7 +366,7 @@ import { useFormDraft } from '@/utils/formDraft';
 import { contractApi } from '@/api/contract';
 import { quoteApi } from '@/api/quote';
 import { useRemoteOptions, listParams } from '@/utils/remoteOptions';
-import { halfFilledRows, halfFilledMessage } from '@/utils/lineCheck';
+import { halfFilledRows, halfFilledMessage, duplicateSplitGroups, duplicateSplitMessage } from '@/utils/lineCheck';
 // 判断"这行人填过东西没有"的列；不含 lossRate（有默认值 3）
 const ORDER_MAT_TOUCHED = ['part', 'width', 'color', 'composition', 'supplier', 'unit', 'unitPrice', 'netUsage', 'finalPurchase'];
 import { settlementApi } from '@/api/settlement';
@@ -511,6 +528,13 @@ function splitPreview(mat: any) {
     const d = dims.get(key) ?? { color: '', size: '', label: key };
     return { key, ...d, groupQty, qty, formula: `${groupQty} × ${per} × ${loss.toFixed(2)}${shouldRound ? ' ↑取整' : ''}` };
   });
+}
+/** 分组摘要（摆在「系统采购量」下面）：最多点 3 组，多了给总数——细节仍看展开面板 */
+function splitSummary(row: any): string {
+  const gs = splitPreview(row);
+  if (!gs.length) return '矩阵未分出组，按整单计';
+  const head = gs.slice(0, 3).map((g: any) => `${g.label} ${g.qty}`).join(' / ');
+  return gs.length > 3 ? `${head} 等 ${gs.length} 组` : head;
 }
 const splitLabel = (m: string) => (m === 'BY_COLOR' ? '色' : m === 'BY_SIZE' ? '码' : '色分码');
 const splitDimLabel = (m: string) => (m === 'BY_COLOR' ? '颜色' : m === 'BY_SIZE' ? '尺码' : '颜色+尺码');
@@ -743,6 +767,9 @@ function checkOrderNumbers(): string | null {
   // 但「填了供应商/耗用/单价却漏了品名」是人没填完（8-26 深度审查，同类第 7 处）
   const half = halfFilledMessage('材料明细', halfFilledRows(form.materials, 'itemName', ORDER_MAT_TOUCHED));
   if (half) return half;
+  // 同名材料多行 + 标了拆分 = 每行都把矩阵拆一遍，合同按行数翻倍（#120，多签过 20.2 万）
+  const dup = duplicateSplitMessage('材料明细', duplicateSplitGroups(form.materials, 'itemName', 'splitMode'));
+  if (dup) return dup;
   return checkNumericCells(form.materials.filter((m: any) => m.itemName), ORDER_MAT_NUM_COLS, '材料明细');
 }
 
@@ -1007,6 +1034,8 @@ onMounted(async () => { await loadRefs(); await load(); void loadDocLinks(); awa
 :deep(.el-table .mat-contracted:hover > td.el-table__cell) { background: #DCEFE9; }
 .mat-name { display: flex; align-items: center; gap: 6px; }
 .mat-name .el-input { flex: 1; min-width: 0; }
+.split-mini { font-size: 11px; line-height: 1.5; color: var(--el-color-success); white-space: normal; }
+.split-mini.warn { color: var(--el-color-warning); }
 .mat-tag { flex: none; }
 :deep(.section-block) { border: 1px solid var(--el-border-color-light); border-radius: 6px; overflow: hidden; }
 :deep(.section-head) { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: #F5EDDC; border-bottom: 1px solid var(--el-border-color-light); }

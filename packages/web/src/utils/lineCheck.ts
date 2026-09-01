@@ -128,3 +128,43 @@ export function droppedMessage(label: string, rows: number[], needHint: string):
   const more = rows.length > 3 ? ` 等 ${rows.length} 行` : '';
   return `${label}第 ${head} 行${more}填了内容，但${needHint}——补上或删掉该行，否则保存时这几行会被丢掉`;
 }
+
+/**
+ * 「同名材料多行 + 标了拆分」检测（#120 B改良版的防呆闸）。
+ *
+ * 【为什么必须拦】拆分（按颜色/按尺码/色码）的语义是「一行代表整单，系统按矩阵自动拆」。
+ * 同名材料建了多行、每行还标着拆分，生成合同时**每一行都把整张矩阵拆一遍**：
+ * 行数 × 组数 = 合同行数——订单 O-20260901-001 就这样把三张材料合同签多了 20.2 万。
+ * 表面看不出翻倍（每行的数字各自都"对"），所以只能在保存时拦，不能指望人看出来。
+ *
+ * 同名但都「不拆」的行不拦：同一种料分两个部位/两个供应商是正常用法。
+ */
+export function duplicateSplitGroups(
+  rows: Array<Record<string, unknown>>,
+  nameField: string,
+  modeField: string,
+): Array<{ name: string; rowNos: number[] }> {
+  const byName = new Map<string, number[]>();
+  (rows ?? []).forEach((r, i) => {
+    const name = String(r?.[nameField] ?? '').trim();
+    if (!name) return;
+    if (!byName.has(name)) byName.set(name, []);
+    byName.get(name)!.push(i);
+  });
+  const out: Array<{ name: string; rowNos: number[] }> = [];
+  for (const [name, idxs] of byName) {
+    if (idxs.length < 2) continue;
+    const hasSplit = idxs.some((i) => String(rows[i]?.[modeField] ?? 'NONE') !== 'NONE');
+    if (hasSplit) out.push({ name, rowNos: idxs.map((i) => i + 1) });
+  }
+  return out;
+}
+
+/** 拦截文案：说清楚为什么、以及两条出路（删多余行 / 改为不拆） */
+export function duplicateSplitMessage(label: string, groups: Array<{ name: string; rowNos: number[] }>): string | null {
+  if (!groups.length) return null;
+  const g = groups[0];
+  const more = groups.length > 1 ? `（另有 ${groups.length - 1} 组同类问题）` : '';
+  return `${label}第 ${g.rowNos.join('、')} 行「${g.name}」重复且标了拆分——拆分的料会按矩阵自动分行，`
+    + `多建一行就多算一整份（合同数量翻倍）。请删掉多余行，或把拆分改成「不拆」${more}`;
+}

@@ -305,7 +305,7 @@
                 <template #default="{ row }">
                   <!-- 分色/分码材料：按订单尺码矩阵拆行（合同要分尺寸），显示拆行预览不可手改 -->
                   <div v-if="splitLinesOf(row.raw).length">
-                    <el-tag v-for="l in splitLinesOf(row.raw)" :key="l.key" size="small" style="margin:1px 2px">{{ l.key }}{{ l.dim === 'size' && dimOfRaw(row.raw, l.key) ? `(${dimOfRaw(row.raw, l.key)})` : '' }}: {{ l.qty }}</el-tag>
+                    <el-tag v-for="l in splitLinesOf(row.raw)" :key="l.key" size="small" style="margin:1px 2px">{{ l.dim === 'both' ? `${l.color}·${l.size}` : l.key }}{{ l.size && dimOfRaw(row.raw, l.size) ? `(${dimOfRaw(row.raw, l.size)})` : '' }}: {{ l.qty }}</el-tag>
                   </div>
                   <el-input-number v-else v-model="row.qty" :min="0" :precision="2" size="small" :controls="false" style="width:100%" />
                 </template>
@@ -562,16 +562,23 @@ const importMatrixRows = ref<any[]>([]); // 订单尺码矩阵行（分色/分�
 const INT_UNITS = ['个', '条', '只', '件', '粒', '套', '对', 'pcs', 'PCS', 'PC'];
 const dimOfRaw = (m: any, key: string) => String(m?.size_specs?.[key] ?? '').trim();
 // 与后端 contract.service expandMaterialLines 同一公式：某色(码)该料量=该色(码)件数×单件耗用×(1+损耗率)，整数类单位向上取整
-function splitLinesOf(m: any): Array<{ key: string; qty: number; dim: 'color' | 'size' }> {
+function splitLinesOf(m: any): Array<{ key: string; qty: number; dim: 'color' | 'size' | 'both'; color: string; size: string }> {
   const mode = m?.split_mode;
-  if ((mode !== 'BY_COLOR' && mode !== 'BY_SIZE') || !importMatrixRows.value.length) return [];
-  const dim = mode === 'BY_COLOR' ? 'color' : 'size';
+  // 【BY_BOTH 不能漏】后端 expandMaterialLines 三种拆分都支持，这里原来只认前两种——
+  // 「颜色+尺码」的料走本入口带入时静默退回整单一行（8-31 深挖实锤，订单 73 的拉链就是这类）
+  if ((mode !== 'BY_COLOR' && mode !== 'BY_SIZE' && mode !== 'BY_BOTH') || !importMatrixRows.value.length) return [];
   const groups = new Map<string, number>();
+  const dims = new Map<string, { color: string; size: string }>();
   for (const r of importMatrixRows.value) {
-    const key = String(r?.[dim] ?? '').trim();
+    const color = String(r?.color ?? '').trim();
+    const size = String(r?.size ?? '').trim();
+    // key 口径与后端一致：BY_BOTH 用 JSON 化（颜色本身带空格，拼串会歧义），缺一维就跳过
+    const key = mode === 'BY_COLOR' ? color : mode === 'BY_SIZE' ? size
+      : (color && size ? JSON.stringify([color, size]) : '');
     const qty = Array.isArray(r?.qtys) ? r.qtys.reduce((s: number, n: any) => s + (+n || 0), 0) : +r?.qty || 0;
     if (!key || !qty) continue;
     groups.set(key, (groups.get(key) ?? 0) + qty);
+    if (!dims.has(key)) dims.set(key, { color, size });
   }
   if (!groups.size) return [];
   const per = +m.net_usage || 0;
@@ -579,10 +586,12 @@ function splitLinesOf(m: any): Array<{ key: string; qty: number; dim: 'color' | 
   const totalGroupQty = [...groups.values()].reduce((a, b) => a + b, 0);
   const fallbackBase = +(m.final_purchase ?? m.total_purchase) || 0;
   const round = m.round_up === 1 || (m.round_up == null && INT_UNITS.includes(m.unit ?? ''));
+  const dim = mode === 'BY_COLOR' ? 'color' : mode === 'BY_SIZE' ? 'size' : 'both';
   return [...groups].map(([key, groupQty]) => {
     let qty = per > 0 ? groupQty * per * loss : (totalGroupQty ? (fallbackBase * groupQty) / totalGroupQty : 0);
     qty = round ? Math.ceil(qty) : +qty.toFixed(2);
-    return { key, qty, dim: dim as 'color' | 'size' };
+    const d = dims.get(key) ?? { color: '', size: '' };
+    return { key, qty, dim: dim as 'color' | 'size' | 'both', color: d.color, size: d.size };
   });
 }
 function minusDays(d: string | null | undefined, days: number): string {
@@ -616,7 +625,9 @@ async function loadImportMaterials() {
       color: m.color || '', unit: m.unit || '',
       net_usage: +m.net_usage || 0,
       split_mode: m.split_mode || 'NONE',
-      qty: +((+m.net_usage || 0) * orderQty).toFixed(2),
+      // 【默认量取已核算的采购量】原来写 net_usage×orderQty，连 (1+损耗%) 都没乘也不取整——
+      // 带入的量总是偏小，业务不改就按缺的量签（8-31 深挖实锤）。final_purchase 是人工确认过的，优先
+      qty: +(m.final_purchase ?? m.total_purchase ?? 0) || +((+m.net_usage || 0) * orderQty).toFixed(2),
     }));
   } catch (e: any) { errToast(e?.response?.data?.msg ?? '加载订单材料失败'); }
   finally { importing.value = false; }
@@ -643,13 +654,15 @@ async function doImport() {
           // 分色/分码材料：按订单尺码矩阵拆行（合同要分尺寸）——与后端 generateFromOrder 同公式；
           // 各码尺寸(size_specs)以 S(50) 形式带进 size 列，工厂按码裁料
           for (const l of splits) {
-            const dim = l.dim === 'size' ? String(c.raw?.size_specs?.[l.key] ?? '').trim() : '';
+            // 尺码维度取纯尺码（size_specs 按「S」建，不是「黑色 S」——与后端同口径）
+            const sizeKey = l.dim === 'color' ? '' : l.size;
+            const dim = sizeKey ? String(c.raw?.size_specs?.[sizeKey] ?? '').trim() : '';
             lines.push({
               item_name: c.item_name, spec: c.spec,
-              color: l.dim === 'color' ? l.key : (c.color || ''), size: l.dim === 'size' ? (dim ? `${l.key}(${dim})` : l.key) : '',
+              color: l.dim === 'size' ? (c.color || '') : l.color, size: sizeKey ? (dim ? `${sizeKey}(${dim})` : sizeKey) : '',
               style_no: od.style_no || '', unit: c.unit || '', qty: l.qty,
               unit_price: +c.raw?.unit_price || 0, delivery_date: dd, photo_url: '',
-              qty_source: l.dim === 'color' ? '采购量·分色' : '采购量·分码',
+              qty_source: l.dim === 'color' ? '采购量·分色' : (l.dim === 'size' ? '采购量·分码' : '采购量·分色分码'),
               // 行级溯源：不带这个，订单那边永远标不了「已订」绿底（2026-08-10 King 反馈）。
               // 走「生成合同」的路径由后端 expandMaterialLines 写入，走本入口就得前端自己带。
               order_material_id: c.raw?.id ?? undefined,
