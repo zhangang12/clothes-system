@@ -380,7 +380,7 @@ import { settlementApi } from '@/api/settlement';
 import { exportInvoiceApi } from '@/api/exportInvoice';
 import { factoryApi } from '@/api/factory';
 import FileUpload from '@/components/FileUpload.vue';
-import { ORDER_STATUS_LABEL, QuoteStatus, QUOTE_STATUS_LABEL, matrixColorsOf, colorPiecesOf, perColorRowErrors } from '@i9/types';
+import { ORDER_STATUS_LABEL, QuoteStatus, QUOTE_STATUS_LABEL, matrixColorsOf, colorPiecesOf, perColorRowErrors, draftOrderFromQuotePayload } from '@i9/types';
 import { downloadBlob } from '@/utils/docExcel';
 
 const SectionBlock = (props: { title: string; badge?: string }, { slots }: any) =>
@@ -1015,7 +1015,8 @@ async function doImport() {
       // （比如选了草稿态报价），人已经站在草稿上，重试不会再建一张单。
       const q: any = (await quoteApi.get(importQuoteId.value)) as any;
       const qd = q?.data ?? q;
-      const res: any = await orderApi.create({ quote_id: importQuoteId.value, customer_id: qd?.customer_id, style_no: qd?.style_no || undefined });
+      // 请求体走共享包（@i9/types）：这里手写字面量时漏过后端必填的 qty_total，新建页导入必 400（error_log #29）
+      const res: any = await orderApi.create(draftOrderFromQuotePayload({ quote_id: importQuoteId.value, customer_id: qd?.customer_id, style_no: qd?.style_no }));
       id = Number((res?.data ?? res)?.id);
       if (!id) throw new Error('草稿订单创建失败');
       await router.replace({ name: 'OrderEdit', params: { id } }); // 同组件不同路由不重挂载，下面手动 load

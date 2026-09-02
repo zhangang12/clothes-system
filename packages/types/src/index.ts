@@ -243,6 +243,25 @@ export function perColorRowErrors(rows: Array<{ color: string; mode: string }>, 
   return out;
 }
 
+/**
+ * 「从报价导入」在新建订单页要先静默建一张草稿订单的请求体（2026-09-02 巡查发现）。
+ *
+ * 【为什么要放在共享包】前端原来在页面里手写这个字面量，漏了后端 `CreateOrderDto` 里**必填**的
+ * `qty_total`，于是新建页点「从报价导入」必然 400（生产 error_log #29：daisy 9-01 连点 3 次，
+ * 只看到一句英文 `qty_total must not be less than 0`）。前端 mock 掉 create 的单测看不见 DTO 校验，
+ * 所以把请求体挪到这里一份，由 api 侧的契约用例拿真 DTO 校验它——两边再漂移就会当场变红。
+ *
+ * `qty_total: 0`：草稿此刻还没有件数，件数由尺码矩阵回填（与「报价转合同自动建订单」同口径）。
+ */
+export function draftOrderFromQuotePayload(q: { quote_id: number; customer_id?: number; style_no?: string }) {
+  return {
+    quote_id: q.quote_id,
+    customer_id: q.customer_id,
+    style_no: q.style_no || undefined,
+    qty_total: 0,
+  };
+}
+
 export enum ContractType {
   MATERIAL = 'MATERIAL',
   PROCESS = 'PROCESS',
