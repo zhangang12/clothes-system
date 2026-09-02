@@ -191,11 +191,56 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   [OrderStatus.DONE]: '已完成',
 };
 
-// 材料拆分模式（订单设计稿 §用料核算）
+// 材料拆分模式（订单设计稿 §用料核算）。**列是 varchar(10)，新增取值别超 10 字符**
 export enum OrderSplitMode {
-  NONE = 'NONE',       // 不拆
-  BY_SIZE = 'BY_SIZE', // 按尺码
-  BY_COLOR = 'BY_COLOR', // 按颜色
+  NONE = 'NONE',         // 不拆：一行 = 全订单量
+  BY_SIZE = 'BY_SIZE',   // 按尺码：一行 → 生成合同时按矩阵尺码自动拆行
+  BY_COLOR = 'BY_COLOR', // 按颜色：一行 → 按矩阵颜色自动拆行
+  BY_BOTH = 'BY_BOTH',   // 颜色×尺码
+  /**
+   * 按色单行（2026-09-02，#122 daisy：「同一种料不同颜色会有不同供应商/单价」）：
+   * 一行只代表矩阵里的**一个**颜色，采购量 = 该色件数 × 单耗 × (1+损耗)，供应商/单价按行填，
+   * 生成合同时本行单独成一行（不同供应商自然分到不同合同）。同名多行须颜色互异，且不能与其它拆分方式混用。
+   */
+  PER_COLOR = 'PER_COLOR',
+}
+export const ORDER_SPLIT_MODES: string[] = Object.values(OrderSplitMode);
+export const ORDER_SPLIT_MODE_LABEL: Record<string, string> = {
+  NONE: '不拆', BY_SIZE: '按尺码', BY_COLOR: '按颜色', BY_BOTH: '颜色+尺码', PER_COLOR: '按色单行',
+};
+
+/** 矩阵一行的件数：新结构 qtys=各 PO 数量数组；旧平铺行 qty 单值 */
+export function matrixRowPieces(r: any): number {
+  return Array.isArray(r?.qtys) ? r.qtys.reduce((s: number, n: any) => s + (+n || 0), 0) : +r?.qty || 0;
+}
+/** 矩阵里出现过的颜色（去空去重，按录入顺序） */
+export function matrixColorsOf(rows: any[]): string[] {
+  const out: string[] = [];
+  for (const r of rows ?? []) {
+    const c = String(r?.color ?? '').trim();
+    if (c && !out.includes(c)) out.push(c);
+  }
+  return out;
+}
+/** 某个颜色在矩阵里的件数（跨 PO、跨尺码合计）——按色单行的算量基数 */
+export function colorPiecesOf(rows: any[], color: string): number {
+  const want = String(color ?? '').trim();
+  if (!want) return 0;
+  return (rows ?? []).reduce((s: number, r: any) => s + (String(r?.color ?? '').trim() === want ? matrixRowPieces(r) : 0), 0);
+}
+/**
+ * 按色单行的行级校验：颜色必须是矩阵里的颜色（下拉只给矩阵颜色，对不上说明矩阵改过），
+ * 空颜色也不行——这行代表哪个色都不知道，算不出量。
+ */
+export function perColorRowErrors(rows: Array<{ color: string; mode: string }>, matrixColors: string[]): Array<{ rowNo: number; reason: string }> {
+  const out: Array<{ rowNo: number; reason: string }> = [];
+  rows.forEach((r, i) => {
+    if ((r.mode ?? 'NONE') !== 'PER_COLOR') return;
+    const c = String(r.color ?? '').trim();
+    if (!c) out.push({ rowNo: i + 1, reason: '按色单行必须选一个颜色' });
+    else if (!matrixColors.includes(c)) out.push({ rowNo: i + 1, reason: `颜色「${c}」不在数量搭配矩阵里` });
+  });
+  return out;
 }
 
 export enum ContractType {
@@ -743,6 +788,16 @@ export function findSplitDupConflicts(rows: SplitDupRow[]): SplitDupConflict[] {
     if (!idxs.some((i) => (rows[i].mode ?? 'NONE') !== 'NONE')) continue;   // 全不拆：一料两部位正常
     const parts = idxs.map((i) => (rows[i].part ?? '').trim());
     const colors = idxs.map((i) => (rows[i].color ?? '').trim());
+    // 按色单行（PER_COLOR）：同名多行正是它的用法——但必须全是按色单行，且一色一行
+    const perColorCount = idxs.filter((i) => rows[i].mode === 'PER_COLOR').length;
+    if (perColorCount > 0) {
+      if (perColorCount !== idxs.length) {
+        out.push({ name, rowNos: idxs.map((i) => i + 1), reason: '「按色单行」不能与其它拆分方式混用——同名的行要么都按色单行，要么都不是' });
+      } else if (colors.some((c) => !c) || new Set(colors).size !== colors.length) {
+        out.push({ name, rowNos: idxs.map((i) => i + 1), reason: '按色单行要一色一行：每行选一个颜色，且颜色不能重复' });
+      }
+      continue;
+    }
     const partsDistinctNonEmpty = parts.every(Boolean) && new Set(parts).size === parts.length;
     const colorsAllEmpty = colors.every((c) => !c);
     if (partsDistinctNonEmpty && colorsAllEmpty) continue;                  // 订单42：按部位分摊，放行

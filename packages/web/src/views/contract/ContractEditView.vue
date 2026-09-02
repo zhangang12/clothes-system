@@ -297,8 +297,7 @@
               <el-table-column label="单耗" width="80" align="right"><template #default="{ row }">{{ row.net_usage }}</template></el-table-column>
               <el-table-column label="拆分" width="80" align="center">
                 <template #default="{ row }">
-                  <el-tag v-if="row.split_mode === 'BY_SIZE'" size="small" type="warning">按尺码</el-tag>
-                  <el-tag v-else-if="row.split_mode === 'BY_COLOR'" size="small" type="warning">按颜色</el-tag>
+                  <el-tag v-if="row.split_mode && row.split_mode !== 'NONE'" size="small" type="warning">{{ ORDER_SPLIT_MODE_LABEL[row.split_mode] ?? row.split_mode }}</el-tag>
                   <span v-else class="muted">不拆</span>
                 </template>
               </el-table-column>
@@ -327,6 +326,7 @@
 
 <script setup lang="ts">
 import { splitLinesOf } from '@/utils/splitLines';
+import { ORDER_SPLIT_MODE_LABEL } from '@i9/types';
 import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';

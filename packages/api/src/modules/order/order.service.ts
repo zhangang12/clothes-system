@@ -13,7 +13,7 @@ import { SampleMaterial } from '../sample/sample-material.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { CustomerService } from '../customer/customer.service';
 import { SysConfigService } from '../../common/config/sys-config.service';
-import { OrderStatus, QuoteStatus, ApprovalStatus, APPROVAL_THRESHOLD_KEYS, findSplitDupConflicts } from '@i9/types';
+import { OrderStatus, QuoteStatus, ApprovalStatus, APPROVAL_THRESHOLD_KEYS, findSplitDupConflicts, perColorRowErrors, matrixColorsOf, colorPiecesOf } from '@i9/types';
 import { CreateOrderDto, CreateOrderMaterialDto, AddShipmentDto } from './dto/create-order.dto';
 import { QueryOrderDto } from './dto/query-order.dto';
 
@@ -53,7 +53,7 @@ export class OrderService {
     private readonly customerService: CustomerService,
   ) {}
 
-  private buildMaterials(orderId: number, qtyTotal: number, materials: CreateOrderMaterialDto[]): OrderMaterial[] {
+  private buildMaterials(orderId: number, qtyTotal: number, materials: CreateOrderMaterialDto[], matrixRows: any[]): OrderMaterial[] {
     // 【#120 防线·保存闸】同名材料多行且标了拆分：生成合同时每行都把矩阵拆一遍，行数×组数翻倍
     // （订单 73 因此多签 20.2 万）。前端保存前有同样的提示，但复制订单、API 直写不经过前端——
     // 这里是 create/update/importFromQuote 三条路的共同漏斗，拦一处即全覆盖。
@@ -67,10 +67,17 @@ export class OrderService {
         `材料「${g.name}」第 ${g.rowNos.join('、')} 行重复且标了拆分：${g.reason}。请删掉多余行或改为「不拆」`,
       );
     }
+    // 按色单行：颜色必须是矩阵里的颜色，否则该色件数为 0，采购量算成 0 还不报错
+    const pcErr = perColorRowErrors(materials.map((m) => ({ color: m.color ?? '', mode: m.split_mode ?? 'NONE' })), matrixColorsOf(matrixRows));
+    if (pcErr.length) {
+      throw new BadRequestException(`材料明细第 ${pcErr[0].rowNo} 行：${pcErr[0].reason}`);
+    }
     return materials.map((m, idx) => {
       const lossRate = m.loss_rate ?? 3;
       const roundOverride = m.round_up == null ? undefined : m.round_up === 1;
-      const { perUnit, total } = calcPurchase(qtyTotal, m.net_usage ?? 0, lossRate, m.unit, roundOverride);
+      // 按色单行的算量基数是该色件数，不是大货总数（#122：一行只代表一个颜色）
+      const pieces = m.split_mode === 'PER_COLOR' ? colorPiecesOf(matrixRows, m.color ?? '') : qtyTotal;
+      const { perUnit, total } = calcPurchase(pieces, m.net_usage ?? 0, lossRate, m.unit, roundOverride);
       const finalPurchase = m.final_purchase ?? total;
       const budget = m.unit_price ? +(finalPurchase * m.unit_price).toFixed(4) : null;
       return this.materialRepo.create({
@@ -81,7 +88,7 @@ export class OrderService {
         puller: m.puller ?? null, zipper_teeth: m.zipper_teeth ?? null, code_band: m.code_band ?? null,
         split_mode: m.split_mode ?? 'NONE', unit: m.unit, net_usage: m.net_usage, loss_rate: lossRate,
         size_specs: m.size_specs ?? null, // 各码尺寸（仅 BY_SIZE，拉链/织带按码不同尺寸）
-        loss_usage: perUnit, qty: qtyTotal, total_purchase: total, final_purchase: finalPurchase,
+        loss_usage: perUnit, qty: pieces, total_purchase: total, final_purchase: finalPurchase,
         round_up: m.round_up ?? null, unit_price: m.unit_price, budget, sort_order: m.sort_order ?? idx,
       });
     });
@@ -116,7 +123,7 @@ export class OrderService {
         await manager.save(OrderSizeMatrix, manager.create(OrderSizeMatrix, { order_id: order.id, matrix_data: dto.matrix_data }));
       }
       if (dto.materials?.length) {
-        await manager.save(OrderMaterial, this.buildMaterials(order.id, dto.qty_total, dto.materials));
+        await manager.save(OrderMaterial, this.buildMaterials(order.id, dto.qty_total, dto.materials, (dto.matrix_data as any)?.rows ?? []));
       }
       return order;
     });
@@ -251,7 +258,10 @@ export class OrderService {
         const own = new Set(existing.map((r) => String(r.id)));
         // 越权守卫：只认属于本订单的行 ID，其余一律当新增行，杜绝把别单的材料行改绑过来
         const incoming = dto.materials.map((m) => (m.id && own.has(String(m.id)) ? m : { ...m, id: undefined }));
-        const rows = this.buildMaterials(id, order.qty_total, incoming);
+        // 按色单行要按矩阵算该色件数：本次没带矩阵就用库里现有的
+        const mxRows: any[] = (dto.matrix_data as any)?.rows
+          ?? ((await manager.findOne(OrderSizeMatrix, { where: { order_id: id } }))?.matrix_data as any)?.rows ?? [];
+        const rows = this.buildMaterials(id, order.qty_total, incoming, mxRows);
         const keep = rows.map((r) => r.id).filter((v): v is number => v != null);
         await manager.delete(OrderMaterial, keep.length ? { order_id: id, id: Not(In(keep)) } : { order_id: id });
         await manager.save(OrderMaterial, rows);
@@ -326,10 +336,11 @@ export class OrderService {
       const carry = new Map<string, { split_mode: string; size_specs: Record<string, string> | null }>();
       for (const r of prevRows) {
         const n = nameOf(r.item_name);
-        if (n && prevCount.get(n) === 1 && nextCount.get(n) === 1 && (r.split_mode ?? 'NONE') !== 'NONE') {
+        if (n && prevCount.get(n) === 1 && nextCount.get(n) === 1 && (r.split_mode ?? 'NONE') !== 'NONE' && r.split_mode !== 'PER_COLOR') {
           carry.set(n, { split_mode: r.split_mode!, size_specs: r.size_specs ?? null });
         }
       }
+      const quoteMx: any[] = ((await manager.findOne(OrderSizeMatrix, { where: { order_id: id } }))?.matrix_data as any)?.rows ?? [];
       await manager.delete(OrderMaterial, { order_id: id });
       const materials = this.buildMaterials(id, order.qty_total, items.map((it) => ({
         item_name: it.item_name, part: it.part, width: it.width, color: it.color, supplier: it.supplier,
@@ -338,7 +349,7 @@ export class OrderService {
         quote_item_id: it.id,
         split_mode: carry.get(nameOf(it.item_name))?.split_mode,
         size_specs: carry.get(nameOf(it.item_name))?.size_specs ?? undefined,
-      } as CreateOrderMaterialDto)));
+      } as CreateOrderMaterialDto)), quoteMx);
       if (materials.length) await manager.save(OrderMaterial, materials);
       return order;
     });
@@ -536,17 +547,20 @@ export class OrderService {
         }
         await manager.save(OrderMain, order);
       }
-      if (qtyTotal != null && qtyChanged) {
+      // 【矩阵一变就重算，不只看总数】按色单行的基数是该色件数——颜色之间挪数、总数不变，
+      // 那几行也得跟着变；不拆的行重算结果与原来相同，多算一遍无害
+      if (qtyTotal != null && (qtyChanged || matrixChanged)) {
         // 按既有逻辑重算材料(采购量=大货总数×单件耗用×(1+损耗%),与 buildMaterials 同式)
         const materials = await manager.find(OrderMaterial, { where: { order_id: id } });
         for (const m of materials) {
           const roundOverride = m.round_up == null ? undefined : m.round_up === 1;
           const lossRate = m.loss_rate == null ? 3 : +m.loss_rate;
-          const { perUnit, total } = calcPurchase(qtyTotal, m.net_usage == null ? 0 : +m.net_usage, lossRate, m.unit, roundOverride);
+          const pieces = m.split_mode === 'PER_COLOR' ? colorPiecesOf(rows ?? [], m.color ?? '') : qtyTotal;
+          const { perUnit, total } = calcPurchase(pieces, m.net_usage == null ? 0 : +m.net_usage, lossRate, m.unit, roundOverride);
           // final_purchase=业务微调值:与系统量一致(未微调)时跟随重算;有偏差(人工微调过)则保留人工值
           const wasAuto = m.final_purchase == null || +m.final_purchase === +m.total_purchase;
           m.loss_usage = perUnit;
-          m.qty = qtyTotal;
+          m.qty = pieces;
           m.total_purchase = total;
           m.final_purchase = wasAuto ? total : m.final_purchase;
           m.budget = m.unit_price ? +(m.final_purchase * +m.unit_price).toFixed(4) : null;

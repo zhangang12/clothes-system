@@ -162,7 +162,7 @@ describe('会被保存时丢掉、但人填了东西的行', () => {
 
 // ── #120：同名材料多行 + 标了拆分 → 保存前必拦（规则本体在 @i9/types，前后端共用） ──
 import { duplicateSplitGroups, duplicateSplitMessage } from '../lineCheck';
-import { findSplitDupConflicts } from '@i9/types';
+import { findSplitDupConflicts, matrixColorsOf, colorPiecesOf, perColorRowErrors } from '@i9/types';
 
 describe('同名拆分行防呆（#120）', () => {
   // fixture 按订单 O-20260901-001 真实数据：金属丝底PU 各行填了不同颜色，合同翻倍多签 20.2 万
@@ -264,3 +264,72 @@ describe('同名拆分行防呆（#120）', () => {
     expect(duplicateSplitMessage('材料明细', [])).toBeNull();
   });
 });
+
+// ── 按色单行（PER_COLOR，#122 daisy：同一种料不同颜色不同供应商/单价）──
+describe('按色单行的防呆与算量（前后端共用 @i9/types）', () => {
+  // 订单 73 的矩阵：米白 2264 件、浅棕 2264 件（各 4 码）
+  const ROWS = [
+    { color: '米白11-0602', size: 'PP', qtys: [336] }, { color: '米白11-0602', size: 'P', qtys: [526] },
+    { color: '米白11-0602', size: 'M', qtys: [740] }, { color: '米白11-0602', size: 'G', qtys: [662] },
+    { color: '浅棕18-1048', size: 'PP', qtys: [455] }, { color: '浅棕18-1048', size: 'P', qtys: [552] },
+    { color: '浅棕18-1048', size: 'M', qtys: [718] }, { color: '浅棕18-1048', size: 'G', qtys: [539] },
+    { color: '', size: '', qtys: [0] },   // 占位空行不算颜色
+  ];
+
+  it('UT-PC-01 同名多行全是按色单行、颜色互异 → 放行（这正是它的用法）', () => {
+    expect(findSplitDupConflicts([
+      { name: '金属丝底PU', part: '', color: '米白11-0602', mode: 'PER_COLOR' },
+      { name: '金属丝底PU', part: '', color: '浅棕18-1048', mode: 'PER_COLOR' },
+    ])).toEqual([]);
+  });
+
+  it('UT-PC-02 按色单行与自动分色混用 → 拦，说明不能混', () => {
+    const g = findSplitDupConflicts([
+      { name: '金属丝底PU', part: '', color: '米白11-0602', mode: 'PER_COLOR' },
+      { name: '金属丝底PU', part: '', color: '', mode: 'BY_COLOR' },
+    ]);
+    expect(g).toHaveLength(1);
+    expect(g[0].reason).toContain('混用');
+  });
+
+  it('UT-PC-03 两行选了同一个颜色 / 有行没选颜色 → 拦', () => {
+    expect(findSplitDupConflicts([
+      { name: 'A', part: '', color: '米白11-0602', mode: 'PER_COLOR' },
+      { name: 'A', part: '', color: '米白11-0602', mode: 'PER_COLOR' },
+    ])[0].reason).toContain('一色一行');
+    expect(findSplitDupConflicts([
+      { name: 'A', part: '', color: '米白11-0602', mode: 'PER_COLOR' },
+      { name: 'A', part: '', color: '', mode: 'PER_COLOR' },
+    ])).toHaveLength(1);
+  });
+
+  it('UT-PC-04 与不拆的同名行混用也拦（不拆那行是整单量，叠上去就重复）', () => {
+    expect(findSplitDupConflicts([
+      { name: 'A', part: '', color: '米白11-0602', mode: 'PER_COLOR' },
+      { name: 'A', part: '', color: '白色', mode: 'NONE' },
+    ])).toHaveLength(1);
+  });
+
+  it('UT-PC-05 矩阵颜色：去空去重、按录入顺序', () => {
+    expect(matrixColorsOf(ROWS)).toEqual(['米白11-0602', '浅棕18-1048']);
+  });
+
+  it('UT-PC-06 该色件数跨码合计；两边都去空格；不在矩阵的颜色是 0', () => {
+    expect(colorPiecesOf(ROWS, '米白11-0602')).toBe(2264);
+    expect(colorPiecesOf(ROWS, ' 浅棕18-1048 ')).toBe(2264);
+    expect(colorPiecesOf(ROWS, '咖色')).toBe(0);
+    expect(colorPiecesOf(ROWS, '')).toBe(0);
+  });
+
+  it('UT-PC-07 行级校验：只管按色单行；空颜色、不在矩阵里的颜色都点名', () => {
+    const errs = perColorRowErrors([
+      { color: '米白11-0602', mode: 'PER_COLOR' },
+      { color: '咖色', mode: 'PER_COLOR' },
+      { color: '', mode: 'PER_COLOR' },
+      { color: '咖色', mode: 'NONE' },          // 不拆的行颜色随便填
+    ], matrixColorsOf(ROWS));
+    expect(errs.map((e) => e.rowNo)).toEqual([2, 3]);
+    expect(errs[0].reason).toContain('咖色');
+  });
+});
+

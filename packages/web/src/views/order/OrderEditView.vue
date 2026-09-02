@@ -199,7 +199,7 @@
             <el-table-column type="expand" width="30">
               <template #default="{ row }">
                 <div class="split-preview">
-                  <template v-if="row.splitMode !== 'NONE'">
+                  <template v-if="row.splitMode !== 'NONE' && row.splitMode !== 'PER_COLOR'">
                     <div class="split-title">分{{ splitLabel(row.splitMode) }}出量（某{{ splitLabel(row.splitMode) }}该料量=该{{ splitLabel(row.splitMode) }}数量×单件耗用×(1+损耗率)；生成材料合同时按此分行）{{ hasSizeDim(row.splitMode) ? '；「尺寸」列按码填（拉链/织带等），不填与门幅一致' : '' }}</div>
                     <el-table :data="splitPreview(row)" size="small" border style="max-width:760px">
                       <el-table-column prop="label" :label="splitDimLabel(row.splitMode)" width="120" />
@@ -218,6 +218,7 @@
                     </el-table>
                     <div v-if="!splitPreview(row).length" class="hint">尺码数量搭配暂无{{ splitDimLabel(row.splitMode) }}数据，先在上方矩阵填写{{ row.splitMode === 'BY_BOTH' ? '（颜色与尺码都要填才成组）' : '' }}</div>
                   </template>
+                  <span v-else-if="row.splitMode === 'PER_COLOR'" class="hint">按色单行：本行只代表「{{ row.color || '（未选颜色）' }}」一个颜色，采购量 = 该色 {{ colorPiecesOf(form.matrix.rows, row.color) }} 件 × 单件耗用 × (1+损耗率)；供应商/单价按本行填，生成材料合同时本行单独成一行。其它颜色各建一行（同名、选不同颜色）。</span>
                   <span v-else class="hint">该料不拆分（整单量核算）；选「按颜色/按尺码/颜色+尺码」后此处按矩阵出分行预览</span>
                 </div>
               </template>
@@ -237,13 +238,18 @@
             </el-table-column>
             <el-table-column label="部位" width="90"><template #default="{ row }"><el-input v-model="row.part" size="small" /></template></el-table-column>
             <el-table-column label="门幅/尺寸" width="100"><template #default="{ row }"><el-input v-model="row.width" size="small" /></template></el-table-column>
-            <el-table-column label="颜色" width="96">
+            <el-table-column label="颜色" width="120">
               <template #default="{ row }">
                 <!-- 按颜色/色码拆的行：颜色由矩阵决定，这格手填会误导（daisy 填的「咖色」≠矩阵的「浅棕18-1048」）-->
                 <el-tooltip v-if="row.splitMode === 'BY_COLOR' || row.splitMode === 'BY_BOTH'" placement="top"
                   content="该料按数量搭配矩阵自动分色，颜色以矩阵为准，不用手填">
                   <el-tag size="small" effect="plain" type="success">自动分色</el-tag>
                 </el-tooltip>
+                <!-- 按色单行（#122）：一行一个颜色，只能从矩阵里选——手打的外号对不上矩阵，该色件数就是 0 -->
+                <el-select v-else-if="row.splitMode === 'PER_COLOR'" v-model="row.color" size="small" filterable placeholder="选矩阵颜色" style="width:100%"
+                  :class="{ 'dev-warn': row.color && !matrixColors.includes(row.color) }">
+                  <el-option v-for="c in matrixColors" :key="c" :label="c" :value="c" />
+                </el-select>
                 <el-input v-else v-model="row.color" size="small" />
               </template>
             </el-table-column>
@@ -258,14 +264,14 @@
             <el-table-column label="取整" width="92"><template #default="{ row }"><el-select v-model="row.roundUp" size="small" style="width:100%" clearable placeholder="自动"><el-option label="强制取整" :value="1" /><el-option label="不取整" :value="0" /></el-select></template></el-table-column>
             <el-table-column label="单件耗用" width="90"><template #default="{ row }"><el-input v-model="row.netUsage" size="small" /></template></el-table-column>
             <el-table-column label="损耗%" width="80"><template #default="{ row }"><el-input v-model="row.lossRate" size="small" /></template></el-table-column>
-            <el-table-column label="拆分" width="100"><template #default="{ row }"><el-select v-model="row.splitMode" size="small" style="width:100%"><el-option label="不拆" value="NONE" /><el-option label="按尺码" value="BY_SIZE" /><el-option label="按颜色" value="BY_COLOR" /><el-option label="颜色+尺码" value="BY_BOTH" /></el-select></template></el-table-column>
+            <el-table-column label="拆分" width="100"><template #default="{ row }"><el-select v-model="row.splitMode" size="small" style="width:100%"><el-option label="不拆" value="NONE" /><el-option label="按尺码" value="BY_SIZE" /><el-option label="按颜色" value="BY_COLOR" /><el-option label="颜色+尺码" value="BY_BOTH" /><el-option label="按色单行" value="PER_COLOR" /></el-select></template></el-table-column>
             <!-- 【分色要摆在面上】（#120 B改良版）：系统一直在按矩阵分色，但这列只显示整单总数，
                  分组藏在展开面板里——daisy 以为没分色，自己一色建一行，合同翻倍多签 20.2 万。
                  现在拆分行直接把各组量写在总数下面；矩阵分不出组时也明说，不再无声退回整单。 -->
             <el-table-column label="系统采购量" width="150">
               <template #default="{ row }">
                 <span class="calc">{{ sysPurchase(row) }}</span>
-                <div v-if="row.splitMode !== 'NONE'" class="split-mini" :class="{ warn: !splitPreview(row).length }">{{ splitSummary(row) }}</div>
+                <div v-if="row.splitMode !== 'NONE'" class="split-mini" :class="{ warn: splitWarn(row) }">{{ splitSummary(row) }}</div>
               </template>
             </el-table-column>
             <el-table-column label="最终采购量" width="120">
@@ -295,7 +301,7 @@
             <el-radio value="BY_BOTH">颜色+尺码</el-radio>
           </el-radio-group>
         </el-form-item>
-        <div class="hint">采购量公式：不拆分 = 大货总数×单件耗用×(1+损耗率)；按分码/分色分别出量。整数类材料(个/条)损耗后向上取整。</div>
+        <div class="hint">采购量公式：不拆分 = 大货总数×单件耗用×(1+损耗率)；按分码/分色分别出量；按色单行 = 该色件数×单件耗用×(1+损耗率)，一行一色、供应商与单价按行填（同一种料不同颜色不同供应商/单价时用）。整数类材料(个/条)损耗后向上取整。</div>
       </section-block>
     </el-form>
 
@@ -374,7 +380,7 @@ import { settlementApi } from '@/api/settlement';
 import { exportInvoiceApi } from '@/api/exportInvoice';
 import { factoryApi } from '@/api/factory';
 import FileUpload from '@/components/FileUpload.vue';
-import { ORDER_STATUS_LABEL, QuoteStatus, QUOTE_STATUS_LABEL } from '@i9/types';
+import { ORDER_STATUS_LABEL, QuoteStatus, QUOTE_STATUS_LABEL, matrixColorsOf, colorPiecesOf, perColorRowErrors } from '@i9/types';
 import { downloadBlob } from '@/utils/docExcel';
 
 const SectionBlock = (props: { title: string; badge?: string }, { slots }: any) =>
@@ -531,7 +537,23 @@ function splitPreview(mat: any) {
   });
 }
 /** 分组摘要（摆在「系统采购量」下面）：最多点 3 组，多了给总数——细节仍看展开面板 */
+/** 按色单行的小字：该色件数；同名的按色单行没把矩阵颜色建全时提示（不拦，可能确实只用于部分颜色） */
+function perColorSummary(row: any): string {
+  if (!row.color) return '请选颜色';
+  const pieces = colorPiecesOf(form.matrix.rows, row.color);
+  if (!pieces) return `「${row.color}」矩阵里没有件数`;
+  const name = String(row.itemName ?? '').trim();
+  const covered = form.materials
+    .filter((m: any) => m.splitMode === 'PER_COLOR' && String(m.itemName ?? '').trim() === name)
+    .map((m: any) => String(m.color ?? '').trim());
+  const missing = matrixColors.value.filter((c) => !covered.includes(c));
+  return `该色 ${pieces} 件` + (missing.length ? `；未建：${missing.join('、')}` : '');
+}
+function splitWarn(row: any): boolean {
+  return row.splitMode === 'PER_COLOR' ? !colorPiecesOf(form.matrix.rows, row.color) : !splitPreview(row).length;
+}
 function splitSummary(row: any): string {
+  if (row.splitMode === 'PER_COLOR') return perColorSummary(row);
   const gs = splitPreview(row);
   if (!gs.length) return '矩阵未分出组，按整单计';
   const head = gs.slice(0, 3).map((g: any) => `${g.label} ${g.qty}`).join(' / ');
@@ -542,9 +564,12 @@ const splitDimLabel = (m: string) => (m === 'BY_COLOR' ? '颜色' : m === 'BY_SI
 // 「尺寸」列（拉链/织带按码不同尺寸）只要拆分维度里含尺码就该出现
 const hasSizeDim = (m: string) => m === 'BY_SIZE' || m === 'BY_BOTH';
 const statusLabel = computed(() => (ORDER_STATUS_LABEL as any)[form.status] ?? '');
+const matrixColors = computed(() => matrixColorsOf(form.matrix.rows));
 function sysPurchase(row: any) {
   const per = (Number(row.netUsage) || 0) * (1 + (Number(row.lossRate) || 0) / 100);
-  let v = qtyTotal.value * per;
+  // 按色单行的基数是该色件数（与后端 buildMaterials 同口径）
+  const base = row.splitMode === 'PER_COLOR' ? colorPiecesOf(form.matrix.rows, row.color) : qtyTotal.value;
+  let v = base * per;
   const shouldRound = row.roundUp === 1 || row.roundUp === 0
     ? row.roundUp === 1
     : !!(row.unit && INT_UNITS.includes(row.unit));
@@ -771,6 +796,9 @@ function checkOrderNumbers(): string | null {
   // 同名材料多行 + 标了拆分 = 每行都把矩阵拆一遍，合同按行数翻倍（#120，多签过 20.2 万）
   const dup = duplicateSplitMessage('材料明细', duplicateSplitGroups(form.materials, 'itemName', 'splitMode'));
   if (dup) return dup;
+  // 按色单行：颜色必须是矩阵里的颜色（与后端 buildMaterials 同一份规则）
+  const pc = perColorRowErrors(form.materials.filter((m: any) => m.itemName).map((m: any) => ({ color: m.color, mode: m.splitMode })), matrixColors.value);
+  if (pc.length) return `材料明细第 ${pc[0].rowNo} 行：${pc[0].reason}${pc.length > 1 ? `（另有 ${pc.length - 1} 行同类问题）` : ''}`;
   return checkNumericCells(form.materials.filter((m: any) => m.itemName), ORDER_MAT_NUM_COLS, '材料明细');
 }
 

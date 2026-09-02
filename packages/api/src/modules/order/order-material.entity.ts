@@ -42,7 +42,7 @@ export class OrderMaterial {
   supplier: string; // 供应商
 
   @Column({ length: 10, default: 'NONE' })
-  split_mode: string; // 拆分 NONE/BY_SIZE/BY_COLOR/BY_BOTH(颜色×尺码)。**列是 varchar(10)，新增取值别超 10 字符**
+  split_mode: string; // 拆分 NONE/BY_SIZE/BY_COLOR/BY_BOTH(颜色×尺码)/PER_COLOR(按色单行：一行=矩阵一个颜色，qty=该色件数)。**列是 varchar(10)，新增取值别超 10 字符**
 
   // 各码尺寸（仅 BY_SIZE 材料）：{"S":"50","M":"52"}，拉链/织带等按码不同尺寸；空=各码同尺寸
   @Column({ type: 'json', nullable: true })

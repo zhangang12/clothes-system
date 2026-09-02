@@ -80,3 +80,17 @@ describe('materialPrintRows · 打印/导出的材料行（#122 工厂要看到�
     expect(rows.map((r) => r.no)).toEqual([1, 2, 2, 2]);
   });
 });
+
+describe('materialPrintRows · 按色单行', () => {
+  it('UT-MPR-06 按色单行不是矩阵拆分：原样一行，颜色就是行上选的矩阵颜色，量是该行采购量', () => {
+    const rows = materialPrintRows([
+      { item_name: '金属丝底PU', color: '米白11-0602', split_mode: 'PER_COLOR', supplier: 'A厂', final_purchase: 0, total_purchase: 3988 },
+      { item_name: '金属丝底PU', color: '浅棕18-1048', split_mode: 'PER_COLOR', supplier: 'B厂', final_purchase: 4000, total_purchase: 3988 },
+    ], ROWS);
+    expect(rows.map((r) => [r.kind, r.no, r.color, r.qty, r.supplier])).toEqual([
+      ['line', 1, '米白11-0602', 3988, 'A厂'],
+      ['line', 2, '浅棕18-1048', 4000, 'B厂'],
+    ]);
+  });
+});
+

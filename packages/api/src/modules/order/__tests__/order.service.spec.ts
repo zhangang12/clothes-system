@@ -433,6 +433,7 @@ describe('OrderService', () => {
     create: jest.fn().mockImplementation((_, v) => v),
     save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
     find: jest.fn().mockResolvedValue([]),
+    findOne: jest.fn().mockResolvedValue(null),   // 重导会读一次矩阵（按色单行算该色件数用）
     delete: jest.fn(),
   });
 
@@ -499,4 +500,78 @@ describe('OrderService', () => {
     const saved = m.save.mock.calls.find((c) => Array.isArray(c[1]))![1];
     expect(saved.every((r: any) => r.split_mode === 'NONE')).toBe(true);
   });
+  // ===== 按色单行 PER_COLOR（#122 daisy：同一种料不同颜色不同供应商/单价）=====
+  // 矩阵按订单 73：米白 2264 件、浅棕 2264 件
+  const MX = { pos: [{ po_no: 'P1' }], rows: [
+    { color: '米白11-0602', size: 'PP', qtys: [336] }, { color: '米白11-0602', size: 'P', qtys: [526] },
+    { color: '米白11-0602', size: 'M', qtys: [740] }, { color: '米白11-0602', size: 'G', qtys: [662] },
+    { color: '浅棕18-1048', size: 'PP', qtys: [455] }, { color: '浅棕18-1048', size: 'P', qtys: [552] },
+    { color: '浅棕18-1048', size: 'M', qtys: [718] }, { color: '浅棕18-1048', size: 'G', qtys: [539] },
+  ] };
+  const PC_ROWS = [
+    { item_name: '金属丝底PU', color: '米白11-0602', split_mode: 'PER_COLOR', unit: '米', net_usage: 1.71, loss_rate: 3, round_up: 1, supplier: 'A厂', unit_price: 10 },
+    { item_name: '金属丝底PU', color: '浅棕18-1048', split_mode: 'PER_COLOR', unit: '米', net_usage: 1.71, loss_rate: 3, round_up: 1, supplier: 'B厂', unit_price: 12 },
+  ];
+  const savedMaterials = (m: any) => m.save.mock.calls.find((c: any[]) => Array.isArray(c[1]))![1];
+
+  it('UT-PC-ORD-01 create：按色单行的算量基数是该色件数（2264），不是大货总数（4528）', async () => {
+    const m = {
+      create: jest.fn().mockImplementation((_, v) => v),
+      save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
+    };
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(m));
+    await service.create({ customer_id: 3, style_name: 'T', qty_total: 4528, unit_price: 1, matrix_data: MX, materials: PC_ROWS } as any, 1);
+    const rows = savedMaterials(m);
+    expect(rows.map((r: any) => [r.color, r.qty, r.total_purchase, r.final_purchase, r.supplier])).toEqual([
+      ['米白11-0602', 2264, 3988, 3988, 'A厂'],   // ceil(2264×1.71×1.03)=3988，与订单 73 合同上的数一致
+      ['浅棕18-1048', 2264, 3988, 3988, 'B厂'],
+    ]);
+  });
+
+  it('UT-PC-ORD-02 create：按色单行选了矩阵里没有的颜色 → 拒绝（否则件数 0、采购量 0 还不报错）', async () => {
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb({
+      create: jest.fn().mockImplementation((_, v) => v),
+      save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
+    }));
+    await expect(service.create({ customer_id: 3, style_name: 'T', qty_total: 4528, unit_price: 1, matrix_data: MX,
+      materials: [{ ...PC_ROWS[0], color: '咖色' }] } as any, 1)).rejects.toThrow(/咖色/);
+  });
+
+  it('UT-PC-ORD-03 update 没带矩阵时用库里的矩阵算该色件数', async () => {
+    mockOrderRepo.findOne.mockResolvedValueOnce({ id: 9, qty_total: 4528, status: OrderStatus.DRAFT, deleted: 0 });
+    const m = {
+      create: jest.fn().mockImplementation((_, v) => v),
+      save: jest.fn().mockImplementation((_, v) => Promise.resolve(v)),
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn().mockImplementation((entity) => Promise.resolve(entity === OrderSizeMatrix ? { order_id: 9, matrix_data: MX } : null)),
+      delete: jest.fn(),
+    };
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(m));
+    await service.update(9, { materials: [PC_ROWS[1]] } as any);
+    expect(savedMaterials(m)[0]).toMatchObject({ color: '浅棕18-1048', qty: 2264, total_purchase: 3988 });
+  });
+
+  it('UT-PC-ORD-04 updateMatrix：颜色之间挪数、总数不变，按色单行的行也要重算（原来只看总数变没变）', async () => {
+    const order = makeOrder({ status: OrderStatus.CONFIRMED, qty_total: 4528, unit_price: 10, total_amount: 45280 });
+    mockOrderRepo.findOne.mockResolvedValue(order);
+    mockMatrixRepo.findOne.mockResolvedValue({ id: 9, order_id: 1, matrix_data: MX });
+    const perColor = { id: 5, order_id: 1, item_name: '金属丝底PU', color: '米白11-0602', split_mode: 'PER_COLOR', unit: '米',
+      net_usage: 1, loss_rate: 0, round_up: 0, qty: 2264, total_purchase: 2264, final_purchase: 2264, unit_price: 10, budget: 22640 };
+    const whole = { id: 6, order_id: 1, item_name: '主标', color: '', split_mode: 'NONE', unit: '个',
+      net_usage: 1, loss_rate: 0, round_up: 1, qty: 4528, total_purchase: 4528, final_purchase: 4528, unit_price: 1, budget: 4528 };
+    const manager = {
+      create: jest.fn().mockImplementation((_, v) => v),
+      save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: v.id ?? 1 })),
+      find: jest.fn().mockResolvedValue([perColor, whole]),
+    };
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    // 米白挪成 3000、浅棕 1528，总数仍 4528
+    await service.updateMatrix(1, { pos: [{ po_no: 'P1' }], rows: [
+      { color: '米白11-0602', size: 'M', qtys: [3000] }, { color: '浅棕18-1048', size: 'M', qtys: [1528] },
+    ] });
+    expect(order.qty_total).toBe(4528);
+    expect(perColor).toMatchObject({ qty: 3000, total_purchase: 3000, final_purchase: 3000, budget: 30000 });
+    expect(whole).toMatchObject({ qty: 4528, total_purchase: 4528 });   // 不拆的行重算结果不变
+  });
 });
+

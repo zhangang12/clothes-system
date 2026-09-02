@@ -103,6 +103,16 @@ export class ContractService {
       order_material_id: om.id,
     };
     const mode = om.split_mode;
+    // 按色单行（#122）：这一行本来就只代表一个颜色，量已按该色件数算好——原样成一行，
+    // 颜色就是行上选的矩阵颜色；不同供应商由外层按供应商分单，自然落到不同合同
+    if (mode === 'PER_COLOR') {
+      return [{
+        ...base,
+        color: om.color || undefined,
+        qty: (+om.final_purchase! > 0 ? +om.final_purchase! : +om.total_purchase!) || 0,
+        qty_source: '采购量·按色单行',
+      }];
+    }
     // BY_BOTH = 颜色×尺码同时拆（用户反馈 2026-08-07 King：「材料拆分有的要按颜色按尺码都分」）。
     // 【为什么叫 BY_BOTH 不叫 BY_COLOR_SIZE】split_mode 是 VARCHAR(10)，BY_COLOR_SIZE 有 13 个字符，
     // 插进去就是 Data too long → 保存订单必 500。这正是 CLAUDE.md 里记着的「组合值超列宽」那一类，
