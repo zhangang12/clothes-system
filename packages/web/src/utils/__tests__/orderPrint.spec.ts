@@ -65,4 +65,38 @@ describe('生产通知单 · 按 PO 转置（#118）', () => {
   it('没有搭配数据时返回 null，由调用方给一句话', () => {
     expect(matrixPivotRows({ pos: [], rows: [] })).toBeNull();
   });
+
+  // ── #122 daisy：「每个 PO 全码的数量配比汇总：PO，P 100，M 200，G 300，合计 600」──
+  describe('PO 小计（一 PO 多色时）', () => {
+    // 让第一个 PO（6800189356，原本只有酒红）再带 100/200/300/0 的黑色
+    const m4 = { ...matrix, rows: matrix.rows.map((r) => (r.color === '黑色19-4008'
+      ? { ...r, qtys: r.qtys.map((q, i) => (i === 0 ? [100, 200, 300, 0][SIZES.indexOf(r.size)] : q)) }
+      : r)) };
+    const pv = matrixPivotRows(m4)!;
+
+    it('多色 PO 在自己的色行之后补一行小计：各码相加、合计相加', () => {
+      const idx = pv.rows.findIndex((r) => r[0] === '6800189356' && r[2] === '小计（全色）');
+      expect(idx).toBeGreaterThan(0);
+      expect(pv.rows[idx]).toEqual(['6800189356', '', '小计（全色）', 893, 1205, 1201, 701, 4000]);
+      expect(pv.subtotal.has(idx)).toBe(true);
+      // 小计紧跟在该 PO 的两行色行之后
+      expect(pv.rows[idx - 1][0]).toBe('6800189356');
+      expect(pv.rows[idx - 2][0]).toBe('6800189356');
+    });
+
+    it('一 PO 一色的 PO 不出小计——那行本身就是汇总，重复只会占纸', () => {
+      const subs = pv.rows.filter((r) => r[2] === '小计（全色）');
+      expect(subs).toHaveLength(1);
+      expect(pv.rows).toHaveLength(6 + 1 + 1);   // 原 6 行 + 新增黑色行 + 1 行小计
+    });
+
+    it('合计行不把小计再加一遍（否则那个 PO 翻倍）', () => {
+      expect(pv.foot.slice(3)).toEqual([3624 + 100, 4322 + 200, 3905 + 300, 3149, 15600]);
+    });
+
+    it('原样张（一 PO 一色）完全不受影响：没有小计行', () => {
+      expect(pivot.subtotal.size).toBe(0);
+      expect(pivot.rows).toHaveLength(6);
+    });
+  });
 });

@@ -102,10 +102,11 @@
               <el-select v-model="form.currency" style="width:100%"><el-option label="CNY" value="CNY" /><el-option label="USD" value="USD" /></el-select>
             </el-form-item>
           </el-col>
-          <el-col :span="6"><el-form-item label="定金%"><el-input-number v-model="form.deposit_ratio" :min="0" :max="100" :precision="2" style="width:100%" /></el-form-item></el-col>
-          <el-col :span="6"><el-form-item label="中期%"><el-input-number v-model="form.mid_ratio" :min="0" :max="100" :precision="2" style="width:100%" /></el-form-item></el-col>
-          <el-col :span="6"><el-form-item label="尾款%"><el-input-number v-model="form.final_ratio" :min="0" :max="100" :precision="2" style="width:100%" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="账期(天)"><el-input-number v-model="form.account_period_days" :min="0" style="width:100%" /></el-form-item></el-col>
+          <!-- 【#123】1/4 栅格 + 130px 标签，再带左右加减按钮，输入区只剩一两个字符宽（业务截图：中期% 只看得见一个字符）——去掉按钮 -->
+          <el-col :span="6"><el-form-item label="定金%"><el-input-number v-model="form.deposit_ratio" :min="0" :max="100" :precision="2" :controls="false" style="width:100%" /></el-form-item></el-col>
+          <el-col :span="6"><el-form-item label="中期%"><el-input-number v-model="form.mid_ratio" :min="0" :max="100" :precision="2" :controls="false" style="width:100%" /></el-form-item></el-col>
+          <el-col :span="6"><el-form-item label="尾款%"><el-input-number v-model="form.final_ratio" :min="0" :max="100" :precision="2" :controls="false" style="width:100%" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="账期(天)"><el-input-number v-model="form.account_period_days" :min="0" :controls="false" style="width:100%" /></el-form-item></el-col>
           <el-col :span="8">
             <el-form-item>
               <template #label>
@@ -304,8 +305,8 @@
               <el-table-column label="带入数量" min-width="150">
                 <template #default="{ row }">
                   <!-- 分色/分码材料：按订单尺码矩阵拆行（合同要分尺寸），显示拆行预览不可手改 -->
-                  <div v-if="splitLinesOf(row.raw).length">
-                    <el-tag v-for="l in splitLinesOf(row.raw)" :key="l.key" size="small" style="margin:1px 2px">{{ l.dim === 'both' ? `${l.color}·${l.size}` : l.key }}{{ l.size && dimOfRaw(row.raw, l.size) ? `(${dimOfRaw(row.raw, l.size)})` : '' }}: {{ l.qty }}</el-tag>
+                  <div v-if="splitLinesOf(row.raw, importMatrixRows).length">
+                    <el-tag v-for="l in splitLinesOf(row.raw, importMatrixRows)" :key="l.key" size="small" style="margin:1px 2px">{{ l.dim === 'both' ? `${l.color}·${l.size}` : l.key }}{{ l.size && dimOfRaw(row.raw, l.size) ? `(${dimOfRaw(row.raw, l.size)})` : '' }}: {{ l.qty }}</el-tag>
                   </div>
                   <el-input-number v-else v-model="row.qty" :min="0" :precision="2" size="small" :controls="false" style="width:100%" />
                 </template>
@@ -325,6 +326,7 @@
 </template>
 
 <script setup lang="ts">
+import { splitLinesOf } from '@/utils/splitLines';
 import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -559,42 +561,8 @@ const importMaterials = ref<any[]>([]); // 订单材料候选（勾选+数量可
 const importChecked = ref<any[]>([]);
 const importOrderQty = ref(0);
 const importMatrixRows = ref<any[]>([]); // 订单尺码矩阵行（分色/分码拆行用）
-const INT_UNITS = ['个', '条', '只', '件', '粒', '套', '对', 'pcs', 'PCS', 'PC'];
 const dimOfRaw = (m: any, key: string) => String(m?.size_specs?.[key] ?? '').trim();
 // 与后端 contract.service expandMaterialLines 同一公式：某色(码)该料量=该色(码)件数×单件耗用×(1+损耗率)，整数类单位向上取整
-function splitLinesOf(m: any): Array<{ key: string; qty: number; dim: 'color' | 'size' | 'both'; color: string; size: string }> {
-  const mode = m?.split_mode;
-  // 【BY_BOTH 不能漏】后端 expandMaterialLines 三种拆分都支持，这里原来只认前两种——
-  // 「颜色+尺码」的料走本入口带入时静默退回整单一行（8-31 深挖实锤，订单 73 的拉链就是这类）
-  if ((mode !== 'BY_COLOR' && mode !== 'BY_SIZE' && mode !== 'BY_BOTH') || !importMatrixRows.value.length) return [];
-  const groups = new Map<string, number>();
-  const dims = new Map<string, { color: string; size: string }>();
-  for (const r of importMatrixRows.value) {
-    const color = String(r?.color ?? '').trim();
-    const size = String(r?.size ?? '').trim();
-    // key 口径与后端一致：BY_BOTH 用 JSON 化（颜色本身带空格，拼串会歧义），缺一维就跳过
-    const key = mode === 'BY_COLOR' ? color : mode === 'BY_SIZE' ? size
-      : (color && size ? JSON.stringify([color, size]) : '');
-    const qty = Array.isArray(r?.qtys) ? r.qtys.reduce((s: number, n: any) => s + (+n || 0), 0) : +r?.qty || 0;
-    if (!key || !qty) continue;
-    groups.set(key, (groups.get(key) ?? 0) + qty);
-    if (!dims.has(key)) dims.set(key, { color, size });
-  }
-  if (!groups.size) return [];
-  const per = +m.net_usage || 0;
-  const loss = 1 + (+m.loss_rate || 0) / 100;
-  const totalGroupQty = [...groups.values()].reduce((a, b) => a + b, 0);
-  // 0 不是有效值：生产 543/800 行 final_purchase 存 0 而非 NULL，?? 跳不过 0
-  const fallbackBase = (+m.final_purchase > 0 ? +m.final_purchase : +m.total_purchase) || 0;
-  const round = m.round_up === 1 || (m.round_up == null && INT_UNITS.includes(m.unit ?? ''));
-  const dim = mode === 'BY_COLOR' ? 'color' : mode === 'BY_SIZE' ? 'size' : 'both';
-  return [...groups].map(([key, groupQty]) => {
-    let qty = per > 0 ? groupQty * per * loss : (totalGroupQty ? (fallbackBase * groupQty) / totalGroupQty : 0);
-    qty = round ? Math.ceil(qty) : +qty.toFixed(2);
-    const d = dims.get(key) ?? { color: '', size: '' };
-    return { key, qty, dim: dim as 'color' | 'size' | 'both', color: d.color, size: d.size };
-  });
-}
 function minusDays(d: string | null | undefined, days: number): string {
   if (!d) return '';
   const t = new Date(String(d).slice(0, 10));
@@ -652,7 +620,7 @@ async function doImport() {
       if (!importChecked.value.length) { ElMessage.warning('请至少勾选 1 行材料'); return; }
       const dd = minusDays(od.delivery_date, 45);
       for (const c of importChecked.value) {
-        const splits = splitLinesOf(c.raw);
+        const splits = splitLinesOf(c.raw, importMatrixRows.value);
         if (splits.length) {
           // 分色/分码材料：按订单尺码矩阵拆行（合同要分尺寸）——与后端 generateFromOrder 同公式；
           // 各码尺寸(size_specs)以 S(50) 形式带进 size 列，工厂按码裁料

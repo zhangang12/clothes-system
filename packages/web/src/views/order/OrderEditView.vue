@@ -352,6 +352,7 @@
 </template>
 
 <script setup lang="ts">
+import { INT_UNITS } from '@/utils/splitLines';
 import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted, h } from 'vue';
 import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
@@ -449,7 +450,7 @@ const { loading: quoteSearching, search: searchQuotes } = useRemoteOptions<any>(
 });
 const factories = ref<any[]>([]);
 const supplierFactories = ref<any[]>([]);
-const INT_UNITS = ['个', '条', '只', '件', '粒', '套', '对', 'pcs', 'PCS', 'PC'];
+
 
 // 尺码数量搭配矩阵（设计稿 03：行=款·色·尺码，列=各 PO（PO号/目的地/收货人），格=数量）
 const emptyPo = () => ({ po_no: '', destination: '', consignee: '' });

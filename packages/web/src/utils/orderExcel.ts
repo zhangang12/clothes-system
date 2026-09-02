@@ -1,3 +1,4 @@
+import { materialPrintRows } from './splitLines';
 // 订单导出 Excel（2026-08-19 YSM #106：「生成合同下载不能转换Excel么」）。
 //
 // 【为什么之前没有】订单页只有「打印」下拉，样衣 / 报价 / 合同都早有「导出Excel」，
@@ -48,18 +49,17 @@ function matrixBlock(matrix: any): Block {
 }
 
 /** 用料核算 → 表格区。成本与供应商只在指定口径下出现 */
-function materialBlock(materials: any[], mode: OrderExportMode): Block {
+function materialBlock(materials: any[], mode: OrderExportMode, matrixRows: any[]): Block {
   const withCost = mode === 'internal';
   const withSupplier = mode === 'internal';
   const head = ['#', '品名', '部位', '颜色', ...(withSupplier ? ['供应商'] : []), '单位',
     '单件耗用', '损耗%', '采购量', ...(withCost ? ['单价', '预算'] : [])];
-  const rows = (materials ?? []).map((m, i) => [
-    i + 1, m.item_name, m.part || '—',
-    // 同 orderPrint：分色行颜色由矩阵自动分，导残留单色会误导（#120 审计）
-    (m.split_mode === 'BY_COLOR' || m.split_mode === 'BY_BOTH') ? '自动分色' : (m.color || '—'),
-    ...(withSupplier ? [m.supplier || '—'] : []), m.unit || '—',
-    money4(m.net_usage), numCell(m.loss_rate, '#,##0.##'), qty(+m.final_purchase > 0 ? m.final_purchase : m.total_purchase),
-    ...(withCost ? [money4(m.unit_price), money2(m.budget)] : []),
+  // 与打印同一份 materialPrintRows：拆分料逐组出行，多组补合计（#122）
+  const rows = materialPrintRows(materials ?? [], matrixRows).map((r) => [
+    r.kind === 'sum' ? '' : r.no, r.item_name, r.part || '—', r.color || '—',
+    ...(withSupplier ? [r.supplier || '—'] : []), r.unit || '—',
+    money4(r.net_usage), numCell(r.loss_rate, '#,##0.##'), r.qty == null ? '—' : numCell(r.qty, '#,##0.##'),
+    ...(withCost ? [money4(r.unit_price), money2(r.budget)] : []),
   ]);
   return { kind: 'table', title: '用料核算', head, rows, empty: '（无用料核算记录）' };
 }
@@ -99,7 +99,7 @@ export async function exportOrderExcel(detail: any, mode: OrderExportMode): Prom
     // 打印那边一直是对的（orderPrint 里写的就是 detail.matrix?.matrix_data），是我加导出时抄漏了。
     matrixBlock(detail.matrix?.matrix_data),
     // 对客口径不出用料明细：那是成本与工艺，客户看的是款式与数量
-    ...(mode === 'customer' ? [] : [materialBlock(detail.materials ?? [], mode)]),
+    ...(mode === 'customer' ? [] : [materialBlock(detail.materials ?? [], mode, detail.matrix?.matrix_data?.rows ?? [])]),
     {
       kind: 'kv',
       title: '说明',
