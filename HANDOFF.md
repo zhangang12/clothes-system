@@ -8,6 +8,11 @@
 
 ## 一句话现状（最后更新 2026-08-26）
 
+> **老板已拍板暂不处理的条目（巡查任务与新会话不必再当待办上报）**：
+> - **#76 qiao**「用客人 PO 生成更多文件」——9-03 老板说"先不管了"，保持 PENDING，不回复、不提。
+> - **船期列**（daisy #120 再提）——8-31 老板说不做；除非老板重新表态，不提。
+> - `/uploads/file` 缺参数 400 噪音——等业务侧 F12 Initiator 截图，不主动追。
+
 > 同日追加：**反馈的「全量查询」可以按账号开通了（King + 主管）**。查下来分两种情况：**主管本来就有**——`RolesGuard` 与前端 `hasRole` 都按「SUPERVISOR 视同 ADMIN」放行，`resolveMenuKeys` 给管理级角色返回全量菜单，接口和侧栏都通，无需改动；**King 是 BUSINESS**，三道都挡着：路由 `meta.admin`、侧栏 `canMenu('feedbacks')`（`feedbacks` 标了 `adminOnly`，不进业务默认菜单）、接口 `@Roles(ADMIN)`。
 > 【为什么不是简单放开角色】改成 `@Roles(BUSINESS)` 等于所有业务都能看；把他提成主管等于把整套管理权限一起给出去。系统里其实早有账号级开关 `sys_user.menu_keys`（账号管理里逐项勾选），但它**只管前端**——菜单给了、点进去仍 403。
 > 【做法】新增 `MenuGuard` + `@MenuAccess('feedbacks')`，把**同一套** `resolveMenuKeys` 口径接到接口层（两处规则一旦分叉就会出现「侧栏有、点进去没有」）；`JwtStrategy` 的 `select` 顺带取 `menu_keys`（本来每请求就查这一行，不增加查询，且改完菜单**立刻生效**不必重登）；路由 `/feedbacks` 由 `meta.admin` 改为 `meta.menu='feedbacks'`。**只开「查」**：列表与导出走菜单授权，**回复 / 标记已处理仍限 ADMIN/主管**，页面上对只读账号直接不渲染那一列（按钮摆着点下去只会 403）。King 的账号菜单已在生产配好（业务默认菜单 + `feedbacks`）。api jest **465**（+9）；**变异测试 4 次**全部如期变红。
