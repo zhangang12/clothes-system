@@ -259,6 +259,7 @@
 </template>
 
 <script setup lang="ts">
+import { dateOrNull, txt } from '@/utils/clearable';
 import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted, h } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -686,12 +687,12 @@ function checkQuoteNumbers(): string | null {
 
 function buildDto() {
   return {
-    inquiryDate: form.inquiryDate || undefined, sampleId: form.sampleId, middlemanId: form.middlemanId,
-    buyerId: form.buyerId, styleNo: form.styleNo || undefined, middlemanContact: form.middlemanContact || undefined,
-    currency: form.currency, exchangeRate: num(form.exchangeRate), tradeCountry: form.tradeCountry || undefined,
-    settlementMethod: form.settlementMethod || undefined, priceTerms: form.priceTerms || undefined,
-    salesperson: form.salesperson || undefined, profitRate: num(form.profitRate) ?? 0, quoteQty: num(form.quoteQty),
-    totalRemark: form.totalRemark || undefined, image1: form.image1 || undefined, image2: form.image2 || undefined,
+    inquiryDate: dateOrNull(form.inquiryDate), sampleId: form.sampleId, middlemanId: form.middlemanId,
+    buyerId: form.buyerId, styleNo: txt(form.styleNo), middlemanContact: txt(form.middlemanContact),
+    currency: form.currency, exchangeRate: num(form.exchangeRate), tradeCountry: txt(form.tradeCountry),
+    settlementMethod: txt(form.settlementMethod), priceTerms: txt(form.priceTerms),
+    salesperson: txt(form.salesperson), profitRate: num(form.profitRate) ?? 0, quoteQty: num(form.quoteQty),
+    totalRemark: txt(form.totalRemark), image1: txt(form.image1), image2: txt(form.image2),
     items: form.items.filter((i: any) => i.itemName).map((i: any, idx: number) => ({
       part: i.part, itemName: i.itemName, width: i.width, color: i.color, supplier: i.supplier, unit: i.unit,
       quoteUsage: num(i.quoteUsage), rmbPrice: num(i.rmbPrice), lossRate: num(i.lossRate) ?? 3, remark: i.remark, sortOrder: idx,

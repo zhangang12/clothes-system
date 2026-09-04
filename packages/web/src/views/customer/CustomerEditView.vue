@@ -121,6 +121,7 @@
 </template>
 
 <script setup lang="ts">
+import { dateOrNull, txt } from '@/utils/clearable';
 import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted, watch, h } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -276,18 +277,18 @@ function buildDto() {
       ['payMethod', 'remark']), '缺快递公司/账号');
   if (dropWarn) { ElMessage.error(dropWarn); return null; }
   return {
-    name: form.name || undefined, type: form.type, relatedMiddleman: form.relatedMiddleman || undefined,
-    tradeCountry: form.tradeCountry || undefined, countryRegion: form.countryRegion || undefined,
-    city: form.city || undefined, homepage: form.homepage || undefined, address: form.address || undefined,
-    priceTerms: form.priceTerms || undefined, settlementMethod: form.settlementMethod || undefined,
-    grade: form.grade || undefined, cooperationLevel: form.cooperationLevel || undefined,
-    customerSource: form.customerSource || undefined, paymentDays: num(form.paymentDays),
-    businessScope: form.businessScope || undefined, salesperson: form.salesperson || undefined,
-    developDate: form.developDate || undefined, currency: form.currency || undefined,
-    spare1: form.spare1 || undefined, spare2: form.spare2 || undefined, spare3: form.spare3 || undefined,
-    deliveryAddress: form.deliveryAddress || undefined, frontMark: form.frontMark || undefined,
-    sideMark: form.sideMark || undefined, innerBoxText: form.innerBoxText || undefined,
-    customerRemark: form.customerRemark || undefined,
+    name: form.name || undefined, type: form.type, relatedMiddleman: txt(form.relatedMiddleman),
+    tradeCountry: txt(form.tradeCountry), countryRegion: txt(form.countryRegion),
+    city: txt(form.city), homepage: txt(form.homepage), address: txt(form.address),
+    priceTerms: txt(form.priceTerms), settlementMethod: txt(form.settlementMethod),
+    grade: form.grade || undefined, cooperationLevel: txt(form.cooperationLevel),
+    customerSource: txt(form.customerSource), paymentDays: num(form.paymentDays),
+    businessScope: txt(form.businessScope), salesperson: txt(form.salesperson),
+    developDate: dateOrNull(form.developDate), currency: form.currency || undefined,
+    spare1: txt(form.spare1), spare2: txt(form.spare2), spare3: txt(form.spare3),
+    deliveryAddress: txt(form.deliveryAddress), frontMark: txt(form.frontMark),
+    sideMark: txt(form.sideMark), innerBoxText: txt(form.innerBoxText),
+    customerRemark: txt(form.customerRemark),
     commissionRate: form.commissionRate ?? undefined,
     contacts: clean(form.contacts, ['name', 'mobile', 'phone']),
     banks: clean(form.banks, ['bankName', 'bankAccount', 'accountName']),

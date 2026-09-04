@@ -358,6 +358,7 @@
 </template>
 
 <script setup lang="ts">
+import { dateOrNull, txt } from '@/utils/clearable';
 import { INT_UNITS } from '@/utils/splitLines';
 import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted, h } from 'vue';
@@ -809,11 +810,11 @@ function buildDto() {
     // NOT NULL 列，后端只能回一句看不懂的 400。缺失时就让它是 undefined，由 save() 前置拦下并给中文提示。
     quote_id: form.quoteId, customer_id: q?.customer_id ?? form.customerId,
     customer_po: form.customerPo, style_no: form.styleNo,
-    unit_price: num(form.unitPrice), currency: form.currency, delivery_date: form.deliveryDate || undefined,
-    commission_rate: num(form.commissionRate) ?? 0, factory_id: form.factoryId, salesperson: form.salesperson || undefined,
+    unit_price: num(form.unitPrice), currency: form.currency, delivery_date: dateOrNull(form.deliveryDate),
+    commission_rate: num(form.commissionRate) ?? 0, factory_id: form.factoryId, salesperson: txt(form.salesperson),
     split_mode: form.splitMode, qty_total: qtyTotal.value,
-    att_artwork: form.att1 || undefined, att_sizechart: form.att2 || undefined, att_board: form.att3 || undefined,
-    att_packing: form.att4 || undefined, att_filling: form.att5 || undefined,
+    att_artwork: txt(form.att1), att_sizechart: txt(form.att2), att_board: txt(form.att3),
+    att_packing: txt(form.att4), att_filling: txt(form.att5),
     matrix_data: {
       pos: form.matrix.pos.map((p: any) => ({ po_no: p.po_no, destination: p.destination, consignee: p.consignee })),
       rows: form.matrix.rows

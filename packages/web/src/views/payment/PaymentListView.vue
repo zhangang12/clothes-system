@@ -441,6 +441,7 @@
               </div>
             </el-upload>
             <div v-if="slipUploading" class="slip-loading">上传中…</div>
+            <el-button v-if="slipUrl && !slipUploading" link type="danger" size="small" @click="slipUrl = ''">移除水单</el-button>
           </div>
         </el-form-item>
         <el-form-item label="水单URL">

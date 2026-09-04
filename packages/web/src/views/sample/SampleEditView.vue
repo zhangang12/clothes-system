@@ -170,6 +170,8 @@
                   <el-upload v-if="!bizDisabled || pmEnabled" :show-file-list="false" :http-request="(o: any) => uploadMatImage(o, row)" accept="image/*">
                     <el-button size="small" link>📷</el-button>
                   </el-upload>
+                  <!-- 同 #125：裸 el-upload 只有上传没有删除 -->
+                  <el-button v-if="(!bizDisabled || pmEnabled) && row.image" size="small" link type="danger" title="移除图片" @click="row.image = ''">✕</el-button>
                 </div>
               </template>
             </el-table-column>
@@ -291,6 +293,7 @@
 </template>
 
 <script setup lang="ts">
+import { dateOrNull, txt } from '@/utils/clearable';
 import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted, h } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -727,17 +730,17 @@ function checkMaterialNumbers(): string | null {
 function buildDto() {
   return {
     categories: form.categories, middlemanId: form.middlemanId ?? null, styleNo: form.styleNo,
-    sampleSize: form.sampleSize || undefined,
+    sampleSize: txt(form.sampleSize),
     sampleQty: form.sampleQty === '' || form.sampleQty === null ? undefined : Number(form.sampleQty),
     buyerId: form.buyerId ?? null, patternmakerId: form.patternmakerId || undefined,
-    patternmakerName: form.patternmakerName || undefined, maker: form.maker || undefined,
+    patternmakerName: txt(form.patternmakerName), maker: txt(form.maker),
     // 空串照发：清空寄样日期要能存回去（与材料寄出日期同一处理，#96/#104）
-    shipSampleDate: form.shipSampleDate ?? '', recipient: form.recipient || undefined,
+    shipSampleDate: form.shipSampleDate ?? '', recipient: txt(form.recipient),
     // 空串照发（不是 undefined）：清空日期要能存回去，否则填错了永远删不掉
     materialShipNo: form.materialShipNo ?? '', materialShipDate: form.materialShipDate ?? '',
-    fileLocation: form.fileLocation || undefined, garmentRemark: form.garmentRemark || undefined,
+    fileLocation: txt(form.fileLocation), garmentRemark: txt(form.garmentRemark),
     feedbackAttachments: form.feedbackAttachments ?? '',
-    image1: form.image1 || undefined, image2: form.image2 || undefined, image3: form.image3 || undefined,
+    image1: txt(form.image1), image2: txt(form.image2), image3: txt(form.image3),
     materials: form.materials.filter((m: any) => m.itemName).map((m: any, i: number) => {
       // colorGroups 是编辑态辅助数组，不能进 DTO（whitelist 会 400）；colors 逗号串已在编辑时同步
       const { colorGroups, ...rest } = m;
@@ -795,7 +798,7 @@ async function save() {
     const wasPending = editId.value ? form.status === 'PENDING' : true; // 新建后必为待派单
     if (id && form.materialShipNo && wasPending) {
       try {
-        await sampleApi.push(id, { materialShipNo: form.materialShipNo, materialShipDate: form.materialShipDate || undefined });
+        await sampleApi.push(id, { materialShipNo: form.materialShipNo, materialShipDate: dateOrNull(form.materialShipDate) });
         ElMessage.success('已自动推送版师(打样中)');
         if (editId.value) { await load(); return; } // 停留当前页并刷新
       } catch (e: any) {
@@ -839,7 +842,7 @@ async function uploadMatImage(option: any, row: any) {
 async function pushPatternmaker() {
   if (!editId.value) return;
   try {
-    await sampleApi.push(editId.value, { patternmakerName: form.patternmakerName || undefined, materialShipNo: form.materialShipNo || undefined, materialShipDate: form.materialShipDate || undefined });
+    await sampleApi.push(editId.value, { patternmakerName: txt(form.patternmakerName), materialShipNo: txt(form.materialShipNo), materialShipDate: dateOrNull(form.materialShipDate) });
     ElMessage.success('已推送版师工作台（状态→打样中）');
     load();
   } catch (e: any) { errToast(e?.response?.data?.msg ?? '推送失败'); }
@@ -856,7 +859,7 @@ async function savePatternmaker() {
   try {
     await sampleApi.patternmakerSave(editId.value, {
       materials: form.materials.filter((m: any) => m.id).map((m: any) => ({ id: m.id, actualUsage: m.actualUsage === '' ? undefined : Number(m.actualUsage), zipperLength: m.zipperLength })),
-      returnNo: form.returnNo || undefined,
+      returnNo: txt(form.returnNo),
       // 版师按轮填工价(#5):提交多轮,后端 Σ 回填顶层工价 → 生成对账单
       shipRounds: buildRounds(),
       feedbackAttachments: form.feedbackAttachments ?? '',

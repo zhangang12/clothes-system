@@ -60,6 +60,7 @@
 </template>
 
 <script setup lang="ts">
+import { txt } from '@/utils/clearable';
 import FileUpload from '@/components/FileUpload.vue';
 import { ref, reactive, computed, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
@@ -108,7 +109,7 @@ async function doSave() {
     const dto = {
       name: form.name, shortName: form.shortName, legalRep: form.legalRep, address: form.address,
       phone: form.phone, taxNo: form.taxNo, bankName: form.bankName, bankAccount: form.bankAccount,
-      remark: form.remark, isDefault: form.isDefault, sealUrl: form.sealUrl || undefined,
+      remark: form.remark, isDefault: form.isDefault, sealUrl: txt(form.sealUrl),
     };
     if (form.id) await companyApi.update(form.id, dto);
     else await companyApi.create(dto);

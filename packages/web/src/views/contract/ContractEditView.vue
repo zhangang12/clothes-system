@@ -87,6 +87,7 @@
                 <el-upload :show-file-list="false" :http-request="(o: any) => uploadTo(o, (url) => (form.guarantor_id_photo = url), true)" accept="image/*" :disabled="!editable">
                   <el-button size="small" plain>📎 {{ form.guarantor_id_photo ? '重新上传' : '点选上传(选填)' }}</el-button>
                 </el-upload>
+                <el-button v-if="editable && form.guarantor_id_photo" size="small" link type="danger" @click="form.guarantor_id_photo = ''">清除</el-button>
               </div>
             </el-form-item>
           </el-col>
@@ -205,6 +206,8 @@
               <el-upload v-if="editable" :show-file-list="false" :http-request="(o: any) => uploadTo(o, (url) => (row.photo_url = url))" accept="image/*">
                 <el-button size="small" link>📷</el-button>
               </el-upload>
+              <!-- #125 YSM：只有上传没有删除，传错了只能覆盖 -->
+              <el-button v-if="editable && row.photo_url" size="small" link type="danger" title="移除照片" @click="row.photo_url = ''">✕</el-button>
             </div>
           </template>
         </el-table-column>
@@ -325,6 +328,7 @@
 </template>
 
 <script setup lang="ts">
+import { dateOrNull, txt } from '@/utils/clearable';
 import { splitLinesOf } from '@/utils/splitLines';
 import { ORDER_SPLIT_MODE_LABEL } from '@i9/types';
 import { errToast } from '@/api';
@@ -684,14 +688,14 @@ function buildDto(): Record<string, unknown> {
     factory_id: form.factory_id, currency: form.currency,
     deposit_ratio: +form.deposit_ratio, mid_ratio: +form.mid_ratio, final_ratio: +form.final_ratio,
     account_period_days: form.account_period_days,
-    sign_place: form.sign_place || undefined, sign_date: form.sign_date || undefined,
-    company_id: form.company_id || undefined, company_rep: form.company_rep || undefined,
-    guarantor: form.guarantor || undefined, guarantor_id_photo: form.guarantor_id_photo || undefined,
-    delivery_deadline: form.delivery_deadline || undefined,
-    ship_to_address: form.ship_to_address || undefined,
-    last_ship_date: form.last_ship_date || undefined,
-    style_nos: form.style_nos || undefined,
-    remark: form.remark || undefined,
+    sign_place: txt(form.sign_place), sign_date: dateOrNull(form.sign_date),
+    company_id: form.company_id || undefined, company_rep: txt(form.company_rep),
+    guarantor: txt(form.guarantor), guarantor_id_photo: txt(form.guarantor_id_photo),
+    delivery_deadline: dateOrNull(form.delivery_deadline),
+    ship_to_address: txt(form.ship_to_address),
+    last_ship_date: dateOrNull(form.last_ship_date),
+    style_nos: txt(form.style_nos),
+    remark: txt(form.remark),
     terms_json: { ...terms },
     materials: form.materials.map((m: any, idx: number) => ({
       item_name: m.item_name, spec: m.spec || undefined, color: m.color || undefined, size: m.size || undefined,
@@ -707,7 +711,7 @@ function buildDto(): Record<string, unknown> {
   if (isProcess.value) {
     dto.price_includes = form.price_includes;
     dto.vat_rate = +form.vat_rate;
-    dto.price_other = form.price_other || undefined;
+    dto.price_other = txt(form.price_other);
   }
   return dto;
 }

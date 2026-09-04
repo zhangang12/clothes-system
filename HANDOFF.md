@@ -17,7 +17,12 @@
 > 【为什么不是简单放开角色】改成 `@Roles(BUSINESS)` 等于所有业务都能看；把他提成主管等于把整套管理权限一起给出去。系统里其实早有账号级开关 `sys_user.menu_keys`（账号管理里逐项勾选），但它**只管前端**——菜单给了、点进去仍 403。
 > 【做法】新增 `MenuGuard` + `@MenuAccess('feedbacks')`，把**同一套** `resolveMenuKeys` 口径接到接口层（两处规则一旦分叉就会出现「侧栏有、点进去没有」）；`JwtStrategy` 的 `select` 顺带取 `menu_keys`（本来每请求就查这一行，不增加查询，且改完菜单**立刻生效**不必重登）；路由 `/feedbacks` 由 `meta.admin` 改为 `meta.menu='feedbacks'`。**只开「查」**：列表与导出走菜单授权，**回复 / 标记已处理仍限 ADMIN/主管**，页面上对只读账号直接不渲染那一列（按钮摆着点下去只会 403）。King 的账号菜单已在生产配好（业务默认菜单 + `feedbacks`）。api jest **465**（+9）；**变异测试 4 次**全部如期变红。
 
-> 最新：**A 方案「按色单行」已实施（9-02，用户拍板）**——#122 daisy 确认"同一种料不同颜色会有不同供应商/单价"。
+> 最新：**9-04 两条反馈（#124 business_user / #125 YSM）已修并上线**。
+> **#124「报价备注删掉再保存，重新打开还在」**——不是一处 bug，是一类：七个编辑页的 buildDto 都写成 `form.x || undefined`，清空后发出去的是 undefined，而后端所有 update 都是「undefined = 没传、别改」（quote/order/contract 的 `!== undefined` 赋值、customer/factory 的 mapDto、TypeORM save 也跳过 undefined）→ **几十个文本/图片/日期字段一旦填过就再也清不掉**。修法：新增 `utils/clearable.ts`（`txt()` 文本清空发 ''、`dateOrNull()` 日期清空发 null——DATE 列不接受空串、`@IsOptional` 放过 null），合同/订单/报价/样衣/客户/工厂/本司主体七个页面共 ~70 个字段改走它；ID/枚举/必填/币种字段不动。样衣的推送/退回动作调用一并改（后端是 `|| today()` / `if (dto.x)`，空串安全），`sampleApi.push` 的 `materialShipDate` 类型放宽为 `string | null`。**新增源码守卫** `clear-field-guard.spec.ts`：编辑页再出现 `form.x || undefined`（白名单外）即红；变异实测（工厂页放回一处）守卫如期变红。
+> **#125「合同材料行的图片怎么删」**——裸 `el-upload` 只有上传没有删除，三处补了删除按钮：合同材料行照片 ✕、担保人身份证「清除」、样衣材料行图片 ✕；付款水单加「移除水单」。用 `file-upload` 组件的（报价图片、订单附件）本来就能删，没动。
+> **验证**：web vitest **594**（+4）/ vue-tsc 真实退出码 0（之前几轮我打印的 `tsc=0` 其实是 tail 的退出码；好在 web/portal 的 build 脚本本身带 `vue-tsc --noEmit`，上线过的版本都是经过类型检查的）/ web 构建绿；后端零改动、零 schema 变更。**没在浏览器点过**（本机没起 MySQL）。
+
+> 前一轮：**A 方案「按色单行」已实施（9-02，用户拍板）**——#122 daisy 确认"同一种料不同颜色会有不同供应商/单价"。
 > **语义**：新拆分方式 `PER_COLOR`（9 字符，`split_mode` varchar(10) 装得下，**零 schema 变更**）：一行只代表矩阵里的**一个**颜色（颜色格改为下拉、只给矩阵颜色），采购量 = **该色件数**×单耗×(1+损耗)，`order_material.qty` 存该色件数；供应商/单价按行填；生成合同时本行原样成一行（`qty_source` 「采购量·按色单行」），按供应商分单自然落到不同合同。
 > **共享规则（@i9/types）**：`OrderSplitMode` 补齐 BY_BOTH、新增 PER_COLOR + `ORDER_SPLIT_MODES/ORDER_SPLIT_MODE_LABEL`；`matrixColorsOf/colorPiecesOf/matrixRowPieces`（前后端同一份算量）；`perColorRowErrors`（颜色必须在矩阵里、不能空）；`findSplitDupConflicts` 新增分支：同名多行**全是**按色单行且颜色互异 → 放行，与其它拆分方式混用 / 颜色重复或为空 → 拦。
 > **后端**：`buildMaterials` 多一个 `matrixRows` 参数（create 用 dto 矩阵，update 没带矩阵就读库，importFromQuote 读库且**不携带** PER_COLOR——报价行颜色是外号对不上矩阵）；`updateMatrix` 改为**矩阵一变就重算**（原来只看总数变没变，按色单行在颜色间挪数时总数不变也得变）；`expandMaterialLines` 加 PER_COLOR 分支；DTO `@IsIn(ORDER_SPLIT_MODES)`。

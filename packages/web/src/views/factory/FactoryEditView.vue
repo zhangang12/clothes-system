@@ -169,6 +169,7 @@
 </template>
 
 <script setup lang="ts">
+import { dateOrNull, txt } from '@/utils/clearable';
 import { ref, reactive, computed, onMounted, h } from 'vue';
 import { droppedButFilledRows, droppedMessage } from '@/utils/lineCheck';
 import { useRoute, useRouter } from 'vue-router';
@@ -290,20 +291,20 @@ function buildDto() {
   const num = (v: any) => (v === '' || v == null ? undefined : Number(v));
   return {
     type: form.type, extraTypes: form.extraTypes ?? [], canInvoice: form.canInvoice, name: form.name,
-    sealUrl: form.sealUrl || undefined,
-    province: form.province || undefined, city: form.city || undefined,
-    address: form.address || undefined, businessScope: form.businessScope || undefined,
-    developDate: form.developDate || undefined,
-    bankName: form.bankName || undefined, bankAccount: form.bankAccount || undefined,
-    taxNo: form.taxNo || undefined, invoicePhone: form.invoicePhone || undefined,
-    invoiceAddress: form.invoiceAddress || undefined,
-    bankName2: form.bankName2 || undefined, bankAccount2: form.bankAccount2 || undefined,
-    taxNo2: form.taxNo2 || undefined, invoicePhone2: form.invoicePhone2 || undefined,
-    invoiceAddress2: form.invoiceAddress2 || undefined,
-    legalRep: form.legalRep || undefined, registeredCapital: num(form.registeredCapital),
-    establishedDate: form.establishedDate || undefined, annualSales: num(form.annualSales),
-    representativeCustomers: form.representativeCustomers || undefined,
-    qualityCerts: form.qualityCerts || undefined, remark: form.remark || undefined,
+    sealUrl: txt(form.sealUrl),
+    province: txt(form.province), city: txt(form.city),
+    address: txt(form.address), businessScope: txt(form.businessScope),
+    developDate: dateOrNull(form.developDate),
+    bankName: txt(form.bankName), bankAccount: txt(form.bankAccount),
+    taxNo: txt(form.taxNo), invoicePhone: txt(form.invoicePhone),
+    invoiceAddress: txt(form.invoiceAddress),
+    bankName2: txt(form.bankName2), bankAccount2: txt(form.bankAccount2),
+    taxNo2: txt(form.taxNo2), invoicePhone2: txt(form.invoicePhone2),
+    invoiceAddress2: txt(form.invoiceAddress2),
+    legalRep: txt(form.legalRep), registeredCapital: num(form.registeredCapital),
+    establishedDate: dateOrNull(form.establishedDate), annualSales: num(form.annualSales),
+    representativeCustomers: txt(form.representativeCustomers),
+    qualityCerts: txt(form.qualityCerts), remark: txt(form.remark),
     // 门户账号仅新建时开通（编辑不重置）
     portalAccount: !editId.value ? (form.portalAccount || undefined) : undefined,
     portalPassword: !editId.value ? (form.portalPassword || undefined) : undefined,
