@@ -104,7 +104,14 @@
           <el-table :data="detail.shipments" size="small" border>
             <el-table-column prop="ship_no" label="发货单号" width="140" />
             <el-table-column prop="qty" label="数量" width="76" align="right" />
-            <el-table-column prop="snapshot_unit_price" label="锁定单价" width="90" align="right">
+            <!-- #126：这一列是本批各行按合同单价加权后的均价（金额÷数量），不是某一行的单价——
+                 两块布 20 和 13 的合同，业务看到 16.64 以为算错了。改名并把各行单价放到「物料行」里 -->
+            <el-table-column prop="snapshot_unit_price" width="96" align="right">
+              <template #header>
+                <el-tooltip content="本批发出的各行按各自合同单价加权平均（本批金额 ÷ 本批数量），供应商对账按此核对；每行实际单价见「物料行」" placement="top">
+                  <span>批次均价 ⓘ</span>
+                </el-tooltip>
+              </template>
               <template #default="{ row }">{{ row.snapshot_unit_price != null ? (+row.snapshot_unit_price).toFixed(4) : '—' }}</template>
             </el-table-column>
             <el-table-column prop="ship_date" label="发货日" width="104" />
@@ -118,7 +125,7 @@
               <template #default="{ row }">{{ row.merge_no || '—' }}</template>
             </el-table-column>
             <el-table-column label="物料行" min-width="130" show-overflow-tooltip>
-              <template #default="{ row }">{{ (row.items ?? []).map((it: any) => `${it.item_name ?? '行'}×${+it.qty}`).join(' / ') || '—' }}</template>
+              <template #default="{ row }">{{ (row.items ?? []).map((it: any) => `${it.item_name ?? '行'}×${+it.qty}${it.unit_price != null ? `@${+(+it.unit_price).toFixed(4)}` : ''}`).join(' / ') || '—' }}</template>
             </el-table-column>
             <el-table-column label="附件" width="64" align="center">
               <template #default="{ row }">

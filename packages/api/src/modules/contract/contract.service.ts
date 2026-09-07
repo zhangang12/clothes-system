@@ -422,9 +422,11 @@ export class ContractService {
       contract_no = await this.numbering.next(NUM_PREFIX.CONTRACT);
     }
 
-    const deposit_ratio = dto.deposit_ratio ?? 30;
-    const mid_ratio = dto.mid_ratio ?? 40;
-    const final_ratio = dto.final_ratio ?? 30;
+    // #127（9-07 业务）：默认 0/0/100——材料合同基本都是货到/账期付，30/40/30 每张都得改。
+    // 与前端 ContractEditView 的表单默认保持一致；generateFromOrder 不传比例也走这里
+    const deposit_ratio = dto.deposit_ratio ?? 0;
+    const mid_ratio = dto.mid_ratio ?? 0;
+    const final_ratio = dto.final_ratio ?? 100;
     // 付款条款验证（系统开发手册·核心业务规则）：定金% + 中期% + 尾款% 必须 = 100%
     if (Math.abs(deposit_ratio + mid_ratio + final_ratio - 100) > 0.01) {
       throw new BadRequestException(

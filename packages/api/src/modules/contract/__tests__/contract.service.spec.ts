@@ -1389,5 +1389,23 @@ describe('ContractService', () => {
     expect(savedLines).toHaveLength(2);
     expect(savedLines.find((l) => l.color === '浅棕18-1048')).toMatchObject({ qty: 4000, unit_price: 12 });
   });
+  // ===== #127 付款比例默认值 =====
+  it('UT-CON-43 不传付款比例时默认 0/0/100（材料合同基本都是货到/账期付）', async () => {
+    mockRedis.eval.mockResolvedValue('HT-20260907-001');
+    mockOrderRepo.findOne.mockResolvedValue(null);
+    const saves: any[] = [];
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb({
+      create: jest.fn().mockImplementation((_: any, v: any) => v),
+      save: jest.fn().mockImplementation((_: any, v: any) => { saves.push(v); return Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 }); }),
+      findOne: jest.fn().mockResolvedValue(null),
+      delete: jest.fn(),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+      find: jest.fn().mockResolvedValue([]),
+      query: jest.fn().mockResolvedValue([]),
+    }));
+    await service.create({ type: ContractType.MATERIAL, factory_id: 5,
+      materials: [{ item_name: '主面料', unit: '米', qty: 100, unit_price: 20 }] } as any, 1);
+    const header = saves.find((v) => v && !Array.isArray(v) && 'deposit_ratio' in v);
+    expect(header).toMatchObject({ deposit_ratio: 0, mid_ratio: 0, final_ratio: 100 });
+  });
 });
-

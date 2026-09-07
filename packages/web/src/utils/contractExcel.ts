@@ -105,7 +105,7 @@ export async function exportContractExcel(detail: any): Promise<void> {
     blocks.push({
       kind: 'table',
       title: '发货批次（逐批锁价）',
-      head: ['#', '发货单号', '发货日期', '数量', '锁定单价', '金额', '审批状态', '对账状态', '快递公司', '快递单号', '收货地址', '合并组', '物料行', '操作人'],
+      head: ['#', '发货单号', '发货日期', '数量', '批次均价', '金额', '审批状态', '对账状态', '快递公司', '快递单号', '收货地址', '合并组', '物料行', '操作人'],
       rows: ships.map((b, i) => [
         i + 1, b.ship_no, d10(b.ship_date), qty(b.qty), money4(b.snapshot_unit_price), money2(b.amount),
         approvalLabel(b.approval_status), b.reconcile_id ? `已对账（对账单#${b.reconcile_id}）` : '未对账',

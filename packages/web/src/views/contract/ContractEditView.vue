@@ -387,7 +387,7 @@ const form = reactive<any>({
   factory_id: undefined, company_id: undefined, company_rep: authStore.realName || '',
   sign_place: '', sign_date: new Date().toISOString().slice(0, 10),
   guarantor: '', guarantor_id_photo: '', ship_to_address: '', delivery_deadline: '',
-  currency: 'CNY', deposit_ratio: 30, mid_ratio: 40, final_ratio: 30,
+  currency: 'CNY', deposit_ratio: 0, mid_ratio: 0, final_ratio: 100, // #127 业务：默认 0/0/100，免得每次改
   account_period_days: 90, last_ship_date: '', remark: '',
   style_nos: '', price_includes: [...PRICE_INCLUDE_OPTIONS], vat_rate: 13, price_other: '',
   portal_status: 'DRAFT', approval_status: 'NONE', stamped_at: null, stamped_by_supplier: '',
