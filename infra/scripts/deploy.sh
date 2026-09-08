@@ -222,10 +222,17 @@ fi
 
 # ── ④ 静态文件 + 权限 ─────────────────────────────────────────
 log "修正文件权限..."
-chown -R i9app:i9app "$APP_DIR/packages/api/dist" 2>/dev/null || true
+# 四个 dist 都要归 i9app 且对 other 可读：API 进程以 i9app 跑、@i9/types 走 node_modules 软链指到
+# packages/types/dist；静态目录由 nginx 用户读。2026-09-08 只 chown api/dist 时，开发机带上来的
+# 600/uid501 让 types 读不到、站点 403，服务挂了 4 分钟——这里是最后一道兜底，别只修一个目录。
+for p in types api web portal; do
+  chown -R i9app:i9app "$APP_DIR/packages/$p/dist" 2>/dev/null || true
+  chmod -R u+rwX,go+rX "$APP_DIR/packages/$p/dist" 2>/dev/null || true
+done
 log "更新静态文件..."
 rsync -a --delete packages/web/dist/    "$WEB_ROOT/"
 rsync -a --delete packages/portal/dist/ "$PORTAL_ROOT/"
+chmod -R u+rwX,go+rX "$WEB_ROOT" "$PORTAL_ROOT" 2>/dev/null || true
 
 # ── ⑤ 保证 Redis 就绪（单号生成依赖，停机会导致新建单据失败）────
 if command -v docker &>/dev/null && has_container "$REDIS_CONTAINER" --all; then

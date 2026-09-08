@@ -89,8 +89,13 @@ git push ecs main 2>&1 | tail -1
 # 整页跳转去取新资源（见 packages/web/src/utils/versionCheck.ts）；万一还是撞上竞态窗口，
 # router.onError 再兜底重载一次。所以这里恢复 --delete，不留旧文件、不掩盖问题。
 log "上传构建产物..."
+# 【别去掉 --chmod/--no-owner】(2026-09-08 发版把生产打挂 4 分钟的原因)
+# rsync -a 会把开发机文件的属主 uid 与权限位原样带到服务器：那天本机被 iCloud 归档重排后
+# 所有文件成了 600、uid 501，推上去后 i9app 读不到 @i9/types/dist、nginx 读不到静态文件，
+# API 起不来（MODULE_NOT_FOUND）、站点 403。产物权限只该由这里统一定：目录 755、文件 644、不带属主。
+RSYNC_PERMS=(--no-owner --no-group --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r)
 for p in types api web portal; do
-  rsync -az --delete "packages/$p/dist/" "$REMOTE:$APP_DIR/packages/$p/dist/"
+  rsync -az --delete "${RSYNC_PERMS[@]}" "packages/$p/dist/" "$REMOTE:$APP_DIR/packages/$p/dist/"
 done
 
 # ── ⑥ 服务器只做：备份 → 结构升级 → 换静态 → 重启 → 体检 ──────

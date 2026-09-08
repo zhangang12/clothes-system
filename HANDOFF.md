@@ -23,6 +23,7 @@
 > **顺手两处**：样衣编辑页 `load()` 在 await 之后重读 `editId`（keep-alive 页签切走后变 null → `GET /samples/null/versions` 400，error_log #21 Nina 两次）改为进函数先抓 id；前端错误上报过滤 ElMessageBox 的 `cancel/close` 字符串拒绝（error_log #34 daisy 那条「PROMISE cancel」就是它），新增用例，变异如期变红。
 > **验证**：api jest **504**（+2）/ web vitest **595**（+1）/ api nest build、web vue-tsc+vite 构建绿。零 schema 变更。没在浏览器点过；S000 修复要等下次真有未匹配供应商的订单生成合同才会走到（可在测试单上验）。error_log 的 OPEN 状态一个没动。
 > **本机环境事故（9-07 晚）**：桌面被 iCloud 归档重排，仓库 `.git` 丢了 8-31 之后的松散对象（HEAD 指向 11202c0 但对象不在）、node_modules 整个没了、巡查日志与图解被扔进 iCloud 废纸篓。处理：`git fetch origin main` 补回对象（HEAD=origin/main，工作树干净）、`pnpm install --frozen-lockfile` 复原、巡查日志从废纸篓拷回桌面（只剩到 9-03 12:00 的两段）。**别碰** `~/iCloud云盘（归档）/Desktop/样衣管理系统`（会触发 iCloud 下载，git 命令直接挂死）。
+> **发版事故（9-08 22:48–22:53，生产挂了约 5 分钟）**：本机被 iCloud 重排后所有目录 700 / 文件 600、uid 501，`deploy-local.sh` 的 `rsync -a` 把属主和权限位原样推上去 → i9app 读不到 `@i9/types/dist`（API 起不来，MODULE_NOT_FOUND）、nginx 进不去 `/var/www/web`（403）。现场处理：服务器上 chown i9app + chmod go+rX 四个 dist 与两个静态根，重启后全绿、0 报错。根治：`deploy-local.sh` rsync 加 `--no-owner --no-group --chmod=D755,F644`（产物权限只由这里定）；`deploy.sh` 的权限修正扩到四个 dist + 静态根（原来只 chown api/dist）。加固后再发一次版走通即验证。
 > **error_log 其余 OPEN 项不是缺陷**：quotes/174 ×47（supervisor_user）与 samples/217 ×21（ZYT）都是「该状态不可编辑」的正常拦截，但次数说明**编辑页在不可编辑状态下仍让人改、点保存才拒**——可做「状态不可编辑时页面只读+顶部提示」（乙类，等拍板）；/orders/78/edit 前端 15s 超时（Dean 9-07 15:30）一次性、日志无线索，未追。
 
 > 前一轮：**9-07 三条反馈：#126/#127 已上线，#128 daisy 分批下合同待老板拍板**。
@@ -313,6 +314,7 @@
 
 ## 最近变更（新→旧，保留最近若干条）
 
+- （本次·**发版把生产打挂 5 分钟 → 发版脚本加固**）`fix(infra)` 本机 iCloud 重排后文件成 600/700、uid 501，`rsync -a` 原样推上服务器：i9app 读不到 `@i9/types/dist`、nginx 403。`deploy-local.sh` rsync 改 `--no-owner --no-group --chmod=D755,F644`；`deploy.sh` 权限修正覆盖四个 dist 与静态根。服务器已手工修复并全绿。
 - （本次·**9-08 生产 500：占位工厂撞 S000**）`fix(api,web)` `generateFromOrder` 建「待定供应商」占位时硬编码 `S000`，生产库该号早被真实厂商占用 → 有未匹配供应商就整批 500（Dean 订单 78 连撞 8 次）。改为 S000 被占则走 `nextGlobal('S')` 发号，占位只认名字。顺手：样衣页 `load()` 进函数先抓 id（切页签后 `/samples/null/versions` 400）；错误上报过滤弹窗 `cancel/close`。#129 Nina 是机密客户未授权，非缺陷已回复。api jest **504**（+2）/ web **595**（+1）；变异 2 次全红。**零 DB 结构变更**。
 - （本次·**#120 B改良版落地**）`fix(web)` 把「里子早就分色、面子看不出」补齐：系统采购量列带分组明细（无组时明说按整单）、分色行颜色格换「自动分色」标记（手打外号对不上矩阵真名）、同名拆分行保存前防呆（`duplicateSplitGroups`，用订单 73 真实数据做 fixture）、合同页 `splitLinesOf` 补 BY_BOTH + 默认量改取已核算采购量。算法/后端/历史数据全零改动。web **562**（+7）；变异 3 全红。**待办**：订单 73 外科清理 + 回复 daisy 并问「分色不同供应商/单价」判据。
 - （本次·**#121 展开面板输入框失焦**）`fix(web)` 材料表加 `:row-key`（WeakMap 发号，不污染行数据）。根因在 element-plus 源码逐行核实：deep watch → setData → updateExpandRows，无 rowKey 分支直接清空 expandRows。新增守卫 `expand-rowkey-guard.spec.ts`（展开面板含 v-model 必须有 row-key，变异实测有效）。web vitest **555**（+2）。**#120 未动**：采购量分色口径与船期均待用户拍板（多签 20.2 万的三张合同还是草稿，不急但别拖）。**零后端改动、零 DB 结构变更**。
