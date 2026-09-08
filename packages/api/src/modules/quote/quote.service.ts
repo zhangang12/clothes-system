@@ -16,7 +16,7 @@ import { OrderService } from '../order/order.service';
 import { OrderMain } from '../order/order-main.entity';
 import { CreateOrderDto } from '../order/dto/create-order.dto';
 import { SysConfigService } from '../../common/config/sys-config.service';
-import { QuoteStatus, SampleStatus, DEFAULT_QUOTE_FEES, ApprovalStatus, APPROVAL_THRESHOLD_KEYS, OrderStatus } from '@i9/types';
+import { QuoteStatus, SampleStatus, DEFAULT_QUOTE_FEES, ApprovalStatus, APPROVAL_THRESHOLD_KEYS, OrderStatus, QUOTE_EDITABLE_STATUSES } from '@i9/types';
 import { CreateQuoteDto, CreateQuoteItemDto, CreateQuoteFeeDto } from './dto/create-quote.dto';
 import { QueryQuoteDto } from './dto/query-quote.dto';
 
@@ -238,7 +238,8 @@ export class QuoteService {
     const quote = await this.quoteRepo.findOne({ where: { id, deleted: 0 } });
     if (!quote) throw new NotFoundException(`报价单 #${id} 不存在`);
     await this.assertVisible(quote, user);
-    if (![QuoteStatus.DRAFT, QuoteStatus.ADJUSTING].includes(quote.status)) {
+    // 允许状态与前端 QuoteEditView 共用 @i9/types.QUOTE_EDITABLE_STATUSES（页面在其它状态直接只读）
+    if (!QUOTE_EDITABLE_STATUSES.includes(quote.status)) {
       throw new BadRequestException('只有草稿/客户调整状态的报价单可以编辑');
     }
     const map: Array<[keyof CreateQuoteDto, keyof Quotation]> = [

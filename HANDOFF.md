@@ -17,7 +17,14 @@
 > 【为什么不是简单放开角色】改成 `@Roles(BUSINESS)` 等于所有业务都能看；把他提成主管等于把整套管理权限一起给出去。系统里其实早有账号级开关 `sys_user.menu_keys`（账号管理里逐项勾选），但它**只管前端**——菜单给了、点进去仍 403。
 > 【做法】新增 `MenuGuard` + `@MenuAccess('feedbacks')`，把**同一套** `resolveMenuKeys` 口径接到接口层（两处规则一旦分叉就会出现「侧栏有、点进去没有」）；`JwtStrategy` 的 `select` 顺带取 `menu_keys`（本来每请求就查这一行，不增加查询，且改完菜单**立刻生效**不必重登）；路由 `/feedbacks` 由 `meta.admin` 改为 `meta.menu='feedbacks'`。**只开「查」**：列表与导出走菜单授权，**回复 / 标记已处理仍限 ADMIN/主管**，页面上对只读账号直接不渲染那一列（按钮摆着点下去只会 403）。King 的账号菜单已在生产配好（业务默认菜单 + `feedbacks`）。api jest **465**（+9）；**变异测试 4 次**全部如期变红。
 
-> 最新：**9-08 拉反馈：#129 Nina 非缺陷已回复；从生产 error_log 抓出一个真 500 已修（占位工厂撞 S000）；#128 仍等拍板**。
+> 最新：**9-09 老板一句话拍板三件事（「128 按默认做、2、做」），已全部实现并上线**。
+> **#128 分批下合同（按默认做）**——`generateFromOrder(orderId, createdBy, materialIds?)`：传了 `material_ids` 就只为这些行生成（只认本订单的行，别的 id 无视；全不属于本订单报错），不传 = 为**尚未下过合同**的行生成。幂等守卫从「订单已有合同就整批拒绝」改为**按行**：已进过任一未删除合同的行（认 `contract_material.order_material_id`，与订单页「已订」标记同一条 SQL 口径）跳过并在返回的 `skipped` 里报回，全部都下过才报错（连点两次仍幂等）。同一供应商分两批得两张合同（这就是分批的含义）。控制器加 `GenerateFromOrderDto`；订单编辑页「生成合同」下拉多一项「为勾选的 N 行生成」（勾了材料行才出现），原项改为「为未下单的材料生成」；列表页入口改为同一语义并在规则提示里说明；结果弹窗列出跳过的行，未匹配供应商的文案改为真实行为（挂「待定供应商」占位合同，不是"未生成"）。UT-CON-27 改写 + UT-CON-46～49；变异 2 次（不过滤已下过的行 / 无视勾选）各红 3 条。
+> **中间商授权自动带上关联买家**——`CustomerService.visibleCustomerIds` 在「授权+自建」之外，把 `related_middleman`（逗号分隔的中间商 id 串）里含任一可见中间商的最终买家一并算作可见（纯函数 `buyersUnderMiddlemen`，认 id 不认名字；无任何授权时不查买家表）。带出来的买家**只看不能改**：`assertEditable` 对无直接授权但可见的客户抛 403「随其关联中间商的授权带出，修改需单独授权」而不是 404。报价/订单/样衣的行级可见都走这一个函数，一处改全站生效——Nina 现在不用等 King 授权就能选到 DATEX 名下的荟品仓/松野湃。UT-CUS-G6/G6b/G7；变异（不带买家）红 2 条。
+> **不可编辑状态的编辑页直接只读**——允许状态收进 `@i9/types`：`QUOTE_EDITABLE_STATUSES`（草稿/客户调整）、`SAMPLE_EDITABLE_STATUSES`（待派单/打样中）、`SAMPLE_PM_EDITABLE_STATUSES`（打样中/已寄出/已寄回/已对账），后端 `quote.service.update`、`sample.service.update/版师保存` 三道闸改用同一份常量；前端 QuoteEditView 加 `statusLocked`（表单整体禁用、保存/从样衣导入/明细增删排序隐藏，「客户调整」「转销售合同」等状态动作不动）和顶部 `el-alert` 说明出路（已报价→点「客户调整」；已成单→去订单改）；SampleEditView 业务视图 `statusLocked`、版师视图 `pmLocked`，`bizDisabled/pmEnabled` 并入，寄出/完成等状态按钮不受影响。新增源码守卫 `status-lock-guard.spec.ts` 钉住「页面用共享常量判锁 + 后端闸用同一份常量」，变异（后端退回手写数组）如期变红。
+> **验证**：api jest **511**（+7）/ web vitest **598**（+3）/ 四包构建绿；零 schema 变更。**没在浏览器点过**（本机没起 MySQL）：三处页面改动是模板条件与 computed，逻辑在共享常量与后端闸里有测试；分批下合同建议在测试单上点一遍（勾两行生成 → 再点「为未下单的材料生成」→ 看跳过提示）。
+> **顺带发现**：web 全量 vitest 与 api 全量 jest **并行跑**会把 errorReport.spec 的 5 秒超时打爆（第一条超时后残留的上报把第二条的计数带成 2），单独跑全绿——以后两套全量别并行。
+
+> 前一轮：**9-08 拉反馈：#129 Nina 非缺陷已回复；从生产 error_log 抓出一个真 500 已修（占位工厂撞 S000）；#128 仍等拍板**。
 > **#129「样衣里关联不了最终客户」**——不是 bug，是机密客户授权：`visibleCustomerIds` 只让 BUSINESS 看「授权给我的 + 我建的」；DATEX 名下两家买家（荟品仓 FE004、松野湃 FE005）是 King 建的，只授权给了 King（荟品仓另有主管/YSM/Helen），Nina 的下拉自然没有。已回复她找 King/主管在客户管理里授权。**可选改进（乙类，等拍板）**：中间商授权自动带上其关联买家（`related_middleman`），否则每新建一个买家都得逐人授权一遍。
 > **占位工厂「待定供应商」从没建成功过**——`generateFromOrder` 硬编码 `factory_no: 'S000'`，而生产库 S000 早被真实厂商「苏州誉绸」（id 2，7-15 建）占着，`uk_factory_no` 对软删行同样生效 → 凡有供应商没匹配到工厂库就整批 500「服务器内部错误」（Dean 9-07 订单 78 一小时连撞 8 次，error_log #24 从 8-31 就在撞）。修法：建占位前查 S000 是否被占，被占就走 `numbering.nextGlobal('S')` 正常发号；占位身份只认名字。UT-CON-44/45，变异（恒 S000）如期变红。
 > **顺手两处**：样衣编辑页 `load()` 在 await 之后重读 `editId`（keep-alive 页签切走后变 null → `GET /samples/null/versions` 400，error_log #21 Nina 两次）改为进函数先抓 id；前端错误上报过滤 ElMessageBox 的 `cancel/close` 字符串拒绝（error_log #34 daisy 那条「PROMISE cancel」就是它），新增用例，变异如期变红。
@@ -314,6 +321,7 @@
 
 ## 最近变更（新→旧，保留最近若干条）
 
+- （本次·**9-09 三件拍板落地：#128 分批下合同 / 中间商授权带买家 / 不可编辑状态页面只读**）`feat(api,web,types)` 生成合同按材料行：勾选生成或只为未下单的行生成，已下过的行跳过并报回，守卫按行（UT-CON-27 改写 + 46～49，变异 2 次红 6 条）；`visibleCustomerIds` 把可见中间商名下的买家带出（只看不能改，UT-CUS-G6/G7，变异红 2）；`*_EDITABLE_STATUSES` 收进 @i9/types 供前后端共用，报价/样衣编辑页状态锁 + 顶部提示，源码守卫 `status-lock-guard.spec.ts`。api **511**（+7）/ web **598**（+3）。**零 DB 结构变更**。
 - （本次·**发版把生产打挂 5 分钟 → 发版脚本加固**）`fix(infra)` 本机 iCloud 重排后文件成 600/700、uid 501，`rsync -a` 原样推上服务器：i9app 读不到 `@i9/types/dist`、nginx 403。`deploy-local.sh` rsync 改 `--no-owner --no-group --chmod=D755,F644`；`deploy.sh` 权限修正覆盖四个 dist 与静态根。服务器已手工修复并全绿。
 - （本次·**9-08 生产 500：占位工厂撞 S000**）`fix(api,web)` `generateFromOrder` 建「待定供应商」占位时硬编码 `S000`，生产库该号早被真实厂商占用 → 有未匹配供应商就整批 500（Dean 订单 78 连撞 8 次）。改为 S000 被占则走 `nextGlobal('S')` 发号，占位只认名字。顺手：样衣页 `load()` 进函数先抓 id（切页签后 `/samples/null/versions` 400）；错误上报过滤弹窗 `cancel/close`。#129 Nina 是机密客户未授权，非缺陷已回复。api jest **504**（+2）/ web **595**（+1）；变异 2 次全红。**零 DB 结构变更**。
 - （本次·**#120 B改良版落地**）`fix(web)` 把「里子早就分色、面子看不出」补齐：系统采购量列带分组明细（无组时明说按整单）、分色行颜色格换「自动分色」标记（手打外号对不上矩阵真名）、同名拆分行保存前防呆（`duplicateSplitGroups`，用订单 73 真实数据做 fixture）、合同页 `splitLinesOf` 补 BY_BOTH + 默认量改取已核算采购量。算法/后端/历史数据全零改动。web **562**（+7）；变异 3 全红。**待办**：订单 73 外科清理 + 回复 daisy 并问「分色不同供应商/单价」判据。

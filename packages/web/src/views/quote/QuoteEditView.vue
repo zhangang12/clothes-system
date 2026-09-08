@@ -8,16 +8,18 @@
         <el-tag v-if="statusLabel" size="small" :type="form.status === 'ORDERED' ? 'success' : 'warning'">{{ statusLabel }}</el-tag>
       </div>
       <div class="ops">
-        <el-button v-if="!readonly" type="primary" :icon="Check" :loading="saving" @click="save">保存</el-button>
+        <el-button v-if="!readonly && !statusLocked" type="primary" :icon="Check" :loading="saving" @click="save">保存</el-button>
         <el-button v-if="editId" :icon="Printer" @click="printDialog = true">打印/PDF</el-button>
         <el-button v-if="editId" :icon="Download" @click="exportExcel">导出Excel</el-button>
-        <el-button v-if="!readonly && editId" :icon="Download" @click="importDialog = true">从样衣导入</el-button>
+        <el-button v-if="!readonly && !statusLocked && editId" :icon="Download" @click="importDialog = true">从样衣导入</el-button>
         <el-button v-if="!readonly && editId && ['DRAFT', 'ADJUSTING'].includes(form.status)" type="warning" @click="submitQuote">发出报价</el-button>
         <el-button v-if="!readonly && editId && form.status === 'QUOTED'" plain @click="adjustQuote">客户调整</el-button>
         <el-button v-if="!readonly && editId && ['QUOTED', 'ADJUSTING'].includes(form.status)" type="success" :icon="Promotion" @click="toContract">转销售合同</el-button>
         <el-button v-if="editId" :icon="CopyDocument" :loading="copying" @click="copy">复制</el-button>
       </div>
     </div>
+
+    <el-alert v-if="statusLocked" type="warning" show-icon :closable="false" :title="lockHint" style="margin-bottom:12px" />
 
     <!-- 关联单据快速跳转(P2#20/#23):上游样衣 + 下游被引用订单;草稿订单引用=占用中软标记(防误改被占用报价,
          单列在 DocLinks 外保证反查为空时也不丢) -->
@@ -76,7 +78,7 @@
     </el-dialog>
 
     <RuleHint>可从样衣一键导入材料明细(品名在前);报价合计<b>超审批阈值需主管审批后才能发出</b>;发出后可被订单引用,<b>已成单不可再改</b>;转销售合同会自动建订单(数量留空待补矩阵)。</RuleHint>
-    <el-form ref="formRef" :model="form" :rules="rules" label-width="104px" :disabled="readonly" class="form-body">
+    <el-form ref="formRef" :model="form" :rules="rules" label-width="104px" :disabled="contentDisabled" class="form-body">
       <!-- 主要信息 -->
       <section-block title="▣ 主要信息" badge="18 字段">
         <el-row :gutter="16">
@@ -143,14 +145,14 @@
       <!-- 图片信息 -->
       <section-block title="▣ 图片信息" badge="2 字段 · 截图/拖拽">
         <el-row :gutter="16">
-          <el-col :span="8"><el-form-item label="图片1"><file-upload v-model="form.image1" :disabled="readonly" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="图片2"><file-upload v-model="form.image2" :disabled="readonly" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="图片1"><file-upload v-model="form.image1" :disabled="contentDisabled" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="图片2"><file-upload v-model="form.image2" :disabled="contentDisabled" /></el-form-item></el-col>
         </el-row>
       </section-block>
 
       <!-- 报价明细 -->
       <section-block title="▣ 报价明细（从样衣导入）" badge="12 字段">
-        <div v-if="!readonly" class="subtable-ops">
+        <div v-if="!contentDisabled" class="subtable-ops">
           <el-button size="small" :icon="Plus" @click="addItem">添加行</el-button>
           <el-button size="small" :icon="Minus" :disabled="!selItems.length" @click="delItems">删除</el-button>
           <el-tooltip placement="top"
@@ -198,7 +200,7 @@
             <el-table-column label="损耗%" width="80"><template #default="{ row }"><el-input v-model="row.lossRate" size="small" /></template></el-table-column>
             <el-table-column label="含损金额" width="110"><template #default="{ row }"><span class="calc">{{ lossAmt(row) }}</span></template></el-table-column>
             <el-table-column label="备注" min-width="100"><template #default="{ row }"><el-input v-model="row.remark" size="small" /></template></el-table-column>
-            <el-table-column v-if="!readonly" label="排序" width="100" align="center" fixed="right">
+            <el-table-column v-if="!contentDisabled" label="排序" width="100" align="center" fixed="right">
               <template #default="{ $index }">
                 <el-tooltip placement="top" content="按住拖到目标位置（挪很远时比点箭头快）">
                   <span class="row-drag-handle">⣿</span>
@@ -213,7 +215,7 @@
 
       <!-- 费用明细 -->
       <section-block title="▣ 费用明细" badge="4 字段 · 自动带6行">
-        <div v-if="!readonly" class="subtable-ops">
+        <div v-if="!contentDisabled" class="subtable-ops">
           <el-button size="small" :icon="Plus" @click="addFee">添加行</el-button>
           <el-button size="small" :icon="Minus" :disabled="!selFees.length" @click="delFees">删除</el-button>
         </div>
@@ -282,7 +284,7 @@ import { printQuote } from '@/utils/quotePrint';
 import { exportQuoteExcel } from '@/utils/quoteExcel';
 import FileUpload from '@/components/FileUpload.vue';
 import type { DocLink } from '@/components/DocLinks.vue'; // 仅取类型:组件已全局注册
-import { QUOTE_STATUS_LABEL } from '@i9/types';
+import { QUOTE_STATUS_LABEL, QUOTE_EDITABLE_STATUSES } from '@i9/types';
 import { TRADE_COUNTRIES, DICT_PRICE_TERMS, DICT_SETTLEMENT } from '@/constants/regions';
 import { UNIT_OPTIONS } from '@/constants/units';
 import { halfFilledRows, halfFilledMessage } from '@/utils/lineCheck';
@@ -310,6 +312,18 @@ const DictSelect = (props: any, { emit }: any) =>
 const route = useRoute();
 const router = useRouter();
 const readonly = computed(() => !!route.meta.readonly);
+// 状态锁（2026-09-09 老板拍板）：已报价/已成单的报价单后端一律拒改（quote.service 与这里共用 QUOTE_EDITABLE_STATUSES）。
+// 以前页面照样让填、点保存才报 400「只有草稿/客户调整状态的报价单可以编辑」，一个月被撞了 47 次。
+// 现在直接置只读，顶部说清出路；「客户调整」「转销售合同」等状态动作不受影响。
+const statusLocked = computed(() => !!editId.value && !!form.status && !(QUOTE_EDITABLE_STATUSES as readonly string[]).includes(form.status));
+const contentDisabled = computed(() => readonly.value || statusLocked.value);
+const lockHint = computed(() => {
+  if (!statusLocked.value) return '';
+  const st = statusLabel.value || form.status;
+  if (form.status === 'QUOTED') return `报价单已「${st}」，内容不可修改；要改价请点右上角「客户调整」，改完再「发出报价」。`;
+  if (form.status === 'ORDERED') return `报价单已「${st}」（已转销售合同），不可修改；后续改动请在订单里做。`;
+  return `报价单当前「${st}」，不可修改。`;
+});
 const editId = computed(() => (route.params.id ? Number(route.params.id) : null));
 const modeLabel = computed(() => (readonly.value ? '查看' : editId.value ? '编辑' : '新建'));
 

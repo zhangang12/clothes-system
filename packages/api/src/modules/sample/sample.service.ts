@@ -16,7 +16,7 @@ import { QuoteService } from '../quote/quote.service';
 import { Reconciliation, ReconciliationStatus } from '../reconciliation/reconciliation.entity';
 import { ReconciliationExpenseItem } from '../reconciliation/reconciliation-expense-item.entity';
 import { Factory } from '../factory/factory.entity';
-import { ReconcileType } from '@i9/types';
+import { ReconcileType, SAMPLE_EDITABLE_STATUSES, SAMPLE_PM_EDITABLE_STATUSES } from '@i9/types';
 import { CustomerService } from '../customer/customer.service';
 import { SampleStatus, UserRole , SAMPLE_STATUS_LABEL } from '@i9/types';
 import { SysUser } from '../auth/sys-user.entity';
@@ -234,7 +234,8 @@ export class SampleService {
   async update(id: number, dto: Partial<CreateSampleDto>, operatorId?: number): Promise<SampleGarment> {
     const entity = await this.repo.findOne({ where: { id, deleted: 0 } });
     if (!entity) throw new NotFoundException(`样衣 #${id} 不存在`);
-    if (![SampleStatus.PENDING, SampleStatus.SAMPLING].includes(entity.status)) {
+    // 允许状态与前端 SampleEditView 共用 @i9/types.SAMPLE_EDITABLE_STATUSES（页面在其它状态直接只读）
+    if (!SAMPLE_EDITABLE_STATUSES.includes(entity.status)) {
       throw new BadRequestException('该状态样衣不允许修改基本信息');
     }
     // 中间商/最终买家改动:回填名称/编号快照(编辑态联动,设计稿页面事件)
@@ -429,7 +430,7 @@ export class SampleService {
       && Number(entity.patternmaker_id) !== Number(operatorId)) {
       throw new ForbiddenException('仅该样衣的指派制版师可保存实耗/工价');
     }
-    if (![SampleStatus.SAMPLING, SampleStatus.SHIPPED, SampleStatus.RETURNED, SampleStatus.RECONCILED].includes(entity.status)) {
+    if (!SAMPLE_PM_EDITABLE_STATUSES.includes(entity.status)) { // 与版师视图页面共用同一份允许状态
       throw new BadRequestException('当前状态不允许版师保存(样衣未在打样/寄回/对账阶段,或已成单/完成)');
     }
 

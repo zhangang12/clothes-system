@@ -83,6 +83,7 @@ const mockReconShipQb = {
 const mockReconShipRepo = { createQueryBuilder: jest.fn().mockReturnValue(mockReconShipQb) };
 const mockPrepayRepo = { count: jest.fn().mockResolvedValue(0) };
 const mockDataSource = {
+  query: jest.fn().mockResolvedValue([]), // generateFromOrder 事务外先查「哪些材料行已进过合同」（#128）
   transaction: jest.fn().mockImplementation((cb) => cb({
     create: jest.fn().mockImplementation((_, v) => v),
     save: jest.fn().mockImplementation((_, v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
@@ -630,11 +631,15 @@ describe('ContractService', () => {
     await expect(service.priceHint('   ')).rejects.toThrow(BadRequestException);
   });
 
-  // UT-CON-27: generateFromOrder 幂等守卫——订单已生成过合同则拒绝整批重跑（L1）
-  it('UT-CON-27 generateFromOrder rejects re-run when order already has contracts (L1 幂等守卫)', async () => {
+  // UT-CON-27（#128 改版）: 幂等守卫改为按行——订单材料行全都进过合同 → 拒绝、不进事务，连点两次也不会重复建单
+  it('UT-CON-27 generateFromOrder 全部材料行都已进过合同 → 拒绝且不进事务（按行幂等）', async () => {
     mockOrderRepo.findOne.mockResolvedValueOnce({ id: 10, currency: 'CNY', deleted: 0 });
-    mockRepo.count.mockResolvedValueOnce(2); // 该订单已有 2 张合同
-    await expect(service.generateFromOrder(10, 1)).rejects.toThrow(BadRequestException);
+    mockOrderMaterialRepo.find.mockResolvedValueOnce([
+      { id: 101, item_name: '面料A', supplier: '面料厂A', unit_price: 8, total_purchase: 100, sort_order: 0 },
+      { id: 102, item_name: '拉链', supplier: '辅料厂B', unit_price: 2, total_purchase: 200, sort_order: 1 },
+    ]);
+    mockDataSource.query.mockResolvedValueOnce([{ omid: '101' }, { omid: 102 }]); // mysql2 会把 bigint 给成字符串
+    await expect(service.generateFromOrder(10, 1)).rejects.toThrow(/都已生成过合同/);
     expect(mockDataSource.transaction).not.toHaveBeenCalled(); // 未进入生成事务
   });
 
@@ -1459,5 +1464,68 @@ describe('ContractService', () => {
       expect(createdFactory(manager)).toMatchObject({ factory_no: 'S000', name: '待定供应商' });
       expect(result.created).toBe(1);
     } finally { nextGlobal.mockRestore(); }
+  });
+  // UT-CON-46～49（#128 分批下合同，老板 9-09 拍板按默认做：同一供应商允许多张 / 已下过的行跳过并提示 / 只认本订单的行）
+  const batchMaterials = () => [
+    { id: 101, item_name: '面料A', supplier: '面料厂A', unit_price: 8, total_purchase: 100, sort_order: 0 },
+    { id: 102, item_name: '面料B', supplier: '面料厂A', unit_price: 5, total_purchase: 50, sort_order: 1 },
+    { id: 103, item_name: '拉链', supplier: '辅料厂B', unit_price: 2, total_purchase: 200, sort_order: 2 },
+  ];
+  function batchManager() {
+    return {
+      create: jest.fn().mockImplementation((_: any, v: any) => v),
+      save: jest.fn().mockImplementation((_: any, v: any) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
+      findOne: jest.fn().mockImplementation((entity: any, opts: any) => {
+        if (entity === Factory) {
+          const hit = [{ id: 7, name: '面料厂A', deleted: 0 }, { id: 8, name: '辅料厂B', deleted: 0 }].find((f) => f.name === opts?.where?.name);
+          return Promise.resolve(hit ?? null);
+        }
+        return Promise.resolve(null);
+      }),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+      find: jest.fn().mockResolvedValue([]),
+      query: jest.fn().mockResolvedValue([]),
+    };
+  }
+  const savedLineNames = (manager: any) => manager.save.mock.calls
+    .filter((c: any[]) => Array.isArray(c[1])).flatMap((c: any[]) => c[1]).map((l: any) => l.item_name);
+
+  it('UT-CON-46 generateFromOrder 只为还没下过合同的行生成，已下过的行跳过并报回；同一供应商第二批照样成单', async () => {
+    mockOrderRepo.findOne.mockResolvedValueOnce({ id: 10, currency: 'CNY', deleted: 0 });
+    mockOrderMaterialRepo.find.mockResolvedValueOnce(batchMaterials());
+    mockDataSource.query.mockResolvedValueOnce([{ omid: '101' }]); // 面料A 上一批已下过
+    const manager = batchManager();
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+    const result = await service.generateFromOrder(10, 1);
+    expect(result.created).toBe(2); // 面料厂A（面料B）+ 辅料厂B（拉链）——面料厂A 是第二张
+    expect(result.skipped).toEqual([{ id: 101, item_name: '面料A', reason: '已生成过合同' }]);
+    expect(savedLineNames(manager)).toEqual(['面料B', '拉链']); // 已下过的面料A 一行都没进合同
+  });
+
+  it('UT-CON-47 generateFromOrder 传 material_ids 只为勾选的行生成，不是本订单的 id 无视', async () => {
+    mockOrderRepo.findOne.mockResolvedValueOnce({ id: 10, currency: 'CNY', deleted: 0 });
+    mockOrderMaterialRepo.find.mockResolvedValueOnce(batchMaterials());
+    mockDataSource.query.mockResolvedValueOnce([]);
+    const manager = batchManager();
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+    const result = await service.generateFromOrder(10, 1, [102, 999]);
+    expect(result.created).toBe(1);
+    expect(result.skipped).toEqual([]);
+    expect(savedLineNames(manager)).toEqual(['面料B']);
+  });
+
+  it('UT-CON-48 generateFromOrder 勾选的行都已下过合同 → 报错、不进事务', async () => {
+    mockOrderRepo.findOne.mockResolvedValueOnce({ id: 10, currency: 'CNY', deleted: 0 });
+    mockOrderMaterialRepo.find.mockResolvedValueOnce(batchMaterials());
+    mockDataSource.query.mockResolvedValueOnce([{ omid: 101 }, { omid: 102 }]);
+    await expect(service.generateFromOrder(10, 1, [101, 102])).rejects.toThrow(/勾选的材料都已生成过合同/);
+    expect(mockDataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('UT-CON-49 generateFromOrder 勾选的 id 全不属于该订单 → 报错，不会退化成整单生成', async () => {
+    mockOrderRepo.findOne.mockResolvedValueOnce({ id: 10, currency: 'CNY', deleted: 0 });
+    mockOrderMaterialRepo.find.mockResolvedValueOnce(batchMaterials());
+    await expect(service.generateFromOrder(10, 1, [888, 999])).rejects.toThrow(/不属于该订单/);
+    expect(mockDataSource.transaction).not.toHaveBeenCalled();
   });
 });

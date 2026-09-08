@@ -12,6 +12,7 @@ import { ContractService } from './contract.service';
 import { maskContract } from '../../common/masking/field-mask';
 import { ContractStatus } from './contract.entity';
 import { CreateContractDto } from './dto/create-contract.dto';
+import { GenerateFromOrderDto } from './dto/generate-from-order.dto';
 import { UpdateContractDto } from './dto/update-contract.dto';
 import { QueryContractDto } from './dto/query-contract.dto';
 
@@ -39,9 +40,13 @@ export class ContractController {
 
   @Post('generate-from-order/:orderId')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
-  @ApiOperation({ summary: '供应商拆单生成材料合同（按订单材料供应商分组）' })
-  generateFromOrder(@Param('orderId', ParseIntPipe) orderId: number, @Request() req: any) {
-    return this.service.generateFromOrder(orderId, req.user.id);
+  @ApiOperation({ summary: '为订单材料生成材料合同（按供应商拆单；可传 material_ids 分批下，不传=只为尚未下单的行）' })
+  generateFromOrder(
+    @Param('orderId', ParseIntPipe) orderId: number,
+    @Body() dto: GenerateFromOrderDto,
+    @Request() req: any,
+  ) {
+    return this.service.generateFromOrder(orderId, req.user.id, dto?.material_ids);
   }
 
   // 价格提示/按款号查合同均含供应商成本价（unit_price/total_amount），属脱敏基建覆盖范围

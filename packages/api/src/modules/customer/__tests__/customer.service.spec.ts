@@ -267,6 +267,36 @@ describe('CustomerService', () => {
       await expect(service.update(3, { name: '改名' } as any, biz)).rejects.toThrow('仅有查看权限');
     });
 
+    it('UT-CUS-G6: 中间商授权自动带上它名下的最终买家（related_middleman 逗号串，认 id 不认名字）', async () => {
+      mockGrantRepo.find.mockResolvedValue([{ customer_id: 31 }]);
+      mockRepo.find.mockImplementation(async (opts: any) => (opts?.where?.type === 'BUYER'
+        ? [
+          { id: 32, related_middleman: '31' },
+          { id: 33, related_middleman: '25,31' },
+          { id: 34, related_middleman: null },
+          { id: 3, related_middleman: '客户测试_dt' },
+          { id: 26, related_middleman: '25' },
+        ]
+        : [])); // 自建：无
+      const ids = await service.visibleCustomerIds(biz);
+      expect([...ids!].sort((a, b) => a - b)).toEqual([31, 32, 33]);
+    });
+
+    it('UT-CUS-G6b: 什么授权都没有时不去查买家表，也不会因空 Set 带出任何买家', async () => {
+      mockGrantRepo.find.mockResolvedValue([]);
+      mockRepo.find.mockImplementation(async (opts: any) => (opts?.where?.type === 'BUYER' ? [{ id: 32, related_middleman: '31' }] : []));
+      expect(await service.visibleCustomerIds(biz)).toEqual([]);
+      expect(mockRepo.find.mock.calls.some((c: any[]) => c[0]?.where?.type === 'BUYER')).toBe(false);
+    });
+
+    it('UT-CUS-G7: 随中间商带出来的买家只能看：update → 403 说明「随授权带出」，而不是 404', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 32, name: '荟品仓', created_by: 6, deleted: 0, type: 'BUYER' });
+      mockGrantRepo.findOne.mockResolvedValue(null); // 对这家买家没有直接授权
+      mockGrantRepo.find.mockResolvedValue([{ customer_id: 31 }]);
+      mockRepo.find.mockImplementation(async (opts: any) => (opts?.where?.type === 'BUYER' ? [{ id: 32, related_middleman: '31' }] : []));
+      await expect(service.update(32, { name: '改名' } as any, biz)).rejects.toThrow(/随其关联中间商的授权带出/);
+    });
+
     it('UT-CUS-G5: create 保存后自动为创建人登记机密权限（can_edit=1）', async () => {
       mockRedis.incr.mockResolvedValue(9);
       await service.create({ name: '新客户', type: CustomerType.MIDDLEMAN, contacts: CONTACTS } as any, 42);

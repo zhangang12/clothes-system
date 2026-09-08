@@ -17,8 +17,10 @@ export const contractApi = {
   byStyle: (styleNo: string) =>
     http.get<unknown, { data: any[] }>('/contracts/by-style', { params: { style_no: styleNo } }),
   // 按订单材料供应商拆单批量生成材料合同（设计稿 合同 A1 主流程入口）
-  generateFromOrder: (orderId: number) =>
-    http.post<unknown, { data: { created: number; contracts: any[]; unmatched: string[] } }>(`/contracts/generate-from-order/${orderId}`),
+  // #128 分批下：materialIds 传了就只为这些行生成；不传 = 为尚未下过合同的材料行生成（已下过的后端跳过并在 skipped 报回）
+  generateFromOrder: (orderId: number, materialIds?: number[]) =>
+    http.post<unknown, { data: { created: number; contracts: any[]; unmatched: string[]; skipped: Array<{ id: number; item_name: string; reason: string }> } }>(
+      `/contracts/generate-from-order/${orderId}`, materialIds?.length ? { material_ids: materialIds } : {}),
   update: (id: number, dto: Record<string, unknown>) =>
     http.patch<unknown, { data: Contract }>(`/contracts/${id}`, dto),
   push: (id: number) =>

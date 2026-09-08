@@ -16,6 +16,21 @@ import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.se
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { QueryCustomerDto } from './dto/query-customer.dto';
 
+/**
+ * 在 middlemanIds 里任一中间商名下的最终买家 id。
+ * related_middleman 是逗号分隔的中间商 id 串（历史数据里混过名字，认不出数字的段忽略）。
+ */
+export function buyersUnderMiddlemen(
+  buyers: Array<{ id: number | string; related_middleman?: string | null }>,
+  middlemanIds: Set<number>,
+): number[] {
+  return buyers
+    .filter((b) => String(b.related_middleman ?? '').split(',')
+      .map((seg) => Number(seg.trim()))
+      .some((n) => n > 0 && middlemanIds.has(n)))
+    .map((b) => +b.id);
+}
+
 @Injectable()
 export class CustomerService {
   constructor(
@@ -44,6 +59,16 @@ export class CustomerService {
     // 有效期过滤(设计 D.3:过期授权自动失效)
     const grants = allGrants.filter((g) => !g.expire_at || String(g.expire_at).slice(0, 10) >= today);
     const ids = new Set<number>([...grants.map((g) => +g.customer_id), ...own.map((c) => +c.id)]);
+    // 中间商的授权自动带上它名下的最终买家（2026-09-09 老板拍板；起因 #129 Nina：有 DATEX 的授权，
+    // 样衣页却选不到 DATEX 名下的荟品仓/松野湃，每建一个买家都得逐人再授权一遍）。
+    // 买家的归属存在 related_middleman（逗号分隔的中间商 id 串，见 CustomerEditView）；
+    // 随中间商带出来的买家**只看不能改**（见 assertEditable）。客户表很小，取回来在内存里配。
+    if (ids.size) {
+      const buyers = await this.repo.find({
+        where: { type: CustomerType.BUYER, deleted: 0 }, select: ['id', 'related_middleman'],
+      });
+      for (const id of buyersUnderMiddlemen(buyers ?? [], ids)) ids.add(id);
+    }
     return [...ids];
   }
 
@@ -59,7 +84,14 @@ export class CustomerService {
     if (!user || isAdminRole(user.role) || +entity.created_by === +user.id) return;
     const grant = await this.grantRepo.findOne({ where: { customer_id: entity.id, user_id: user.id } });
     const expired = grant?.expire_at && String(grant.expire_at).slice(0, 10) < new Date().toISOString().slice(0, 10);
-    if (!grant || expired) throw new NotFoundException(`客户 #${entity.id} 不存在`); // 不可见/授权已过期
+    if (!grant || expired) {
+      // 随中间商授权带出来的买家：看得见、不能改（要改得对这家买家单独授权 can_edit）
+      const visible = await this.visibleCustomerIds(user);
+      if (visible?.includes(+entity.id)) {
+        throw new ForbiddenException('您对该客户仅有查看权限（随其关联中间商的授权带出），修改需单独授权');
+      }
+      throw new NotFoundException(`客户 #${entity.id} 不存在`); // 不可见/授权已过期
+    }
     if (!grant.can_edit) throw new ForbiddenException('您对该机密客户仅有查看权限，无修改权限');
   }
 

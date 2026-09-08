@@ -1,6 +1,6 @@
 <template>
   <div class="list-page">
-    <RuleHint>订单由报价「转销售合同」自动生成;<b>只有草稿状态可编辑</b>,已下单可「撤回」回草稿修改(已生成合同起不可撤回);下单后状态由下游(生成合同/发货/对账)<b>自动推进,不可手改</b>;可用行内「生成合同」按供应商拆单生成材料/加工合同。</RuleHint>
+    <RuleHint>订单由报价「转销售合同」自动生成;<b>只有草稿状态可编辑</b>,已下单可「撤回」回草稿修改(已生成合同起不可撤回);下单后状态由下游(生成合同/发货/对账)<b>自动推进,不可手改</b>;可用行内「生成合同」按供应商拆单生成材料/加工合同——<b>材料合同可分批下</b>：列表入口只为还没下单的材料生成，要挑行先下请进订单页勾选。</RuleHint>
     <div class="toolbar-card">
       <div class="toolbar">
         <div class="tools-left">
@@ -87,7 +87,7 @@
                 <el-button link type="primary" size="small">生成合同<el-icon><ArrowDown /></el-icon></el-button>
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item command="material">材料合同（按供应商拆单）</el-dropdown-item>
+                    <el-dropdown-item command="material">材料合同（为未下单的材料，按供应商拆单）</el-dropdown-item>
                     <el-dropdown-item command="process">加工合同（带入订单明细）</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
@@ -225,9 +225,10 @@ async function onGenContract(cmd: string, row: any) {
     router.push({ path: '/contracts/new', query: { type: 'PROCESS', order_id: row.id } });
     return;
   }
+  // #128 分批下：列表入口 = 为还没下过合同的材料行生成（已下过的后端跳过并报回）；要挑行下请进订单页勾选
   try {
     await ElMessageBox.confirm(
-      '将按订单「用料核算」中的供应商分组，每个供应商各生成一张材料合同草稿（分色/分码材料按尺码矩阵拆行）。',
+      '将为订单里还没生成过合同的材料行按供应商分组，每个供应商各生成一张材料合同草稿（已下单的行不再重复；分色/分码材料按尺码矩阵拆行）。要挑几行先下，请进订单页勾选后生成。',
       '生成材料合同', { type: 'info', confirmButtonText: '生成', cancelButtonText: '取消' },
     );
   } catch { return; }
@@ -235,15 +236,13 @@ async function onGenContract(cmd: string, row: any) {
     const res: any = await contractApi.generateFromOrder(row.id);
     const d = res?.data ?? res;
     const unmatched: string[] = d?.unmatched ?? [];
-    if (d?.created) ElMessage.success(`已生成 ${d.created} 张材料合同草稿`);
-    if (unmatched.length) {
-      ElMessageBox.alert(
-        `以下供应商未在工厂库中登记，对应材料未生成合同：${unmatched.join('、')}。请先在基础资料·工厂库补录后重试。`,
-        '部分供应商未匹配', { type: 'warning' },
-      );
-    } else if (!d?.created) {
-      ElMessage.warning('没有可生成的材料行');
-    }
+    const skipped: Array<{ item_name: string }> = d?.skipped ?? [];
+    if (d?.created) ElMessage.success(`已生成 ${d.created} 张材料合同草稿${skipped.length ? `，跳过已下单的 ${skipped.length} 行` : ''}`);
+    const notes: string[] = [];
+    if (skipped.length) notes.push(`已生成过合同、本次跳过：${skipped.map((x) => x.item_name).join('、')}`);
+    if (unmatched.length) notes.push(`以下供应商未在工厂库中登记，对应材料先挂在「待定供应商」占位合同上：${unmatched.join('、')}。请在基础资料·工厂库补录后到合同草稿里改绑。`);
+    if (notes.length) ElMessageBox.alert(notes.join('；'), '生成结果', { type: 'warning' });
+    else if (!d?.created) ElMessage.warning('没有可生成的材料行');
     if (d?.created) router.push({ path: '/contracts', query: { order_id: row.id } });
   } catch (e: any) {
     errToast(e?.response?.data?.msg ?? e?.response?.data?.msg ?? '生成失败');

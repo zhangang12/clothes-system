@@ -154,6 +154,17 @@ export const SAMPLE_STATUS_LABEL: Record<SampleStatus, string> = {
 };
 
 // 样衣类别（7 类，可多选）
+/**
+ * 业务视图可改基本信息/材料/寄样的样衣状态。后端 SampleService.update 与前端 SampleEditView 共用这一份：
+ * 页面据此在不可编辑状态直接置只读并说明，而不是让人填完点保存才报「该状态样衣不允许修改基本信息」
+ * （2026-08-13～09-04 一个月被撞 21 次）。
+ */
+export const SAMPLE_EDITABLE_STATUSES: readonly SampleStatus[] = [SampleStatus.PENDING, SampleStatus.SAMPLING];
+/** 版师视图可保存实耗/工价的样衣状态（SampleService.updateByPatternmaker 同一份闸） */
+export const SAMPLE_PM_EDITABLE_STATUSES: readonly SampleStatus[] = [
+  SampleStatus.SAMPLING, SampleStatus.SHIPPED, SampleStatus.RETURNED, SampleStatus.RECONCILED,
+];
+
 export const SAMPLE_CATEGORIES = ['销样', '头样', '二样', '三样', '产前样', '船样', '拍照样'];
 
 // 报价状态机（客户报价设计稿 §B：草稿/已报价/客户调整/已成单）
@@ -170,6 +181,12 @@ export const QUOTE_STATUS_LABEL: Record<QuoteStatus, string> = {
   [QuoteStatus.ADJUSTING]: '客户调整',
   [QuoteStatus.ORDERED]: '已成单',
 };
+
+/**
+ * 可编辑的报价单状态。后端 QuoteService.update 与前端 QuoteEditView 共用：已报价/已成单的报价页面直接只读，
+ * 要改价走「客户调整」（此前页面照样让填、点保存才报 400，一个月被撞 47 次）。
+ */
+export const QUOTE_EDITABLE_STATUSES: readonly QuoteStatus[] = [QuoteStatus.DRAFT, QuoteStatus.ADJUSTING];
 
 // 费用明细新建自动带 6 行（客户报价设计稿 §费用明细）
 export const DEFAULT_QUOTE_FEES = ['加工费', '线', '包装', '样衣费', '测试费', '运费'];

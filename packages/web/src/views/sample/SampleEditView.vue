@@ -10,11 +10,11 @@
       </div>
       <div class="ops">
         <template v-if="patternmaker">
-          <el-button v-if="!readonly" type="primary" :icon="Check" :loading="saving" @click="savePatternmaker">保存（版师）</el-button>
+          <el-button v-if="!readonly && !pmLocked" type="primary" :icon="Check" :loading="saving" @click="savePatternmaker">保存（版师）</el-button>
         </template>
         <template v-else>
-          <el-button v-if="!readonly" type="primary" :icon="Check" :loading="saving" @click="save">保存</el-button>
-          <el-button v-if="!readonly && editId" type="success" :icon="Promotion" @click="pushPatternmaker">推送版师</el-button>
+          <el-button v-if="!readonly && !statusLocked" type="primary" :icon="Check" :loading="saving" @click="save">保存</el-button>
+          <el-button v-if="!readonly && !statusLocked && editId" type="success" :icon="Promotion" @click="pushPatternmaker">推送版师</el-button>
           <el-button v-if="!readonly && editId && ['SAMPLING', 'SHIPPED'].includes(form.status)" type="warning" plain @click="markShipped">标记已寄出</el-button>
           <el-button v-if="!readonly && editId && form.status === 'SHIPPED'" plain @click="undoShipped">撤销已寄出</el-button>
           <el-button v-if="!readonly && editId && ['RECONCILED', 'DONE'].includes(form.status)" type="success" plain @click="markComplete">标记完成</el-button>
@@ -25,6 +25,8 @@
         <el-button v-if="editId && isAdmin" type="danger" plain :icon="Delete" @click="removeSample">删除</el-button>
       </div>
     </div>
+
+    <el-alert v-if="locked" type="warning" show-icon :closable="false" :title="lockHint" style="margin-bottom:12px" />
 
     <!-- 关联单据快速跳转:下游·由本样衣生成的报价单(反查见 loadRelatedQuotes;版师视图不查,报价对版师不可见) -->
     <DocLinks :links="docLinks" />
@@ -105,7 +107,7 @@
 
       <!-- 材料明细 -->
       <section-block title="▣ 材料明细" badge="17 字段">
-        <div v-if="!readonly && !patternmaker" class="subtable-ops">
+        <div v-if="!readonly && !patternmaker && !statusLocked" class="subtable-ops">
           <el-button size="small" :icon="Plus" @click="addMaterial">添加行</el-button>
           <el-button size="small" :icon="CopyDocument" :disabled="!selMaterials.length" @click="copyMaterials">复制行</el-button>
           <el-button size="small" :icon="Minus" :disabled="!selMaterials.length" @click="removeMaterials">删除</el-button>
@@ -183,7 +185,7 @@
               </template>
             </el-table-column>
             <el-table-column label="备注" min-width="110"><template #default="{ row }"><el-input v-model="row.remark" size="small" :disabled="bizDisabled" /></template></el-table-column>
-            <el-table-column v-if="!readonly && !patternmaker" label="排序" width="76" align="center" fixed="right">
+            <el-table-column v-if="!readonly && !patternmaker && !statusLocked" label="排序" width="76" align="center" fixed="right">
               <template #default="{ $index }">
                 <el-button link size="small" :disabled="$index === 0" @click="moveRow(form.materials, $index, -1)">↑</el-button>
                 <el-button link size="small" :disabled="$index === form.materials.length - 1" @click="moveRow(form.materials, $index, 1)">↓</el-button>
@@ -202,7 +204,7 @@
           </el-form-item></el-col>
         </el-row>
         <RuleHint tone="teal">样衣一轮打不完可分<b>多轮寄样</b>:每轮填 尺码/数量/寄样日期/单号;<b>寄回日期、工价单价由版师填</b>;各轮金额=数量×单价,<b>工价合计=各轮之和</b>自动进对账。</RuleHint>
-        <div v-if="!readonly" class="subtable-ops">
+        <div v-if="!readonly && !locked" class="subtable-ops">
           <el-button size="small" :icon="Plus" @click="addRound">加一轮</el-button>
           <el-button size="small" :icon="Minus" :disabled="!selectedRounds.length" @click="removeRounds">删除</el-button>
           <span class="hint">工价合计 ¥{{ shipRoundsTotal }}（{{ form.shipRounds.length }} 轮 · 共 {{ shipRoundsQty }} 件）</span>
@@ -222,7 +224,7 @@
         <el-row :gutter="16" style="margin-top:12px">
           <el-col :span="24">
             <el-form-item label="样衣意见附件">
-              <file-upload v-model="form.feedbackAttachments" multiple accept="image/*,.pdf" :disabled="readonly" tip="客户反馈图/PDF,可多文件(业务/版师均可上传)" />
+              <file-upload v-model="form.feedbackAttachments" multiple accept="image/*,.pdf" :disabled="readonly || locked" tip="客户反馈图/PDF,可多文件(业务/版师均可上传)" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -318,7 +320,7 @@ import PrintDesigner from '@/components/PrintDesigner.vue';
 import { exportSampleExcel } from '@/utils/sampleExcel';
 import { parseSheetFile, guessMapping, rowsToMaterials, MATERIAL_FIELDS } from '@/utils/sheetImport';
 import { useFormDraft } from '@/utils/formDraft';
-import { SAMPLE_CATEGORIES, SAMPLE_STATUS_LABEL, QUOTE_STATUS_LABEL, UserRole } from '@i9/types';
+import { SAMPLE_CATEGORIES, SAMPLE_STATUS_LABEL, QUOTE_STATUS_LABEL, UserRole, SAMPLE_EDITABLE_STATUSES, SAMPLE_PM_EDITABLE_STATUSES } from '@i9/types';
 
 const SectionBlock = (props: { title: string; badge?: string }, { slots }: any) =>
   h('div', { class: 'section-block' }, [
@@ -336,8 +338,22 @@ const authStore = useAuthStore();
 const patternmaker = computed(() => !!route.meta.patternmaker);
 const editId = computed(() => (route.params.id ? Number(route.params.id) : null));
 const modeLabel = computed(() => (readonly.value ? '查看' : patternmaker.value ? '版师编辑' : editId.value ? '编辑' : '新建'));
-const bizDisabled = computed(() => readonly.value || patternmaker.value); // 业务字段：查看/版师视图只读
-const pmEnabled = computed(() => patternmaker.value && !readonly.value);  // 版师字段：仅版师视图可编辑
+// 状态锁（2026-09-09 老板拍板）：后端 update / 版师保存各有一份允许状态，与这里共用 @i9/types 的
+// SAMPLE_EDITABLE_STATUSES / SAMPLE_PM_EDITABLE_STATUSES。以前页面照样让填、点保存才报
+// 「该状态样衣不允许修改基本信息」（一个月被撞 21 次），现在直接置只读并在顶部说明；寄出/完成等状态动作不受影响。
+const statusLocked = computed(() => !patternmaker.value && !!editId.value && !!form.status
+  && !(SAMPLE_EDITABLE_STATUSES as readonly string[]).includes(form.status));
+const pmLocked = computed(() => patternmaker.value && !!editId.value && !!form.status
+  && !(SAMPLE_PM_EDITABLE_STATUSES as readonly string[]).includes(form.status));
+const locked = computed(() => statusLocked.value || pmLocked.value);
+const lockHint = computed(() => {
+  const st = statusLabel.value || form.status;
+  if (pmLocked.value) return `版师保存只在打样中/已寄出/已寄回/已对账阶段开放，样衣当前「${st}」，本页只能看。`;
+  if (statusLocked.value) return `样衣已「${st}」，基本信息、材料明细和寄样记录都不能再改（只有待派单、打样中可以改）；寄出/完成等状态动作仍可用。`;
+  return '';
+});
+const bizDisabled = computed(() => readonly.value || patternmaker.value || statusLocked.value); // 业务字段：查看/版师视图/状态锁只读
+const pmEnabled = computed(() => patternmaker.value && !readonly.value && !pmLocked.value);  // 版师字段：仅版师视图且状态允许时可编辑
 const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
 
 const sampleCategories = SAMPLE_CATEGORIES;

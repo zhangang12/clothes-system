@@ -320,19 +320,42 @@ export class ContractService {
     return addrs.length === 1 ? addrs[0] : null;
   }
 
-  async generateFromOrder(orderId: number, createdBy: number) {
+  /**
+   * 分批下合同（2026-09-07 daisy #128「面料批了辅料没批，只想先下面料」；老板 9-09 拍板按默认做）。
+   * - `materialIds` 传了就只为这些行生成（订单页勾选生成）；不传 = 为**尚未下过合同**的材料行生成；
+   * - 幂等守卫从「订单已有合同就整批拒绝」改为**按行**：已进过任一未删除合同的行（认
+   *   `contract_material.order_material_id`，与订单页绿色「已订」标记同一口径）跳过并在 `skipped` 报回，
+   *   全部都下过才报错——连点两次生成仍然幂等（第二次全被跳过 → 报错，不会重复建单）；
+   * - 同一供应商分两批会得到两张合同，这正是分批的含义。
+   * - 只认本订单的行：别的订单的 id 混进来一律无视（越权/误传都不该有副作用）。
+   */
+  async generateFromOrder(orderId: number, createdBy: number, materialIds?: number[]) {
     const order = await this.orderRepo.findOne({ where: { id: orderId, deleted: 0 } });
     if (!order) throw new NotFoundException(`订单 #${orderId} 不存在`);
-    // 幂等守卫（2026-07-19 排查 L1）：该订单已生成过合同则拒绝整批重跑，杜绝重复合同；
-    // 中途失败由下方整体事务回滚兜底，修正数据后可安全重入
-    const existingCount = await this.repo.count({ where: { order_id: orderId, deleted: 0 } });
-    if (existingCount > 0) {
-      throw new BadRequestException(
-        `订单 #${orderId} 已生成过 ${existingCount} 张合同，请勿重复生成（如需重建请先删除原有草稿合同）`,
-      );
+    const allRows = await this.orderMaterialRepo.find({ where: { order_id: orderId }, order: { sort_order: 'ASC' } });
+    if (!allRows.length) throw new BadRequestException('订单无用料核算记录，无法生成合同');
+
+    const wanted = materialIds?.length ? new Set(materialIds.map(Number)) : null;
+    const chosen = wanted ? allRows.filter((m) => wanted.has(+m.id)) : allRows;
+    if (wanted && !chosen.length) throw new BadRequestException('所选材料行不属于该订单');
+
+    // 行级「已下过合同」：与 OrderService.findOne 打「已订」标记用同一条 SQL 口径
+    const linked: Array<{ omid: string | number }> = (await this.dataSource.query(
+      `SELECT DISTINCT cm.order_material_id AS omid
+         FROM contract_material cm JOIN contract c ON c.id = cm.contract_id
+        WHERE c.order_id = ? AND c.deleted = 0 AND cm.order_material_id IS NOT NULL`,
+      [orderId],
+    )) ?? [];
+    const contracted = new Set(linked.map((r) => +r.omid));
+    const skipped = chosen
+      .filter((m) => contracted.has(+m.id))
+      .map((m) => ({ id: +m.id, item_name: m.item_name ?? '', reason: '已生成过合同' }));
+    const materials = chosen.filter((m) => !contracted.has(+m.id));
+    if (!materials.length) {
+      throw new BadRequestException(wanted
+        ? '勾选的材料都已生成过合同（订单页绿色「已订」的行），请勾选还没下单的行'
+        : '该订单的材料都已生成过合同，没有可下单的行（如需重建请先删除原有草稿合同）');
     }
-    const materials = await this.orderMaterialRepo.find({ where: { order_id: orderId }, order: { sort_order: 'ASC' } });
-    if (!materials.length) throw new BadRequestException('订单无用料核算记录，无法生成合同');
 
     // 【#120 防线·后端闸】同名材料多行且标了拆分：每行都会把矩阵拆一遍，行数×组数翻倍
     // （订单 73 因此多签 20.2 万）。前端保存时已有同一规则的提示，但**出事的动作是生成合同**：
@@ -416,7 +439,7 @@ export class ContractService {
         );
         created.push(contract);
       }
-      return { orderId, created: created.length, contracts: created, unmatched };
+      return { orderId, created: created.length, contracts: created, unmatched, skipped };
     });
   }
 

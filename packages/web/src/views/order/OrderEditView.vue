@@ -43,7 +43,9 @@
           <el-button type="warning" plain>生成合同<el-icon><ArrowDown /></el-icon></el-button>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item command="material">材料合同（按供应商拆单）</el-dropdown-item>
+              <!-- #128 分批下：勾了材料行就只为勾选的行生成；没勾 = 为还没下过合同的行生成（已订的行后端跳过） -->
+              <el-dropdown-item v-if="selMats.length" command="material-selected">材料合同 · 为勾选的 {{ selMats.length }} 行生成</el-dropdown-item>
+              <el-dropdown-item command="material">材料合同 · 为未下单的材料生成（按供应商拆单）</el-dropdown-item>
               <el-dropdown-item command="process">加工合同（带入订单明细）</el-dropdown-item>
             </el-dropdown-menu>
           </template>
@@ -417,28 +419,35 @@ async function onGenContract(cmd: string) {
     router.push({ path: '/contracts/new', query: { type: 'PROCESS', order_id: editId.value } });
     return;
   }
+  // #128 分批下合同：勾了行就只为勾选的行生成；没勾 = 为还没下过合同的行生成。
+  // 已下过合同的行（绿色「已订」）后端会跳过并报回来，这里提前算个数让人心里有数；同一供应商分批会得到多张合同。
+  const bySelection = cmd === 'material-selected';
+  const selected = bySelection ? selMats.value.map((r: any) => Number(r.id)).filter((n: number) => n > 0) : [];
+  if (bySelection && !selected.length) { ElMessage.warning('勾选的行还没保存过，请先保存订单再生成'); return; }
+  const already = (bySelection ? selMats.value : form.materials).filter((r: any) => r.contracted).length;
   try {
     await ElMessageBox.confirm(
-      '将按订单「用料核算」中的供应商分组，每个供应商各生成一张材料合同草稿（分色/分码材料按尺码矩阵拆行）。',
+      bySelection
+        ? `将为勾选的 ${selected.length} 行材料按供应商分组生成材料合同草稿${already ? `（其中 ${already} 行已生成过合同，会跳过）` : ''}。同一供应商分批生成会得到多张合同；分色/分码材料按尺码矩阵拆行。`
+        : `将为订单里还没生成过合同的材料行按供应商分组，每个供应商各生成一张材料合同草稿${already ? `（已下单的 ${already} 行不再重复）` : ''}；分色/分码材料按尺码矩阵拆行。`,
       '生成材料合同', { type: 'info', confirmButtonText: '生成', cancelButtonText: '取消' },
     );
   } catch { return; }
   try {
-    const res: any = await contractApi.generateFromOrder(Number(editId.value));
+    const res: any = await contractApi.generateFromOrder(Number(editId.value), selected);
     const d = res?.data ?? res;
     const unmatched: string[] = d?.unmatched ?? [];
-    if (d?.created) ElMessage.success(`已生成 ${d.created} 张材料合同草稿`);
-    if (unmatched.length) {
-      ElMessageBox.alert(
-        `以下供应商未在工厂库中登记，对应材料未生成合同：${unmatched.join('、')}。请先在基础资料·工厂库补录后重试。`,
-        '部分供应商未匹配', { type: 'warning' },
-      );
-    } else if (!d?.created) {
-      ElMessage.warning('没有可生成的材料行');
-    }
+    const skipped: Array<{ item_name: string }> = d?.skipped ?? [];
+    if (d?.created) ElMessage.success(`已生成 ${d.created} 张材料合同草稿${skipped.length ? `，跳过已下单的 ${skipped.length} 行` : ''}`);
+    const notes: string[] = [];
+    if (skipped.length) notes.push(`已生成过合同、本次跳过：${skipped.map((x) => x.item_name).join('、')}`);
+    // 未匹配的供应商并非没生成：会挂到「待定供应商」占位合同上（合同页规则提示同此口径），确定后在草稿里改绑
+    if (unmatched.length) notes.push(`以下供应商未在工厂库中登记，对应材料先挂在「待定供应商」占位合同上：${unmatched.join('、')}。请在基础资料·工厂库补录后到合同草稿里改绑。`);
+    if (notes.length) ElMessageBox.alert(notes.join('；'), '生成结果', { type: 'warning' });
+    else if (!d?.created) ElMessage.warning('没有可生成的材料行');
     if (d?.created) router.push({ path: '/contracts', query: { order_id: editId.value } });
   } catch (e: any) {
-    errToast(e?.response?.data?.msg ?? e?.response?.data?.msg ?? '生成失败');
+    errToast(e?.response?.data?.msg ?? '生成失败');
   }
 }
 // 只读=查看路由,或订单非草稿(非草稿仅可看不可改,与后端"只有草稿可编辑"一致,防误操作)
