@@ -83,6 +83,16 @@ describe('前端错误上报', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
+  it('弹窗取消不报——ElMessageBox 以字符串 cancel/close 拒绝，那是用户按了取消，不是错', async () => {
+    const { listeners } = await load();
+    listeners.unhandledrejection({ reason: 'cancel' });
+    listeners.unhandledrejection({ reason: 'close' });
+    expect(post).not.toHaveBeenCalled();
+    listeners.unhandledrejection({ reason: 'boom' }); // 别的字符串拒绝仍要报，别把过滤写宽了
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post.mock.calls[0][1]).toMatchObject({ kind: 'PROMISE', message: 'boom' });
+  });
+
   it('路由跳转失败连目标地址一起报，才知道是去哪儿的时候崩的', async () => {
     const { onRouterError } = await load();
     onRouterError(new Error('nav failed'), { fullPath: '/settlements' });

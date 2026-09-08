@@ -1408,4 +1408,56 @@ describe('ContractService', () => {
     const header = saves.find((v) => v && !Array.isArray(v) && 'deposit_ratio' in v);
     expect(header).toMatchObject({ deposit_ratio: 0, mid_ratio: 0, final_ratio: 100 });
   });
+  // UT-CON-44/45：占位工厂「待定供应商」建档时的编号。生产库里 S000 早被一家真实厂商占着，
+  // 而 uk_factory_no 对软删行同样生效——原来硬编码 S000，凡有供应商没匹配到工厂库就整批 500
+  //（2026-09-07 Dean 一小时内连撞 8 次）。被占就走 nextGlobal 发号；没被占仍用 S000（排在下拉最前）。
+  function placeholderManager(s000Taken: boolean) {
+    return {
+      create: jest.fn().mockImplementation((_: any, v: any) => v),
+      save: jest.fn().mockImplementation((_: any, v: any) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
+      findOne: jest.fn().mockImplementation((entity: any, opts: any) => {
+        if (entity === Factory && opts?.where?.factory_no === 'S000') {
+          return Promise.resolve(s000Taken ? { id: 2, factory_no: 'S000', name: '苏州誉绸纺织有限公司', deleted: 0 } : null);
+        }
+        return Promise.resolve(null); // 「待定供应商」尚不存在 → 走新建；OrderMain / 加工合同查询等一律查不到
+      }),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+      find: jest.fn().mockResolvedValue([]),
+      query: jest.fn().mockResolvedValue([]),
+    };
+  }
+  const unmatchedOrder = () => {
+    mockOrderRepo.findOne.mockResolvedValueOnce({ id: 10, currency: 'CNY', deleted: 0 });
+    mockOrderMaterialRepo.find.mockResolvedValueOnce([
+      { item_name: '未知料', supplier: '', unit_price: 1, total_purchase: 10, sort_order: 0 },
+    ]);
+  };
+  const createdFactory = (manager: any) => manager.create.mock.calls.find((c: any[]) => c[0] === Factory)?.[1];
+
+  it('UT-CON-44 generateFromOrder：S000 已被真实厂商占用 → 占位工厂改走发号，不再撞唯一键', async () => {
+    unmatchedOrder();
+    const manager = placeholderManager(true);
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+    const nextGlobal = jest.spyOn((service as any).numbering, 'nextGlobal').mockResolvedValue('S212');
+    try {
+      const result = await service.generateFromOrder(10, 1);
+      expect(nextGlobal).toHaveBeenCalledWith('S');
+      expect(createdFactory(manager)).toMatchObject({ factory_no: 'S212', name: '待定供应商' });
+      expect(result.created).toBe(1);
+      expect(result.unmatched).toEqual(['未指定供应商']);
+    } finally { nextGlobal.mockRestore(); }
+  });
+
+  it('UT-CON-45 generateFromOrder：S000 空着 → 占位工厂仍用 S000，不浪费发号', async () => {
+    unmatchedOrder();
+    const manager = placeholderManager(false);
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+    const nextGlobal = jest.spyOn((service as any).numbering, 'nextGlobal').mockResolvedValue('S999');
+    try {
+      const result = await service.generateFromOrder(10, 1);
+      expect(nextGlobal).not.toHaveBeenCalled();
+      expect(createdFactory(manager)).toMatchObject({ factory_no: 'S000', name: '待定供应商' });
+      expect(result.created).toBe(1);
+    } finally { nextGlobal.mockRestore(); }
+  });
 });

@@ -665,8 +665,11 @@ async function ensureRefOption(options: any[], id: unknown) {
 }
 
 async function load() {
-  if (!editId.value) return;
-  const res: any = await sampleApi.get(editId.value);
+  // 先把 id 抓在手里：页面挂在 keep-alive 标签页里，await 期间用户切去别的页签，route.params.id 就没了，
+  // 后面再读 editId 会拿到 null → GET /samples/null/versions 400（error_log #21，Nina 撞过两次）
+  const id = editId.value;
+  if (!id) return;
+  const res: any = await sampleApi.get(id);
   const d = res.data ?? res;
   Object.assign(form, {
     sampleNo: d.sample_no, categories: d.categories ?? '', middlemanId: d.customer_id, styleNo: d.style_no,
@@ -699,7 +702,7 @@ async function load() {
     ensureRefOption(buyers.value, form.buyerId),
   ]);
   void loadRelatedQuotes(); // 不 await:关联单据反查不该拖住主表单
-  const vs: any = await sampleApi.getVersionHistory(editId.value);
+  const vs: any = await sampleApi.getVersionHistory(id);
   versions.value = (vs.data ?? vs) ?? [];
 }
 

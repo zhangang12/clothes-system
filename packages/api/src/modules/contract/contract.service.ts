@@ -372,8 +372,14 @@ export class ContractService {
         if (placeholder) return placeholder;
         placeholder = await manager.findOne(Factory, { where: { name: '待定供应商', deleted: 0 } });
         if (!placeholder) {
+          // 占位工厂惯用 S000（排在工厂下拉最前面），但 uk_factory_no 对软删行同样生效，而生产库里
+          // S000 早被一家真实厂商占着——占位工厂从没建成功过，凡有供应商没匹配到工厂库就整批 500
+          //（2026-09-07 Dean 一小时内连撞 8 次，error_log 里 8-31 起就在撞）。被占就走正常发号；
+          // 占位身份只认名字「待定供应商」，不认编号。
+          const taken = await manager.findOne(Factory, { where: { factory_no: 'S000' } });
+          const factory_no = taken ? await this.numbering.nextGlobal(NUM_PREFIX.FACTORY) : 'S000';
           placeholder = await manager.save(Factory, manager.create(Factory, {
-            factory_no: 'S000', name: '待定供应商', type: 'OTHER', status: 1, deleted: 0,
+            factory_no, name: '待定供应商', type: 'OTHER', status: 1, deleted: 0,
             contact_name: '-', contact_phone: '-',
           } as any) as any) as Factory;
         }

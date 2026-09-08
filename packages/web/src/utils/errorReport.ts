@@ -85,6 +85,9 @@ export function startErrorReport(app: App, router: Router): void {
     const r: any = e.reason;
     // axios 的错误后端已经记过了，这里跳过，避免把错误表灌满重复内容
     if (r?.isAxiosError || r?.response) return;
+    // ElMessageBox 的取消/关闭是以字符串 'cancel' / 'close' 拒绝的：调用处忘了 .catch 就成一条
+    // 「PROMISE cancel」错误进错误表（9-08 daisy 在样衣编辑页就报了一条）。那是用户按了取消，不是错。
+    if (r === 'cancel' || r === 'close') return;
     report('PROMISE', r?.message ?? String(r), r?.stack);
   });
 
