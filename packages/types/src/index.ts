@@ -84,6 +84,15 @@ export const ROLE_DEFAULT_MENUS: Record<UserRole, string[]> = {
   [UserRole.SHIPPING]: ['dashboard', 'orders', 'contracts', 'reconciliations', 'ai-tools'],
 };
 
+/**
+ * 可以「挂水单 / 登记回款」的岗位（2026-09-09 #130 qiao：让业务自己传收付款水单，老板拍板范围=业务+船务+财务+管理员/主管，
+ * 版师、打样间不开）。只管附件与收汇登记：付款的金额与状态仍由财务「确认付款」定，结算确认仍归财务/管理员。
+ * 后端 @Roles 与前端按钮共用这一份，别各写一套。
+ */
+export const PAYMENT_SLIP_ROLES: readonly UserRole[] = [
+  UserRole.ADMIN, UserRole.SUPERVISOR, UserRole.FINANCE, UserRole.BUSINESS, UserRole.SHIPPING,
+];
+
 /** 解析某账号最终可见菜单：管理级角色（ADMIN/SUPERVISOR）恒全量；menuKeys 为 null/undefined 用角色默认；否则用配置 */
 export function resolveMenuKeys(role: UserRole | string, menuKeys?: string[] | null): string[] {
   if (isAdminRole(role)) return ALL_MENUS;

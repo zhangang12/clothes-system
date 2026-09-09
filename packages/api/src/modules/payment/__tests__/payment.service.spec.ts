@@ -741,6 +741,41 @@ describe('PaymentService', () => {
       expect(saved.invoice_url).toBe('/u/old.jpg');
     });
   });
+
+  // UT-PAY-SLIP-01～04（#130 老板 9-09 拍板 A1）：只挂水单、不记账
+  it('UT-PAY-SLIP-01 attachSlip 给已批准的申请挂水单：只写 slip_url，状态/paid_by/实际付款时间都不动', async () => {
+    const pr = makePR({ approval_status: PaymentApprovalStatus.APPROVED, slip_url: null, paid_by: null, slip_uploaded_at: null });
+    mockPrRepo.findOne.mockResolvedValueOnce(pr);
+    mockPrRepo.save.mockImplementationOnce(async (v: any) => v); // 前面的用例把 save 换成过固定返回值
+    const saved: any = await service.attachSlip(1, '  /uploads/slip-a.jpg ', 8);
+    expect(saved.slip_url).toBe('/uploads/slip-a.jpg');
+    expect(saved.approval_status).toBe(PaymentApprovalStatus.APPROVED);
+    expect(saved.paid_by).toBeNull();
+    expect(saved.slip_uploaded_at).toBeNull();
+    expect(mockDataSource.transaction).not.toHaveBeenCalled(); // 不走记账事务
+  });
+
+  it('UT-PAY-SLIP-02 attachSlip 草稿/待审批的申请不能挂水单（先走审批）', async () => {
+    mockPrRepo.findOne.mockResolvedValueOnce(makePR({ approval_status: PaymentApprovalStatus.PENDING }));
+    await expect(service.attachSlip(1, '/uploads/slip.jpg', 8)).rejects.toThrow(/批准后才能挂水单/);
+    expect(mockPrRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('UT-PAY-SLIP-03 attachSlip 已付清的也能换水单（传错了要能补），仍只动 slip_url', async () => {
+    const pr = makePR({ approval_status: PaymentApprovalStatus.PAID, slip_url: '/uploads/old.jpg', paid_total: 5000 });
+    mockPrRepo.findOne.mockResolvedValueOnce(pr);
+    mockPrRepo.save.mockImplementationOnce(async (v: any) => v);
+    const saved: any = await service.attachSlip(1, '/uploads/new.jpg', 8);
+    expect(saved.slip_url).toBe('/uploads/new.jpg');
+    expect(saved.approval_status).toBe(PaymentApprovalStatus.PAID);
+    expect(saved.paid_total).toBe(5000);
+  });
+
+  it('UT-PAY-SLIP-04 attachSlip 空水单直接拒，不查库', async () => {
+    await expect(service.attachSlip(1, '   ', 8)).rejects.toThrow(/请先上传水单/);
+    expect(mockPrRepo.findOne).not.toHaveBeenCalled();
+  });
+
 });
 
 // ── #119 qiao：「用款申请看不到是哪个业务申请的」──

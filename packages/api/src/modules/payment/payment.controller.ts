@@ -6,7 +6,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { UserRole } from '@i9/types';
+import { UserRole, PAYMENT_SLIP_ROLES } from '@i9/types';
 import { PaymentService } from './payment.service';
 import { CreatePrepaymentDto } from './dto/create-prepayment.dto';
 import { CreatePaymentRequestDto } from './dto/create-payment-request.dto';
@@ -110,6 +110,19 @@ export class PaymentController {
   @ApiOperation({ summary: '付款申请的分批付款记录' })
   getRecords(@Param('id', ParseIntPipe) id: number) {
     return this.service.getPaymentRecords(id);
+  }
+
+  // #130：只挂水单不记账。范围（业务+船务+财务+管理员/主管）与前端按钮共用 PAYMENT_SLIP_ROLES；
+  // 记账（records/paid）仍只有财务/管理员
+  @Patch('requests/:id/slip')
+  @Roles(...PAYMENT_SLIP_ROLES)
+  @ApiOperation({ summary: '给已批准/已付款的申请挂银行水单（不改金额与状态；财务确认付款时自动带入）' })
+  attachSlip(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: MarkPaidDto,
+    @Request() req: any,
+  ) {
+    return this.service.attachSlip(id, dto.slip_url, req.user.id);
   }
 
   @Patch('requests/:id/paid')

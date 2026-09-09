@@ -6,7 +6,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { UserRole } from '@i9/types';
+import { UserRole, PAYMENT_SLIP_ROLES } from '@i9/types';
 import { SettlementService } from './settlement.service';
 import { maskSettlement } from '../../common/masking/field-mask';
 import { CreateSettlementDto } from './dto/create-settlement.dto';
@@ -92,7 +92,7 @@ export class SettlementController {
   }
 
   @Post(':id/receipts')
-  @Roles(UserRole.ADMIN, UserRole.FINANCE)
+  @Roles(...PAYMENT_SLIP_ROLES) // #130 老板拍板 B1：业务/船务也可登记回款；删除与结算确认仍归财务/管理员
   @ApiOperation({ summary: '登记回款（可带该笔汇率+银行水单；各笔齐备时结算金额=Σ金额×汇率）' })
   addReceipt(@Param('id', ParseIntPipe) id: number, @Body() dto: AddReceiptDto) {
     return this.service.addReceipt(id, dto);

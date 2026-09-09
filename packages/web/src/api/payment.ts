@@ -30,6 +30,9 @@ export const paymentRequestApi = {
     http.get<unknown, { data: any[] }>(`/payments/requests/${id}/records`),
   markPaid: (id: number, slipUrl: string) =>
     http.patch<unknown, any>(`/payments/requests/${id}/paid`, { slip_url: slipUrl }),
+  // 只挂水单不记账（#130：业务/船务给已批准/已付款的申请传水单，财务确认付款时自动带入）
+  attachSlip: (id: number, slipUrl: string) =>
+    http.patch<unknown, any>(`/payments/requests/${id}/slip`, { slip_url: slipUrl }),
   remove: (id: number) =>
     http.delete(`/payments/requests/${id}`),
   // 工厂往来账单：一次取齐付款申请/实付记录/预付款/对账单+汇总（导出用，避免前端 N+1）

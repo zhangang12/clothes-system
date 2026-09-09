@@ -17,7 +17,11 @@
 > 【为什么不是简单放开角色】改成 `@Roles(BUSINESS)` 等于所有业务都能看；把他提成主管等于把整套管理权限一起给出去。系统里其实早有账号级开关 `sys_user.menu_keys`（账号管理里逐项勾选），但它**只管前端**——菜单给了、点进去仍 403。
 > 【做法】新增 `MenuGuard` + `@MenuAccess('feedbacks')`，把**同一套** `resolveMenuKeys` 口径接到接口层（两处规则一旦分叉就会出现「侧栏有、点进去没有」）；`JwtStrategy` 的 `select` 顺带取 `menu_keys`（本来每请求就查这一行，不增加查询，且改完菜单**立刻生效**不必重登）；路由 `/feedbacks` 由 `meta.admin` 改为 `meta.menu='feedbacks'`。**只开「查」**：列表与导出走菜单授权，**回复 / 标记已处理仍限 ADMIN/主管**，页面上对只读账号直接不渲染那一列（按钮摆着点下去只会 403）。King 的账号菜单已在生产配好（业务默认菜单 + `feedbacks`）。api jest **465**（+9）；**变异测试 4 次**全部如期变红。
 
-> 最新：**9-09 晚拉反馈：#130 qiao（财务）「让业务自己传收付款水单」——权限/流程改动，归乙类，方案已给老板等拍板**；error_log 唯一新条目是表单校验噪音，已在上报层过滤并上线。
+> 最新：**#130 按推荐做已上线（老板 9-09 「按推荐做」）：付款侧 A1 业务只挂水单、财务确认时自动带入；收汇侧 B1 业务可登记回款；范围=业务+船务+财务+管理员/主管**。
+> **实现**：`@i9/types.PAYMENT_SLIP_ROLES` 一份角色表供后端 `@Roles(...)` 与前端按钮共用。付款：新端点 `PATCH /payments/requests/:id/slip`（`attachSlip`：只写 `slip_url`，状态/paid_by/`slip_uploaded_at`(付款日筛选用) 都不动；只允许已批准/已付款，已付清可换）；`records`/`paid` 记账端点仍只有财务/管理员。页面：申请表加「水单」列；业务/船务在已批准行看到「传水单/换水单」，打开的是同一个付款弹窗的"只挂水单"形态（有提示条、按钮「保存水单」）；财务点「付款」时 `slipUrl` 预填申请上已挂的水单，「付款记录」里也能补传/更换。收汇：`POST /settlements/:id/receipts` 与 `POST /export-invoices/:id/receipts` 放开到同一角色表（发票页早就给业务留了按钮、后端却 403，这次对齐）；结算页「登记收汇」按钮按 `canAddReceipt` 显示；删除收汇、结算确认仍归财务/管理员。船务默认菜单没有结算/发票页，要用得在账号里勾菜单。
+> **验证**：api jest **517**（+6：UT-PAY-SLIP-01～04 + `slip-roles.spec.ts` 直接读控制器 `@Roles` 元数据钉权限矩阵）；变异（拿掉状态闸）如期变红；web vue-tsc+vite 构建绿。零 schema 变更（`payment_request.slip_url` 早就有）。**没在浏览器点过**：弹窗两种形态是模板条件切换，建议 qiao 用一个业务账号在已批准的申请上传一张试试。
+
+> 前一轮：**9-09 晚拉反馈：#130 qiao（财务）「让业务自己传收付款水单」——权限/流程改动，归乙类，方案已给老板等拍板**；error_log 唯一新条目是表单校验噪音，已在上报层过滤并上线。
 > **#130 现状**：付款水单只在财务「确认付款」（`PATCH /payments/requests/:id/paid`，ADMIN/FINANCE）那一步上传；收汇水单挂在每笔收汇记录上，记录由财务「登记回款」（`POST /settlements/:id/receipts`，ADMIN/FINANCE）时创建。业务（BUSINESS）能建付款申请、能看列表，但传不了水单。**方案**（付款侧 A1 只传水单/A2 业务直接确认付款；收汇侧 B1 业务可登记回款/B2 不动），推荐 A1+B1，零 schema（`payment_request.slip_url`、`settlement_receipt.slip_url` 都在）。老板没表态前 #130 保持 PENDING、不回复。
 > **error_log #35「[object Object] @component event handler」（YSM /payments）**：`await prFormRef.value?.validate()` 不接 catch，校验不过时 reject 的是 `{字段:[{message,field}]}` 对象——全站 10 处同款写法，每次填错都会进错误表。在 `errorReport.ts` 按形状识别 el-form 校验结果并丢弃（VUE 与 PROMISE 两个通道），新增用例，变异如期变红。web vitest **599**（+1）。
 > **巡查任务 9-09 三次仍没跑**（lastRunAt 停在 9-07 21:56），应用没开着就不会跑。
@@ -326,6 +330,7 @@
 
 ## 最近变更（新→旧，保留最近若干条）
 
+- （本次·**#130 业务自己传收付款水单**）`feat(api,web,types)` `PAYMENT_SLIP_ROLES` 前后端共用；付款申请新增只挂水单端点 `attachSlip`（不记账），财务确认付款自动带入；结算/发票「登记回款」放开到业务/船务；记账与删除仍归财务/管理员。api **517**（+6），变异红；**零 DB 结构变更**。
 - （本次·**表单校验结果不再进错误表**）`fix(web)` errorReport 识别 el-form validate() 的拒绝对象（`{字段:[{message,field}]}`）并丢弃；#130 水单权限方案待拍板。web **599**（+1）。**零后端改动、零 DB 结构变更**。
 - （本次·**9-09 三件拍板落地：#128 分批下合同 / 中间商授权带买家 / 不可编辑状态页面只读**）`feat(api,web,types)` 生成合同按材料行：勾选生成或只为未下单的行生成，已下过的行跳过并报回，守卫按行（UT-CON-27 改写 + 46～49，变异 2 次红 6 条）；`visibleCustomerIds` 把可见中间商名下的买家带出（只看不能改，UT-CUS-G6/G7，变异红 2）；`*_EDITABLE_STATUSES` 收进 @i9/types 供前后端共用，报价/样衣编辑页状态锁 + 顶部提示，源码守卫 `status-lock-guard.spec.ts`。api **511**（+7）/ web **598**（+3）。**零 DB 结构变更**。
 - （本次·**发版把生产打挂 5 分钟 → 发版脚本加固**）`fix(infra)` 本机 iCloud 重排后文件成 600/700、uid 501，`rsync -a` 原样推上服务器：i9app 读不到 `@i9/types/dist`、nginx 403。`deploy-local.sh` rsync 改 `--no-owner --no-group --chmod=D755,F644`；`deploy.sh` 权限修正覆盖四个 dist 与静态根。服务器已手工修复并全绿。

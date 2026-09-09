@@ -271,7 +271,8 @@
         </el-table>
 
         <el-divider content-position="left">收汇记录（逐笔×各自汇率）</el-divider>
-        <div class="detail-toolbar" v-if="canEdit">
+        <!-- #130：登记收汇放开给业务/船务（金额+汇率+水单）；删除与结算确认仍归财务/管理员 -->
+        <div class="detail-toolbar" v-if="canAddReceipt">
           <el-button size="small" type="primary" @click="openAddReceipt">+ 登记收汇</el-button>
         </div>
         <el-table :data="detailData.receipts ?? []" border size="small">
@@ -604,7 +605,7 @@ import type { FormInstance, FormRules } from 'element-plus';
 import { settlementApi } from '@/api/settlement';
 import { orderApi } from '@/api/order';
 import { useAuthStore } from '@/stores/auth';
-import { UserRole } from '@i9/types';
+import { UserRole, PAYMENT_SLIP_ROLES } from '@i9/types';
 import FileUpload from '@/components/FileUpload.vue';
 import { openFile } from '@/utils/secureFile';
 import { exportSettlementExcel } from '@/utils/settlementExcel';
@@ -613,6 +614,7 @@ const authStore = useAuthStore();
 const preview = ref<any>(null);
 const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
 const canEdit = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.FINANCE));
+const canAddReceipt = computed(() => PAYMENT_SLIP_ROLES.some((r) => authStore.hasRole(r))); // #130，与后端 @Roles 同一份
 // 出货后业务可建结算单（结算串流程 rec）；确认/编辑仍限财务/管理
 const canCreate = computed(() => canEdit.value || authStore.hasRole(UserRole.BUSINESS));
 

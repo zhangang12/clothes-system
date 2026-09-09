@@ -6,7 +6,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { UserRole } from '@i9/types';
+import { UserRole, PAYMENT_SLIP_ROLES } from '@i9/types';
 import { ExportInvoiceService, CreateInvoiceDto } from './export-invoice.service';
 
 @ApiTags('出口发票')
@@ -41,7 +41,7 @@ export class ExportInvoiceController {
   }
 
   @Post(':id/receipts')
-  @Roles(UserRole.ADMIN, UserRole.FINANCE)
+  @Roles(...PAYMENT_SLIP_ROLES) // #130：页面早就给业务留了「登记收汇」按钮，后端却只放财务——点了必 403，这里对齐
   @ApiOperation({ summary: '登记逐笔收汇（多笔多汇率+水单，结算Q12/Q13）' })
   addReceipt(@Param('id', ParseIntPipe) id: number, @Body() dto: any) {
     return this.service.addReceipt(id, dto);

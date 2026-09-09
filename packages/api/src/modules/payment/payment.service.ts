@@ -467,6 +467,24 @@ export class PaymentService {
 
   // 一次性付清(L10):与 addPaymentRecord 同口径——事务内悲观锁读取申请,串行化并发付款,
   // 防「分批流水与标记付清并发」时 paid_total 被盖成全额且不留差额流水
+  /**
+   * 只挂水单、不记账（2026-09-09 #130 qiao「让业务自己传收付款水单」，老板拍板 A1）。
+   * 业务/船务把银行水单挂到**已批准/已付款**的申请上，财务「确认付款」时前端自动带入；
+   * 金额、状态、paid_by、slip_uploaded_at（付款日筛选用的实际付款时间）一律不动——那些仍是财务确认那一步的事。
+   * 已付清的也允许换（传错了要能补），同样只动 slip_url。
+   */
+  async attachSlip(id: number, slipUrl: string, _userId: number): Promise<PaymentRequest> {
+    const url = String(slipUrl ?? '').trim();
+    if (!url) throw new BadRequestException('请先上传水单');
+    const pr = await this.prRepo.findOne({ where: { id, deleted: 0 } });
+    if (!pr) throw new NotFoundException(`付款申请 #${id} 不存在`);
+    if (![PaymentApprovalStatus.APPROVED, PaymentApprovalStatus.PAID].includes(pr.approval_status)) {
+      throw new BadRequestException('付款申请批准后才能挂水单（草稿/待审批的请先走审批）');
+    }
+    pr.slip_url = url;
+    return this.prRepo.save(pr);
+  }
+
   async markPaid(id: number, slipUrl: string, paidBy: number): Promise<PaymentRequest> {
     if (!slipUrl) throw new BadRequestException('请上传银行水单后再标记付款');
     return this.dataSource.transaction(async (manager) => {

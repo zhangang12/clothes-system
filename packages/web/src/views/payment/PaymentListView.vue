@@ -1,6 +1,6 @@
 <template>
   <div class="page-container">
-    <RuleHint>付款<b>支持分批</b>,多次付款自动累计已付/未付,余额=0 整单转已付清;<b>付款须上传银行水单(必填)</b>;无合同付款须填收款银行/账号/相关款号;预付款可在付款申请时冲抵。</RuleHint>
+    <RuleHint>付款<b>支持分批</b>,多次付款自动累计已付/未付,余额=0 整单转已付清;<b>付款须上传银行水单(必填)</b>,业务/船务可先给已批准的申请「传水单」,财务确认付款时自动带入;无合同付款须填收款银行/账号/相关款号;预付款可在付款申请时冲抵。</RuleHint>
     <div class="page-toolbar">
       <span class="toolbar-tip">按工厂一次拉齐该公司往来账：付款申请 + 实付记录 + 预付款 + 对账单</span>
       <el-button type="primary" plain :icon="Download" @click="openStatement">导出工厂账单</el-button>
@@ -187,6 +187,13 @@
               <span v-else class="muted">—</span>
             </template>
           </el-table-column>
+          <!-- #130：水单挂在申请上就能看见，业务传了、财务确认时自动带入 -->
+          <el-table-column label="水单" width="64" align="center">
+            <template #default="{ row }">
+              <el-link v-if="row.slip_url" type="primary" @click="preview?.open(row.slip_url, '付款水单')">查看</el-link>
+              <span v-else class="muted">—</span>
+            </template>
+          </el-table-column>
           <el-table-column prop="approval_status" label="状态" width="90">
             <template #default="{ row }">
               <el-tag :type="prTagType(row.approval_status)" size="small">{{ prStatusLabel(row.approval_status) }}</el-tag>
@@ -229,6 +236,12 @@
               >付款</el-button>
               <!-- 未审批时也把入口露出来（禁用+说明）：此前这一列只剩「导出Excel」，
                    财务看不出「付了多少填在哪儿」，误以为没这功能（2026-08-10 qiao 反馈） -->
+              <!-- #130：业务/船务只挂水单不记账（财务的「付款」按钮里本来就能传，不重复给） -->
+              <el-button
+                v-if="row.approval_status === 'APPROVED' && !canEdit && canUploadSlip"
+                link type="primary" size="small"
+                @click="openMarkPaid(row)"
+              >{{ row.slip_url ? '换水单' : '传水单' }}</el-button>
               <el-tooltip v-if="row.approval_status === 'PENDING' && canEdit" placement="top"
                 content="需先由管理员/主管批准这笔申请，批准后此处变为可点，即可登记付款金额并上传水单">
                 <span><el-button link size="small" disabled>付款（待批准）</el-button></span>
@@ -391,7 +404,7 @@
     </el-dialog>
 
     <!-- 财务付款（分批 v1.1：多次付款累计已付/未付，余额=0 整单转已付清；水单支持上传/拖拽/Ctrl+V 粘贴） -->
-    <el-dialog v-model="markPaidVisible" title="💰 财务付款（可分批）" width="560px" @closed="resetSlip">
+    <el-dialog v-model="markPaidVisible" :title="payMode ? '💰 财务付款（可分批）' : '付款水单'" width="560px" @closed="resetSlip">
       <el-descriptions :column="3" border size="small" style="margin-bottom:12px">
         <el-descriptions-item label="应付总额">{{ payTarget ? (+(payTarget.actual_pay ?? payTarget.amount)).toFixed(2) : '—' }}</el-descriptions-item>
         <el-descriptions-item label="已付总额">{{ payTarget ? (+(payTarget.paid_total ?? 0)).toFixed(2) : '—' }}</el-descriptions-item>
@@ -407,7 +420,7 @@
           <el-table-column prop="remark" label="备注" min-width="90" />
         </el-table>
       </template>
-      <el-form v-if="payTarget?.approval_status === 'APPROVED'" label-width="96px">
+      <el-form v-if="payMode" label-width="96px">
         <el-form-item label="付款方式" required>
           <el-radio-group v-model="payForm.pay_method">
             <el-radio value="BANK">银行转账</el-radio>
@@ -424,6 +437,11 @@
         <el-form-item label="备注">
           <el-input v-model="payForm.remark" placeholder="选填" />
         </el-form-item>
+      </el-form>
+      <!-- 水单区两种人共用：财务付款时随记录一起交；业务/船务只挂水单不记账（#130，财务确认付款时自动带入） -->
+      <el-form v-if="payMode || slipOnlyMode" label-width="96px">
+        <el-alert v-if="slipOnlyMode" type="info" show-icon :closable="false" style="margin-bottom:10px"
+          :title="payTarget?.approval_status === 'PAID' ? '这笔已付清，这里只是补传/更换水单，不会改动金额与状态' : '只挂水单、不记账：财务点「确认付款」时会自动带入这张水单'" />
         <el-form-item label="付款水单">
           <div class="slip-uploader" @paste="onSlipPaste" tabindex="0">
             <el-upload
@@ -450,7 +468,8 @@
       </el-form>
       <template #footer>
         <el-button @click="markPaidVisible = false">关闭</el-button>
-        <el-button v-if="payTarget?.approval_status === 'APPROVED'" type="primary" :loading="saving" :disabled="slipUploading" @click="doAddRecord">💰 确认付款</el-button>
+        <el-button v-if="payMode" type="primary" :loading="saving" :disabled="slipUploading" @click="doAddRecord">💰 确认付款</el-button>
+        <el-button v-else-if="slipOnlyMode" type="primary" :loading="saving" :disabled="slipUploading || !slipUrl" @click="doAttachSlip">保存水单</el-button>
       </template>
     </el-dialog>
   </div>
@@ -476,7 +495,7 @@ import { openFile } from '@/utils/secureFile';
 import { exportPaymentRequestExcel, exportPrepaymentExcel } from '@/utils/paymentExcel';
 import { exportFactoryStatementExcel } from '@/utils/factoryStatementExcel';
 import { useAuthStore } from '@/stores/auth';
-import { UserRole } from '@i9/types';
+import { UserRole, PAYMENT_SLIP_ROLES } from '@i9/types';
 
 const authStore = useAuthStore();
 const preview = ref<any>(null);
@@ -488,6 +507,12 @@ const canEdit = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.ha
 // 【别把 BUSINESS 塞进 canEdit 本体】提交/审批/登记实付/标记已付这几步后端仍是
 // ADMIN/FINANCE，塞进去等于一次放出几条必 403 的路径。要放开就单开一个计算属性。
 const canCreatePR = computed(() => canEdit.value || authStore.hasRole(UserRole.BUSINESS));
+// #130（qiao，老板 9-09 拍板 A1）：业务/船务可以给已批准/已付款的申请挂水单，但不记账——
+// 金额、状态、实际付款时间仍由财务「确认付款」那一步定。范围与后端 @Roles 共用 PAYMENT_SLIP_ROLES。
+const canUploadSlip = computed(() => PAYMENT_SLIP_ROLES.some((r) => authStore.hasRole(r)));
+const payMode = computed(() => canEdit.value && payTarget.value?.approval_status === 'APPROVED');
+const slipOnlyMode = computed(() => !payMode.value && canUploadSlip.value
+  && ['APPROVED', 'PAID'].includes(payTarget.value?.approval_status));
 // 预付款的登记与余额查询（2026-08-22 放开到业务，后端同步改成 ADMIN/FINANCE/BUSINESS）：
 // 登记一笔预付是发起动作，钱要真花出去仍得走付款申请、由管理员/财务审批时才冲抵
 const canPrepay = canCreatePR;
@@ -703,7 +728,8 @@ const isOverdue = (row: any) => {
 const payMethodLabel = (m: string) => ({ BANK: '银行转账', ACCEPTANCE: '承兑汇票', OTHER: '其他' } as any)[m] ?? m;
 async function openMarkPaid(row: any) {
   payTarget.value = row;
-  slipUrl.value = '';
+  slipUrl.value = row.slip_url ?? ''; // 申请上已挂的水单（业务先传的）带入，财务确认付款不用再传一遍
+
   Object.assign(payForm, { pay_method: 'BANK', pay_date: new Date().toISOString().slice(0, 10), amount: prBalance(row) > 0 ? prBalance(row) : undefined, remark: '' });
   try { payRecords.value = ((await paymentRequestApi.getRecords(row.id)) as any).data ?? []; } catch { payRecords.value = []; }
   markPaidVisible.value = true;
@@ -723,6 +749,18 @@ async function doAddRecord() {
     markPaidVisible.value = false;
     loadPR();
   } catch (e: any) { errToast(e?.response?.data?.msg ?? '付款登记失败'); }
+  finally { saving.value = false; }
+}
+// 只挂水单不记账（#130）
+async function doAttachSlip() {
+  if (!slipUrl.value) { ElMessage.warning('请先上传水单'); return; }
+  saving.value = true;
+  try {
+    await paymentRequestApi.attachSlip(payTarget.value.id, slipUrl.value);
+    ElMessage.success('水单已挂到该付款申请，财务确认付款时会自动带入');
+    markPaidVisible.value = false;
+    loadPR();
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? '保存水单失败'); }
   finally { saving.value = false; }
 }
 function resetSlip() { slipUrl.value = ''; slipUploading.value = false; }
