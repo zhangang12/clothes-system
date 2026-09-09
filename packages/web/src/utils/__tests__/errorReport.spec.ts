@@ -83,6 +83,17 @@ describe('前端错误上报', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
+  it('表单校验不过不报——el-form validate() 拒绝的是 {字段:[{message,field}]}，那是用户填错了，不是程序错', async () => {
+    const { app, listeners } = await load();
+    const invalid = { amount: [{ message: '请输入金额', field: 'amount' }], factory_id: [{ message: '请选择工厂', field: 'factory_id' }] };
+    app.config.errorHandler(invalid, null, 'component event handler');
+    listeners.unhandledrejection({ reason: invalid });
+    expect(post).not.toHaveBeenCalled();
+    app.config.errorHandler({ code: 500 }, null, 'component event handler'); // 别的对象仍要报，别把过滤写宽了
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post.mock.calls[0][1].message).toContain('[object Object]');
+  });
+
   it('弹窗取消不报——ElMessageBox 以字符串 cancel/close 拒绝，那是用户按了取消，不是错', async () => {
     const { listeners } = await load();
     listeners.unhandledrejection({ reason: 'cancel' });

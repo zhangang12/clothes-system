@@ -46,6 +46,19 @@ function isNoise(message: string): boolean {
   return false;
 }
 
+/**
+ * el-form 的 validate() 校验不过时 reject 的不是 Error，是 { 字段名: [{ message, field }] } 这样的对象。
+ * 页面里 `await formRef.value?.validate()` 大多不接 catch（用户看红字改就行），于是每次填错都会以
+ * 「[object Object] @component event handler」进错误表（2026-09-09 YSM 在付款页就撞了一条）。
+ * 那是用户填错了表单，不是程序错，按形状认出来直接丢掉。
+ */
+function isFormValidationResult(err: unknown): boolean {
+  if (!err || typeof err !== 'object' || err instanceof Error) return false;
+  const values = Object.values(err as Record<string, unknown>);
+  return values.length > 0 && values.every((v) =>
+    Array.isArray(v) && v.length > 0 && v.every((it: any) => it && typeof it === 'object' && 'message' in it && 'field' in it));
+}
+
 function report(kind: string, message: string, stack?: string): void {
   // chunk 加载失败已经有专门的恢复逻辑（发版换版本），不必再进错误表
   if (isChunkLoadError(message)) return;
@@ -69,7 +82,7 @@ export function startErrorReport(app: App, router: Router): void {
   // ① Vue 组件渲染/生命周期里抛出的错——「布局在、内容区空」多半是这一类
   const prev = app.config.errorHandler;
   app.config.errorHandler = (err, instance, info) => {
-    report('VUE', `${(err as Error)?.message ?? err} @${info}`, (err as Error)?.stack);
+    if (!isFormValidationResult(err)) report('VUE', `${(err as Error)?.message ?? err} @${info}`, (err as Error)?.stack);
     if (prev) prev(err, instance, info);
     else console.error(err); // 保留控制台输出，别把本来看得见的错吞掉
   };
@@ -88,6 +101,7 @@ export function startErrorReport(app: App, router: Router): void {
     // ElMessageBox 的取消/关闭是以字符串 'cancel' / 'close' 拒绝的：调用处忘了 .catch 就成一条
     // 「PROMISE cancel」错误进错误表（9-08 daisy 在样衣编辑页就报了一条）。那是用户按了取消，不是错。
     if (r === 'cancel' || r === 'close') return;
+    if (isFormValidationResult(r)) return; // 表单校验不过（没接 catch 的 validate()）同样不是错
     report('PROMISE', r?.message ?? String(r), r?.stack);
   });
 

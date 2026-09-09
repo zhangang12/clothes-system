@@ -17,7 +17,12 @@
 > 【为什么不是简单放开角色】改成 `@Roles(BUSINESS)` 等于所有业务都能看；把他提成主管等于把整套管理权限一起给出去。系统里其实早有账号级开关 `sys_user.menu_keys`（账号管理里逐项勾选），但它**只管前端**——菜单给了、点进去仍 403。
 > 【做法】新增 `MenuGuard` + `@MenuAccess('feedbacks')`，把**同一套** `resolveMenuKeys` 口径接到接口层（两处规则一旦分叉就会出现「侧栏有、点进去没有」）；`JwtStrategy` 的 `select` 顺带取 `menu_keys`（本来每请求就查这一行，不增加查询，且改完菜单**立刻生效**不必重登）；路由 `/feedbacks` 由 `meta.admin` 改为 `meta.menu='feedbacks'`。**只开「查」**：列表与导出走菜单授权，**回复 / 标记已处理仍限 ADMIN/主管**，页面上对只读账号直接不渲染那一列（按钮摆着点下去只会 403）。King 的账号菜单已在生产配好（业务默认菜单 + `feedbacks`）。api jest **465**（+9）；**变异测试 4 次**全部如期变红。
 
-> 最新：**9-09 老板一句话拍板三件事（「128 按默认做、2、做」），已全部实现并上线**。
+> 最新：**9-09 晚拉反馈：#130 qiao（财务）「让业务自己传收付款水单」——权限/流程改动，归乙类，方案已给老板等拍板**；error_log 唯一新条目是表单校验噪音，已在上报层过滤并上线。
+> **#130 现状**：付款水单只在财务「确认付款」（`PATCH /payments/requests/:id/paid`，ADMIN/FINANCE）那一步上传；收汇水单挂在每笔收汇记录上，记录由财务「登记回款」（`POST /settlements/:id/receipts`，ADMIN/FINANCE）时创建。业务（BUSINESS）能建付款申请、能看列表，但传不了水单。**方案**（付款侧 A1 只传水单/A2 业务直接确认付款；收汇侧 B1 业务可登记回款/B2 不动），推荐 A1+B1，零 schema（`payment_request.slip_url`、`settlement_receipt.slip_url` 都在）。老板没表态前 #130 保持 PENDING、不回复。
+> **error_log #35「[object Object] @component event handler」（YSM /payments）**：`await prFormRef.value?.validate()` 不接 catch，校验不过时 reject 的是 `{字段:[{message,field}]}` 对象——全站 10 处同款写法，每次填错都会进错误表。在 `errorReport.ts` 按形状识别 el-form 校验结果并丢弃（VUE 与 PROMISE 两个通道），新增用例，变异如期变红。web vitest **599**（+1）。
+> **巡查任务 9-09 三次仍没跑**（lastRunAt 停在 9-07 21:56），应用没开着就不会跑。
+
+> 前一轮：**9-09 老板一句话拍板三件事（「128 按默认做、2、做」），已全部实现并上线**。
 > **#128 分批下合同（按默认做）**——`generateFromOrder(orderId, createdBy, materialIds?)`：传了 `material_ids` 就只为这些行生成（只认本订单的行，别的 id 无视；全不属于本订单报错），不传 = 为**尚未下过合同**的行生成。幂等守卫从「订单已有合同就整批拒绝」改为**按行**：已进过任一未删除合同的行（认 `contract_material.order_material_id`，与订单页「已订」标记同一条 SQL 口径）跳过并在返回的 `skipped` 里报回，全部都下过才报错（连点两次仍幂等）。同一供应商分两批得两张合同（这就是分批的含义）。控制器加 `GenerateFromOrderDto`；订单编辑页「生成合同」下拉多一项「为勾选的 N 行生成」（勾了材料行才出现），原项改为「为未下单的材料生成」；列表页入口改为同一语义并在规则提示里说明；结果弹窗列出跳过的行，未匹配供应商的文案改为真实行为（挂「待定供应商」占位合同，不是"未生成"）。UT-CON-27 改写 + UT-CON-46～49；变异 2 次（不过滤已下过的行 / 无视勾选）各红 3 条。
 > **中间商授权自动带上关联买家**——`CustomerService.visibleCustomerIds` 在「授权+自建」之外，把 `related_middleman`（逗号分隔的中间商 id 串）里含任一可见中间商的最终买家一并算作可见（纯函数 `buyersUnderMiddlemen`，认 id 不认名字；无任何授权时不查买家表）。带出来的买家**只看不能改**：`assertEditable` 对无直接授权但可见的客户抛 403「随其关联中间商的授权带出，修改需单独授权」而不是 404。报价/订单/样衣的行级可见都走这一个函数，一处改全站生效——Nina 现在不用等 King 授权就能选到 DATEX 名下的荟品仓/松野湃。UT-CUS-G6/G6b/G7；变异（不带买家）红 2 条。
 > **不可编辑状态的编辑页直接只读**——允许状态收进 `@i9/types`：`QUOTE_EDITABLE_STATUSES`（草稿/客户调整）、`SAMPLE_EDITABLE_STATUSES`（待派单/打样中）、`SAMPLE_PM_EDITABLE_STATUSES`（打样中/已寄出/已寄回/已对账），后端 `quote.service.update`、`sample.service.update/版师保存` 三道闸改用同一份常量；前端 QuoteEditView 加 `statusLocked`（表单整体禁用、保存/从样衣导入/明细增删排序隐藏，「客户调整」「转销售合同」等状态动作不动）和顶部 `el-alert` 说明出路（已报价→点「客户调整」；已成单→去订单改）；SampleEditView 业务视图 `statusLocked`、版师视图 `pmLocked`，`bizDisabled/pmEnabled` 并入，寄出/完成等状态按钮不受影响。新增源码守卫 `status-lock-guard.spec.ts` 钉住「页面用共享常量判锁 + 后端闸用同一份常量」，变异（后端退回手写数组）如期变红。
@@ -321,6 +326,7 @@
 
 ## 最近变更（新→旧，保留最近若干条）
 
+- （本次·**表单校验结果不再进错误表**）`fix(web)` errorReport 识别 el-form validate() 的拒绝对象（`{字段:[{message,field}]}`）并丢弃；#130 水单权限方案待拍板。web **599**（+1）。**零后端改动、零 DB 结构变更**。
 - （本次·**9-09 三件拍板落地：#128 分批下合同 / 中间商授权带买家 / 不可编辑状态页面只读**）`feat(api,web,types)` 生成合同按材料行：勾选生成或只为未下单的行生成，已下过的行跳过并报回，守卫按行（UT-CON-27 改写 + 46～49，变异 2 次红 6 条）；`visibleCustomerIds` 把可见中间商名下的买家带出（只看不能改，UT-CUS-G6/G7，变异红 2）；`*_EDITABLE_STATUSES` 收进 @i9/types 供前后端共用，报价/样衣编辑页状态锁 + 顶部提示，源码守卫 `status-lock-guard.spec.ts`。api **511**（+7）/ web **598**（+3）。**零 DB 结构变更**。
 - （本次·**发版把生产打挂 5 分钟 → 发版脚本加固**）`fix(infra)` 本机 iCloud 重排后文件成 600/700、uid 501，`rsync -a` 原样推上服务器：i9app 读不到 `@i9/types/dist`、nginx 403。`deploy-local.sh` rsync 改 `--no-owner --no-group --chmod=D755,F644`；`deploy.sh` 权限修正覆盖四个 dist 与静态根。服务器已手工修复并全绿。
 - （本次·**9-08 生产 500：占位工厂撞 S000**）`fix(api,web)` `generateFromOrder` 建「待定供应商」占位时硬编码 `S000`，生产库该号早被真实厂商占用 → 有未匹配供应商就整批 500（Dean 订单 78 连撞 8 次）。改为 S000 被占则走 `nextGlobal('S')` 发号，占位只认名字。顺手：样衣页 `load()` 进函数先抓 id（切页签后 `/samples/null/versions` 400）；错误上报过滤弹窗 `cancel/close`。#129 Nina 是机密客户未授权，非缺陷已回复。api jest **504**（+2）/ web **595**（+1）；变异 2 次全红。**零 DB 结构变更**。
