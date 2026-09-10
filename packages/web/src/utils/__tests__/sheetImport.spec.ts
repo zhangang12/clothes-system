@@ -61,6 +61,34 @@ describe('guessMapping 列映射自动推断', () => {
   });
 });
 
+describe('guessMapping 品名兜底（2026-09-10 #132 ZYT：表头认出了别的列、唯独品名没认出 → 导入 0 行）', () => {
+  it('表头里没有品名关键词时，品名落到第一个没被占用的列，而不是留成不导入', () => {
+    const rows = [['规格描述', '单耗', '位置', '颜色一'], ['全涤毛呢', '1.2', '大身', '棕格']];
+    const { mapping, hasHeader } = guessMapping(rows);
+    expect(hasHeader).toBe(true);
+    expect(mapping.qty).toBe(1);
+    expect(mapping.part).toBe(2);
+    expect(mapping.itemName).toBe(0);
+  });
+  it('第 1 列已被别的字段占用时，品名兜底到下一个空闲列', () => {
+    const rows = [['单耗', 'XXX', '位置'], ['1.2', '全涤毛呢', '大身']];
+    const { mapping } = guessMapping(rows);
+    expect(mapping.qty).toBe(0);
+    expect(mapping.itemName).toBe(1);
+  });
+  it('新增同义词：物料名称 / 料名 / name 也算品名', () => {
+    for (const h of ['物料名称', '料名', 'Material Name']) {
+      const { mapping } = guessMapping([['单耗', h], ['1', '涤纶']]);
+      expect(mapping.itemName).toBe(1);
+    }
+  });
+  it('完全没表头（hits=0）时不兜底，仍由页面按「第 1 列当品名」处理', () => {
+    const { mapping, hasHeader } = guessMapping([['全涤毛呢', '1.2'], ['TC', '0.8']]);
+    expect(hasHeader).toBe(false);
+    expect(mapping.itemName).toBeUndefined();
+  });
+});
+
 describe('rowsToMaterials 行映射', () => {
   const mapping = { itemName: 0, qty: 1, part: 2, colors: 3, remark: 4 };
 

@@ -397,7 +397,10 @@ const terms = reactive<Record<string, string>>({});
 // 本地草稿（form+terms 双对象）：输入自动暂存，保存报错/误关页面可恢复；保存成功清除
 const draft = useFormDraft(`contract:${route.fullPath}`, form, {
   snapshot: () => ({ form: JSON.parse(JSON.stringify(form)), terms: { ...terms } }),
-  restore: (d) => { Object.assign(form, d.form ?? {}); Object.assign(terms, d.terms ?? {}); },
+  // 合同类型不是页面上能改的字段（由路由 ?type= 决定），草稿恢复时不许覆盖它——
+  // 2026-09-10 King 在新建页连撞 4 次 400「type must be one of…」，请求体里 type 整个缺失，
+  // 页面上唯一能把它写空的就是这一句整体 assign；保存时再兜一道（见 save）
+  restore: (d) => { const { type: _t, ...rest } = d.form ?? {}; Object.assign(form, rest); Object.assign(terms, d.terms ?? {}); },
 });
 
 const isProcess = computed(() => form.type === 'PROCESS');
@@ -737,6 +740,7 @@ async function save() {
       draft.clear(); // 保存成功清草稿
       await loadDetail(contractId.value);
     } else {
+      if (!form.type) form.type = (route.query.type as string) || 'MATERIAL'; // 类型丢了按路由补回，别发一个没类型的请求出去
       const dto = { ...buildDto(), type: form.type, order_id: form.order_id, parent_id: form.parent_id };
       const res: any = await contractApi.create(dto);
       const created = res.data ?? res;

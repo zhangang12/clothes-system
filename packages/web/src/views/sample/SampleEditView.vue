@@ -262,6 +262,9 @@
             </span>
             <el-checkbox v-model="sheetHeader" size="small" style="margin-left:8px">表头行不导入（已自动识别）</el-checkbox>
           </div>
+          <!-- #132 ZYT：品名列没映射时一行都导不进（预览「已解析 30 行」、按钮「导入 0 行」），要把原因说出来 -->
+          <el-alert v-if="sheetMapping.itemName < 0" type="warning" show-icon :closable="false" style="margin:6px 0"
+            title="没认出「品名」列，所以一行都导不进：请在上方「品名 *」下拉里选择品名所在的列" />
           <el-table :data="sheetPreviewRows" size="small" border max-height="300">
             <el-table-column type="index" label="#" width="44" />
             <el-table-column prop="itemName" label="品名" min-width="140" />
@@ -281,7 +284,7 @@
               <el-radio value="append">追加到现有明细</el-radio>
               <el-radio value="replace">替换现有明细</el-radio>
             </el-radio-group>
-            <span class="muted">将导入 {{ sheetPreviewRows.length }} 行（品名为空的行自动跳过；多列颜色自动合并；图片列不导入，请导入后逐个上传；分区标题行请改映射或导入后删除）</span>
+            <span class="muted">将导入 {{ sheetPreviewRows.length }} 行（{{ sheetMapping.itemName < 0 ? '品名列未映射，请先在上方选择；' : '' }}品名为空的行自动跳过；多列颜色自动合并；图片列不导入，请导入后逐个上传；分区标题行请改映射或导入后删除）</span>
           </div>
         </template>
         <el-empty v-else description="选择工艺单/材料表文件后自动解析预览" :image-size="60" />

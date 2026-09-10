@@ -7,7 +7,7 @@ export interface SheetField { key: string; label: string; keywords: RegExp; requ
 
 // 样衣材料可映射的字段（其余字段导入后人工补）
 export const MATERIAL_FIELDS: SheetField[] = [
-  { key: 'itemName', label: '品名', keywords: /品名|材料|名称|面料|辅料|面里料|item/i, required: true },
+  { key: 'itemName', label: '品名', keywords: /品名|材料|名称|面料|辅料|面里料|物料|料名|品种|item|name/i, required: true },
   { key: 'arrangeDate', label: '安排日期', keywords: /安排日期|日期|date/i },
   { key: 'width', label: '门幅', keywords: /门幅|幅宽|宽度|width/i },
   // 【「色组」和「组色」都要收】(2026-08-13 #93 Nina：「还是无法导入2个色组」)
@@ -36,7 +36,7 @@ export const MATERIAL_FIELDS: SheetField[] = [
 // 报价明细可映射的字段（2026-08-10 Grace：老系统里已有报价，想直接导进来，
 // 不必先去建样衣再从样衣导入）。与 MATERIAL_FIELDS 的差别：报价关心单价/损耗，不关心克重/码带。
 export const QUOTE_ITEM_FIELDS: SheetField[] = [
-  { key: 'itemName', label: '品名', keywords: /品名|材料|名称|面料|辅料|面里料|item/i, required: true },
+  { key: 'itemName', label: '品名', keywords: /品名|材料|名称|面料|辅料|面里料|物料|料名|品种|item|name/i, required: true },
   { key: 'part', label: '部位', keywords: /位置|部位|part/i },
   { key: 'width', label: '门幅', keywords: /门幅|幅宽|宽度|width/i },
   { key: 'color', label: '颜色', keywords: /颜色|色组|组色|配色|color/i },
@@ -126,6 +126,17 @@ export function guessMapping(rows: string[][], fields: SheetField[] = MATERIAL_F
       if (idx >= 0 && mapping[f.key] === undefined) { mapping[f.key] = idx; hits++; }
     }
     if (hits > best.hits) best = { mapping, headerRow: r, hits };
+  }
+  // 必填字段（品名）没从表头认出来时兜底给第一个还没被别的字段占用的列，而不是留成「不导入」——
+  // 那样预览会显示「已解析 30 行」却「导入 0 行」，用户不知道要去改映射（2026-09-10 #132 ZYT）。
+  // 品名几乎总在最左边；猜错了用户在下拉里改一下即可，比一行都导不进强。
+  if (best.hits > 0) {
+    const used = new Set(Object.values(best.mapping));
+    const width = Math.max(...rows.slice(0, limit).map((r) => (r ?? []).length), 0);
+    for (const f of fields) {
+      if (!f.required || best.mapping[f.key] !== undefined) continue;
+      for (let i = 0; i < width; i++) if (!used.has(i)) { best.mapping[f.key] = i; used.add(i); break; }
+    }
   }
   return { mapping: best.mapping, hasHeader: best.hits > 0, headerRow: best.headerRow, hits: best.hits };
 }

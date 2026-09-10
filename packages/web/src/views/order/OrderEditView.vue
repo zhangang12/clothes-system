@@ -36,10 +36,7 @@
             </el-dropdown-menu>
           </template>
         </el-dropdown>
-        <el-dropdown
-          v-if="editId && ['CONFIRMED', 'CONTRACTED', 'PRODUCING'].includes(form.status)"
-          trigger="click" @command="onGenContract"
-        >
+        <el-dropdown v-if="canGenContract" trigger="click" @command="onGenContract">
           <el-button type="warning" plain>生成合同<el-icon><ArrowDown /></el-icon></el-button>
           <template #dropdown>
             <el-dropdown-menu>
@@ -180,6 +177,15 @@
 
       <!-- 材料明细 -->
       <section-block title="▣ 材料明细（从报价带入，品名可改）" badge="13 字段">
+        <!-- #131 daisy：分批下合同的入口放在材料表正上方——勾选要先下的行、点生成。
+             非草稿订单从列表只能进「查看」，所以这一栏不受 readonly 控制；顶部「生成合同」下拉保留 -->
+        <div v-if="canGenContract" class="subtable-ops gen-ops">
+          <el-button size="small" type="warning" :disabled="!selMats.length" @click="onGenContract('material-selected')">
+            为勾选的 {{ selMats.length || '…' }} 行生成材料合同
+          </el-button>
+          <el-button size="small" plain @click="onGenContract('material')">为未下单的材料生成</el-button>
+          <span class="hint">勾选要先下的材料行再点生成；绿色「已订」的行会自动跳过；同一供应商分批下会得到多张合同</span>
+        </div>
         <div v-if="!readonly" class="subtable-ops">
           <el-button size="small" :icon="Plus" @click="addMat">添加行</el-button>
           <el-button size="small" :icon="Minus" :disabled="!selMats.length" @click="delMats">删除</el-button>
@@ -413,7 +419,8 @@ async function onPrintOrder(mode: string) {
   catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '打印失败'); }
 }
 
-// 生成合同入口（设计稿 合同 A1 主流程:订单侧拆单）
+// 生成合同入口（设计稿 合同 A1 主流程:订单侧拆单）。已下单/已生成合同/生产中都可以继续下（#128 分批）
+const canGenContract = computed(() => !!editId.value && ['CONFIRMED', 'CONTRACTED', 'PRODUCING'].includes(form.status));
 async function onGenContract(cmd: string) {
   if (cmd === 'process') {
     router.push({ path: '/contracts/new', query: { type: 'PROCESS', order_id: editId.value } });
