@@ -43,6 +43,14 @@ export class PaymentController {
   }
 
   // 跟着创建一起放开：能登记预付却看不到余额，登记完就是一笔糊涂账
+  // #134：预付款挂水单（只写附件，不动金额）。范围与付款申请挂水单同一份 PAYMENT_SLIP_ROLES
+  @Patch('prepayments/:id/slip')
+  @Roles(...PAYMENT_SLIP_ROLES)
+  @ApiOperation({ summary: '给预付款挂/换银行水单（不改金额与余额）' })
+  attachPrepaySlip(@Param('id', ParseIntPipe) id: number, @Body() dto: MarkPaidDto) {
+    return this.service.attachPrepaySlip(id, dto.slip_url);
+  }
+
   @Get('prepayments/balance')
   @Roles(UserRole.ADMIN, UserRole.FINANCE, UserRole.BUSINESS)
   @ApiOperation({ summary: '查询工厂预付款余额（管理员/主管/财务/业务）' })

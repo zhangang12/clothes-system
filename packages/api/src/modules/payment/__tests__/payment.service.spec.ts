@@ -35,6 +35,7 @@ const makePrepayment = (overrides = {}) => ({
 const mockPrepayRepo = {
   create: jest.fn().mockImplementation((v) => v),
   save: jest.fn().mockImplementation((v) => Promise.resolve(v)),
+  findOne: jest.fn(),
   find: jest.fn().mockResolvedValue([]),
   findAndCount: jest.fn().mockResolvedValue([[], 0]),
 };
@@ -740,6 +741,31 @@ describe('PaymentService', () => {
       expect(saved.invoice_no).toBe('INV-旧');
       expect(saved.invoice_url).toBe('/u/old.jpg');
     });
+  });
+
+  // UT-PAY-PRE-SLIP-01～03（#134 qiao：预付款水单没地方上传）
+  it('UT-PAY-PRE-SLIP-01 createPrepayment 带上水单；空串落 null 不存空串', async () => {
+    mockPrepayRepo.save.mockImplementationOnce(async (v: any) => v);
+    const withSlip: any = await service.createPrepayment({ factory_id: 5, amount: 100, pay_date: '2026-09-11', slip_url: ' /uploads/pre.jpg ' } as any, 1);
+    expect(withSlip.slip_url).toBe('/uploads/pre.jpg');
+    mockPrepayRepo.save.mockImplementationOnce(async (v: any) => v);
+    const noSlip: any = await service.createPrepayment({ factory_id: 5, amount: 100, pay_date: '2026-09-11', slip_url: '' } as any, 1);
+    expect(noSlip.slip_url).toBeNull();
+  });
+
+  it('UT-PAY-PRE-SLIP-02 attachPrepaySlip 只写 slip_url，金额/余额/日期不动', async () => {
+    mockPrepayRepo.findOne.mockResolvedValueOnce({ id: 9, factory_id: 5, amount: 100, used_amount: 30, balance: 70, pay_date: '2026-09-01', slip_url: null });
+    mockPrepayRepo.save.mockImplementationOnce(async (v: any) => v);
+    const saved: any = await service.attachPrepaySlip(9, '/uploads/pre-new.jpg');
+    expect(saved).toMatchObject({ id: 9, amount: 100, used_amount: 30, balance: 70, pay_date: '2026-09-01', slip_url: '/uploads/pre-new.jpg' });
+  });
+
+  it('UT-PAY-PRE-SLIP-03 attachPrepaySlip 找不到 → 404；空水单 → 400 且不查库', async () => {
+    mockPrepayRepo.findOne.mockResolvedValueOnce(null);
+    await expect(service.attachPrepaySlip(404, '/uploads/x.jpg')).rejects.toThrow(NotFoundException);
+    mockPrepayRepo.findOne.mockClear();
+    await expect(service.attachPrepaySlip(9, '  ')).rejects.toThrow(BadRequestException);
+    expect(mockPrepayRepo.findOne).not.toHaveBeenCalled();
   });
 
   // UT-PAY-SLIP-01～04（#130 老板 9-09 拍板 A1）：只挂水单、不记账

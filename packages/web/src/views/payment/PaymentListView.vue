@@ -50,13 +50,25 @@
             </template>
           </el-table-column>
           <el-table-column prop="pay_date" label="付款日期" width="120" />
+          <!-- #133 qiao：预付款也要看得见是谁登记的（created_by 一直在存，列表接口早已带出 created_by_name） -->
+          <el-table-column label="申请人" width="90" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.created_by_name || '—' }}</template>
+          </el-table-column>
+          <!-- #134 qiao：预付款也是一笔真实付款，水单要有地方放 -->
+          <el-table-column label="水单" width="64" align="center">
+            <template #default="{ row }">
+              <el-link v-if="row.slip_url" type="primary" @click="preview?.open(row.slip_url, '预付款水单')">查看</el-link>
+              <span v-else class="muted">—</span>
+            </template>
+          </el-table-column>
           <el-table-column prop="remark" label="备注" />
           <el-table-column label="创建时间" width="150">
             <template #default="{ row }">{{ fmtDateTime(row.created_at) }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="110" fixed="right">
+          <el-table-column label="操作" width="150" fixed="right">
             <template #default="{ row }">
               <el-button link size="small" @click="exportPrepayRow(row)">导出Excel</el-button>
+              <el-button v-if="canUploadSlip" link type="primary" size="small" @click="openPrepaySlip(row)">{{ row.slip_url ? '换水单' : '传水单' }}</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -318,6 +330,9 @@
         <el-form-item label="相关款号">
           <el-input v-model="prepayForm.style_no" placeholder="预付归集用(选填,P3#40)" />
         </el-form-item>
+        <el-form-item label="银行水单">
+          <FileUpload v-model="prepayForm.slip_url" :limit="1" accept="image/*,.pdf" list-type="text" sensitive tip="预付款的银行回单/截图（#134）；也可登记后在列表里补传" />
+        </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="prepayForm.remark" type="textarea" :rows="2" />
         </el-form-item>
@@ -325,6 +340,23 @@
       <template #footer>
         <el-button @click="createPrepayVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="doCreatePrepay">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 预付款挂/换水单（#134）：只写附件，不动金额与余额 -->
+    <el-dialog v-model="prepaySlipVisible" title="预付款水单" width="440px" destroy-on-close>
+      <el-descriptions :column="2" border size="small" style="margin-bottom:12px">
+        <el-descriptions-item label="工厂">{{ prepaySlipTarget?.factory_name || ('工厂#' + prepaySlipTarget?.factory_id) }}</el-descriptions-item>
+        <el-descriptions-item label="预付金额">{{ prepaySlipTarget ? (+prepaySlipTarget.amount).toFixed(2) : '—' }}</el-descriptions-item>
+      </el-descriptions>
+      <el-form label-width="90px">
+        <el-form-item label="银行水单">
+          <FileUpload v-model="prepaySlipUrl" :limit="1" accept="image/*,.pdf" list-type="text" sensitive />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="prepaySlipVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" :disabled="!prepaySlipUrl" @click="doAttachPrepaySlip">保存水单</el-button>
       </template>
     </el-dialog>
 
@@ -570,6 +602,7 @@ const prepayForm = reactive({
   pay_date: '',
   style_no: '',
   remark: '',
+  slip_url: '', // #134
 });
 const prepayRules: FormRules = {
   factory_id: [{ required: true, message: '请选择工厂', trigger: 'change' }],
@@ -580,7 +613,23 @@ const prepayRules: FormRules = {
 function onPrepayPickContract(c: any) { if (c?.factory_id) prepayForm.factory_id = Number(c.factory_id); }
 function openCreatePrepay() { createPrepayVisible.value = true; }
 function resetPrepayForm() {
-  Object.assign(prepayForm, { factory_id: undefined, contract_id: undefined, amount: undefined, pay_date: '', style_no: '', remark: '' });
+  Object.assign(prepayForm, { factory_id: undefined, contract_id: undefined, amount: undefined, pay_date: '', style_no: '', remark: '', slip_url: '' });
+}
+// #134：给已登记的预付款挂/换水单
+const prepaySlipVisible = ref(false);
+const prepaySlipTarget = ref<any>(null);
+const prepaySlipUrl = ref('');
+function openPrepaySlip(row: any) { prepaySlipTarget.value = row; prepaySlipUrl.value = row.slip_url ?? ''; prepaySlipVisible.value = true; }
+async function doAttachPrepaySlip() {
+  if (!prepaySlipUrl.value) { ElMessage.warning('请先上传水单'); return; }
+  saving.value = true;
+  try {
+    await prepaymentApi.attachSlip(prepaySlipTarget.value.id, prepaySlipUrl.value);
+    ElMessage.success('水单已保存');
+    prepaySlipVisible.value = false;
+    loadPrepay();
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? '保存水单失败'); }
+  finally { saving.value = false; }
 }
 async function doCreatePrepay() {
   await prepayFormRef.value?.validate();

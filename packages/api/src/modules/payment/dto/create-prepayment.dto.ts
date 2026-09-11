@@ -21,4 +21,7 @@ export class CreatePrepaymentDto {
 
   // 相关款号(预付登记归集,P3#40/补充C2)
   @IsOptional() @IsString() @MaxLength(60) style_no?: string;
+
+  // 银行水单（#134）：建档时可带，也可事后挂
+  @IsOptional() @IsString() @MaxLength(500) slip_url?: string;
 }

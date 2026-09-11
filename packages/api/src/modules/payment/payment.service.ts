@@ -36,10 +36,21 @@ export class PaymentService {
       balance: dto.amount,
       pay_date: dto.pay_date as any,
       style_no: dto.style_no ?? null,
+      slip_url: dto.slip_url?.trim() || null, // #134：'' 也落 null，别存空串
       remark: dto.remark ?? null,
       created_by: createdBy,
     });
     return this.prepayRepo.save(prepayment);
+  }
+
+  /** 给已登记的预付款挂/换银行水单（2026-09-11 #134 qiao）。只写 slip_url，金额/余额/日期一律不动 */
+  async attachPrepaySlip(id: number, slipUrl: string): Promise<Prepayment> {
+    const url = String(slipUrl ?? '').trim();
+    if (!url) throw new BadRequestException('请先上传水单');
+    const p = await this.prepayRepo.findOne({ where: { id } });
+    if (!p) throw new NotFoundException(`预付款 #${id} 不存在`);
+    p.slip_url = url;
+    return this.prepayRepo.save(p);
   }
 
   // 裸ID→名称:给列表行补 factory_name / contract_no(前端展示体验)

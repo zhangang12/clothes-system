@@ -105,8 +105,10 @@ export function exportPrepaymentExcel(detail: any): void {
     // 冲抵情况:审计时最常问的就是「这笔预付冲了多少」,直接把比例算出来,免得看数去按计算器
     ['冲抵比例', amount > 0 ? `${((used / amount) * 100).toFixed(2)}%` : ''],
     ['冲抵状态', used <= 0 ? '未冲抵' : (+(detail.balance ?? 0) <= 0 ? '已冲抵完' : '部分冲抵')],
-    ['制单人', uid(detail.created_by)],
+    // #133 qiao：申请人要看得见名字（列表接口已带 created_by_name），查不到再退回 ID
+    ['申请人', detail.created_by_name || uid(detail.created_by)],
     ['制单日期', d10(detail.created_at)],
+    ['银行水单', detail.slip_url ? '已上传' : '未上传'], // #134
     ['备注', detail.remark],
   ];
 

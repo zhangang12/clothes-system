@@ -7,6 +7,9 @@ export const prepaymentApi = {
     http.get<unknown, any>('/payments/prepayments/balance', { params: { factory_id: factoryId } }),
   create: (dto: Record<string, unknown>) =>
     http.post<unknown, any>('/payments/prepayments', dto),
+  // #134：给已登记的预付款挂/换银行水单
+  attachSlip: (id: number, slipUrl: string) =>
+    http.patch<unknown, any>(`/payments/prepayments/${id}/slip`, { slip_url: slipUrl }),
 };
 
 export const paymentRequestApi = {

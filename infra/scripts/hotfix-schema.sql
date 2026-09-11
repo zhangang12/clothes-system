@@ -872,6 +872,7 @@ CREATE TABLE IF NOT EXISTS `prepayment` (
   `remark`         TEXT          DEFAULT NULL,
   `created_by`     BIGINT        NOT NULL,
   `style_no`  VARCHAR(60) DEFAULT NULL COMMENT '相关款号(预付登记归集,P3#40)',
+  `slip_url`  VARCHAR(500) DEFAULT NULL COMMENT '银行水单(2026-09-11 #134 预付也是真实付款,要留凭证)',
   `created_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -2200,6 +2201,8 @@ CALL _i9_add_col('prepayment','created_by',"BIGINT        NOT NULL");
 CALL _i9_sync_col('prepayment','created_by',"BIGINT","BIGINT        NOT NULL");
 CALL _i9_add_col('prepayment','style_no',"VARCHAR(60) DEFAULT NULL COMMENT '相关款号(预付登记归集,P3#40)'");
 CALL _i9_sync_col('prepayment','style_no',"VARCHAR(60)","VARCHAR(60) DEFAULT NULL COMMENT '相关款号(预付登记归集,P3#40)'");
+CALL _i9_add_col('prepayment','slip_url',"VARCHAR(500) DEFAULT NULL COMMENT '银行水单(2026-09-11 #134 预付也是真实付款,要留凭证)'");
+CALL _i9_sync_col('prepayment','slip_url',"VARCHAR(500)","VARCHAR(500) DEFAULT NULL COMMENT '银行水单(2026-09-11 #134 预付也是真实付款,要留凭证)'");
 CALL _i9_add_col('prepayment','created_at',"DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP");
 CALL _i9_sync_col('prepayment','created_at',"DATETIME","DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP");
 CALL _i9_add_col('prepayment','updated_at',"DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");

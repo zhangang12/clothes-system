@@ -16,6 +16,7 @@ describe('#130 水单/收汇权限矩阵', () => {
   it('挂水单 / 登记回款：业务、船务、财务、管理员都可以（与 PAYMENT_SLIP_ROLES 同一份）', () => {
     for (const [ctrl, method] of [
       [PaymentController, 'attachSlip'],
+      [PaymentController, 'attachPrepaySlip'],
       [SettlementController, 'addReceipt'],
       [ExportInvoiceController, 'addReceipt'],
     ] as const) {

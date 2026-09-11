@@ -777,6 +777,7 @@ CREATE TABLE IF NOT EXISTS `prepayment` (
   `remark`         TEXT          DEFAULT NULL,
   `created_by`     BIGINT        NOT NULL,
   `style_no`  VARCHAR(60) DEFAULT NULL COMMENT '相关款号(预付登记归集,P3#40)',
+  `slip_url`  VARCHAR(500) DEFAULT NULL COMMENT '银行水单(2026-09-11 #134 预付也是真实付款,要留凭证)',
   `created_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
