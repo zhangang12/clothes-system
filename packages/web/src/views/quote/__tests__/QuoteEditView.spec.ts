@@ -117,3 +117,24 @@ describe('QuoteEditView 下拉截断回显(L24)', () => {
     expect(mockSampleGet).not.toHaveBeenCalled();
   });
 });
+
+describe('QuoteEditView 复制行（#137 daisy：加料要跟同类辅料排在一起）', () => {
+  it('复制出的行落在原行正下方，不继承样衣比对标记', async () => {
+    mockQuoteGet.mockResolvedValue({ data: { ...detail, customer_id: 1, buyer_id: 1, sample_id: 1, items: [
+      { item_name: '面料', supplier: '甲', rmb_price: 11, loss_rate: 3, deviated_from_sample: 1, usage_is_estimate: 1, sample_usage: 1.2 },
+      { item_name: '松紧带', supplier: '乙', rmb_price: 0.3, loss_rate: 3 },
+      { item_name: '主标', supplier: '丙', rmb_price: 0.33, loss_rate: 3 },
+    ] } });
+    const wrapper = mountView();
+    await vi.waitFor(() => expect(wrapper.text()).toContain('Q-20260719-001'));
+    const vm: any = wrapper.vm;
+    await vi.waitFor(() => expect(vm.form.items.length).toBe(3));
+    vm.selItems = [vm.form.items[0], vm.form.items[1]];
+    vm.copyItems();
+    expect(vm.form.items.map((i: any) => i.itemName)).toEqual(['面料', '面料', '松紧带', '松紧带', '主标']);
+    expect(vm.form.items[1]).toMatchObject({ supplier: '甲', deviatedFromSample: false, usageIsEstimate: false });
+    expect(vm.form.items[1]).not.toBe(vm.form.items[0]); // 是新对象，改新行不带动原行
+    expect(vm.form.items[0].deviatedFromSample).toBe(true);
+  });
+});
+

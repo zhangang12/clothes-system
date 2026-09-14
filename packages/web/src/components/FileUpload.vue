@@ -19,6 +19,15 @@
     </template>
     <el-button v-else-if="!disabled" size="small" :icon="Upload">上传</el-button>
     <template v-if="tip" #tip><div class="up-tip">{{ tip }}</div></template>
+    <!-- 列表型（text/picture）自己画每一行，把「删除」常驻出来（2026-09-14 #136 Helen：「PDF 传错了怎么删除」）。
+         element-plus 默认只在鼠标悬停时把右侧 ✓ 换成 ✕，从没悬停过的人根本不知道能删。
+         picture-card 仍用默认渲染：缩略图上的悬停遮罩带预览/删除两个图标，形态本身就提示可操作 -->
+    <template v-if="listType !== 'picture-card'" #file="{ file }">
+      <div class="fu-item">
+        <el-link class="fu-name" underline="never" :title="file.name" @click="onPreview(file)">📄 {{ file.name }}</el-link>
+        <el-button v-if="!disabled" link type="danger" size="small" class="fu-del" @click.stop="onRemove(file)">删除</el-button>
+      </div>
+    </template>
   </el-upload>
 
   <div v-if="!disabled" class="fu-hint">支持拖入文件 / Ctrl+V 粘贴截图 · 大图自动压缩后上传</div>
@@ -248,4 +257,8 @@ function onExceed() { ElMessage.warning(`最多上传 ${effectiveLimit.value} �
 .up-tip { font-size: 13px; color: var(--el-text-color-secondary); }
 .fu-wrap { outline: none; }
 .fu-hint { font-size: 12px; color: var(--el-text-color-placeholder); margin-top: 2px; }
+.fu-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 0 4px; }
+.fu-name { flex: 1; min-width: 0; overflow: hidden; }
+.fu-name :deep(.el-link__inner) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.fu-del { flex-shrink: 0; }
 </style>

@@ -154,6 +154,9 @@
       <section-block title="▣ 报价明细（从样衣导入）" badge="12 字段">
         <div v-if="!contentDisabled" class="subtable-ops">
           <el-button size="small" :icon="Plus" @click="addItem">添加行</el-button>
+          <!-- #137 daisy：客人临时加料（比如加根拉链）要跟同类辅料排在一起。复制行落在原行正下方，
+               改品名/供应商即可，比「添加行」加到末尾再一格格往上挪省事 -->
+          <el-button size="small" :icon="CopyDocument" :disabled="!selItems.length" @click="copyItems">复制行</el-button>
           <el-button size="small" :icon="Minus" :disabled="!selItems.length" @click="delItems">删除</el-button>
           <el-tooltip placement="top"
             content="在 Excel 中按列序复制后粘贴追加：部位｜品名｜门幅｜颜色｜供应商｜单位｜报价耗用｜人民币单价｜损耗%｜备注">
@@ -415,6 +418,16 @@ const rules: FormRules = {
 };
 
 function addItem() { form.items.push(emptyItem()); }
+// 复制行（#137）：落在原行正下方；「已偏离样衣/单耗为预估」是原行跟样衣比对出来的标记，新行不继承
+function copyItems() {
+  const n = selItems.value.length;
+  for (const src of selItems.value) {
+    const at = form.items.indexOf(src);
+    if (at < 0) continue;
+    form.items.splice(at + 1, 0, { ...src, usageIsEstimate: false, deviatedFromSample: false, sampleUsage: undefined });
+  }
+  ElMessage.success(`已复制 ${n} 行，新行在原行正下方`);
+}
 function delItems() { form.items = form.items.filter((r: any) => !selItems.value.includes(r)); if (!form.items.length) form.items.push(emptyItem()); }
 function addFee() { form.fees.push(emptyFee()); }
 function delFees() { form.fees = form.fees.filter((r: any) => !selFees.value.includes(r)); }

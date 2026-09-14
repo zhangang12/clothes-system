@@ -41,12 +41,32 @@
           <el-table-column prop="amount" label="预付金额" width="120" align="right">
             <template #default="{ row }">{{ (+row.amount).toFixed(2) }}</template>
           </el-table-column>
-          <el-table-column prop="used_amount" label="已用金额" width="110" align="right">
+          <!-- #138 qiao：「预付款上传水单，怎么不显示已付清」。预付款登记的就是**已经付出去的钱**，没有待付；
+               原来的「已用金额/剩余余额」说的是被付款申请冲抵了多少，被看成了「还欠多少」。
+               列名改成冲抵口径，再加一列付款状态：有水单=已付款，没水单=待传水单 -->
+          <el-table-column label="付款状态" width="96" align="center">
+            <template #default="{ row }">
+              <el-tag v-if="row.slip_url" type="success" size="small">已付款</el-tag>
+              <el-tag v-else type="warning" size="small">待传水单</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="used_amount" width="110" align="right">
+            <template #header>
+              <el-tooltip placement="top" content="已在付款申请里「冲抵预付款」用掉的部分">
+                <span>已冲抵 ⓘ</span>
+              </el-tooltip>
+            </template>
             <template #default="{ row }">{{ (+row.used_amount).toFixed(2) }}</template>
           </el-table-column>
-          <el-table-column prop="balance" label="剩余余额" width="110" align="right">
+          <el-table-column prop="balance" width="120" align="right">
+            <template #header>
+              <el-tooltip placement="top" content="还能在后续付款申请里冲抵的预付金额，不是欠款">
+                <span>可冲抵余额 ⓘ</span>
+              </el-tooltip>
+            </template>
             <template #default="{ row }">
-              <span :class="{ 'text-danger': +row.balance <= 0 }">{{ (+row.balance).toFixed(2) }}</span>
+              <span v-if="+row.balance <= 0" class="muted">已冲抵完</span>
+              <span v-else>{{ (+row.balance).toFixed(2) }}</span>
             </template>
           </el-table-column>
           <el-table-column prop="pay_date" label="付款日期" width="120" />
