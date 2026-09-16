@@ -46,7 +46,7 @@
           </el-col>
           <el-col :span="8">
             <el-form-item label="中间商" prop="middlemanId">
-              <el-select v-model="form.middlemanId" filterable clearable placeholder="选择中间商（无中间商可空，选最终买家即可）" style="width:100%" :disabled="bizDisabled">
+              <el-select v-model="form.middlemanId" filterable clearable placeholder="选择中间商（无中间商可空，选最终买家即可）" style="width:100%" :disabled="bizDisabled" :no-data-text="customerEmpty">
                 <el-option v-for="m in middlemen" :key="m.id" :label="`${m.customer_no} · ${m.name}`" :value="m.id" />
               </el-select>
             </el-form-item>
@@ -56,7 +56,7 @@
           <el-col :span="8"><el-form-item label="样衣数量"><el-input v-model="form.sampleQty" type="number" :min="0" :disabled="bizDisabled" placeholder="件" /></el-form-item></el-col>
           <el-col :span="8">
             <el-form-item label="关联最终买家">
-              <el-select v-model="form.buyerId" filterable clearable placeholder="选择最终买家" style="width:100%" :disabled="bizDisabled">
+              <el-select v-model="form.buyerId" filterable clearable placeholder="选择最终买家" style="width:100%" :disabled="bizDisabled" :no-data-text="customerEmpty">
                 <el-option v-for="b in buyers" :key="b.id" :label="`${b.customer_no} · ${b.name}`" :value="b.id" />
               </el-select>
             </el-form-item>
@@ -324,6 +324,7 @@ import { exportSampleExcel } from '@/utils/sampleExcel';
 import { parseSheetFile, guessMapping, rowsToMaterials, MATERIAL_FIELDS } from '@/utils/sheetImport';
 import { useFormDraft } from '@/utils/formDraft';
 import { SAMPLE_CATEGORIES, SAMPLE_STATUS_LABEL, QUOTE_STATUS_LABEL, UserRole, SAMPLE_EDITABLE_STATUSES, SAMPLE_PM_EDITABLE_STATUSES } from '@i9/types';
+import { customerEmptyText } from '@/utils/customerEmptyHint';
 
 const SectionBlock = (props: { title: string; badge?: string }, { slots }: any) =>
   h('div', { class: 'section-block' }, [
@@ -358,6 +359,8 @@ const lockHint = computed(() => {
 const bizDisabled = computed(() => readonly.value || patternmaker.value || statusLocked.value); // 业务字段：查看/版师视图/状态锁只读
 const pmEnabled = computed(() => patternmaker.value && !readonly.value && !pmLocked.value);  // 版师字段：仅版师视图且状态允许时可编辑
 const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
+// 客户下拉为空时说清原因（#141 Amanda 新账号没被授权任何客户，下拉只显示「无数据」）
+const customerEmpty = computed(() => customerEmptyText(isAdmin.value));
 
 const sampleCategories = SAMPLE_CATEGORIES;
 const middlemen = ref<any[]>([]);

@@ -5,6 +5,7 @@ import {
   defaultColWidth,
 } from '../samplePrint';
 import { loadLayout, saveLayout, resetLayout, type PrintLayout } from '../printLayout';
+import { withPrintToolbar } from '../printToolbar';
 import { splitColorGroups, maxColorGroups, colorGroupLabel } from '../colorGroups';
 
 const detail = {
@@ -131,7 +132,8 @@ describe('预览与打印同源', () => {
     const win: any = { document: { open: vi.fn(), write: (h: string) => { written = h; }, close: vi.fn() } };
     vi.stubGlobal('open', vi.fn().mockReturnValue(win));
     printSample(detail, L());
-    expect(written).toBe(buildSampleHtml(detail, L(), true));
+    // 打印窗口额外多一条只在屏幕显示的「打印 / 保存为 PDF」操作条（#143），单据正文仍与 autoPrint 版逐字相同
+    expect(written).toBe(withPrintToolbar(buildSampleHtml(detail, L(), true)));
   });
 
   it('弹窗被拦截时给出可操作的提示，而不是静默什么都没发生', () => {

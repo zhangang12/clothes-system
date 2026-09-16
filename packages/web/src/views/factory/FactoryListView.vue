@@ -60,7 +60,7 @@
 
     <!-- 列表 -->
     <div class="table-card">
-      <el-table :data="list" v-loading="loading" border stripe :row-class-name="rowClass"
+      <el-table :data="list" v-loading="loading" border stripe @header-dragend="onHeaderDragend" :row-class-name="rowClass"
         @selection-change="(v: any[]) => selected = v" @row-dblclick="goEdit" @row-click="onRowClick" ref="tableRef">
         <el-table-column type="selection" width="42" />
         <el-table-column prop="factory_no" label="编号" width="100" sortable />
@@ -128,6 +128,7 @@
 <script setup lang="ts">
 import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted } from 'vue';
+import { useListState, useColumnWidths } from '@/utils/listState';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { copyText } from '@/utils/clipboard';
@@ -266,6 +267,9 @@ import { exportAll } from '@/utils/exportAll';
 const canImport = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.BUSINESS));
 const exporting = ref(false);
 const tableRef = ref();
+// 返回列表时筛选条件、页码、调过的列宽保持原样（#139/#140，见 utils/listState.ts）
+useListState('factories', { query, showAdvanced });
+const { onHeaderDragend } = useColumnWidths('factories', tableRef);
 const ALL_COLS = [
   { key: 'factory_no', title: '编号' }, { key: 'name', title: '名称' }, { key: 'type', title: '类型' },
   { key: 'contact_name', title: '联系人' }, { key: 'contact_phone', title: '电话' },

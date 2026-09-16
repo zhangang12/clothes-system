@@ -42,7 +42,7 @@
         </div>
       </template>
 
-      <el-table :data="list" v-loading="loading" border stripe>
+      <el-table ref="colTableRef" :data="list" v-loading="loading" border stripe @header-dragend="onHeaderDragend">
         <el-table-column prop="settlement_no" label="结算单编号" width="180" />
         <el-table-column prop="order_id" label="订单ID" width="80" align="center" />
         <el-table-column prop="style_no" label="款号" width="110" show-overflow-tooltip>
@@ -597,6 +597,7 @@
 import { errToast } from '@/api';
 import { useRoute } from 'vue-router';
 import { ref, reactive, computed, onMounted, watch } from 'vue';
+import { useListState, useColumnWidths } from '@/utils/listState';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { fmtDateTime } from '@/utils/format';
 import { Search, Refresh, Plus } from '@element-plus/icons-vue';
@@ -642,6 +643,9 @@ const query = reactive({
   status: undefined as string | undefined,
   order_id: undefined as number | undefined,
 });
+// 返回列表时筛选条件、页码、调过的列宽保持原样（#139/#140，见 utils/listState.ts）
+useListState('settlements', { query, onlyLoss, onlyRecalc });
+const { tableRef: colTableRef, onHeaderDragend } = useColumnWidths('settlements');
 
 async function load() {
   loading.value = true;

@@ -62,7 +62,7 @@
     </div>
 
     <div class="table-card">
-      <el-table :data="list" v-loading="loading" border stripe @selection-change="(v: any[]) => selected = v" @row-dblclick="goEdit">
+      <el-table ref="colTableRef" :data="list" v-loading="loading" border stripe @header-dragend="onHeaderDragend" @selection-change="(v: any[]) => selected = v" @row-dblclick="goEdit">
         <el-table-column type="selection" width="42" />
         <el-table-column prop="quote_no" label="报价单号" width="150" sortable />
         <el-table-column label="中间商" min-width="140" show-overflow-tooltip><template #default="{ row }">{{ row.middleman_name || '-' }}</template></el-table-column>
@@ -143,6 +143,7 @@
 <script setup lang="ts">
 import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted } from 'vue';
+import { useListState, useColumnWidths } from '@/utils/listState';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search, Plus, Download, Delete, CopyDocument, ArrowDown, Printer, DocumentAdd } from '@element-plus/icons-vue';
@@ -197,6 +198,9 @@ const query = reactive({
   quote_no: '', style_no: '', middleman_name: '', buyer_name: '', salesperson: '',
 });
 const inquiryRange = ref<[string, string] | null>(null);
+// 返回列表时筛选条件、页码、调过的列宽保持原样（#139/#140，见 utils/listState.ts）
+useListState('quotes', { query, inquiryRange, showAdvanced });
+const { tableRef: colTableRef, onHeaderDragend } = useColumnWidths('quotes');
 
 async function load() {
   loading.value = true;

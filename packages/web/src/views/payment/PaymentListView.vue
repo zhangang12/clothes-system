@@ -30,7 +30,7 @@
           <el-button v-if="canPrepay" type="primary" :icon="Plus" @click="openCreatePrepay">创建预付款</el-button>
         </div>
 
-        <el-table :data="prepayList" v-loading="prepayLoading" border stripe>
+        <el-table ref="prepayTableRef" :data="prepayList" v-loading="prepayLoading" border stripe @header-dragend="onPrepayHeaderDragend">
           <el-table-column prop="id" label="ID" width="70" align="center" />
           <el-table-column label="工厂" min-width="120" show-overflow-tooltip>
             <template #default="{ row }">{{ row.factory_name || ('工厂#' + row.factory_id) }}</template>
@@ -168,7 +168,7 @@
           <span class="lg lg-partial"></span>部分付款
           <span class="lg-tip">（按已付/应付判定，与审批状态无关）</span>
         </div>
-        <el-table :data="prList" v-loading="prLoading" border stripe :row-class-name="prRowClass">
+        <el-table ref="prTableRef" :data="prList" v-loading="prLoading" border stripe :row-class-name="prRowClass" @header-dragend="onPrHeaderDragend">
           <el-table-column prop="pr_no" label="申请编号" width="180" />
           <el-table-column prop="type" label="类型" width="110">
             <template #default="{ row }">
@@ -532,6 +532,7 @@
 <script setup lang="ts">
 import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted, watch } from 'vue';
+import { useListState, useColumnWidths } from '@/utils/listState';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { fmtDateTime } from '@/utils/format';
@@ -717,6 +718,11 @@ const prQuery = reactive({
   approval_status: undefined as string | undefined, due_start: '', due_end: '', paid_start: '', paid_end: '' });
 // 申请日期范围（工厂+日期组合检索，付款申请设计稿 检索区）
 const prDateRange = ref<[string, string] | null>(null);
+// 返回列表时筛选条件、页码、调过的列宽保持原样（#139/#140，见 utils/listState.ts）
+// reconcile_id 只由对账单跳转带入、检索区没有输入框：不记，免得下次被一个看不见的条件过滤
+useListState('payments', { activeTab, prepayQuery, prQuery, prDateRange }, { omit: ['reconcile_id'] });
+const { tableRef: prepayTableRef, onHeaderDragend: onPrepayHeaderDragend } = useColumnWidths('payments.prepay');
+const { tableRef: prTableRef, onHeaderDragend: onPrHeaderDragend } = useColumnWidths('payments.request');
 
 async function loadPR() {
   prLoading.value = true;

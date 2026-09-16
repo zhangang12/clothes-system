@@ -35,7 +35,7 @@
     </div>
 
     <div class="table-card">
-      <el-table :data="list" v-loading="loading" border stripe :row-class-name="rowClass" @selection-change="(v: any[]) => selected = v" @row-dblclick="goEdit">
+      <el-table ref="colTableRef" :data="list" v-loading="loading" border stripe @header-dragend="onHeaderDragend" :row-class-name="rowClass" @selection-change="(v: any[]) => selected = v" @row-dblclick="goEdit">
         <el-table-column type="selection" width="42" />
         <el-table-column prop="order_no" label="订单编号" width="150" sortable />
         <el-table-column prop="style_no" label="客户款号" min-width="120"><template #default="{ row }">{{ row.style_no || row.style_name || '-' }}</template></el-table-column>
@@ -127,6 +127,7 @@
 <script setup lang="ts">
 import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted } from 'vue';
+import { useListState, useColumnWidths } from '@/utils/listState';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search, Plus, Download, Delete, ArrowDown, Upload } from '@element-plus/icons-vue';
@@ -154,6 +155,9 @@ const total = ref(0);
 const selected = ref<any[]>([]);
 const showAdvanced = ref(false);
 const query = reactive({ page: 1, size: 20, keyword: '', status: undefined as string | undefined });
+// 返回列表时筛选条件、页码、调过的列宽保持原样（#139/#140，见 utils/listState.ts）
+useListState('orders', { query, showAdvanced });
+const { tableRef: colTableRef, onHeaderDragend } = useColumnWidths('orders');
 
 async function load() {
   loading.value = true;

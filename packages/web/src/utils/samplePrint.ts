@@ -10,6 +10,7 @@
 
 import type { PrintLayout } from './printLayout';
 import { splitColorGroups, maxColorGroups, colorGroupLabel } from './colorGroups';
+import { withPrintToolbar } from './printToolbar';
 
 const esc = (v: unknown): string =>
   String(v ?? '')
@@ -255,6 +256,6 @@ export function printSample(detail: any, layout?: Partial<PrintLayout>): void {
   const win = window.open('', '_blank', 'width=900,height=1000');
   if (!win) throw new Error('无法打开打印窗口，请允许弹出窗口后重试');
   win.document.open();
-  win.document.write(buildSampleHtml(detail, layout, true));
+  win.document.write(withPrintToolbar(buildSampleHtml(detail, layout, true))); // #143 操作条只加在打印窗口，不进预览
   win.document.close();
 }

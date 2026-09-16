@@ -1,4 +1,5 @@
 import { materialPrintRows } from './splitLines';
+import { withPrintToolbar } from './printToolbar';
 // 订单打印/导出 PDF —— 三套脱敏模板（P3#32/ORD E2）：
 //   customer=对客（隐藏用料成本/供应商/单价，仅款式+数量搭配+交期+对客金额）
 //   factory =对工厂（隐藏客户与对客价，含用料明细的名称/耗用/损耗与附件清单）
@@ -210,6 +211,6 @@ export function printOrder(detail: any, mode: OrderPrintMode): void {
   const win = window.open('', '_blank', 'width=900,height=1000');
   if (!win) throw new Error('无法打开打印窗口，请允许弹出窗口后重试');
   win.document.open();
-  win.document.write(html);
+  win.document.write(withPrintToolbar(html)); // #143 打印框取消后也能再打印/存 PDF
   win.document.close();
 }

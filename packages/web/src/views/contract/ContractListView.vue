@@ -25,7 +25,7 @@
     </div>
 
     <div class="table-card">
-      <el-table :data="list" v-loading="loading" border stripe @row-dblclick="viewDetail">
+      <el-table ref="colTableRef" :data="list" v-loading="loading" border stripe @header-dragend="onHeaderDragend" @row-dblclick="viewDetail">
         <el-table-column prop="contract_no" label="合同编号" width="160" sortable />
         <el-table-column label="类型" width="100"><template #default="{ row }"><el-tag size="small" effect="light">{{ typeLabel(row.type) }}</el-tag></template></el-table-column>
         <el-table-column label="供应商/加工厂" min-width="140"><template #default="{ row }">{{ factoryName(row.factory_id) }}</template></el-table-column>
@@ -229,6 +229,7 @@
 <script setup lang="ts">
 import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted } from 'vue';
+import { useListState, useColumnWidths } from '@/utils/listState';
 import { useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { Search, Plus, Download } from '@element-plus/icons-vue';
@@ -276,6 +277,9 @@ const total = ref(0);
 const factories = ref<any[]>([]);
 const orders = ref<any[]>([]);
 const query = reactive({ page: 1, size: 20, keyword: '', type: undefined as string | undefined, portal_status: undefined as string | undefined });
+// 返回列表时筛选条件、页码、调过的列宽保持原样（#139/#140，见 utils/listState.ts）
+useListState('contracts', { query });
+const { tableRef: colTableRef, onHeaderDragend } = useColumnWidths('contracts');
 
 async function load() {
   loading.value = true;

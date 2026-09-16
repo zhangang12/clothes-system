@@ -42,7 +42,7 @@
         </div>
       </template>
 
-      <el-table :data="list" v-loading="loading" border stripe>
+      <el-table ref="colTableRef" :data="list" v-loading="loading" border stripe @header-dragend="onHeaderDragend">
         <el-table-column prop="reconcile_no" label="对账单编号" width="180" />
         <el-table-column prop="style_no" label="款号" width="120" show-overflow-tooltip>
           <template #default="{ row }">{{ row.style_no || '—' }}</template>
@@ -491,6 +491,7 @@
 <script setup lang="ts">
 import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted } from 'vue';
+import { useListState, useColumnWidths } from '@/utils/listState';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { fmtDateTime } from '@/utils/format';
@@ -633,6 +634,9 @@ const query = reactive({
   status: undefined as string | undefined,
   factory_id: undefined as number | undefined,
 });
+// 返回列表时筛选条件、页码、调过的列宽保持原样（#139/#140，见 utils/listState.ts）
+useListState('reconciliations', { query });
+const { tableRef: colTableRef, onHeaderDragend } = useColumnWidths('reconciliations');
 
 async function load() {
   loading.value = true;

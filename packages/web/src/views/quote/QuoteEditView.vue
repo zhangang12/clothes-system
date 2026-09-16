@@ -99,14 +99,14 @@
             <!-- 不再无条件必填：直接客户没有中间商（2026-08-04 反馈同 #05）。
                  改为「中间商 / 最终买家至少填一个」，由下方 rules 的 validator 统一把关 -->
             <el-form-item label="中间商" prop="middlemanId">
-              <el-select v-model="form.middlemanId" filterable placeholder="选择中间商" style="width:100%" @change="onMiddleman">
+              <el-select v-model="form.middlemanId" filterable placeholder="选择中间商" style="width:100%" :no-data-text="customerEmpty" @change="onMiddleman">
                 <el-option v-for="m in middlemen" :key="m.id" :label="`${m.customer_no} · ${m.name}`" :value="m.id" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="8">
             <el-form-item label="最终买家" prop="buyerId">
-              <el-select v-model="form.buyerId" filterable clearable placeholder="选择最终买家" style="width:100%">
+              <el-select v-model="form.buyerId" filterable clearable placeholder="选择最终买家" style="width:100%" :no-data-text="customerEmpty">
                 <el-option v-for="b in buyers" :key="b.id" :label="`${b.customer_no} · ${b.name}`" :value="b.id" />
               </el-select>
             </el-form-item>
@@ -287,7 +287,8 @@ import { printQuote } from '@/utils/quotePrint';
 import { exportQuoteExcel } from '@/utils/quoteExcel';
 import FileUpload from '@/components/FileUpload.vue';
 import type { DocLink } from '@/components/DocLinks.vue'; // 仅取类型:组件已全局注册
-import { QUOTE_STATUS_LABEL, QUOTE_EDITABLE_STATUSES } from '@i9/types';
+import { QUOTE_STATUS_LABEL, QUOTE_EDITABLE_STATUSES, UserRole } from '@i9/types';
+import { customerEmptyText } from '@/utils/customerEmptyHint';
 import { TRADE_COUNTRIES, DICT_PRICE_TERMS, DICT_SETTLEMENT } from '@/constants/regions';
 import { UNIT_OPTIONS } from '@/constants/units';
 import { halfFilledRows, halfFilledMessage } from '@/utils/lineCheck';
@@ -355,6 +356,8 @@ const emptyItem = () => ({ part: '', itemName: '', width: '', color: '', supplie
 const emptyFee = (n = '') => ({ feeName: n, rmbPrice: '', quoteUsage: 1 });
 const DEFAULT_FEES = ['加工费', '线', '包装', '样衣费', '测试费', '运费'];
 const authStore = useAuthStore();
+// 客户下拉为空时说清原因（#141，非管理员多半是还没被授权客户）
+const customerEmpty = computed(() => customerEmptyText(authStore.hasRole(UserRole.ADMIN)));
 const form = reactive<any>({
   quoteNo: '', inquiryDate: new Date().toISOString().slice(0, 10), sampleId: undefined,
   middlemanId: undefined, buyerId: undefined, buyerNo: '', styleNo: '', middlemanContact: '',
@@ -469,12 +472,18 @@ async function onSample(id?: number) {
   try {
     const res: any = await sampleApi.get(id);
     const s = res.data ?? res;
+    // 最终买家挂在中间商名下：报价已经选了别的中间商时，样衣上的买家不是这张报价的买家，不带
+    // （2026-09-15 #142 Nina：报价中间商是晋江必迪斯，导入的样衣挂在 BDS 下，带出了 BDS 的买家 SV）
+    const sameMiddleman = !form.middlemanId || String(form.middlemanId) === String(s.customer_id ?? '');
     if (!form.middlemanId && s.customer_id) {
       form.middlemanId = s.customer_id;
       loadContacts(s.customer_id);
     }
     if (!form.styleNo && s.style_no) form.styleNo = s.style_no;
-    if (!form.buyerId && s.buyer_id) form.buyerId = s.buyer_id;
+    if (!form.buyerId && s.buyer_id) {
+      if (sameMiddleman) form.buyerId = s.buyer_id;
+      else ElMessage.info('这件样衣的中间商和报价不同，样衣上的最终买家没有带入');
+    }
     // 样衣带出的中间商/买家同样可能不在前 100 条选项里 → 按需补拉
     await ensureSelectedOptions();
   } catch { /* 样衣详情失败不阻断 */ }
@@ -714,8 +723,10 @@ function checkQuoteNumbers(): string | null {
 
 function buildDto() {
   return {
-    inquiryDate: dateOrNull(form.inquiryDate), sampleId: form.sampleId, middlemanId: form.middlemanId,
-    buyerId: form.buyerId, styleNo: txt(form.styleNo), middlemanContact: txt(form.middlemanContact),
+    // 清空下拉框得到的是 undefined，后端把 undefined 当「不改」——必须发 null 才清得掉（#142 买家清不掉）。
+    // middlemanId 不能这样发：quotation.customer_id NOT NULL，且页面规则要求中间商/买家至少一个
+    inquiryDate: dateOrNull(form.inquiryDate), sampleId: form.sampleId ?? null, middlemanId: form.middlemanId,
+    buyerId: form.buyerId ?? null, styleNo: txt(form.styleNo), middlemanContact: txt(form.middlemanContact),
     currency: form.currency, exchangeRate: num(form.exchangeRate), tradeCountry: txt(form.tradeCountry),
     settlementMethod: txt(form.settlementMethod), priceTerms: txt(form.priceTerms),
     salesperson: txt(form.salesperson), profitRate: num(form.profitRate) ?? 0, quoteQty: num(form.quoteQty),

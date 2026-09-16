@@ -64,7 +64,7 @@
     </div>
 
     <div class="table-card">
-      <el-table :data="list" v-loading="loading" border stripe @selection-change="(v: any[]) => selected = v" @row-dblclick="goEdit">
+      <el-table ref="colTableRef" :data="list" v-loading="loading" border stripe @header-dragend="onHeaderDragend" @selection-change="(v: any[]) => selected = v" @row-dblclick="goEdit">
         <el-table-column type="selection" width="42" />
         <el-table-column prop="sample_no" label="样衣编号" width="150" sortable />
         <el-table-column prop="style_no" label="客户款号" min-width="130" show-overflow-tooltip sortable />
@@ -125,6 +125,7 @@
 <script setup lang="ts">
 import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted } from 'vue';
+import { useListState, useColumnWidths } from '@/utils/listState';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search, Plus, Upload, Download, Delete, CopyDocument, ArrowDown } from '@element-plus/icons-vue';
@@ -166,6 +167,9 @@ const query = reactive({
 });
 const makeRange = ref<[string, string] | null>(null); // 制单日期范围
 const shipRange = ref<[string, string] | null>(null); // 寄出日期范围
+// 返回列表时筛选条件、页码、调过的列宽保持原样（#139/#140，见 utils/listState.ts）
+useListState('samples', { query, makeRange, shipRange, showAdvanced });
+const { tableRef: colTableRef, onHeaderDragend } = useColumnWidths('samples');
 
 function buildParams() {
   const params: Record<string, unknown> = { page: query.page, size: query.size };

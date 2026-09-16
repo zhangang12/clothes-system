@@ -64,7 +64,7 @@
     </div>
 
     <div class="table-card">
-      <el-table :data="list" v-loading="loading" border stripe @selection-change="(v: any[]) => selected = v" @row-dblclick="goEdit" @row-click="onRowClick" ref="tableRef">
+      <el-table :data="list" v-loading="loading" border stripe @header-dragend="onHeaderDragend" @selection-change="(v: any[]) => selected = v" @row-dblclick="goEdit" @row-click="onRowClick" ref="tableRef">
         <el-table-column type="selection" width="42" />
         <el-table-column prop="customer_no" label="编号" width="100" sortable />
         <el-table-column prop="name" label="客户名称" min-width="180" show-overflow-tooltip />
@@ -174,6 +174,7 @@
 <script setup lang="ts">
 import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted } from 'vue';
+import { useListState, useColumnWidths } from '@/utils/listState';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { copyText } from '@/utils/clipboard';
@@ -307,6 +308,9 @@ import { exportAll } from '@/utils/exportAll';
 const canImport = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.BUSINESS));
 const exporting = ref(false);
 const tableRef = ref();
+// 返回列表时筛选条件、页码、调过的列宽保持原样（#139/#140，见 utils/listState.ts）
+useListState('customers', { query, showAdvanced });
+const { onHeaderDragend } = useColumnWidths('customers', tableRef);
 const ALL_COLS = [
   { key: 'customer_no', title: '编号' }, { key: 'name', title: '客户名称' }, { key: 'type', title: '类型' },
   { key: 'trade_country', title: '贸易国别' }, { key: 'country_region', title: '国家区域' }, { key: 'city', title: '城市' },

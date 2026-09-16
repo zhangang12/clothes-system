@@ -138,3 +138,39 @@ describe('QuoteEditView 复制行（#137 daisy：加料要跟同类辅料排在�
   });
 });
 
+describe('QuoteEditView 最终买家（#142 Nina：带出了别家中间商的买家，还清不掉）', () => {
+  beforeEach(() => {
+    mockQuoteGet.mockResolvedValue({ data: { ...detail, customer_id: 1, buyer_id: null, sample_id: null, items: [] } });
+  });
+
+  it('报价中间商和样衣的中间商不同：样衣上的买家不带入', async () => {
+    const wrapper = mountView();
+    const vm: any = wrapper.vm;
+    await vi.waitFor(() => expect(vm.form.middlemanId).toBe(1));
+    mockSampleGet.mockResolvedValueOnce({ data: { id: 149, customer_id: 25, buyer_id: 26, style_no: 'WIA273F501' } });
+    await vm.onSample(149);
+    expect(vm.form.buyerId).toBeFalsy();
+    expect(vm.form.middlemanId).toBe(1);
+  });
+
+  it('中间商一致（或报价还没选中间商）时照常带入买家', async () => {
+    const wrapper = mountView();
+    const vm: any = wrapper.vm;
+    await vi.waitFor(() => expect(vm.form.middlemanId).toBe(1));
+    mockSampleGet.mockResolvedValueOnce({ data: { id: 150, customer_id: 1, buyer_id: 33, style_no: 'X' } });
+    await vm.onSample(150);
+    expect(vm.form.buyerId).toBe(33);
+  });
+
+  it('清空最终买家后保存发 null（后端把 undefined 当不改，发 undefined 就清不掉）', async () => {
+    const wrapper = mountView();
+    const vm: any = wrapper.vm;
+    await vi.waitFor(() => expect(vm.form.middlemanId).toBe(1));
+    vm.form.buyerId = undefined;
+    vm.form.sampleId = undefined;
+    const dto = vm.buildDto();
+    expect(dto.buyerId).toBeNull();
+    expect(dto.sampleId).toBeNull();
+  });
+});
+

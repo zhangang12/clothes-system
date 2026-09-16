@@ -14,7 +14,7 @@
       </div>
     </div>
 
-    <el-table :data="list" v-loading="loading" border stripe @row-dblclick="openDetail">
+    <el-table ref="colTableRef" :data="list" v-loading="loading" border stripe @header-dragend="onHeaderDragend" @row-dblclick="openDetail">
       <el-table-column label="末见时间" width="160">
         <template #default="{ row }">{{ fmt(row.last_seen) }}</template>
       </el-table-column>
@@ -90,6 +90,7 @@
 
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue';
+import { useListState, useColumnWidths } from '@/utils/listState';
 import { ElMessage } from 'element-plus';
 import { Download } from '@element-plus/icons-vue';
 import { errorLogApi, downloadHtml } from '../../api/errorLog';
@@ -98,6 +99,9 @@ const list = ref<any[]>([]);
 const total = ref(0);
 const loading = ref(false);
 const query = reactive({ page: 1, size: 20, status: '' });
+// 返回列表时筛选条件、页码、调过的列宽保持原样（#139/#140，见 utils/listState.ts）
+useListState('error-logs', { query });
+const { tableRef: colTableRef, onHeaderDragend } = useColumnWidths('error-logs');
 const detailOpen = ref(false);
 const cur = ref<any>(null);
 

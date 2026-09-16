@@ -18,7 +18,14 @@
 > 【为什么不是简单放开角色】改成 `@Roles(BUSINESS)` 等于所有业务都能看；把他提成主管等于把整套管理权限一起给出去。系统里其实早有账号级开关 `sys_user.menu_keys`（账号管理里逐项勾选），但它**只管前端**——菜单给了、点进去仍 403。
 > 【做法】新增 `MenuGuard` + `@MenuAccess('feedbacks')`，把**同一套** `resolveMenuKeys` 口径接到接口层（两处规则一旦分叉就会出现「侧栏有、点进去没有」）；`JwtStrategy` 的 `select` 顺带取 `menu_keys`（本来每请求就查这一行，不增加查询，且改完菜单**立刻生效**不必重登）；路由 `/feedbacks` 由 `meta.admin` 改为 `meta.menu='feedbacks'`。**只开「查」**：列表与导出走菜单授权，**回复 / 标记已处理仍限 ADMIN/主管**，页面上对只读账号直接不渲染那一列（按钮摆着点下去只会 403）。King 的账号菜单已在生产配好（业务默认菜单 + `feedbacks`）。api jest **465**（+9）；**变异测试 4 次**全部如期变红。
 
-> 最新：**9-14 拉反馈：#136 Helen（传错的 PDF 删不掉）、#137 daisy（报价复制行/加料排版）、#138 qiao（预付款传了水单不显示已付清）已修并上线；#135 daisy（多订单同供应商合并一张付款/预付单、统一开票）是新需求，方案交老板，保持 PENDING**。
+> 最新：**9-16 拉反馈：#139/#140 EVA（列表筛选条件、列宽回来就丢）、#141 Amanda（新账号选不了客户）、#142 Nina（导入样衣带出别家中间商的买家且清不掉）、#143 YSM（PDF 存不了）已修并上线**。
+> **#139/#140**：根因是 MainLayout `<component :key="$route.fullPath">`，每次切路由列表页整体重建（key 不能去，见其注释），没上 keep-alive。新增 `utils/listState.ts`：`useListState(key, {query, 日期范围 ref, showAdvanced…}, {omit})` 把筛选条件/页码存 sessionStorage、重建时同步还原（路由带查询参数=从别的单据跳来时不还原；只由跳转带入、没输入框的字段如付款页 `reconcile_id` 用 omit 排除）；`useColumnWidths(key, existingRef?)` 接 el-table `@header-dragend` 把拖过的列宽按表头文字存 localStorage，onMounted 后改 `store.states.columns` 的 width/realWidth 再 doLayout（与 element-plus 拖动时同一做法）。接入 11 个列表页（报价/样衣/订单/合同/客户/工厂/对账/付款两张表/结算/反馈/错误日志）。守卫 `list-state-guard.spec.ts`：凡有 `query = reactive(` 的 *ListView 必须接这两个。`listState.spec.ts` 用真 el-table 验证列宽套回。
+> **#141**：不是缺陷——Amanda 9-15 11:13 新开账号，自建客户 0、授权 0，客户属机密单据按授权可见。改动只是让下拉说清原因：报价、样衣页的中间商/最终买家下拉空时显示「客户资料要主管在「客户管理」里给你授权后才会出现」（管理员显示「请先新建」），`utils/customerEmptyHint.ts`。**Amanda 仍需老板/主管授权客户，授哪些由老板定，生产库未动。**
+> **#142**：报价 Q-20260915-038 中间商是晋江必迪斯(1)，导入的样衣 S-20260811-004 挂在 BDS(25) 下且**确实记着买家 SV(26)**（EVA 8-11 建单时填的，Nina 说"没填"与库不符），`onSample` 无条件把样衣买家带进来。改：报价已有中间商且与样衣不同则不带买家并提示。「清不掉」是 undefined=不改老问题：`buildDto` 的 `buyerId`/`sampleId` 改发 `?? null`（`middlemanId` 不改：`quotation.customer_id NOT NULL`）。QuoteEditView.spec +3。报价 250 上的 SV 没替她清，她刷新后可自己清。
+> **#143**：打印/PDF 都是 window.open 空白窗口 + onload 弹打印框，打印框点取消后只剩 about:blank 窗口。新增 `utils/printToolbar.ts` 的 `withPrintToolbar(html)`，在写入打印窗口这一步插「打印 / 保存为 PDF」操作条与说明（@media print 隐藏）；合同/报价/订单/样衣四处。操作条不进 `buildSampleHtml`（样衣要求预览与打印逐字相同，samplePrint.spec 相应只改 printSample 那条断言）。`printToolbar.spec.ts` 4 条。
+> **验证**：web vitest **632**（+25）/ vue-tsc+vite 绿；变异 6 次（买家不看中间商、清空发 undefined、不还原筛选、不套列宽、合同两种去掉操作条）全部如期变红。零后端改动、零 schema。**没在浏览器点过**，列宽套回依赖 element-plus 2.14 表格内部 `store.states.columns`，升级 element-plus 时 listState.spec 会先红。
+
+> 前一轮：**9-14 拉反馈：#136 Helen（传错的 PDF 删不掉）、#137 daisy（报价复制行/加料排版）、#138 qiao（预付款传了水单不显示已付清）已修并上线；#135 daisy（多订单同供应商合并一张付款/预付单、统一开票）是新需求，方案交老板，保持 PENDING**。
 > **#136**：`FileUpload` 列表型（text）用 el-upload `#file` 插槽自绘每一行，「删除」常驻（element-plus 默认只在悬停时把 ✓ 换 ✕）；只读不显示；picture-card（缩略图悬停遮罩自带删除）保持默认渲染。全站 19 处用法里 7 处 text 型一起受益。新增 `components/__tests__/FileUpload.spec.ts`（3 条），变异（关掉自绘）红。
 > **#137**：报价明细加「复制行」，复制出的行落在原行正下方（不继承「已偏离样衣/单耗为预估」标记），加料改品名/供应商即可；排序列本来就有拖动柄与 ↑↓。QuoteEditView.spec +1，变异（追加到末尾）红。
 > **#138**：预付款登记的是已经付出去的钱，「已用金额/剩余余额」其实是冲抵口径，被看成欠款。加「付款状态」列（有水单=已付款，无=待传水单），列名改为「已冲抵 ⓘ」「可冲抵余额 ⓘ」带说明，余额为 0 显示「已冲抵完」。纯前端。
@@ -350,6 +357,7 @@
 
 ## 最近变更（新→旧，保留最近若干条）
 
+- （本次·**9-16 反馈 #139–#143**）`feat/fix(web)` 列表页记住筛选条件（sessionStorage）与列宽（localStorage），11 个列表 + 守卫；客户下拉空时说明需授权；报价导入样衣不带别家中间商的买家、买家/样衣可清空；四个打印窗口加「打印 / 保存为 PDF」条。web **632**（+25），变异 6 次全红。**零后端改动、零 DB 结构变更**。
 - （本次·**9-14 反馈 #136/#137/#138**）`fix(web)` FileUpload 列表型每行常驻「删除」；报价明细「复制行」落原行正下方；预付款加付款状态列、冲抵口径列名。web **607**（+4），变异红 2。**零后端改动、零 DB 结构变更**。#135 方案待拍板。
 - （本次·**#133/#134 预付款申请人 + 水单**）`feat(api,web,sql)` **schema：`prepayment.slip_url VARCHAR(500) NULL`**（init.sql + gen-column-sync 重生成）；建档带水单 / `PATCH /payments/prepayments/:id/slip` 事后挂；列表加申请人、水单两列与传水单动作；Excel 导出补申请人名字与水单状态。api **520**（+3），变异红。
 - （本次·**9-11 反馈 #131/#132 + King 合同类型兜底**）`fix(web)` 订单页材料表上方常驻「为勾选的 N 行生成材料合同 / 为未下单的材料生成」（查看态也有）；表格导入品名列认不出时兜底到首个空闲列并提示（`guessMapping`，+4 用例，变异红 2）；合同草稿恢复不覆盖 type、保存前按路由补回。web **603**。**零后端改动、零 DB 结构变更**。

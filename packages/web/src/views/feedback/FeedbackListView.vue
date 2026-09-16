@@ -13,7 +13,7 @@
       </div>
     </div>
 
-    <el-table :data="list" v-loading="loading" border stripe>
+    <el-table ref="colTableRef" :data="list" v-loading="loading" border stripe @header-dragend="onHeaderDragend">
       <el-table-column label="提交时间" width="160">
         <template #default="{ row }">{{ fmt(row.created_at) }}</template>
       </el-table-column>
@@ -93,6 +93,7 @@
 
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue';
+import { useListState, useColumnWidths } from '@/utils/listState';
 import { ElMessage } from 'element-plus';
 import { Download } from '@element-plus/icons-vue';
 import { feedbackApi } from '../../api/feedback';
@@ -108,6 +109,9 @@ const list = ref<any[]>([]);
 const total = ref(0);
 const loading = ref(false);
 const query = reactive({ page: 1, size: 20, status: '' });
+// 返回列表时筛选条件、页码、调过的列宽保持原样（#139/#140，见 utils/listState.ts）
+useListState('feedbacks', { query });
+const { tableRef: colTableRef, onHeaderDragend } = useColumnWidths('feedbacks');
 
 function imgs(s?: string): string[] {
   if (!s) return [];
