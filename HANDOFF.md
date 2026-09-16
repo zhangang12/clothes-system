@@ -23,6 +23,7 @@
 > **#141**：不是缺陷——Amanda 9-15 11:13 新开账号，自建客户 0、授权 0，客户属机密单据按授权可见。改动只是让下拉说清原因：报价、样衣页的中间商/最终买家下拉空时显示「客户资料要主管在「客户管理」里给你授权后才会出现」（管理员显示「请先新建」），`utils/customerEmptyHint.ts`。**Amanda 仍需老板/主管授权客户，授哪些由老板定，生产库未动。**
 > **#142**：报价 Q-20260915-038 中间商是晋江必迪斯(1)，导入的样衣 S-20260811-004 挂在 BDS(25) 下且**确实记着买家 SV(26)**（EVA 8-11 建单时填的，Nina 说"没填"与库不符），`onSample` 无条件把样衣买家带进来。改：报价已有中间商且与样衣不同则不带买家并提示。「清不掉」是 undefined=不改老问题：`buildDto` 的 `buyerId`/`sampleId` 改发 `?? null`（`middlemanId` 不改：`quotation.customer_id NOT NULL`）。QuoteEditView.spec +3。报价 250 上的 SV 没替她清，她刷新后可自己清。
 > **#143**：打印/PDF 都是 window.open 空白窗口 + onload 弹打印框，打印框点取消后只剩 about:blank 窗口。新增 `utils/printToolbar.ts` 的 `withPrintToolbar(html)`，在写入打印窗口这一步插「打印 / 保存为 PDF」操作条与说明（@media print 隐藏）；合同/报价/订单/样衣四处。操作条不进 `buildSampleHtml`（样衣要求预览与打印逐字相同，samplePrint.spec 相应只改 printSample 那条断言）。`printToolbar.spec.ts` 4 条。
+> **发版插曲**：第一次 `deploy-local.sh` 在「Web 单测」步骤红了（生产未更新），脚本把输出全丢进 /dev/null 查不到是哪条；本地单跑、与 api jest 并行跑各一遍都 632 全绿，未复现。已改脚本：测试输出落临时文件，失败时打出失败用例与日志路径。
 > **验证**：web vitest **632**（+25）/ vue-tsc+vite 绿；变异 6 次（买家不看中间商、清空发 undefined、不还原筛选、不套列宽、合同两种去掉操作条）全部如期变红。零后端改动、零 schema。**没在浏览器点过**，列宽套回依赖 element-plus 2.14 表格内部 `store.states.columns`，升级 element-plus 时 listState.spec 会先红。
 
 > 前一轮：**9-14 拉反馈：#136 Helen（传错的 PDF 删不掉）、#137 daisy（报价复制行/加料排版）、#138 qiao（预付款传了水单不显示已付清）已修并上线；#135 daisy（多订单同供应商合并一张付款/预付单、统一开票）是新需求，方案交老板，保持 PENDING**。

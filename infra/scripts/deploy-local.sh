@@ -59,8 +59,14 @@ done
 
 # ── ③ 测试（默认跑，--skip-tests 可跳）────────────────────────
 if ! $SKIP_TESTS; then
-  log "API 单测..."; (cd packages/api && npx jest -c jest.unit.config.js --silent >/dev/null) || die "API 单测未过"
-  log "Web 单测..."; (cd packages/web && npx vitest run --silent >/dev/null 2>&1) || die "Web 单测未过"
+  # 输出落到临时文件、失败时把失败用例打出来（2026-09-16：Web 单测在发版时红了一次，输出全被吞掉，
+  # 事后连跑两遍都绿，查不到是哪条——偶发的更要留证据）
+  TEST_LOG=$(mktemp -t i9-test.XXXXXX)
+  log "API 单测..."; (cd packages/api && npx jest -c jest.unit.config.js --silent >"$TEST_LOG" 2>&1) \
+    || { grep -E "✕|●|Tests:" "$TEST_LOG" | head -40; die "API 单测未过（完整输出：$TEST_LOG）"; }
+  log "Web 单测..."; (cd packages/web && npx vitest run --silent >"$TEST_LOG" 2>&1) \
+    || { grep -E "FAIL|×|AssertionError|Error:|timed out|Test Files|Tests  " "$TEST_LOG" | head -40; die "Web 单测未过（完整输出：$TEST_LOG）"; }
+  rm -f "$TEST_LOG"
 fi
 
 # ── ④ 推代码（服务器留一份源码，便于回滚/查证）────────────────
