@@ -80,7 +80,7 @@ macOS 本地免 Docker 全栈（原生 MySQL8+Redis+API:3001+web+portal，装在
 
 - **发版（服务器上一条命令）**：`cd /opt/i9/clothes-system && bash infra/scripts/deploy.sh`。内置顺序：拉 main → 构建 → 整库备份+幂等结构升级+校验关键列（都在重启前）→ 保证 MySQL/Redis 就绪 → 重启 i9-api → 健康检查 → reload nginx。开关：`--skip-pull`、`--skip-backup`、`--skip-build`。
 - **本地构建发版**（服务器仅 2GB 内存、曾因连续构建 OOM 杀过 mysqld——服务器不再承担构建）：开发机 `bash infra/scripts/deploy-local.sh`（本地构建+单测→rsync dist→ssh 调 `deploy.sh --skip-pull --skip-build`）。
-- 首次装机：`bash infra/scripts/setup.sh`；回滚：`rollback.sh <commit>`（只回代码，结构只增不减）；体检：`health.sh`；备份：`backup.sh`（含 uploads 打包）；清库：`clean-db.sh`（交付前清业务数据）。
+- 首次装机：`bash infra/scripts/setup.sh`；回滚：`rollback.sh <commit>`（只回代码，结构只增不减）；体检：`health.sh`；备份：`backup.sh`（每日 03:00：数据库留 30 天、uploads 整包留 7 天；`--db-only` 只备库不清理，发版前用）；清库：`clean-db.sh`（交付前清业务数据）。
 - 运维脚本全在 `infra/scripts/`。已知坑（勿回退）：探活别用 `curl -f`（`/api/v1` 无根路由返回 404）；Redis 探活用 `redis-cli --no-auth-warning`；systemd 判定用 `systemctl cat`。
 - 环境变量模板 `.env.example` → 复制为 `.env.production`：`DB_* / REDIS_* / JWT_SECRET(≥32位) / UPLOAD_ROOT(默认/data/uploads) / WEB_ORIGIN / PORTAL_ORIGIN`。生产强制要求 `WEB_ORIGIN`。上传文件须挂持久卷。
 - CI：`infra/ci/deploy.yml` 是 GitHub Actions 合并即发版模板，**用户已拍板不启用（2026-08-03）**——模板留档参考，别再建议接入。发版一律走开发机 `deploy-local.sh`；它只推 `ecs` 不推 GitHub，**每次发版后需单独 `git push origin main`**。

@@ -73,4 +73,4 @@
 - 引入正式 **migration 体系**（全新装机走 `init.sql`，存量升级走 migration），替掉临时的 `hotfix-schema.sql`。（注：`gen-column-sync.py` 已实现"任意历史库→HEAD"的等效能力，migration 紧迫性降低）
 - 把 `deep-test.sh` **真机门禁接进部署/CI**——连真库没跑通不许发版。
 - ~~GitHub Actions merge→deploy~~ **用户拍板不做（2026-08-03），已从待办移除——别再建议启用它。** 模板 `infra/ci/deploy.yml` 留在仓库供日后参考，但不启用。**发版方式维持现状**：开发机跑 `infra/scripts/deploy-local.sh`（本地构建 → rsync 产物 → ssh 调 `deploy.sh --skip-pull --skip-build`）。**它只 `git push ecs main`、不推 GitHub**，所以**每次发版后必须单独 `git push origin main`**（凭据走 macOS keychain，已存条目可非交互推），否则 GitHub 上的备份会一直落后。
-- 运维 P0：**异地备份 + HTTPS + 恢复演练 + 告警**。`backup.sh` 已补上传文件打包（`uploads_*.tar.gz`，2026-07-10）；但备份仍只在本机（实例挂了陪葬），异地推送需配 OSS/rclone。
+- 运维 P0：**异地备份 + HTTPS + 恢复演练 + 告警**。`backup.sh` 已补上传文件打包（`uploads_*.tar.gz`，2026-07-10；2026-09-17 起附件包只留 7 天、发版前只备数据库）；但备份仍只在本机（实例挂了陪葬），异地推送需配 OSS/rclone。

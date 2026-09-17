@@ -18,7 +18,13 @@
 > 【为什么不是简单放开角色】改成 `@Roles(BUSINESS)` 等于所有业务都能看；把他提成主管等于把整套管理权限一起给出去。系统里其实早有账号级开关 `sys_user.menu_keys`（账号管理里逐项勾选），但它**只管前端**——菜单给了、点进去仍 403。
 > 【做法】新增 `MenuGuard` + `@MenuAccess('feedbacks')`，把**同一套** `resolveMenuKeys` 口径接到接口层（两处规则一旦分叉就会出现「侧栏有、点进去没有」）；`JwtStrategy` 的 `select` 顺带取 `menu_keys`（本来每请求就查这一行，不增加查询，且改完菜单**立刻生效**不必重登）；路由 `/feedbacks` 由 `meta.admin` 改为 `meta.menu='feedbacks'`。**只开「查」**：列表与导出走菜单授权，**回复 / 标记已处理仍限 ADMIN/主管**，页面上对只读账号直接不渲染那一列（按钮摆着点下去只会 403）。King 的账号菜单已在生产配好（业务默认菜单 + `feedbacks`）。api jest **465**（+9）；**变异测试 4 次**全部如期变红。
 
-> 最新：**9-16 拉反馈：#139/#140 EVA（列表筛选条件、列宽回来就丢）、#141 Amanda（新账号选不了客户）、#142 Nina（导入样衣带出别家中间商的买家且清不掉）、#143 YSM（PDF 存不了）已修并上线**。
+> 最新：**9-17 生产体检 + 备份脚本改保留策略（老板「备份清一下」→ 选了「改备份脚本，防止再涨回去」，没有让手工删）**。
+> **体检结论**：全部组件正常、78 天未重启、近 7 天 0 个 5xx；磁盘 40G 用 22G，其中 `/data/backups` 占 11G——63 份数据库备份才 22M，63 份 `uploads_*.tar.gz` 占 11G（每份是 /data/uploads 完整副本，已 255M/份；每天 03:00 一份 + 每次发版 deploy.sh 调 backup.sh 再打一份，全部留 30 天）。长期风险不变：备份只在本机、全站 http 无 https。
+> **改动**：`backup.sh` 数据库备份仍留 `RETAIN_DAYS`（30）天；附件包改留 `UPLOADS_RETAIN_DAYS`（7）天；新增 `--db-only`（只备库、不打附件包、**不清理任何旧备份**），`deploy.sh` 升级前改用它；清理只在本次备份成功后做（附件包打成功才删旧附件包），只认脚本自己的文件名（手工快照 `contract_before_*` 等不动）；数据库备份解压为空时删掉空文件并以非 0 退出、不清理。`BACKUP_DIR` 可用环境变量覆盖（为测试）。
+> **验证**：在服务器 /tmp 沙箱里用假 docker、假备份（touch 成 3/8/20 天、10/31/40 天）跑了三种情况，15 项断言全过（发版模式不打包不删；每日模式删 8/20 天附件包与 31/40 天库备份、留 3 天附件包/10 天库备份/手工快照，新包可解、新库备份完整；空库备份非 0 退出且目录前后一致）；沙箱已删。
+> **生效时间**：cron 不用改。**9-18 03:00 那次例行备份会第一次按 7 天清附件包**，按 9-17 的目录估算会删掉 9-10 03:00 之前的附件包（数量与大小见发版后核对）。老板若想保留，3 点前把 `UPLOADS_RETAIN_DAYS` 调大或暂停 cron。
+
+> 前一轮：**9-16 拉反馈：#139/#140 EVA（列表筛选条件、列宽回来就丢）、#141 Amanda（新账号选不了客户）、#142 Nina（导入样衣带出别家中间商的买家且清不掉）、#143 YSM（PDF 存不了）已修并上线**。
 > **#139/#140**：根因是 MainLayout `<component :key="$route.fullPath">`，每次切路由列表页整体重建（key 不能去，见其注释），没上 keep-alive。新增 `utils/listState.ts`：`useListState(key, {query, 日期范围 ref, showAdvanced…}, {omit})` 把筛选条件/页码存 sessionStorage、重建时同步还原（路由带查询参数=从别的单据跳来时不还原；只由跳转带入、没输入框的字段如付款页 `reconcile_id` 用 omit 排除）；`useColumnWidths(key, existingRef?)` 接 el-table `@header-dragend` 把拖过的列宽按表头文字存 localStorage，onMounted 后改 `store.states.columns` 的 width/realWidth 再 doLayout（与 element-plus 拖动时同一做法）。接入 11 个列表页（报价/样衣/订单/合同/客户/工厂/对账/付款两张表/结算/反馈/错误日志）。守卫 `list-state-guard.spec.ts`：凡有 `query = reactive(` 的 *ListView 必须接这两个。`listState.spec.ts` 用真 el-table 验证列宽套回。
 > **#141**：不是缺陷——Amanda 9-15 11:13 新开账号，自建客户 0、授权 0，客户属机密单据按授权可见。改动只是让下拉说清原因：报价、样衣页的中间商/最终买家下拉空时显示「客户资料要主管在「客户管理」里给你授权后才会出现」（管理员显示「请先新建」），`utils/customerEmptyHint.ts`。**Amanda 仍需老板/主管授权客户，授哪些由老板定，生产库未动。**
 > **#142**：报价 Q-20260915-038 中间商是晋江必迪斯(1)，导入的样衣 S-20260811-004 挂在 BDS(25) 下且**确实记着买家 SV(26)**（EVA 8-11 建单时填的，Nina 说"没填"与库不符），`onSample` 无条件把样衣买家带进来。改：报价已有中间商且与样衣不同则不带买家并提示。「清不掉」是 undefined=不改老问题：`buildDto` 的 `buyerId`/`sampleId` 改发 `?? null`（`middlemanId` 不改：`quotation.customer_id NOT NULL`）。QuoteEditView.spec +3。报价 250 上的 SV 没替她清，她刷新后可自己清。
@@ -358,6 +364,7 @@
 
 ## 最近变更（新→旧，保留最近若干条）
 
+- （本次·**备份保留策略**）`chore(ops)` backup.sh 附件整包留 7 天（库备份仍 30 天），新增 `--db-only` 供 deploy.sh 发版前用（不打包不清理），清理挂在本次备份成功之后、空库备份中止；服务器沙箱 15 项断言全过。**零业务代码改动**。
 - （本次·**9-16 反馈 #139–#143**）`feat/fix(web)` 列表页记住筛选条件（sessionStorage）与列宽（localStorage），11 个列表 + 守卫；客户下拉空时说明需授权；报价导入样衣不带别家中间商的买家、买家/样衣可清空；四个打印窗口加「打印 / 保存为 PDF」条。web **632**（+25），变异 6 次全红。**零后端改动、零 DB 结构变更**。
 - （本次·**9-14 反馈 #136/#137/#138**）`fix(web)` FileUpload 列表型每行常驻「删除」；报价明细「复制行」落原行正下方；预付款加付款状态列、冲抵口径列名。web **607**（+4），变异红 2。**零后端改动、零 DB 结构变更**。#135 方案待拍板。
 - （本次·**#133/#134 预付款申请人 + 水单**）`feat(api,web,sql)` **schema：`prepayment.slip_url VARCHAR(500) NULL`**（init.sql + gen-column-sync 重生成）；建档带水单 / `PATCH /payments/prepayments/:id/slip` 事后挂；列表加申请人、水单两列与传水单动作；Excel 导出补申请人名字与水单状态。api **520**（+3），变异红。

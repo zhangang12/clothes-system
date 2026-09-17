@@ -182,7 +182,8 @@ if command -v docker &>/dev/null && has_container "$MYSQL_CONTAINER" --all; then
   else
     log "升级前整库备份..."
     if [[ -x "$APP_DIR/infra/scripts/backup.sh" ]]; then
-      bash "$APP_DIR/infra/scripts/backup.sh" >/dev/null || die "备份失败，已中止（未改动数据库）"
+      # --db-only：升级只动库结构，只备数据库；不打附件包、不清理旧备份（清理只在每日 03:00 例行备份里做）
+      bash "$APP_DIR/infra/scripts/backup.sh" --db-only >/dev/null || die "备份失败，已中止（未改动数据库）"
     else
       TS=$(date '+%Y%m%d_%H%M%S'); mkdir -p /data/backups
       docker exec "$MYSQL_CONTAINER" mysqldump -uroot -p"${MYSQL_ROOT_PASSWORD}" \
