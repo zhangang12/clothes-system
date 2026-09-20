@@ -18,3 +18,13 @@ export function fmtDate(v: unknown): string {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
+
+/**
+ * 今天（浏览器本地时区）的 YYYY-MM-DD。表单默认日期一律用它，
+ * 别写 new Date().toISOString().slice(0,10)——那是 UTC 日期，早上 8 点前会少一天（2026-09-20 审查）。
+ */
+export function todayStr(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}

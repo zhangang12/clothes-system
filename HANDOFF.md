@@ -373,6 +373,7 @@
 
 ## 最近变更（新→旧，保留最近若干条）
 
+- （进行中·**审查 161 条并行修复批**，老板 9-20 指令「别等我排，派多路并行修复和验证，别改出次生问题，关注体验」）先入库共享工具：`api/common/utils/local-date.ts`（todayLocal/toLocalDateStr/dateColToStr）与 web `format.todayStr()`，8 路按文件归属并行修（G1 订单 / G2 合同+脱敏 / G3 报价样衣 / G4 客户工厂安全 / G5 付款结算 / G6 对账门户发票 / G7 前端单据页 / G8 前端资金页与组件），任务与规则在会话 scratchpad `audit/tasks/`，结果 `audit/results/`；主线做集成、全量回归、变异抽查、发版。
 - （本次·**全系统审查 161 条 + 修 1 条回归**）`fix(api)` generateFromOrder 的同名拆分闸改查 allRows（#128 分批引入的绕过），UT-CON-50，变异红；`docs/审查-缺陷清单-2026-09-20.html` 入库。api **528**（+1）。其余 160 条只列不修、等排优先级。
 - （本次·**9-20 反馈 #144/#145**）`fix(api)` 报价与样衣比对同名多行按序配对，消除误标「已偏离样衣」；`feat(api,web,sql)` **schema：`prepayment.statement_url`**，预付款可传/换/清对账单附件（图片/PDF/Excel 多份），列表与导出同步。api **527**（+7），变异红 2。
 - （本次·**备份保留策略**）`chore(ops)` backup.sh 附件整包留 7 天（库备份仍 30 天），新增 `--db-only` 供 deploy.sh 发版前用（不打包不清理），清理挂在本次备份成功之后、空库备份中止；服务器沙箱 15 项断言全过。**零业务代码改动**。
