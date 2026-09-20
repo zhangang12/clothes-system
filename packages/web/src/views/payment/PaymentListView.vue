@@ -81,6 +81,16 @@
               <span v-else class="muted">—</span>
             </template>
           </el-table-column>
+          <!-- #145 daisy：供应商对账单（图片/PDF/Excel，可多份），逐份点开看 -->
+          <el-table-column label="对账单" width="96" align="center">
+            <template #default="{ row }">
+              <template v-if="filesOf(row.statement_url).length">
+                <el-link v-for="(u, i) in filesOf(row.statement_url)" :key="u" type="primary" style="margin-right:6px"
+                  @click="preview?.open(u, '对账单')">{{ filesOf(row.statement_url).length > 1 ? `第${i + 1}份` : '查看' }}</el-link>
+              </template>
+              <span v-else class="muted">—</span>
+            </template>
+          </el-table-column>
           <el-table-column prop="remark" label="备注" />
           <el-table-column label="创建时间" width="150">
             <template #default="{ row }">{{ fmtDateTime(row.created_at) }}</template>
@@ -89,6 +99,7 @@
             <template #default="{ row }">
               <el-button link size="small" @click="exportPrepayRow(row)">导出Excel</el-button>
               <el-button v-if="canUploadSlip" link type="primary" size="small" @click="openPrepaySlip(row)">{{ row.slip_url ? '换水单' : '传水单' }}</el-button>
+              <el-button v-if="canUploadSlip" link type="primary" size="small" @click="openPrepayStatement(row)">{{ row.statement_url ? '换对账单' : '传对账单' }}</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -353,6 +364,9 @@
         <el-form-item label="银行水单">
           <FileUpload v-model="prepayForm.slip_url" :limit="1" accept="image/*,.pdf" list-type="text" sensitive tip="预付款的银行回单/截图（#134）；也可登记后在列表里补传" />
         </el-form-item>
+        <el-form-item label="对账单">
+          <FileUpload v-model="prepayForm.statement_url" :limit="5" multiple accept="image/*,.pdf,.xlsx,.xls,.csv" list-type="text" sensitive tip="供应商对账单，图片 / PDF / Excel 都可以，最多 5 份；也可登记后在列表里补传" />
+        </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="prepayForm.remark" type="textarea" :rows="2" />
         </el-form-item>
@@ -360,6 +374,23 @@
       <template #footer>
         <el-button @click="createPrepayVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="doCreatePrepay">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 预付款挂/换对账单附件（#145）：只写附件，不动金额与余额 -->
+    <el-dialog v-model="prepayStatementVisible" title="预付款对账单" width="480px" destroy-on-close>
+      <el-descriptions :column="2" border size="small" style="margin-bottom:12px">
+        <el-descriptions-item label="工厂">{{ prepayStatementTarget?.factory_name || ('工厂#' + prepayStatementTarget?.factory_id) }}</el-descriptions-item>
+        <el-descriptions-item label="预付金额">{{ prepayStatementTarget ? (+prepayStatementTarget.amount).toFixed(2) : '—' }}</el-descriptions-item>
+      </el-descriptions>
+      <el-form label-width="90px">
+        <el-form-item label="对账单">
+          <FileUpload v-model="prepayStatementUrl" :limit="5" multiple accept="image/*,.pdf,.xlsx,.xls,.csv" list-type="text" sensitive tip="图片 / PDF / Excel 都可以，最多 5 份；删光后保存即清除" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="prepayStatementVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="doAttachPrepayStatement">保存对账单</el-button>
       </template>
     </el-dialog>
 
@@ -624,6 +655,7 @@ const prepayForm = reactive({
   style_no: '',
   remark: '',
   slip_url: '', // #134
+  statement_url: '', // #145 对账单附件（可多份）
 });
 const prepayRules: FormRules = {
   factory_id: [{ required: true, message: '请选择工厂', trigger: 'change' }],
@@ -634,13 +666,33 @@ const prepayRules: FormRules = {
 function onPrepayPickContract(c: any) { if (c?.factory_id) prepayForm.factory_id = Number(c.factory_id); }
 function openCreatePrepay() { createPrepayVisible.value = true; }
 function resetPrepayForm() {
-  Object.assign(prepayForm, { factory_id: undefined, contract_id: undefined, amount: undefined, pay_date: '', style_no: '', remark: '', slip_url: '' });
+  Object.assign(prepayForm, { factory_id: undefined, contract_id: undefined, amount: undefined, pay_date: '', style_no: '', remark: '', slip_url: '', statement_url: '' });
 }
 // #134：给已登记的预付款挂/换水单
 const prepaySlipVisible = ref(false);
 const prepaySlipTarget = ref<any>(null);
 const prepaySlipUrl = ref('');
 function openPrepaySlip(row: any) { prepaySlipTarget.value = row; prepaySlipUrl.value = row.slip_url ?? ''; prepaySlipVisible.value = true; }
+// #145：对账单附件（多份逗号分隔）
+const filesOf = (v: unknown): string[] => String(v ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+const prepayStatementVisible = ref(false);
+const prepayStatementTarget = ref<any>(null);
+const prepayStatementUrl = ref('');
+function openPrepayStatement(row: any) {
+  prepayStatementTarget.value = row;
+  prepayStatementUrl.value = row.statement_url ?? '';
+  prepayStatementVisible.value = true;
+}
+async function doAttachPrepayStatement() {
+  saving.value = true;
+  try {
+    await prepaymentApi.attachStatement(prepayStatementTarget.value.id, prepayStatementUrl.value);
+    ElMessage.success(prepayStatementUrl.value ? '对账单已保存' : '已清除对账单');
+    prepayStatementVisible.value = false;
+    loadPrepay();
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? '保存对账单失败'); }
+  finally { saving.value = false; }
+}
 async function doAttachPrepaySlip() {
   if (!prepaySlipUrl.value) { ElMessage.warning('请先上传水单'); return; }
   saving.value = true;

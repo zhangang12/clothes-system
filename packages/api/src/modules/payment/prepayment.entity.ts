@@ -34,6 +34,11 @@ export class Prepayment {
   @Column({ length: 500, nullable: true })
   slip_url: string;
 
+  // 供应商对账单（2026-09-20 #145 daisy：「预付款申请单那里需要加一个可以上传对账单的按钮，
+  // 对账单有图片也有 excel 格式」）。多份逗号分隔，与其它附件字段同口径
+  @Column({ length: 1000, nullable: true })
+  statement_url: string;
+
   @Column({ type: 'bigint' })
   created_by: number;
 

@@ -10,6 +10,9 @@ export const prepaymentApi = {
   // #134：给已登记的预付款挂/换银行水单
   attachSlip: (id: number, slipUrl: string) =>
     http.patch<unknown, any>(`/payments/prepayments/${id}/slip`, { slip_url: slipUrl }),
+  // #145：给已登记的预付款挂/换对账单附件（传空串清除）
+  attachStatement: (id: number, statementUrl: string) =>
+    http.patch<unknown, any>(`/payments/prepayments/${id}/statement`, { statement_url: statementUrl }),
 };
 
 export const paymentRequestApi = {

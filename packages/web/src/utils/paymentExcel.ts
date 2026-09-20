@@ -109,6 +109,7 @@ export function exportPrepaymentExcel(detail: any): void {
     ['申请人', detail.created_by_name || uid(detail.created_by)],
     ['制单日期', d10(detail.created_at)],
     ['银行水单', detail.slip_url ? '已上传' : '未上传'], // #134
+    ['对账单', detail.statement_url ? `已上传 ${String(detail.statement_url).split(',').filter(Boolean).length} 份` : '未上传'], // #145
     ['备注', detail.remark],
   ];
 

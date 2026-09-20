@@ -207,10 +207,28 @@ export class QuoteService {
     // 行级标记(P2#20):耗用偏离样衣实测「已偏离样衣」/样衣未实测「单耗为预估」
     let outItems: any[] = items;
     if (quote.sample_id) {
-      const mats = await this.sampleMaterialRepo.find({ where: { sample_id: quote.sample_id } });
-      const byName = new Map(mats.map((m) => [String(m.item_name || '').trim(), m]));
+      const mats = await this.sampleMaterialRepo.find({
+        where: { sample_id: quote.sample_id }, order: { sort_order: 'ASC', id: 'ASC' },
+      });
+      // 【同名多行按出现顺序一一对应】(2026-09-20 #144 EVA：「从样品直接生成的报价单，为什么会出现偏离提醒？」)
+      // 原来是 name → 单条 的 Map，同名多行只留最后一条：样衣里「5号尼龙反装闭口cm葫芦头」两行(2条/1条)，
+      // 报价照搬也是两行(2/1)，第一行 2 却被拿去和最后那条 1 比，于是数量明明一致却标「已偏离样衣」。
+      // 与合同侧 linkOrderMaterials 同一口径：按出现顺序配对，样衣侧行数不够就不猜、不标。
+      const byName = new Map<string, typeof mats>();
+      for (const m of mats) {
+        const k = String(m.item_name || '').trim();
+        if (!k) continue;
+        if (!byName.has(k)) byName.set(k, [] as typeof mats);
+        byName.get(k)!.push(m);
+      }
+      const seen = new Map<string, number>();
       outItems = items.map((it) => {
-        const m = byName.get(String(it.item_name || '').trim());
+        const k = String(it.item_name || '').trim();
+        const list = byName.get(k);
+        if (!list?.length) return it;
+        const idx = seen.get(k) ?? 0;
+        seen.set(k, idx + 1);
+        const m = list[idx];
         if (!m) return it;
         const sampleUsage = m.actual_usage != null ? +m.actual_usage : (m.qty != null ? +m.qty : null);
         return {

@@ -37,6 +37,7 @@ export class PaymentService {
       pay_date: dto.pay_date as any,
       style_no: dto.style_no ?? null,
       slip_url: dto.slip_url?.trim() || null, // #134：'' 也落 null，别存空串
+      statement_url: dto.statement_url?.trim() || null, // #145 对账单附件（可多份）
       remark: dto.remark ?? null,
       created_by: createdBy,
     });
@@ -50,6 +51,17 @@ export class PaymentService {
     const p = await this.prepayRepo.findOne({ where: { id } });
     if (!p) throw new NotFoundException(`预付款 #${id} 不存在`);
     p.slip_url = url;
+    return this.prepayRepo.save(p);
+  }
+
+  /**
+   * 给已登记的预付款挂/换对账单附件（2026-09-20 #145 daisy）。与水单同样只写附件那一列，
+   * 金额/余额/日期不动；传空串表示清掉附件（业务传错了要能撤）。
+   */
+  async attachPrepayStatement(id: number, statementUrl: string): Promise<Prepayment> {
+    const p = await this.prepayRepo.findOne({ where: { id } });
+    if (!p) throw new NotFoundException(`预付款 #${id} 不存在`);
+    p.statement_url = String(statementUrl ?? '').trim() || (null as any);
     return this.prepayRepo.save(p);
   }
 

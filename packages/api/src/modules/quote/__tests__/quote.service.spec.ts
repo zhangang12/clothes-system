@@ -220,4 +220,57 @@ describe('报价机密行级安全 (H4/H6)', () => {
       await expect(service.create({ items: [] } as any, 1)).rejects.toThrow('中间商与最终买家至少填一个');
     });
   });
+
+  describe('「已偏离样衣」标记（#144 EVA：从样衣直接生成的报价也报偏离）', () => {
+    // 生产实况：样衣 109 里「5号尼龙反装闭口cm葫芦头」有两行（2 条 / 1 条），报价照搬也是两行。
+    // 旧实现 name→单条 Map 只留最后一条，第一行 2 被拿去和 1 比，于是数量一致却标偏离。
+    const mkQuote = () => ({ id: 261, customer_id: 1, buyer_id: null, sample_id: 109, status: QuoteStatus.DRAFT });
+    const findOne = async () => {
+      mockQuoteRepo.findOne.mockResolvedValue(mkQuote());
+      mockCustomerService.visibleCustomerIds.mockResolvedValue(null);
+      return (await service.findOne(261, { id: 1, role: 'ADMIN' })) as any;
+    };
+    const flags = (r: any) => r.items.map((i: any) => [i.item_name, i.quote_usage, !!i.deviated_from_sample]);
+
+    it('同名多行按顺序配对：数量一一对上就不标偏离', async () => {
+      mockItemRepo.find.mockResolvedValue([
+        { item_name: '葫芦头拉链', quote_usage: 2 }, { item_name: '葫芦头拉链', quote_usage: 1 }, { item_name: '主标', quote_usage: 1 },
+      ]);
+      mockSampleMaterialRepo.find.mockResolvedValue([
+        { item_name: '葫芦头拉链', qty: 2, actual_usage: null }, { item_name: '葫芦头拉链', qty: 1, actual_usage: null }, { item_name: '主标', qty: 1, actual_usage: null },
+      ]);
+      expect(flags(await findOne())).toEqual([['葫芦头拉链', 2, false], ['葫芦头拉链', 1, false], ['主标', 1, false]]);
+    });
+
+    it('真的对不上才标：第二行改了量就只标第二行', async () => {
+      mockItemRepo.find.mockResolvedValue([
+        { item_name: '葫芦头拉链', quote_usage: 2 }, { item_name: '葫芦头拉链', quote_usage: 5 },
+      ]);
+      mockSampleMaterialRepo.find.mockResolvedValue([
+        { item_name: '葫芦头拉链', qty: 2, actual_usage: null }, { item_name: '葫芦头拉链', qty: 1, actual_usage: null },
+      ]);
+      expect(flags(await findOne())).toEqual([['葫芦头拉链', 2, false], ['葫芦头拉链', 5, true]]);
+    });
+
+    it('报价里多出来的同名行：样衣侧没有对应行就不猜、不标', async () => {
+      mockItemRepo.find.mockResolvedValue([
+        { item_name: '葫芦头拉链', quote_usage: 2 }, { item_name: '葫芦头拉链', quote_usage: 1 }, { item_name: '葫芦头拉链', quote_usage: 9 },
+      ]);
+      mockSampleMaterialRepo.find.mockResolvedValue([
+        { item_name: '葫芦头拉链', qty: 2, actual_usage: null }, { item_name: '葫芦头拉链', qty: 1, actual_usage: null },
+      ]);
+      const r = await findOne();
+      expect(flags(r)).toEqual([['葫芦头拉链', 2, false], ['葫芦头拉链', 1, false], ['葫芦头拉链', 9, false]]);
+      expect(r.items[2].sample_usage).toBeUndefined(); // 没配到行的，连参考值都不给
+    });
+
+    it('样衣实测值优先于预估量，且按样衣的排序取行', async () => {
+      mockItemRepo.find.mockResolvedValue([{ item_name: '面料', quote_usage: 1.5 }]);
+      mockSampleMaterialRepo.find.mockResolvedValue([{ item_name: '面料', qty: 1.2, actual_usage: 1.5 }]);
+      const r = await findOne();
+      expect(r.items[0].deviated_from_sample).toBe(false);
+      expect(r.items[0].usage_is_estimate).toBe(false);
+      expect(mockSampleMaterialRepo.find).toHaveBeenCalledWith(expect.objectContaining({ order: { sort_order: 'ASC', id: 'ASC' } }));
+    });
+  });
 });

@@ -17,6 +17,7 @@ describe('#130 水单/收汇权限矩阵', () => {
     for (const [ctrl, method] of [
       [PaymentController, 'attachSlip'],
       [PaymentController, 'attachPrepaySlip'],
+      [PaymentController, 'attachPrepayStatement'],
       [SettlementController, 'addReceipt'],
       [ExportInvoiceController, 'addReceipt'],
     ] as const) {

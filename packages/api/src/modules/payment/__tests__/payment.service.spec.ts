@@ -768,6 +768,33 @@ describe('PaymentService', () => {
     expect(mockPrepayRepo.findOne).not.toHaveBeenCalled();
   });
 
+  // UT-PAY-PRE-STMT-01～03（#145 daisy：预付款要能传供应商对账单，图片/Excel 都有）
+  it('UT-PAY-PRE-STMT-01 createPrepayment 带上对账单附件（多份逗号分隔）；空串落 null', async () => {
+    mockPrepayRepo.save.mockImplementationOnce(async (v: any) => v);
+    const withDoc: any = await service.createPrepayment({ factory_id: 5, amount: 100, pay_date: '2026-09-20', statement_url: ' /uploads/a.xlsx,/uploads/b.jpg ' } as any, 1);
+    expect(withDoc.statement_url).toBe('/uploads/a.xlsx,/uploads/b.jpg');
+    mockPrepayRepo.save.mockImplementationOnce(async (v: any) => v);
+    const none: any = await service.createPrepayment({ factory_id: 5, amount: 100, pay_date: '2026-09-20', statement_url: '' } as any, 1);
+    expect(none.statement_url).toBeNull();
+  });
+
+  it('UT-PAY-PRE-STMT-02 attachPrepayStatement 只写附件列，金额/余额/水单不动；传空串可清除', async () => {
+    const row = { id: 9, amount: 100, used_amount: 30, balance: 70, slip_url: '/uploads/slip.jpg', statement_url: null };
+    mockPrepayRepo.findOne.mockResolvedValueOnce({ ...row });
+    mockPrepayRepo.save.mockImplementationOnce(async (v: any) => v);
+    const saved: any = await service.attachPrepayStatement(9, '/uploads/duizhang.xlsx');
+    expect(saved).toMatchObject({ id: 9, amount: 100, used_amount: 30, balance: 70, slip_url: '/uploads/slip.jpg', statement_url: '/uploads/duizhang.xlsx' });
+    mockPrepayRepo.findOne.mockResolvedValueOnce({ ...row, statement_url: '/uploads/duizhang.xlsx' });
+    mockPrepayRepo.save.mockImplementationOnce(async (v: any) => v);
+    const cleared: any = await service.attachPrepayStatement(9, '  ');
+    expect(cleared.statement_url).toBeNull();
+  });
+
+  it('UT-PAY-PRE-STMT-03 attachPrepayStatement 预付款不存在 → 404', async () => {
+    mockPrepayRepo.findOne.mockResolvedValueOnce(null);
+    await expect(service.attachPrepayStatement(404, '/uploads/x.xlsx')).rejects.toThrow(NotFoundException);
+  });
+
   // UT-PAY-SLIP-01～04（#130 老板 9-09 拍板 A1）：只挂水单、不记账
   it('UT-PAY-SLIP-01 attachSlip 给已批准的申请挂水单：只写 slip_url，状态/paid_by/实际付款时间都不动', async () => {
     const pr = makePR({ approval_status: PaymentApprovalStatus.APPROVED, slip_url: null, paid_by: null, slip_uploaded_at: null });

@@ -24,4 +24,7 @@ export class CreatePrepaymentDto {
 
   // 银行水单（#134）：建档时可带，也可事后挂
   @IsOptional() @IsString() @MaxLength(500) slip_url?: string;
+
+  // 对账单附件（#145）：图片/PDF/Excel，多份逗号分隔
+  @IsOptional() @IsString() @MaxLength(1000) statement_url?: string;
 }

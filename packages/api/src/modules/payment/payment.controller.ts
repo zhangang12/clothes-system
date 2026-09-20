@@ -51,6 +51,14 @@ export class PaymentController {
     return this.service.attachPrepaySlip(id, dto.slip_url);
   }
 
+  // #145：预付款挂对账单附件（图片/PDF/Excel，可多份）。与挂水单同一批角色
+  @Patch('prepayments/:id/statement')
+  @Roles(...PAYMENT_SLIP_ROLES)
+  @ApiOperation({ summary: '给预付款挂/换对账单附件（不改金额与余额；传空串可清除）' })
+  attachPrepayStatement(@Param('id', ParseIntPipe) id: number, @Body('statement_url') statementUrl: string) {
+    return this.service.attachPrepayStatement(id, statementUrl);
+  }
+
   @Get('prepayments/balance')
   @Roles(UserRole.ADMIN, UserRole.FINANCE, UserRole.BUSINESS)
   @ApiOperation({ summary: '查询工厂预付款余额（管理员/主管/财务/业务）' })
