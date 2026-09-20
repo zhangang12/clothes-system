@@ -33,8 +33,13 @@ function cellText(v: any): string {
   return String(v);
 }
 
-export async function parseXlsx(buf: ArrayBuffer): Promise<SheetData[]> {
+/**
+ * @param opts.maxRows 行数上限（默认 200，给附件预览定的）。导入链复用本函数时要传更大的值，
+ *   否则 230 行的报价表只进 200 行，还只提示「已解析 200 行」（B095）；超限仍会标 truncated。
+ */
+export async function parseXlsx(buf: ArrayBuffer, opts: { maxRows?: number } = {}): Promise<SheetData[]> {
   if (buf.byteLength > MAX_BYTES) throw new Error('文件超过 15MB，请下载后查看');
+  const maxRows = opts.maxRows ?? MAX_ROWS;
   const ExcelJS = await import('exceljs');
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buf);
@@ -42,7 +47,7 @@ export async function parseXlsx(buf: ArrayBuffer): Promise<SheetData[]> {
   const sheets: SheetData[] = [];
   wb.eachSheet((ws) => {
     const rows: string[][] = [];
-    const limit = Math.min(ws.rowCount, MAX_ROWS);
+    const limit = Math.min(ws.rowCount, maxRows);
     for (let r = 1; r <= limit; r++) {
       const row = ws.getRow(r);
       const cells: string[] = [];
@@ -51,7 +56,7 @@ export async function parseXlsx(buf: ArrayBuffer): Promise<SheetData[]> {
       // 整行空白不进预览
       if (cells.some((x) => x !== '')) rows.push(cells);
     }
-    sheets.push({ name: ws.name, rows, truncated: ws.rowCount > MAX_ROWS });
+    sheets.push({ name: ws.name, rows, truncated: ws.rowCount > maxRows });
   });
   if (!sheets.length) throw new Error('未读到任何工作表');
   return sheets;

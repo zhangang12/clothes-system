@@ -1,7 +1,14 @@
 // 材料电子表格导入（用户反馈：样衣材料管理需要可以上传电子表格）
 // 兼容工厂自有工艺单格式：不定列序、带表头/分区行——靠「列映射」而不是固定模板。
 // .xlsx 走 exceljs（动态 import，复用 sheetPreview 的解析）；.csv 按文本（逗号/制表符/分号）。
+import { ElMessage } from 'element-plus';
 import { parseXlsx, MAX_SHEET_BYTES } from './sheetPreview';
+import { decodeSheetText } from './sheetGrid';
+
+/** 导入侧的行数上限。parseXlsx 默认的 200 行是给「附件预览」定的（防止浏览器卡死），
+ *  导入一份 230 行的报价表却只进 200 行、还只提示「已解析 200 行」（B095）。
+ *  这里放到 2000 行：工艺单/报价明细远到不了，真到了也会明确告诉用户被截断。 */
+export const IMPORT_MAX_ROWS = 2000;
 
 export interface SheetField { key: string; label: string; keywords: RegExp; required?: boolean }
 
@@ -64,52 +71,76 @@ export async function parseSheetFile(file: File, fields: SheetField[] = MATERIAL
         + '或把明细单独另存为 .csv 再导入。',
       );
     }
-    const buf = await file.arrayBuffer();
-    const sheets = await parseXlsx(buf);
-    let best: string[][] = sheets[0]?.rows ?? [];
+    const buf = await readBytes(file);
+    const sheets = await parseXlsx(buf, { maxRows: IMPORT_MAX_ROWS });
+    let best = sheets[0];
     let bestHits = -1;
     for (const s of sheets) {
       const hits = guessMapping(s.rows, fields).hits;
-      if (hits > bestHits) { bestHits = hits; best = s.rows; }
+      if (hits > bestHits) { bestHits = hits; best = s; }
     }
-    return best;
+    // 被截断必须说出来（B095）：否则用户看到「已解析 2000 行」以为全进来了
+    if (best?.truncated) {
+      ElMessage.warning(`表格超过 ${IMPORT_MAX_ROWS} 行，只导入了前 ${IMPORT_MAX_ROWS} 行——请拆成多份分别导入`);
+    }
+    return best?.rows ?? [];
   }
   if (/\.(csv|txt)$/i.test(file.name)) {
-    const text = await readText(file);
-    return text
-      .split(/\r?\n/)
-      .filter((l) => l.trim() !== '')
-      .map(splitCsvLine);
+    // 中文 Windows 的 Excel「另存为 CSV」默认写 GBK，按 UTF-8 读出来品名整片是问号、「导入 0 行」（B094）；
+    // 与 sheetGrid 同一套做法：先 UTF-8，出现替换字符再按 GBK 读一遍
+    const text = decodeSheetText(await readBytes(file));
+    return parseCsvText(text);
   }
   throw new Error('仅支持 .xlsx / .csv 文件');
 }
 
-// CSV 行切分：尊重引号包裹（"帽子,大身" 不被拆开）、转义双引号（""→"）；制表符/分号/逗号自适应
-function splitCsvLine(line: string): string[] {
-  const sep = line.includes('\t') ? '\t' : (!line.includes(',') && line.includes(';') ? ';' : ',');
-  const out: string[] = [];
-  let cur = '', inQ = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
+/**
+ * CSV 文本 → 行数组。制表符/分号/逗号**逐行**自适应（工厂发来的文件里两种分隔符混用也见过）；
+ * 引号包裹内的分隔符与换行原样保留（"帽子,\n大身" 不断行）、转义双引号（""→"）；
+ * **只有字段开头的引号才进入引号态**——字段中间的引号（5" 拉链）当普通字符，
+ * 否则整行后文被吞进这一格（B148，与 parseTable.ts 同口径）；空行剔除、单元格 trim。
+ */
+export function parseCsvText(text: string): string[][] {
+  const src = text.replace(/^\ufeff/, '');
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cur = '';
+  let inQ = false;
+  let sep: string | null = null; // 每一行开头按该行内容判分隔符
+  const pickSep = (from: number): string => {
+    const nl = src.indexOf('\n', from);
+    const line = src.slice(from, nl < 0 ? src.length : nl);
+    return line.includes('\t') ? '\t' : (!line.includes(',') && line.includes(';') ? ';' : ',');
+  };
+  const endRow = () => {
+    row.push(cur.trim()); cur = '';
+    if (row.some((x) => x !== '')) rows.push(row);
+    row = []; sep = null;
+  };
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (sep === null) sep = pickSep(i);
     if (inQ) {
-      if (ch === '"') {
-        if (line[i + 1] === '"') { cur += '"'; i++; } else inQ = false;
-      } else cur += ch;
-    } else if (ch === '"') inQ = true;
-    else if (ch === sep) { out.push(cur.trim()); cur = ''; }
-    else cur += ch;
+      if (ch === '"') { if (src[i + 1] === '"') { cur += '"'; i++; } else inQ = false; }
+      else cur += ch;
+    } else if (ch === '"') {
+      if (cur === '') inQ = true; else cur += ch;
+    } else if (ch === sep) { row.push(cur.trim()); cur = ''; }
+    else if (ch === '\n') endRow();
+    else if (ch !== '\r') cur += ch;
   }
-  out.push(cur.trim());
-  return out;
+  if (cur !== '' || row.length) endRow();
+  return rows;
 }
 
-// FileReader 读文本（比 file.text() 兼容面更广）
-function readText(file: File): Promise<string> {
+// FileReader 读字节（jsdom / 老浏览器没有 File.arrayBuffer，FileReader 兼容面最广）
+function readBytes(file: File): Promise<ArrayBuffer> {
+  if (typeof file.arrayBuffer === 'function') return file.arrayBuffer();
   return new Promise((resolve, reject) => {
     const r = new FileReader();
-    r.onload = () => resolve(String(r.result ?? ''));
+    r.onload = () => resolve(r.result as ArrayBuffer);
     r.onerror = () => reject(r.error);
-    r.readAsText(file);
+    r.readAsArrayBuffer(file);
   });
 }
 

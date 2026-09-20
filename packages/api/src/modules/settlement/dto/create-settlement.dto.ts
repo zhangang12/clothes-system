@@ -1,4 +1,4 @@
-import { IsInt, IsPositive, IsNumber, IsOptional, IsString, IsArray, ValidateNested, IsIn, Min, MaxLength } from 'class-validator';
+import { IsInt, IsPositive, IsNumber, IsOptional, IsString, IsArray, ValidateNested, IsIn, Min, Max, MaxLength } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -17,9 +17,12 @@ export class CreateCostLineDto {
   @IsIn([0, 1])
   has_invoice?: number;
 
-  @ApiPropertyOptional({ description: '该行税率%（有票按此换不含税，缺省13）', default: 13 })
+  // B136 同类：税率 0~100，-100 会除以 0
+  @ApiPropertyOptional({ description: '该行税率%（有票按此换不含税，缺省13；0~100）', default: 13 })
   @IsOptional()
   @IsNumber()
+  @Min(0)
+  @Max(100)
   tax_rate?: number;
 }
 

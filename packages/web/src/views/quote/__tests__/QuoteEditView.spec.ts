@@ -24,18 +24,23 @@ vi.mock('vue-router', () => ({
 
 // ── API mock ────────────────────────────────────────────────────────────────
 const mockQuoteGet = vi.fn();
+const mockQuoteCreate = vi.fn();
+const mockImportFromSample = vi.fn();
 vi.mock('@/api/quote', () => ({
   quoteApi: {
     get: (...a: any[]) => mockQuoteGet(...a),
-    create: vi.fn(),
+    create: (...a: any[]) => mockQuoteCreate(...a),
     update: vi.fn(),
     copy: vi.fn(),
     submit: vi.fn(),
     adjust: vi.fn(),
     toContract: vi.fn(),
-    importFromSample: vi.fn(),
+    importFromSample: (...a: any[]) => mockImportFromSample(...a),
   },
 }));
+// errToast 是模块级函数，组件直接从 '@/api' 引入 —— 打成替身才能断言提示文案
+const mockErrToast = vi.fn();
+vi.mock('@/api', async (importOriginal) => ({ ...(await importOriginal<any>()), errToast: (...a: any[]) => mockErrToast(...a) }));
 const mockCustomerList = vi.fn();
 const mockCustomerGet = vi.fn();
 vi.mock('@/api/customer', () => ({
@@ -171,6 +176,74 @@ describe('QuoteEditView 最终买家（#142 Nina：带出了别家中间商的�
     const dto = vm.buildDto();
     expect(dto.buyerId).toBeNull();
     expect(dto.sampleId).toBeNull();
+  });
+});
+
+// ── 2026-09-20 审查 ──────────────────────────────────────────────────────────
+describe('QuoteEditView · 2026-09-20 审查', () => {
+  beforeEach(() => {
+    mockCustomerList.mockResolvedValue({ data: [{ id: 1, customer_no: 'C-001', name: '在列客户' }] });
+    mockSampleList.mockResolvedValue({ data: [] });
+    mockCustomerGet.mockResolvedValue({ data: { id: 1, customer_no: 'C-001', name: '在列客户', contacts: [] } });
+    mockQuoteGet.mockResolvedValue({ data: { ...detail, customer_id: 1, buyer_id: null, sample_id: null, quote_qty: 500, items: [] } });
+  });
+  afterEach(() => { vi.clearAllMocks(); mockRoute.params = { id: '7' }; mockRoute.meta = {}; });
+
+  // ── B111：报价数量清空发 undefined，清不掉 ──
+  it('B111 清空报价数量后保存发 null（发 undefined 后端当「不改」，重开数字还在）', async () => {
+    const vm: any = mountView().vm;
+    await vi.waitFor(() => expect(vm.form.quoteQty).toBe(500));
+    expect(vm.buildDto().quoteQty).toBe(500);
+    vm.form.quoteQty = '';
+    expect(vm.buildDto().quoteQty).toBeNull();
+  });
+
+  // ── B159：数值列自检按「有品名的行」编号，报错行号与表格行号对不上 ──
+  it('B159 报错行号＝表格行号（第 1 行是空占位行时不能把第 2 行说成第 1 行）', async () => {
+    const vm: any = mountView().vm;
+    await vi.waitFor(() => expect(vm.form.items.length).toBeGreaterThan(0));
+    vm.form.items = [
+      { itemName: '', quoteUsage: '', rmbPrice: '', lossRate: 3 },
+      { itemName: '拉链', quoteUsage: '若干', rmbPrice: '', lossRate: 3 },
+    ];
+    expect(vm.checkQuoteNumbers()).toContain('第 2 行');
+    expect(vm.checkQuoteNumbers()).not.toContain('第 1 行');
+  });
+
+  // ── B112：新建带样衣的报价，create 成功、导入失败却提示「保存失败」──
+  it('B112 建单成功后样衣导入失败：提示「报价已创建…可再点从样衣导入」，不报保存失败，也不再建一张', async () => {
+    mockRoute.params = {};                  // 新建页
+    const vm: any = mountView().vm;
+    await vi.waitFor(() => expect(mockCustomerList).toHaveBeenCalled());
+    vm.form.middlemanId = 1;
+    vm.form.styleNo = 'ST-1';
+    vm.form.sampleId = 777;
+    vm.form.items = [{ itemName: '', quoteUsage: '', rmbPrice: '', lossRate: 3 }];   // 无明细 → 走自动带入样衣材料那条路
+    mockQuoteCreate.mockResolvedValue({ data: { id: 900 } });
+    mockImportFromSample.mockRejectedValue({ response: { data: { msg: '样衣不存在' } } });
+
+    await vm.save();
+
+    expect(mockQuoteCreate).toHaveBeenCalledTimes(1);           // 只建了一张
+    expect(mockErrToast).toHaveBeenCalledWith(expect.stringContaining('报价已创建'));
+    expect(mockErrToast).toHaveBeenCalledWith(expect.stringContaining('从样衣导入'));
+    expect(mockErrToast).not.toHaveBeenCalledWith(expect.stringContaining('保存失败'));
+    expect(mockPush).toHaveBeenCalledWith({ name: 'QuoteEdit', params: { id: 900 } });  // 人落在那张报价上
+  });
+
+  // ── B106：参考数据任一接口失败就不加载单据，空白表单还可编辑并保存 ──
+  it('B106 客户下拉接口挂了也照常装载报价（只少几个下拉选项）', async () => {
+    mockCustomerList.mockRejectedValue(new Error('500'));
+    const vm: any = mountView().vm;
+    await vi.waitFor(() => expect(vm.form.quoteNo).toBe('Q-20260719-001'));
+    expect(vm.contentDisabled).toBe(false);
+  });
+
+  it('B106 报价本体装载失败时整页转只读，不给在空白表单上保存的机会', async () => {
+    mockQuoteGet.mockRejectedValue({ response: { data: { msg: '报价单不存在' } } });
+    const vm: any = mountView().vm;
+    await vi.waitFor(() => expect(vm.contentDisabled).toBe(true));
+    expect(vm.form.quoteNo).toBe('');
   });
 });
 

@@ -1,5 +1,35 @@
-import { describe, it, expect } from 'vitest';
-import { matrixPivotRows } from '../orderPrint';
+import { describe, it, expect, vi } from 'vitest';
+import { matrixPivotRows, printOrder } from '../orderPrint';
+
+function captureHtml(fn: () => void): string {
+  let html = '';
+  const win = { document: { open: vi.fn(), write: (s: string) => { html += s; }, close: vi.fn() } };
+  const spy = vi.spyOn(window, 'open').mockReturnValue(win as any);
+  try { fn(); } finally { spy.mockRestore(); }
+  return html;
+}
+
+// ── B093 同类：未定价订单的对客确认单印「单价 0.0000」──
+describe('订单打印 · 空值不印成 0（B093 同类）', () => {
+  it('B093 单品单价/总金额为空时印「—」，有值时照常 4 位/2 位', () => {
+    const none = captureHtml(() => printOrder({ order_no: 'O-1', currency: 'USD', unit_price: null, total_amount: null, materials: [], matrix: null } as any, 'customer'));
+    expect(none).toContain('<b>单品单价：</b>—');
+    expect(none).toContain('订单总金额：<b>USD —</b>');
+    expect(none).not.toContain('0.0000');
+    const priced = captureHtml(() => printOrder({ order_no: 'O-2', currency: 'USD', unit_price: 12.5, total_amount: 1250, materials: [], matrix: null } as any, 'customer'));
+    expect(priced).toContain('<b>单品单价：</b>12.5000');
+    expect(priced).toContain('订单总金额：<b>USD 1250.00</b>');
+  });
+
+  it('B093 内部单据里没填单价的材料行印「—」，不印 0.0000 / 0.00', () => {
+    const html = captureHtml(() => printOrder({
+      order_no: 'O-3', currency: 'CNY', unit_price: 1, total_amount: 1, matrix: { matrix_data: { pos: [], rows: [] } },
+      materials: [{ item_name: '面料', unit: '米', net_usage: 1.2, loss_rate: 3, total_purchase: 100, unit_price: null, budget: null, split_mode: 'NONE' }],
+    } as any, 'internal'));
+    expect(html).toContain('<td>1.2000</td>');
+    expect(html).toContain('<td>—</td><td>—</td></tr>');
+  });
+});
 
 /**
  * #118 daisy 给的工厂样张（I25.230.02757）：每 PO 一行、尺码作列。

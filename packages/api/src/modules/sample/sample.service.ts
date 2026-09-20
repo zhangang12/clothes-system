@@ -3,7 +3,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
-  Repository, FindOptionsWhere, Like, IsNull, Between, MoreThanOrEqual, LessThanOrEqual, DataSource,
+  Repository, FindOptionsWhere, Like, IsNull, Between, MoreThanOrEqual, LessThanOrEqual, DataSource, EntityManager,
 } from 'typeorm';
 import { SampleGarment } from './sample-garment.entity';
 import { SampleMaterial } from './sample-material.entity';
@@ -23,9 +23,12 @@ import { SysUser } from '../auth/sys-user.entity';
 import {
   CreateSampleDto, PushPatternmakerDto, PatternmakerSaveDto, ShipSampleDto, ImportSampleRowDto,
 } from './dto/create-sample.dto';
+import { UpdateSampleDto } from './dto/update-sample.dto';
 import { QuerySampleDto } from './dto/query-sample.dto';
+import { todayLocal } from '../../common/utils/local-date';
 
-const today = () => new Date().toISOString().slice(0, 10);
+// 业务日期取本地日历日(B061)：原来 toISOString() 是 UTC，北京时间 00:00–08:00 建单「单号是今天、制单/寄出日期是昨天」
+const today = () => todayLocal();
 
 @Injectable()
 export class SampleService {
@@ -49,7 +52,8 @@ export class SampleService {
       sample_id: sampleId, sort_order: (m.sortOrder as any) === '' || m.sortOrder == null ? idx : m.sortOrder,
       arrange_date: m.arrangeDate || null, item_name: m.itemName, width: m.width, colors: m.colors,
       part: m.part, composition: m.composition, code_band: m.codeBand, zipper_length: m.zipperLength,
-      puller: m.puller, qty: num(m.qty), gram_weight: m.gramWeight || null, size: m.size, ref_price: num(m.refPrice), actual_usage: num(m.actualUsage),
+      puller: m.puller, zipper_teeth: m.zipperTeeth, // 拉齿(B073)：DTO/实体都有，唯独这里漏映射，填了保存就静默丢
+      qty: num(m.qty), gram_weight: m.gramWeight || null, size: m.size, ref_price: num(m.refPrice), actual_usage: num(m.actualUsage),
       supplier_id: num(m.supplierId), supplier_name: m.supplierName, image: m.image, remark: m.remark,
     }));
   }
@@ -231,7 +235,7 @@ export class SampleService {
     return { ...entity, materials, shipRounds };
   }
 
-  async update(id: number, dto: Partial<CreateSampleDto>, operatorId?: number): Promise<SampleGarment> {
+  async update(id: number, dto: UpdateSampleDto, operatorId?: number): Promise<SampleGarment> {
     const entity = await this.repo.findOne({ where: { id, deleted: 0 } });
     if (!entity) throw new NotFoundException(`样衣 #${id} 不存在`);
     // 允许状态与前端 SampleEditView 共用 @i9/types.SAMPLE_EDITABLE_STATUSES（页面在其它状态直接只读）
@@ -292,6 +296,9 @@ export class SampleService {
       if (dto.materials !== undefined) {
         await manager.delete(SampleMaterial, { sample_id: id });
         await manager.save(SampleMaterial, this.buildMaterials(id, dto.materials));
+        // 样衣材料修改→同步未成单报价(P1#11 已拍板):品名匹配保留议价,已成单不动。
+        // 放进同一事务(B075)：原来在提交之后裸调，同步中途失败就「样衣已改、报价改了一半、接口 500」，重试又再删一遍明细
+        await this.quoteService.syncFromSample(id, manager);
       }
       if (dto.shipRounds !== undefined) {
         await manager.delete(SampleShipRound, { sample_id: id });
@@ -300,10 +307,6 @@ export class SampleService {
       return updated;
     });
     await this.log(id, entity.version, 'UPDATE', operatorId ?? entity.created_by);
-    // 样衣材料修改→同步未成单报价(P1#11 已拍板):品名匹配保留议价,已成单不动
-    if (dto.materials !== undefined) {
-      await this.quoteService.syncFromSample(id);
-    }
     return saved;
   }
 
@@ -426,69 +429,92 @@ export class SampleService {
     // 指派归属校验(L2):版师仅能写自己名下的样衣(实耗/工价直接驱动对账金额);管理员等角色按既有惯例放行
     // controller 仅传 operatorId,角色经 sys_user 回查(同 purchaseMaterial 跨模块取 Factory 的 dataSource 惯例)
     const operator = await this.dataSource.getRepository(SysUser).findOne({ where: { id: operatorId } });
-    if (operator?.role === UserRole.PATTERNMAKER && entity.patternmaker_id != null
+    const isPatternmaker = operator?.role === UserRole.PATTERNMAKER;
+    if (isPatternmaker && entity.patternmaker_id != null
       && Number(entity.patternmaker_id) !== Number(operatorId)) {
       throw new ForbiddenException('仅该样衣的指派制版师可保存实耗/工价');
     }
     if (!SAMPLE_PM_EDITABLE_STATUSES.includes(entity.status)) { // 与版师视图页面共用同一份允许状态
       throw new BadRequestException('当前状态不允许版师保存(样衣未在打样/寄回/对账阶段,或已成单/完成)');
     }
+    // 未指派版师的样衣(B076)：原来任一版师账号都能写件数×单价直接生成对账金额。
+    // 不直接拒（业务忘了指派、版师已经做完是常态），而是第一个来保存的版师把自己绑成指派版师，之后只有他能改；留一条变更记录
+    let claimed = false;
+    if (isPatternmaker && entity.patternmaker_id == null) {
+      entity.patternmaker_id = Number(operatorId);
+      if (operator?.real_name) entity.patternmaker_name = operator.real_name;
+      claimed = true;
+    }
 
-    if (dto.materials?.length) {
-      for (const m of dto.materials) {
-        if (m.id) {
-          await this.materialRepo.update(
-            { id: m.id, sample_id: id },
-            { actual_usage: m.actualUsage, zipper_length: m.zipperLength },
-          );
+    // 材料行只能改本样衣已有的行(B077)：原来 if (m.id) 让没 id 的行悄悄消失、别的样衣的 id 也悄悄不生效，
+    // 版师以为存上了其实没有；这里先校验清楚再动库
+    const materialRows = dto.materials ?? [];
+    if (materialRows.length) {
+      const noId = materialRows.findIndex((m) => !m.id);
+      if (noId >= 0) throw new BadRequestException(`材料明细第 ${noId + 1} 行缺少行号，请刷新页面后重新保存`);
+    }
+
+    const saved = await this.dataSource.transaction(async (manager) => {
+      if (materialRows.length) {
+        const own = new Set((await manager.find(SampleMaterial, { where: { sample_id: id }, select: ['id'] as any })).map((r) => Number(r.id)));
+        const alien = materialRows.find((m) => !own.has(Number(m.id)));
+        if (alien) throw new BadRequestException(`材料行 #${alien.id} 不属于该样衣，请刷新页面后重新保存`);
+        // 逐行 update 收进同一事务(B077)：原来第 5 行失败前 4 行已落库，且半截状态被推给报价
+        for (const m of materialRows) {
+          await manager.update(SampleMaterial, { id: m.id, sample_id: id }, { actual_usage: m.actualUsage, zipper_length: m.zipperLength });
         }
+        // 版师实测耗用落库→同步未成单报价的报价耗用(P1#11:实耗替换预估)，与材料更新同一事务(B075)
+        await this.quoteService.syncFromSample(id, manager);
       }
-      // 版师实测耗用落库→同步未成单报价的报价耗用(P1#11:实耗替换预估)
-      await this.quoteService.syncFromSample(id);
-    }
-    if (dto.returnNo) {
-      entity.return_no = dto.returnNo;
-      entity.return_date = today();
-      entity.status = SampleStatus.RETURNED;
-    }
-    if (dto.feedbackAttachments !== undefined) entity.feedback_attachments = dto.feedbackAttachments;
-    // 版师按轮填工价(#5 多轮):重存子表 + 汇总回填顶层 + 进对账态(自动生成对账单触发点)
-    if (dto.shipRounds !== undefined) {
-      const rounds = this.buildShipRounds(id, dto.shipRounds);
-      const sum = this.summarizeRounds(rounds);
-      await this.dataSource.transaction(async (manager) => {
+      if (dto.returnNo) {
+        entity.return_no = dto.returnNo;
+        entity.return_date = today();
+        entity.status = SampleStatus.RETURNED;
+      }
+      if (dto.feedbackAttachments !== undefined) entity.feedback_attachments = dto.feedbackAttachments;
+      // 版师按轮填工价(#5 多轮):重存子表 + 汇总回填顶层 + 进对账态(自动生成对账单触发点)
+      if (dto.shipRounds !== undefined) {
+        const rounds = this.buildShipRounds(id, dto.shipRounds);
+        const sum = this.summarizeRounds(rounds);
         await manager.delete(SampleShipRound, { sample_id: id });
         if (rounds.length) await manager.save(SampleShipRound, this.buildShipRounds(id, dto.shipRounds));
-      });
-      entity.piece_count = sum.piece_count as any;
-      entity.labor_unit_price = sum.labor_unit_price as any;
-      entity.labor_amount = sum.labor_amount as any;
-      if (sum.labor_amount) entity.status = SampleStatus.RECONCILED;
-    } else if (dto.pieceCount !== undefined || dto.laborUnitPrice !== undefined) {
-      // 兼容旧单值路径:版师填件数+单价 → 工时金额公式生效 + 状态已对账
-      if (dto.pieceCount === undefined || dto.laborUnitPrice === undefined) {
-        throw new BadRequestException('版师保存：件数与工时单价必须同时填写');
+        entity.piece_count = sum.piece_count as any;
+        entity.labor_unit_price = sum.labor_unit_price as any;
+        entity.labor_amount = sum.labor_amount as any;
+        if (sum.labor_amount) entity.status = SampleStatus.RECONCILED;
+      } else if (dto.pieceCount !== undefined || dto.laborUnitPrice !== undefined) {
+        // 兼容旧单值路径:版师填件数+单价 → 工时金额公式生效 + 状态已对账
+        if (dto.pieceCount === undefined || dto.laborUnitPrice === undefined) {
+          throw new BadRequestException('版师保存：件数与工时单价必须同时填写');
+        }
+        entity.piece_count = dto.pieceCount;
+        entity.labor_unit_price = dto.laborUnitPrice;
+        entity.labor_amount = +(dto.pieceCount * dto.laborUnitPrice).toFixed(2);
+        entity.status = SampleStatus.RECONCILED;
       }
-      entity.piece_count = dto.pieceCount;
-      entity.labor_unit_price = dto.laborUnitPrice;
-      entity.labor_amount = +(dto.pieceCount * dto.laborUnitPrice).toFixed(2);
-      entity.status = SampleStatus.RECONCILED;
+      return manager.save(SampleGarment, entity);
+    });
+    if (claimed) {
+      await this.log(id, entity.version, 'PATTERNMAKER_CLAIM', operatorId,
+        `样衣未指派版师，由 ${operator?.real_name ?? `#${operatorId}`} 保存时自动绑定为指派版师`);
     }
-    const saved = await this.repo.save(entity);
     await this.log(id, entity.version, 'PATTERNMAKER_SAVE', operatorId, dto.returnNo);
     return saved;
   }
 
   async markShipped(id: number, dto: ShipSampleDto, operatorId?: number): Promise<SampleGarment> {
-    const entity = await this.repo.findOne({ where: { id, deleted: 0 } });
-    if (!entity) throw new NotFoundException(`样衣 #${id} 不存在`);
-    if (![SampleStatus.SAMPLING, SampleStatus.SHIPPED].includes(entity.status)) {
-      throw new BadRequestException('当前状态不允许标记寄出');
-    }
-    entity.ship_sample_date = dto.shipSampleDate || today();
-    entity.status = SampleStatus.SHIPPED;
-    const saved = await this.repo.save(entity);
-    await this.log(id, entity.version, 'SHIP', operatorId ?? entity.created_by, entity.ship_sample_date);
+    // 事务内锁行再判状态(B065，同 payment.service markPaid 范式)：原来先查后 save 无锁，两人同时点后写的盖掉先写的
+    const saved = await this.dataSource.transaction(async (manager: EntityManager) => {
+      const entity = await manager.findOne(SampleGarment, { where: { id, deleted: 0 }, lock: { mode: 'pessimistic_write' } });
+      if (!entity) throw new NotFoundException(`样衣 #${id} 不存在`);
+      if (![SampleStatus.SAMPLING, SampleStatus.SHIPPED].includes(entity.status)) {
+        throw new BadRequestException('当前状态不允许标记寄出');
+      }
+      entity.ship_sample_date = dto.shipSampleDate || today();
+      entity.status = SampleStatus.SHIPPED;
+      return manager.save(SampleGarment, entity);
+    });
+    await this.log(id, saved.version, 'SHIP', operatorId ?? saved.created_by, saved.ship_sample_date);
     return saved;
   }
 
@@ -554,7 +580,9 @@ export class SampleService {
       const copied = srcMaterials.map((m, idx) => manager.create(SampleMaterial, {
         sample_id: saved.id, sort_order: idx, arrange_date: m.arrange_date, item_name: m.item_name,
         width: m.width, colors: m.colors, part: m.part, composition: m.composition, code_band: m.code_band,
-        zipper_length: m.zipper_length, puller: m.puller, qty: m.qty, size: m.size, ref_price: m.ref_price,
+        zipper_length: m.zipper_length, puller: m.puller, zipper_teeth: m.zipper_teeth, qty: m.qty,
+        gram_weight: m.gram_weight, // 克重与拉齿一并复制(B078)：复制面料样衣克重列变空，导入报价/工艺单缺值
+        size: m.size, ref_price: m.ref_price,
         supplier_id: m.supplier_id, supplier_name: m.supplier_name, image: m.image, remark: m.remark,
       }));
       if (copied.length) await manager.save(SampleMaterial, copied);

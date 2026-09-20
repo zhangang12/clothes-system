@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { guessMapping, rowsToMaterials, parseSheetFile, MATERIAL_FIELDS, QUOTE_ITEM_FIELDS } from '../sheetImport';
+import { guessMapping, rowsToMaterials, parseSheetFile, parseCsvText, IMPORT_MAX_ROWS, MATERIAL_FIELDS, QUOTE_ITEM_FIELDS } from '../sheetImport';
 
 // 以用户截图的真实工艺单结构为基准：面里料部分|单耗|位置|颜色1|备注（带分区行/空行）
 const CRAFT_SHEET = [
@@ -139,6 +139,59 @@ describe('parseSheetFile（csv/txt 路径）', () => {
 
   it('不支持的扩展名抛错', async () => {
     await expect(parseSheetFile(new File(['x'], 'a.docx'))).rejects.toThrow('仅支持');
+  });
+});
+
+/** 造一个「文件」：jsdom 的 File 没实现 arrayBuffer()，这里喂 parseSheetFile 真正用到的几样 */
+const fileOf = (name: string, data: Uint8Array | string): File => {
+  const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data;
+  return { name, size: bytes.byteLength, arrayBuffer: async () => bytes.buffer } as unknown as File;
+};
+/** 把中文按 GBK 编码——jsdom 没有 GBK 编码器，用码点表手拼这几个字够用了 */
+const GBK: Record<string, number[]> = {
+  品: [0xc6, 0xb7], 名: [0xc3, 0xfb], 单: [0xb5, 0xa5], 耗: [0xba, 0xc4],
+  春: [0xb4, 0xba], 亚: [0xd1, 0xc7], 纺: [0xb7, 0xc4],
+};
+const gbkBytes = (s: string) => new Uint8Array([...s].flatMap((ch) => GBK[ch] ?? [ch.charCodeAt(0)]));
+
+describe('parseCsvText（B148 引号 / 分隔符自适应）', () => {
+  it('B148 字段中间的引号不吞后文（5" 拉链）', () => {
+    expect(parseCsvText('品名,单耗\n5" 拉链,1\n下一行,2')).toEqual([
+      ['品名', '单耗'], ['5" 拉链', '1'], ['下一行', '2'],
+    ]);
+  });
+
+  it('B148 字段开头的引号仍是包裹，内含逗号与换行都保留', () => {
+    expect(parseCsvText('品名,位置\nA,"帽子,大身"')).toEqual([['品名', '位置'], ['A', '帽子,大身']]);
+    expect(parseCsvText('品名,备注\nA,"第一行\n第二行"')[1][1]).toBe('第一行\n第二行');
+  });
+
+  it('转义双引号还原成一个，空行剔除', () => {
+    expect(parseCsvText('a\n"他说""好"""\n\n')[1][0]).toBe('他说"好"');
+  });
+
+  it('制表符/分号/逗号自适应', () => {
+    expect(parseCsvText('品名\t单耗\n春亚纺\t1.5')).toEqual([['品名', '单耗'], ['春亚纺', '1.5']]);
+    expect(parseCsvText('品名;单耗\n春亚纺;1.5')).toEqual([['品名', '单耗'], ['春亚纺', '1.5']]);
+  });
+});
+
+describe('parseSheetFile CSV 编码（B094）与导入行数上限（B095）', () => {
+  it('B094 中文 Windows 另存的 GBK CSV 要能读出中文，不是一片问号', async () => {
+    const bytes = gbkBytes('品名,单耗\n春亚纺,1.5');
+    // 先证明这份字节确实不是合法 UTF-8（否则这条用例等于没测）
+    expect(new TextDecoder('utf-8').decode(bytes.buffer)).toContain('�');
+    const rows = await parseSheetFile(fileOf('工艺单.csv', bytes));
+    expect(rows).toEqual([['品名', '单耗'], ['春亚纺', '1.5']]);
+  });
+
+  it('B094 UTF-8 的 CSV 照旧正常', async () => {
+    const rows = await parseSheetFile(fileOf('a.csv', '品名,单耗\n春亚纺,1.5'));
+    expect(rows[1][0]).toBe('春亚纺');
+  });
+
+  it('B095 导入行数上限远大于「附件预览」那套 200 行', () => {
+    expect(IMPORT_MAX_ROWS).toBeGreaterThan(200);
   });
 });
 

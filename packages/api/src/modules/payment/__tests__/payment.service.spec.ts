@@ -201,59 +201,130 @@ describe('PaymentService', () => {
     });
     const ADMIN = { id: 99, role: 'ADMIN' };
     const OWNER = { id: 5, role: 'BUSINESS' };
+    /**
+     * B009/B010/B011 后改草稿走事务：申请行与对账单行都在 manager 里锁着读，
+     * 预付余额也从 manager 取（B084）。按实体分流：PaymentRequest→申请，Reconciliation→对账单，
+     * find(Prepayment)→预付款，find(PaymentRequest)→同对账单下的其它申请
+     */
+    const armUpdate = (pr: any, opts: { prepays?: any[]; rec?: any; existing?: any[] } = {}) => {
+      mockManager.findOne.mockImplementation((e: any) =>
+        Promise.resolve(e === PaymentRequest ? pr : e === Reconciliation ? (opts.rec ?? null) : null));
+      mockManager.find.mockImplementation((e: any) =>
+        Promise.resolve(e === Prepayment ? (opts.prepays ?? []) : e === PaymentRequest ? (opts.existing ?? []) : []));
+    };
+    const savedPr = () => mockManager.save.mock.calls.filter((c: any[]) => c[0] === PaymentRequest).at(-1)![1];
 
     it('草稿可改，actual_pay 跟着重算', async () => {
-      mockPrRepo.findOne.mockResolvedValue(draft());
-      mockPrepayRepo.find.mockResolvedValue([]);
+      armUpdate(draft());
       await service.updatePaymentRequest(9, { amount: 800, prepay_offset: 0 } as any, ADMIN);
-      expect(mockPrRepo.save).toHaveBeenCalledWith(expect.objectContaining({
-        amount: 800, actual_pay: 800,
-      }));
+      expect(savedPr()).toEqual(expect.objectContaining({ amount: 800, actual_pay: 800 }));
     });
 
     it('非草稿一律拒绝——已提交的金额是审批依据，已付款的会让勾稽断掉', async () => {
       for (const st of ['PENDING', 'APPROVED', 'PAID', 'REJECTED']) {
-        mockPrRepo.findOne.mockResolvedValue(draft({ approval_status: st }));
+        armUpdate(draft({ approval_status: st }));
         await expect(service.updatePaymentRequest(9, { amount: 1 } as any, ADMIN))
           .rejects.toThrow(BadRequestException);
       }
     });
 
     it('业务只能改自己建的草稿', async () => {
-      mockPrRepo.findOne.mockResolvedValue(draft({ created_by: 777 }));
+      armUpdate(draft({ created_by: 777 }));
       await expect(service.updatePaymentRequest(9, { amount: 1 } as any, OWNER))
         .rejects.toThrow(ForbiddenException);
     });
 
     it('本人改自己的草稿放行', async () => {
-      mockPrRepo.findOne.mockResolvedValue(draft({ created_by: 5 }));
-      mockPrepayRepo.find.mockResolvedValue([]);
+      armUpdate(draft({ created_by: 5 }));
       await expect(service.updatePaymentRequest(9, { amount: 500 } as any, OWNER)).resolves.toBeDefined();
     });
 
     it('财务/管理员不受创建人限制', async () => {
-      mockPrRepo.findOne.mockResolvedValue(draft({ created_by: 777 }));
-      mockPrepayRepo.find.mockResolvedValue([]);
+      armUpdate(draft({ created_by: 777 }));
       await expect(service.updatePaymentRequest(9, { amount: 500 } as any, ADMIN)).resolves.toBeDefined();
     });
 
     it('改单同样要过冲抵预付的余额闸门，不能绕过创建时的校验', async () => {
-      mockPrRepo.findOne.mockResolvedValue(draft());
-      mockPrepayRepo.find.mockResolvedValue([makePrepayment({ balance: 100 })]);
+      armUpdate(draft(), { prepays: [makePrepayment({ balance: 100 })] });
       await expect(service.updatePaymentRequest(9, { prepay_offset: 500 } as any, ADMIN))
         .rejects.toThrow(BadRequestException);
     });
 
     it('金额必须大于 0', async () => {
-      mockPrRepo.findOne.mockResolvedValue(draft());
-      mockPrepayRepo.find.mockResolvedValue([]);
+      armUpdate(draft());
       await expect(service.updatePaymentRequest(9, { amount: 0 } as any, ADMIN))
         .rejects.toThrow(BadRequestException);
     });
 
     it('不存在的申请报 404', async () => {
-      mockPrRepo.findOne.mockResolvedValue(null);
+      armUpdate(null);
       await expect(service.updatePaymentRequest(9, {} as any, ADMIN)).rejects.toThrow(NotFoundException);
+    });
+
+    // ===== 2026-09-20 审查：改草稿要过与 create 同一组闸门 =====
+    const confirmedRec = (over: any = {}) => ({
+      id: 7, status: ReconciliationStatus.CONFIRMED, factory_id: 3, total_amount: 100000, deleted: 0, ...over,
+    });
+
+    it('B009 改草稿要复核「累计申请 ≤ 对账应付」：1 元草稿改成全额后再来一张就要被拦', async () => {
+      // 对账应付 10 万，已有另一张 10 万（非驳回）；本单 1 元想改成 10 万 → 累计 20 万
+      armUpdate(draft({ reconcile_id: 7, amount: 1 }), {
+        rec: confirmedRec(),
+        existing: [{ id: 8, amount: 100000, approval_status: 'APPROVED' }, { id: 9, amount: 1, approval_status: 'DRAFT' }],
+      });
+      await expect(service.updatePaymentRequest(9, { amount: 100000 } as any, ADMIN))
+        .rejects.toThrow(/累计付款申请/);
+      expect(mockManager.save).not.toHaveBeenCalled();
+    });
+
+    it('B009 累计校验不把本单旧金额算两遍：本单 1 元改 10 万、别无他单 → 恰好等于应付放行', async () => {
+      armUpdate(draft({ reconcile_id: 7, amount: 1 }), {
+        rec: confirmedRec(),
+        existing: [{ id: 9, amount: 1, approval_status: 'DRAFT' }],
+      });
+      await expect(service.updatePaymentRequest(9, { amount: 100000 } as any, ADMIN)).resolves.toBeDefined();
+      expect(savedPr()).toEqual(expect.objectContaining({ amount: 100000 }));
+    });
+
+    it('B009 对账单行在事务内加悲观锁读取（与 create 同范式，串行化并发改单）', async () => {
+      armUpdate(draft({ reconcile_id: 7 }), { rec: confirmedRec() });
+      await service.updatePaymentRequest(9, { amount: 500 } as any, ADMIN);
+      expect(mockDataSource.transaction).toHaveBeenCalled();
+      expect(mockManager.findOne).toHaveBeenCalledWith(PaymentRequest, expect.objectContaining({ lock: { mode: 'pessimistic_write' } }));
+      expect(mockManager.findOne).toHaveBeenCalledWith(Reconciliation, expect.objectContaining({ lock: { mode: 'pessimistic_write' } }));
+      expect(mockPrRepo.findOne).not.toHaveBeenCalled(); // 不再用事务外仓储读
+    });
+
+    it('B010 挂了对账单的草稿不能把 factory_id 改成别的厂（钱付给 B 厂、账挂 A 厂）', async () => {
+      armUpdate(draft({ reconcile_id: 7, factory_id: 3 }), { rec: confirmedRec({ factory_id: 3 }) });
+      await expect(service.updatePaymentRequest(9, { factory_id: 4 } as any, ADMIN))
+        .rejects.toThrow(/归属工厂 #3 不一致/);
+    });
+
+    it('B010 对账单已不是「已确认」（被退回）时草稿也不能再改金额', async () => {
+      armUpdate(draft({ reconcile_id: 7 }), { rec: confirmedRec({ status: ReconciliationStatus.DRAFT }) });
+      await expect(service.updatePaymentRequest(9, { amount: 500 } as any, ADMIN)).rejects.toThrow(/未复核确认/);
+    });
+
+    it('B011 冲抵预付传负数直接拒——否则 actual_pay = amount + 5000，登记付款闸门按实付放行就多付', async () => {
+      armUpdate(draft(), { prepays: [makePrepayment({ balance: 100000 })] });
+      await expect(service.updatePaymentRequest(9, { prepay_offset: -5000 } as any, ADMIN))
+        .rejects.toThrow(/不能为负数/);
+      expect(mockManager.save).not.toHaveBeenCalled();
+    });
+
+    it('B011 冲抵预付不能超过申请金额（create 有这条，改单同样要有）', async () => {
+      armUpdate(draft({ amount: 1000 }), { prepays: [makePrepayment({ balance: 100000 })] });
+      await expect(service.updatePaymentRequest(9, { prepay_offset: 1500 } as any, ADMIN))
+        .rejects.toThrow(/不能超过付款申请金额/);
+    });
+
+    it('B084 改单校验预付余额时从事务 manager 取，不再用事务外的 prepayRepo', async () => {
+      armUpdate(draft(), { prepays: [makePrepayment({ balance: 800 })] });
+      await service.updatePaymentRequest(9, { prepay_offset: 500 } as any, ADMIN);
+      expect(mockManager.find).toHaveBeenCalledWith(Prepayment, expect.objectContaining({ where: { factory_id: 3 } }));
+      expect(mockPrepayRepo.find).not.toHaveBeenCalled();
+      expect(savedPr()).toEqual(expect.objectContaining({ prepay_offset: 500, actual_pay: 500 }));
     });
   });
 
@@ -267,8 +338,8 @@ describe('PaymentService', () => {
   // UT-PAY-05: submitPaymentRequest transitions DRAFT → PENDING
   it('UT-PAY-05 submitPaymentRequest transitions DRAFT→PENDING', async () => {
     const pr = makePR({ approval_status: PaymentApprovalStatus.DRAFT });
-    mockPrRepo.findOne.mockResolvedValue(pr);
-    mockPrRepo.save.mockResolvedValue({ ...pr, approval_status: PaymentApprovalStatus.PENDING });
+    mockManager.findOne.mockResolvedValue(pr);
+    mockManager.save.mockImplementation((_e: any, v: any) => Promise.resolve(v));
 
     const result = await service.submitPaymentRequest(1, 1);
     expect(result.approval_status).toBe(PaymentApprovalStatus.PENDING);
@@ -277,8 +348,22 @@ describe('PaymentService', () => {
   // UT-PAY-06: submitPaymentRequest throws if not DRAFT
   it('UT-PAY-06 submitPaymentRequest throws BadRequest if not DRAFT', async () => {
     const pr = makePR({ approval_status: PaymentApprovalStatus.PENDING });
-    mockPrRepo.findOne.mockResolvedValue(pr);
+    mockManager.findOne.mockResolvedValue(pr);
     await expect(service.submitPaymentRequest(1, 1)).rejects.toThrow(BadRequestException);
+  });
+
+  // B065 同类：提交是状态流转，先查后存改成事务内锁行（与 approve/markPaid 同范式）
+  it('B065 submitPaymentRequest 在事务内以悲观锁读取申请，不再用事务外仓储先查后存', async () => {
+    const pr = makePR({ approval_status: PaymentApprovalStatus.DRAFT });
+    mockManager.findOne.mockResolvedValue(pr);
+    await service.submitPaymentRequest(1, 1);
+    expect(mockDataSource.transaction).toHaveBeenCalled();
+    expect(mockManager.findOne).toHaveBeenCalledWith(PaymentRequest, expect.objectContaining({
+      where: { id: 1, deleted: 0 }, lock: { mode: 'pessimistic_write' },
+    }));
+    expect(mockManager.save).toHaveBeenCalledWith(PaymentRequest, expect.objectContaining({ approval_status: PaymentApprovalStatus.PENDING }));
+    expect(mockPrRepo.findOne).not.toHaveBeenCalled();
+    expect(mockPrRepo.save).not.toHaveBeenCalled();
   });
 
   // UT-PAY-07: approvePaymentRequest transitions PENDING → APPROVED
@@ -558,6 +643,62 @@ describe('PaymentService', () => {
     }));
   });
 
+  // ===== 2026-09-20 审查 B008：确认付款要留一条实付流水，工厂账单的已付/未付才对得上 =====
+  it('B008 markPaid 同步生成一条付款记录：金额=应付−已付、日期=本地今天、水单同申请、备注说明来源', async () => {
+    const pr = makePR({ approval_status: PaymentApprovalStatus.APPROVED, actual_pay: 5000, paid_total: 0 });
+    const manager = makeRecordManager(pr);
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+    await service.markPaid(1, 'http://example.com/slip.jpg', 99);
+    const recSave = manager.save.mock.calls.find((c: any[]) => c[0] === PaymentRecord);
+    expect(recSave).toBeDefined();
+    expect(recSave[1]).toEqual(expect.objectContaining({
+      pr_id: 1, amount: 5000, pay_method: 'BANK', slip_url: 'http://example.com/slip.jpg', created_by: 99,
+      pay_date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    }));
+    // 日期是进程本地日历日（todayLocal），不是 UTC——北京 00:00–08:00 确认的付款不能记成昨天
+    const d = new Date();
+    const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    expect(recSave[1].pay_date).toBe(local);
+  });
+
+  it('B008 已分批付过 3000 再一次性付清：流水只补差额 2000，不是全额', async () => {
+    const pr = makePR({ approval_status: PaymentApprovalStatus.APPROVED, actual_pay: 5000, paid_total: 3000 });
+    const manager = makeRecordManager(pr);
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+    const res = await service.markPaid(1, '/u/slip.png', 99);
+    const recSave = manager.save.mock.calls.find((c: any[]) => c[0] === PaymentRecord);
+    expect(recSave[1].amount).toBe(2000);
+    expect(+res.paid_total).toBe(5000);
+  });
+
+  it('B008 差额为 0（分批已付满）时不补空流水', async () => {
+    const pr = makePR({ approval_status: PaymentApprovalStatus.APPROVED, actual_pay: 5000, paid_total: 5000 });
+    const manager = makeRecordManager(pr);
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+    await service.markPaid(1, '/u/slip.png', 99);
+    expect(manager.save.mock.calls.find((c: any[]) => c[0] === PaymentRecord)).toBeUndefined();
+  });
+
+  // ===== B057 / B127：分批付款登记的金额与日期 =====
+  it('B057 amount 以字符串进来也按数字累计，不做字符串拼接', async () => {
+    const pr = makePR({ approval_status: PaymentApprovalStatus.APPROVED, actual_pay: 5000, paid_total: 1000 });
+    const manager = makeRecordManager(pr);
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+    const res: any = await service.addPaymentRecord(1, { slip_url: '/u/s.png', pay_date: '2026-09-20', amount: '2000' as any }, 3);
+    expect(res.paid_total).toBe(3000);          // 而不是 '10002000'
+    expect(res.request.paid_total).toBe(3000);
+    const recSave = manager.save.mock.calls.find((c: any[]) => c[0] === PaymentRecord);
+    expect(recSave[1].amount).toBe(2000);
+  });
+
+  it('B127 付款日期不是真实日期（2026-13-45 / 2026-02-30 / 带时间）→ 400，不进事务', async () => {
+    for (const bad of ['2026-13-45', '2026-02-30', '2026/09/20', '2026-09-20T00:00:00Z', 'abc']) {
+      await expect(service.addPaymentRecord(1, { slip_url: '/u/s.png', pay_date: bad, amount: 100 }, 3))
+        .rejects.toThrow(/付款日期格式不正确/);
+    }
+    expect(mockDataSource.transaction).not.toHaveBeenCalled();
+  });
+
   // UT-L7-01: 无合同费用对账付清后,按款号补标同款式结算单 needs_recalc
   it('UT-L7-01 final payment on NO_CONTRACT reconciliation marks settlement needs_recalc by style_no', async () => {
     const pr = makePR({ approval_status: PaymentApprovalStatus.APPROVED, actual_pay: 5000, paid_total: 3000, reconcile_id: 7 });
@@ -632,6 +773,33 @@ describe('PaymentService', () => {
       expect(st.summary.unpaid_total).toBe(8000 - 3500);
     });
 
+    it('B008 历史「确认付款」没留流水的已付清申请：账单按 paid_total 计已付，不再全额躺在未付里', async () => {
+      armStatement({
+        prs: [
+          makePR({ id: 1, actual_pay: 5000, paid_total: 5000, approval_status: PaymentApprovalStatus.PAID }),   // 老 markPaid：只写 paid_total
+          makePR({ id: 2, actual_pay: 3000, paid_total: null, approval_status: PaymentApprovalStatus.PAID }),   // 更早的：连 paid_total 都空 → 按应付
+          makePR({ id: 3, actual_pay: 2000, paid_total: 0, approval_status: PaymentApprovalStatus.APPROVED }),  // 已批准未付：仍是 0
+        ],
+        records: [],
+      });
+      const st: any = await service.getFactoryStatement(5);
+      expect(st.requests[0].paid_sum).toBe(5000);
+      expect(st.requests[1].paid_sum).toBe(3000);
+      expect(st.requests[2].paid_sum).toBe(0);
+      expect(st.summary.paid_total).toBe(8000);
+      expect(st.summary.unpaid_total).toBe(2000);
+    });
+
+    it('B008 有流水的仍以流水为准（流水与 paid_total 并存时不重复计）', async () => {
+      armStatement({
+        prs: [makePR({ id: 1, actual_pay: 5000, paid_total: 5000, approval_status: PaymentApprovalStatus.PAID })],
+        records: [{ id: 1, pr_id: 1, amount: 3000 }, { id: 2, pr_id: 1, amount: 2000 }],
+      });
+      const st: any = await service.getFactoryStatement(5);
+      expect(st.requests[0].paid_sum).toBe(5000);
+      expect(st.summary.paid_total).toBe(5000);
+    });
+
     it('UT-STMT-05 没有一张申请时不查付款记录（别拿空 IN () 去撞 SQL 语法错）', async () => {
       armStatement({ prs: [] });
       await service.getFactoryStatement(5);
@@ -696,33 +864,38 @@ describe('PaymentService', () => {
       }));
     });
 
+    // 改草稿已改为事务内 manager 读写（B009/B010/B011），这里按实体分流
+    const armDraft = (pr: any) => {
+      mockManager.findOne.mockImplementation((e: any) => Promise.resolve(e === PaymentRequest ? pr : null));
+      mockManager.find.mockResolvedValue([]);
+    };
+    const lastSavedPr = () => mockManager.save.mock.calls.filter((c: any[]) => c[0] === PaymentRequest).at(-1)![1];
+
     it('UT-PAY-INV-03 改草稿能补票，没传的字段保持原值', async () => {
-      mockPrRepo.findOne.mockResolvedValue({
+      armDraft({
         id: 1, approval_status: PaymentApprovalStatus.DRAFT, created_by: 3, factory_id: 5,
         amount: 1000, prepay_offset: 0, invoice_no: null, invoice_url: null, bank_name: '中行',
       });
-      mockPrepayRepo.find.mockResolvedValue([]);
       // 断言「存进去的是什么」而不是返回值：save 的 mock 会被同文件其它用例改成固定返回，
       // 拿返回值断言会在全量跑时莫名其妙地挂（实测踩过）
       await service.updatePaymentRequest(1, { invoice_no: 'INV-9' } as any, { id: 3, role: UserRole.FINANCE });
-      const saved = mockPrRepo.save.mock.calls.at(-1)![0];
+      const saved = lastSavedPr();
       expect(saved.invoice_no).toBe('INV-9');
       expect(saved.bank_name).toBe('中行');   // 没传的不动
     });
 
     it('UT-PAY-SUP-01 主管能改别人建的付款草稿——权限视同管理员，别卡在服务层', async () => {
-      mockPrRepo.findOne.mockResolvedValue({
+      armDraft({
         id: 1, approval_status: PaymentApprovalStatus.DRAFT, created_by: 999, factory_id: 5,
         amount: 1000, prepay_offset: 0,
       });
-      mockPrepayRepo.find.mockResolvedValue([]);
       // 前端按 hasRole(ADMIN) 把「编辑」显示给主管、控制器也放行，服务层再挡就是"按钮点不动"
       await expect(service.updatePaymentRequest(1, { description: 'x' } as any,
         { id: 3, role: UserRole.SUPERVISOR })).resolves.toBeDefined();
     });
 
     it('UT-PAY-SUP-02 业务仍然只能改自己建的（这条闸门不能被上一条顺手放开）', async () => {
-      mockPrRepo.findOne.mockResolvedValue({
+      armDraft({
         id: 1, approval_status: PaymentApprovalStatus.DRAFT, created_by: 999, factory_id: 5,
         amount: 1000, prepay_offset: 0,
       });
@@ -731,13 +904,12 @@ describe('PaymentService', () => {
     });
 
     it('UT-PAY-INV-04 改草稿时没传发票，原来传过的票不能被清掉', async () => {
-      mockPrRepo.findOne.mockResolvedValue({
+      armDraft({
         id: 1, approval_status: PaymentApprovalStatus.DRAFT, created_by: 3, factory_id: 5,
         amount: 1000, prepay_offset: 0, invoice_no: 'INV-旧', invoice_url: '/u/old.jpg',
       });
-      mockPrepayRepo.find.mockResolvedValue([]);
       await service.updatePaymentRequest(1, { description: '只改了说明' } as any, { id: 3, role: UserRole.FINANCE });
-      const saved = mockPrRepo.save.mock.calls.at(-1)![0];
+      const saved = lastSavedPr();
       expect(saved.invoice_no).toBe('INV-旧');
       expect(saved.invoice_url).toBe('/u/old.jpg');
     });

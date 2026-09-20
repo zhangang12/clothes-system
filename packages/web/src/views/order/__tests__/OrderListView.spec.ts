@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import ElementPlus from 'element-plus';
+import ElementPlus, { ElMessageBox } from 'element-plus';
 import OrderListView from '../OrderListView.vue';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole } from '@i9/types';
@@ -15,11 +15,12 @@ vi.mock('vue-router', () => ({
 
 const mockList = vi.fn();
 const mockCopy = vi.fn();
+const mockRemove = vi.fn();
 vi.mock('@/api/order', () => ({
   orderApi: {
     list: (...a: any[]) => mockList(...a),
     get: vi.fn(), copy: (...a: any[]) => mockCopy(...a),
-    remove: vi.fn(), advance: vi.fn(), revert: vi.fn(), importBatch: vi.fn(),
+    remove: (...a: any[]) => mockRemove(...a), advance: vi.fn(), revert: vi.fn(), importBatch: vi.fn(),
   },
 }));
 vi.mock('@/api/contract', () => ({ contractApi: { generateFromOrder: vi.fn() } }));
@@ -31,13 +32,13 @@ vi.mock('element-plus', async () => {
   return {
     ...actual,
     ElMessage: { success: vi.fn(), warning: vi.fn(), error: vi.fn() },
-    ElMessageBox: { confirm: vi.fn().mockResolvedValue('confirm') },
+    ElMessageBox: { confirm: vi.fn().mockResolvedValue('confirm'), alert: vi.fn().mockResolvedValue(undefined) },
   };
 });
 
-async function mountView() {
+async function mountView(role: UserRole = UserRole.ADMIN) {
   setActivePinia(createPinia());
-  useAuthStore().setAuth({ access_token: 'tok', role: UserRole.ADMIN, real_name: '测试用户' });
+  useAuthStore().setAuth({ access_token: 'tok', role, real_name: '测试用户' });
   mockList.mockResolvedValue({ data: [{ id: 7, order_no: 'O-20260805-001', currency: 'CNY', unit_price: 12 }], total: 1 });
   const w = mount(OrderListView, {
     global: {
@@ -82,5 +83,57 @@ describe('OrderListView · 复制防连点（2026-08-04 反馈 #09 同型）', (
     mockCopy.mockResolvedValue({ data: { order_no: 'O-2' } });
     await w.vm.doCopy({ id: 7, order_no: 'O-1' });
     expect(mockCopy).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('OrderListView · 2026-09-20 审查', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  // ── B026：编辑按钮与行双击没有 canEdit 守卫，无权角色进了可编辑表单 ──
+  it('B026 无编辑权限时双击行进「查看」而不是编辑表单', async () => {
+    const w: any = await mountView(UserRole.SHIPPING);
+    expect(w.vm.canEdit).toBe(false);
+    w.vm.onRowDblclick({ id: 7, status: 'DRAFT' });
+    expect(mockPush).toHaveBeenCalledWith({ name: 'OrderView', params: { id: 7 } });
+    expect(mockPush).not.toHaveBeenCalledWith({ name: 'OrderEdit', params: { id: 7 } });
+  });
+
+  it('B026 有权限且是草稿时双击照常进编辑；非草稿进查看', async () => {
+    const w: any = await mountView();
+    w.vm.onRowDblclick({ id: 7, status: 'DRAFT' });
+    expect(mockPush).toHaveBeenLastCalledWith({ name: 'OrderEdit', params: { id: 7 } });
+    w.vm.onRowDblclick({ id: 8, status: 'CONFIRMED' });
+    expect(mockPush).toHaveBeenLastCalledWith({ name: 'OrderView', params: { id: 8 } });
+  });
+
+  it('B026 无编辑权限时操作列不出现「编辑」按钮（留「查看」）', async () => {
+    const w = await mountView(UserRole.SHIPPING);
+    await vi.waitFor(() => expect(w.text()).toContain('O-20260805-001'));
+    const texts = w.findAll('button').map((b: any) => b.text());
+    expect(texts).not.toContain('编辑');
+    expect(texts).toContain('查看');
+  });
+
+  // ── B107 同类：点「搜索」不重置页码，翻到第 3 页再搜出空表 ──
+  it('B107 点搜索把页码拨回第 1 页（翻页本身不受影响）', async () => {
+    const w: any = await mountView();
+    w.vm.query.page = 3;
+    w.vm.search();
+    expect(w.vm.query.page).toBe(1);
+  });
+
+  // ── G1 配合项：批量删除被后端拦下时要说清原因 ──
+  it('批量删除把后端拦截原因逐条列出来，而不是只报「拦截 N 条」', async () => {
+    const w: any = await mountView();
+    mockRemove.mockImplementation((id: number) => (id === 7
+      ? Promise.reject({ response: { data: { msg: '该订单下还有未删除的合同' } } })
+      : Promise.resolve({})));
+    w.vm.selected = [{ id: 7, order_no: 'O-1' }, { id: 8, order_no: 'O-2' }];
+    await w.vm.batchRemove();
+    await vi.waitFor(() => expect(ElMessageBox.alert).toHaveBeenCalled());
+    const [body, title] = (ElMessageBox.alert as any).mock.calls.at(-1);
+    expect(body).toContain('O-1：该订单下还有未删除的合同');
+    expect(title).toContain('成功 1 条');
+    expect(title).toContain('拦截 1 条');
   });
 });

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import ElementPlus from 'element-plus';
+import ElementPlus, { ElMessage } from 'element-plus';
 import QuoteListView from '../QuoteListView.vue';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole } from '@i9/types';
@@ -16,11 +16,12 @@ vi.mock('vue-router', () => ({
 
 // ── API mock ────────────────────────────────────────────────────────────────
 const mockList = vi.fn();
+const mockQuoteCreate = vi.fn().mockResolvedValue({ data: { id: 501 } });
 vi.mock('@/api/quote', () => ({
   quoteApi: {
     list: (...a: any[]) => mockList(...a),
     get: vi.fn(),
-    create: vi.fn(),
+    create: (...a: any[]) => mockQuoteCreate(...a),
     copy: vi.fn(),
     submit: vi.fn(),
     adjust: vi.fn(),
@@ -33,13 +34,14 @@ vi.mock('@/api/quote', () => ({
 vi.mock('@/api/sample', () => ({ sampleApi: { list: vi.fn() } }));
 vi.mock('@/api/company', () => ({ companyApi: { getDefault: vi.fn() } }));
 
-// 抓取写入 Blob 的 CSV 内容（套路同 utils/__tests__/sampleExcel.spec.ts）
-function captureBlob(fn: () => void): string {
+// 抓取写入 Blob 的 CSV 内容（套路同 utils/__tests__/sampleExcel.spec.ts）。
+// 导出改成「当前筛选下全量、逐页拉取」（B152）后是异步的，这里要 await
+async function captureBlob(fn: () => void | Promise<void>): Promise<string> {
   let captured = '';
   const OrigBlob = globalThis.Blob;
   // @ts-expect-error 测试替身
   globalThis.Blob = class { constructor(parts: any[]) { captured = parts.join(''); } };
-  try { fn(); } finally { globalThis.Blob = OrigBlob; }
+  try { await fn(); } finally { globalThis.Blob = OrigBlob; }
   return captured;
 }
 
@@ -76,7 +78,7 @@ describe('QuoteListView 导出 CSV', () => {
 
     const btn = wrapper.findAll('button').find((b) => b.text() === '导出');
     expect(btn).toBeTruthy();
-    const csv = captureBlob(() => { void btn!.trigger('click'); });
+    const csv = await captureBlob(async () => { await (wrapper.vm as any).exportCsv(); });
 
     // 内嵌引号翻倍（转义写法同 utils/exportAll.ts）
     expect(csv).toContain('"香港""恒升""贸易"');
@@ -90,10 +92,61 @@ describe('QuoteListView 导出 CSV', () => {
     const wrapper = mountView();
     await vi.waitFor(() => expect(mockList).toHaveBeenCalled());
 
-    const btn = wrapper.findAll('button').find((b) => b.text() === '导出');
-    const csv = captureBlob(() => { void btn!.trigger('click'); });
+    const csv = await captureBlob(async () => { await (wrapper.vm as any).exportCsv(); });
     const lines = csv.replace(/^﻿/, '').split('\n');
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain('报价单号');
+  });
+
+  // ── B152：列表「导出」只导当前一页，文件名却像全量 ──
+  it('B152 导出走全量分页拉取，不是只把当前页 20 行写出去', async () => {
+    const page1 = Array.from({ length: 100 }, (_, i) => ({ id: i + 1, quote_no: `Q-${i + 1}`, status: 'DRAFT' }));
+    const page2 = [{ id: 101, quote_no: 'Q-101', status: 'DRAFT' }];
+    mockList.mockImplementation((p: any) => Promise.resolve(
+      p?.page === 1 ? { data: page1, total: 101 } : { data: page2, total: 101 },
+    ));
+    const wrapper = mountView();
+    await vi.waitFor(() => expect(mockList).toHaveBeenCalled());
+
+    const csv = await captureBlob(async () => { await (wrapper.vm as any).exportCsv(); });
+    const lines = csv.replace(/^﻿/, '').split('\n');
+    expect(lines).toHaveLength(102);          // 表头 + 101 行，而不是一页 20/100 行
+    expect(csv).toContain('"Q-101"');
+    // 当前筛选条件要带进每一页的请求里
+    expect(mockList).toHaveBeenCalledWith(expect.objectContaining({ page: 2, size: 100 }));
+  });
+
+  // ── B107 同类：点「搜索」不重置页码 ──
+  it('B107 点搜索把页码拨回第 1 页', async () => {
+    const wrapper: any = mountView();
+    await vi.waitFor(() => expect(mockList).toHaveBeenCalled());
+    wrapper.vm.query.page = 3;
+    wrapper.vm.search();
+    expect(wrapper.vm.query.page).toBe(1);
+  });
+
+  // ── B113：「从样衣建报价」选中后再搜别的关键字，点创建毫无反应 ──
+  it('B113 选中样衣后又搜了别的关键字，点「创建」仍按选中的那张建单', async () => {
+    const wrapper: any = mountView();
+    await vi.waitFor(() => expect(mockList).toHaveBeenCalled());
+    wrapper.vm.sampleOptions = [{ id: 7, sample_no: 'S-7', style_no: 'ST-7', customer_id: 42 }];
+    wrapper.vm.fromSampleId = 7;
+    wrapper.vm.onPickSample(7);
+    wrapper.vm.sampleOptions = [{ id: 9, sample_no: 'S-9', style_no: 'ST-9', customer_id: 99 }]; // 又搜了别的关键字
+    await wrapper.vm.createFromSample();
+    expect(mockQuoteCreate).toHaveBeenCalledWith(expect.objectContaining({ sampleId: 7, middlemanId: 42 }));
+  });
+
+  it('B113 一张都没选就点「创建」时给一句提示，而不是毫无反应', async () => {
+    const wrapper: any = mountView();
+    await vi.waitFor(() => expect(mockList).toHaveBeenCalled());
+    const warn = vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({ id: '' } as any));
+    wrapper.vm.sampleOptions = [];
+    wrapper.vm.fromSampleId = undefined;
+    wrapper.vm.onPickSample(undefined);
+    await wrapper.vm.createFromSample();
+    expect(mockQuoteCreate).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('请先在下拉里选一张样衣'));
+    warn.mockRestore();
   });
 });

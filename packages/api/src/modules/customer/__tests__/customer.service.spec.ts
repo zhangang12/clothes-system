@@ -34,6 +34,7 @@ const mockManager = {
   create: jest.fn().mockImplementation((_e: any, v: any) => v),
   save: jest.fn().mockImplementation((_e: any, v: any) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: v.id ?? 1 })),
   delete: jest.fn().mockResolvedValue({}),
+  query: jest.fn().mockResolvedValue([]),
 };
 const mockDataSource = { transaction: jest.fn((cb: any) => cb(mockManager)), query: jest.fn().mockResolvedValue([]) };
 const mockGrantRepo = {
@@ -98,6 +99,25 @@ describe('CustomerService', () => {
       expect(result.customer_no).toBe('FE004');
     });
 
+    it('B043 不传/空白 name → 400，且不发号（客户编号不跳号）、不写库', async () => {
+      await expect(service.create({ type: CustomerType.MIDDLEMAN, contacts: CONTACTS } as any, 1))
+        .rejects.toThrow(BadRequestException);
+      await expect(service.create({ name: '   ', type: CustomerType.MIDDLEMAN, contacts: CONTACTS } as any, 1))
+        .rejects.toThrow('客户名称不能为空');
+      expect(mockRedis.incr).not.toHaveBeenCalled();
+      expect(mockManager.save).not.toHaveBeenCalled();
+    });
+
+    it('B061 develop_date 缺省取本地日历日（不是 UTC 日期）', async () => {
+      jest.useFakeTimers().setSystemTime(new Date(2026, 8, 20, 1, 30, 0)); // 本地 09-20 01:30，UTC 仍是 09-19（+08:00 进程）
+      try {
+        mockRedis.incr.mockResolvedValue(6);
+        await service.create({ name: '凌晨客户', type: CustomerType.MIDDLEMAN, contacts: CONTACTS } as any, 1);
+        const savedArg = mockManager.save.mock.calls[0][1];
+        expect(savedArg.develop_date).toBe('2026-09-20');
+      } finally { jest.useRealTimers(); }
+    });
+
     it('UT-CUS-15: throws when contacts empty (保存前·联系人非空校验)', async () => {
       mockRedis.incr.mockResolvedValue(5);
       await expect(service.create(
@@ -136,6 +156,27 @@ describe('CustomerService', () => {
       expect(call.where).toMatchObject({ type: CustomerType.BUYER });
     });
 
+    it('B063 keyword 与同名高级筛选（trade_country）同用时为 AND，不被 OR 分支覆盖', async () => {
+      mockRepo.findAndCount.mockResolvedValue([[], 0]);
+      await service.findAll({ page: 1, size: 20, keyword: 'ABC', trade_country: '美国' } as any);
+      const where = mockRepo.findAndCount.mock.calls[0][0].where;
+      expect(Array.isArray(where)).toBe(true);
+      for (const w of where) {
+        const tc = w.trade_country as any;
+        expect(tc).toBeDefined();
+        if (tc._type === 'and') {
+          // trade_country 自己那条 OR 分支：筛选值 与 关键词 两个 Like 同时成立
+          const vals = tc._value.map((op: any) => op._value);
+          expect(vals).toEqual(expect.arrayContaining(['%美国%', '%ABC%']));
+        } else {
+          // 其它分支：高级筛选原样保留
+          expect(tc._type).toBe('like');
+          expect(tc._value).toBe('%美国%');
+        }
+      }
+      expect(where.some((w: any) => w.trade_country._type === 'and')).toBe(true);
+    });
+
     it('UT-CUS-05: calculates correct skip for page 2', async () => {
       mockRepo.findAndCount.mockResolvedValue([[], 0]);
       await service.findAll({ page: 2, size: 15 } as any);
@@ -172,6 +213,13 @@ describe('CustomerService', () => {
       mockRepo.save.mockResolvedValue({ id: 1, status: 1 });
       await service.toggleStatus(1);
       expect(mockRepo.save).toHaveBeenCalledWith(expect.objectContaining({ status: 1 }));
+    });
+
+    it('B042 停用时统计未完成订单必须排除已软删（deleted:0），否则永远停不掉', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 1, status: 1, deleted: 0 });
+      mockRepo.save.mockResolvedValue({ id: 1, status: 0 });
+      await service.toggleStatus(1);
+      expect(mockOrderRepo.count).toHaveBeenCalledWith({ where: expect.objectContaining({ customer_id: 1, deleted: 0 }) });
     });
 
     it('UT-CUS-13: throws when disabling a customer with open (non-DONE) orders', async () => {
@@ -255,10 +303,51 @@ describe('CustomerService', () => {
     });
 
     it('UT-CUS-G3: grantBatch 多客户×多用户批量授权', async () => {
-      mockGrantRepo.findOne.mockResolvedValue(null);
+      mockGrantRepo.find.mockResolvedValue([]);
       const r = await service.grantBatch([1, 2], [8, 9], false, 1);
       expect(r.created).toBe(4);
-      expect(mockGrantRepo.save).toHaveBeenCalledTimes(4);
+      const savedRows = mockGrantRepo.save.mock.calls.flatMap((c: any[]) => (Array.isArray(c[0]) ? c[0] : [c[0]]));
+      expect(savedRows).toHaveLength(4);
+    });
+
+    it('B125 grantBatch 不再逐对 findOne+save：一次 find 查已有授权，更新与新建各自批量 save', async () => {
+      // 3 客户 × 4 人 = 12 对，其中 (1,8) 已有授权
+      mockGrantRepo.find.mockResolvedValue([{ id: 99, customer_id: '1', user_id: '8', can_edit: 0 }]);
+      const r = await service.grantBatch([1, 2, 3], [8, 9, 10, 11], true, 1, '2026-12-31', '备注');
+      expect(r).toEqual({ created: 11, updated: 1, customers: 3, users: 4 });
+      expect(mockGrantRepo.findOne).not.toHaveBeenCalled();
+      expect(mockGrantRepo.find).toHaveBeenCalledTimes(1);
+      // 最多两次 save（一批更新 + 一批新建），而不是 12 次
+      expect(mockGrantRepo.save.mock.calls.length).toBeLessThanOrEqual(2);
+      const savedRows = mockGrantRepo.save.mock.calls.flatMap((c: any[]) => (Array.isArray(c[0]) ? c[0] : [c[0]]));
+      expect(savedRows).toHaveLength(12);
+      const upd = savedRows.find((g: any) => g.id === 99);
+      expect(upd).toMatchObject({ can_edit: 1, expire_at: '2026-12-31', remark: '备注' });
+      expect(savedRows.filter((g: any) => g.id !== 99).every((g: any) => g.can_edit === 1 && g.created_by === 1)).toBe(true);
+    });
+
+    it('B125 输入里重复的 id 去重，不会对同一对 (客户,用户) 插两行撞唯一键', async () => {
+      mockGrantRepo.find.mockResolvedValue([]);
+      const r = await service.grantBatch([1, 1, 2], [8, 8], false, 1);
+      // 去重后是 2 个客户 × 1 个用户 = 2 对，不是按原始长度 3×2=6
+      expect(r).toEqual({ created: 2, updated: 0, customers: 2, users: 1 });
+      const savedRows = mockGrantRepo.save.mock.calls.flatMap((c: any[]) => (Array.isArray(c[0]) ? c[0] : [c[0]]));
+      expect(savedRows.map((g: any) => `${g.customer_id}:${g.user_id}`).sort()).toEqual(['1:8', '2:8']);
+    });
+
+    it('B101 授权清单的 expire_at：裸 SQL 回来的 Date（+08:00 本地零点）归一成 YYYY-MM-DD，不再早一天', async () => {
+      // mysql2 按连接时区把 DATE '2026-09-20' 解析成本地 2026-09-20 00:00:00
+      const localMidnight = new Date(2026, 8, 20, 0, 0, 0);
+      mockDataSource.query.mockResolvedValueOnce([
+        { id: 1, customer_id: 3, user_id: 8, expire_at: localMidnight, username: 'u' },
+        { id: 2, customer_id: 3, user_id: 9, expire_at: null, username: 'v' },
+        { id: 3, customer_id: 3, user_id: 10, expire_at: '2026-10-01', username: 'w' },
+      ]);
+      const rows = await service.getGrants(3);
+      expect(rows[0].expire_at).toBe('2026-09-20');
+      expect(rows[1].expire_at).toBeNull();
+      expect(rows[2].expire_at).toBe('2026-10-01');
+      expect(JSON.stringify(rows[0])).toContain('"expire_at":"2026-09-20"');
     });
 
     it('UT-CUS-G4: 仅查看授权的用户 update → Forbidden（无修改权限）', async () => {
@@ -322,6 +411,29 @@ describe('CustomerService', () => {
       const cond = Array.isArray(where) ? where[0] : where;
       const inValues = (cond.id as any).value ?? (cond.id as any)._value;
       expect(inValues).toEqual([12]); // 仅保留真交集，id=1 不得混入
+    });
+  });
+
+  describe('update() 改名同步快照', () => {
+    it('B041 中间商名快照只同步「本来就有中间商名」的行，直接客户报价/样衣/订单留空的不被强塞买家名', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 5, name: '旧名', created_by: 1, deleted: 0, type: 'BUYER' });
+      await service.update(5, { name: '新名' } as any, { id: 1, role: 'ADMIN' });
+      const sqls = mockManager.query.mock.calls.map((c: any[]) => String(c[0]).replace(/\s+/g, ' '));
+      const midSyncs = sqls.filter((q) => /SET middleman_name = \?/.test(q));
+      expect(midSyncs).toHaveLength(3); // quotation / sample_garment / order_main
+      for (const q of midSyncs) {
+        expect(q).toMatch(/middleman_name IS NOT NULL/);
+        expect(q).toMatch(/middleman_name <> ''/);
+      }
+      // 买家名快照按 buyer_id 同步，本就只命中真有买家的行，口径不变
+      expect(sqls.filter((q) => /SET buyer_name = \?/.test(q))).toHaveLength(2);
+      expect(mockManager.query.mock.calls.every((c: any[]) => c[1][0] === '新名' && c[1][1] === 5)).toBe(true);
+    });
+
+    it('B041 没改名不发任何同步 SQL', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 5, name: '同名', created_by: 1, deleted: 0, type: 'BUYER' });
+      await service.update(5, { name: '同名', city: '上海' } as any, { id: 1, role: 'ADMIN' });
+      expect(mockManager.query).not.toHaveBeenCalled();
     });
   });
 });

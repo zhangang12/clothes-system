@@ -1,10 +1,17 @@
 import {
-  IsString, IsEnum, IsOptional, IsArray, IsInt, MaxLength, ValidateNested, IsNumber } from 'class-validator';
+  IsString, IsEnum, IsOptional, IsArray, IsInt, MaxLength, ValidateNested, IsNumber, Allow } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CustomerGrade, CustomerType } from '@i9/types';
 
 export class CustomerContactDto {
+  // 前端 CustomerEditView 把详情接口回来的联系人行**原样**回传（banks/expresses 有映射，contacts 没有），
+  // 行里带着实体列 id/customer_id/sort_order。全局 forbidNonWhitelisted 会把它们当未知字段 400，
+  // 这里显式放行但不落库（buildSubtables 只读 camelCase 字段，sort_order 用行序重排）。
+  @Allow() id?: unknown;
+  @Allow() customer_id?: unknown;
+  @Allow() sort_order?: unknown;
+
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) name?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) department?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2) gender?: string;

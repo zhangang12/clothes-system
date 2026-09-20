@@ -96,7 +96,7 @@ export async function exportContractExcel(detail: any): Promise<void> {
       title: isProcess ? '加工明细' : '材料明细',
       head: ['#', '品名', '规格', '颜色', '尺码', '款号', '单位', '数量', '数量来源', '单价', '小计', '交货期限', '照片', '备注'],
       rows: matRows,
-      foot: ['合计', '', '', '', '', '', '', qty(sum(mats, (m) => m.qty)), '', '', money2(sum(mats, (m) => m.amount)), '', ''],
+      foot: ['合计', '', '', '', '', '', '', qty(sum(mats, (m) => m.qty, 4)), '', '', money2(sum(mats, (m) => m.amount)), '', ''],
       empty: '（无货物明细）',
     },
   ];
@@ -113,7 +113,7 @@ export async function exportContractExcel(detail: any): Promise<void> {
         (b.items ?? []).map((it: any) => `${it.item_name ?? '行'}×${+it.qty}`).join(' / '),
         b.operator,
       ]),
-      foot: ['合计', '', '', qty(sum(ships, (b) => b.qty)), '', money2(sum(ships, (b) => b.amount)), '', '', '', '', '', '', '', ''],
+      foot: ['合计', '', '', qty(sum(ships, (b) => b.qty, 4)), '', money2(sum(ships, (b) => b.amount)), '', '', '', '', '', '', '', ''],
     });
   }
 

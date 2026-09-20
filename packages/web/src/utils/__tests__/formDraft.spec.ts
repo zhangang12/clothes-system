@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { reactive } from 'vue';
 import { mount } from '@vue/test-utils';
 import { defineComponent, h } from 'vue';
-import { useFormDraft } from '../formDraft';
+import { useFormDraft, clearAllDrafts } from '../formDraft';
 import { ElMessageBox } from 'element-plus';
 
 // localStorage mock
@@ -12,6 +12,9 @@ const localStorageMock = {
   setItem: (k: string, v: string) => { store[k] = v; },
   removeItem: (k: string) => { delete store[k]; },
   clear: () => { for (const k of Object.keys(store)) delete store[k]; },
+  // clearAllDrafts 要按前缀遍历，真 Storage 的 length/key() 得有
+  get length() { return Object.keys(store).length; },
+  key: (i: number) => Object.keys(store)[i] ?? null,
 };
 vi.stubGlobal('localStorage', localStorageMock);
 
@@ -26,6 +29,63 @@ function mountWithDraft(form: any, key = '/samples/new') {
 
 describe('useFormDraft 表单本地草稿', () => {
   beforeEach(() => { localStorageMock.clear(); vi.restoreAllMocks(); });
+
+  // ── B092：打开编辑页看一眼就返回，下次再打开必弹「检测到未保存草稿」；
+  //    期间别人改过这张单，点「恢复草稿」再保存就把对方的改动覆盖回去。
+  //    现在只有表单相对「初始快照」真有改动才写草稿。
+  it('B092 打开页面什么都没改就离开 → 不写草稿（原来无条件写）', async () => {
+    const form = reactive({ a: '库里的值', items: [{ n: 1 }] });
+    const { wrapper } = mountWithDraft(form, '/orders/5/edit');
+    wrapper.unmount();
+    expect(store['i9.draft./orders/5/edit']).toBeUndefined();
+  });
+
+  it('B092 编辑页 load 完再问草稿：此刻的表单是库里的原样，之后不动也不写', async () => {
+    const form = reactive({ a: '' });
+    const { wrapper, draft } = mountWithDraft(form, '/orders/6/edit');
+    Object.assign(form, { a: '后端读回来的值' }); // 模拟 load() 把库里数据填进表单
+    await draft().restorePrompt();               // 编辑页都是 load 之后才问草稿
+    wrapper.unmount();
+    expect(store['i9.draft./orders/6/edit']).toBeUndefined();
+  });
+
+  it('B092 真改过才写草稿', async () => {
+    vi.useFakeTimers();
+    const form = reactive({ a: '库里的值' });
+    const { wrapper } = mountWithDraft(form, '/orders/7/edit');
+    form.a = '我改的值';
+    await vi.advanceTimersByTimeAsync(900);
+    wrapper.unmount();
+    expect(JSON.parse(store['i9.draft./orders/7/edit']).data.a).toBe('我改的值');
+    vi.useRealTimers();
+  });
+
+  it('B092 改了又手工改回原样 → 草稿清掉，下次不再白弹一次', async () => {
+    vi.useFakeTimers();
+    const form = reactive({ a: '库里的值' });
+    const { wrapper } = mountWithDraft(form, '/orders/8/edit');
+    form.a = '改一下';
+    await vi.advanceTimersByTimeAsync(900);
+    expect(store['i9.draft./orders/8/edit']).toBeTruthy();
+    form.a = '库里的值';
+    await vi.advanceTimersByTimeAsync(900);
+    expect(store['i9.draft./orders/8/edit']).toBeUndefined();
+    wrapper.unmount();
+    expect(store['i9.draft./orders/8/edit']).toBeUndefined();
+    vi.useRealTimers();
+  });
+
+  it('B144 clearAllDrafts 清掉本机所有草稿（换账号不该看到上一个人的）', () => {
+    store['i9.draft./orders/1/edit'] = '{"t":1,"data":{}}';
+    store['i9.draft./quotes/2/edit'] = '{"t":1,"data":{}}';
+    store['i9.list.orders'] = '{"query":{}}';   // 不归它管
+    store['token'] = 'x';
+    clearAllDrafts();
+    expect(store['i9.draft./orders/1/edit']).toBeUndefined();
+    expect(store['i9.draft./quotes/2/edit']).toBeUndefined();
+    expect(store['i9.list.orders']).toBe('{"query":{}}');
+    expect(store['token']).toBe('x');
+  });
 
   it('输入后防抖自动写入 localStorage', async () => {
     vi.useFakeTimers();

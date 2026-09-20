@@ -43,7 +43,7 @@
 
       <!-- ================= 供应商门户账号 ================= -->
       <el-tab-pane label="供应商门户账号" name="suppliers">
-        <p class="muted tip">供应商账号在首次推送合同给工厂时自动开通（账号=工厂编号，初始密码 Factory@123）。此处可重置密码或启停。</p>
+        <p class="muted tip">供应商账号在首次推送合同给工厂时自动开通（账号=工厂编号）。密码不在页面上展示，请用下方「重置密码」设置后单独告知供应商；此处也可启停账号。</p>
         <el-table :data="suppliers" v-loading="loadingS" border stripe>
           <el-table-column prop="id" label="ID" width="60" align="center" />
           <el-table-column prop="account" label="账号" width="140" />

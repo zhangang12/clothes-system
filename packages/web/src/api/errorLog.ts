@@ -1,4 +1,4 @@
-import { http } from './index';
+import { http, redirectToLogin } from './index';
 
 export const errorLogApi = {
   list: (params?: { page?: number; size?: number; status?: string }) =>
@@ -13,6 +13,11 @@ export async function downloadHtml(path: string, filename: string) {
   const res = await fetch(`/api/v1${path}`, {
     headers: { Authorization: `Bearer ${localStorage.getItem('token') ?? ''}` },
   });
+  // 裸 fetch 不经过 axios 拦截器：令牌过期得自己走同一条跳登录的路，别只弹「导出失败 (401)」让人干瞪眼（B137）
+  if (res.status === 401) {
+    redirectToLogin();
+    throw new Error('登录已过期，请重新登录后再导出');
+  }
   if (!res.ok) throw new Error(`导出失败 (${res.status})`);
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);

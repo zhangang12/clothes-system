@@ -2,13 +2,14 @@ import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { MenuGuard, MenuAccess } from '../../common/guards/menu.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@i9/types';
 import { StatsService } from './stats.service';
 
 @ApiTags('报表统计')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, MenuGuard)
 @Controller('stats')
 export class StatsController {
   constructor(private readonly service: StatsService) {}
@@ -20,7 +21,10 @@ export class StatsController {
     return this.service.funnel();
   }
 
+  // B086：同文件其余三个都有 @Roles，唯独这条没有——版师/打样能拿到按客户/PO 汇总的订单金额（订单模块对他们是抹掉 total_amount 的）。
+  // 按「能看见报表菜单的人才能调」收口（与侧栏同一份口径），不动角色默认菜单。
   @Get('orders')
+  @MenuAccess('reports')
   @ApiQuery({ name: 'dimension', required: false, enum: ['po', 'customer', 'factory', 'currency'] })
   @ApiOperation({ summary: '订单维度统计:按PO/客户/工厂/币种聚合(P3#34/ORD D8)' })
   orderStats(@Query('dimension') dimension?: string) {

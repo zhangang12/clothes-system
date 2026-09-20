@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { buildDocXls, sum, n2, d10, val, imgCell, isImageCell, imageSize, type Block } from '../docExcel';
+import { fmtDate } from '../format';
 import { exportQuoteExcel } from '../quoteExcel';
 import { exportToXlsx, flatten, numericCells, imageCount, stubImageOk, stubImageFail, stubImageTooBig, pngHeader, jpegHeader, gifHeader } from './xlsxTestKit';
 
@@ -19,6 +20,30 @@ beforeEach(() => {
   HTMLAnchorElement.prototype.click = vi.fn();
 });
 afterEach(() => { vi.unstubAllGlobals(); });
+
+describe('docExcel 日期与合计口径', () => {
+  it('B091 d10 对带时区的 datetime 先转本地再取日期（早 8 点前不再显示成前一天）', () => {
+    const iso = '2026-07-31T23:30:00.000Z'; // 本地 +08:00 = 08-01 07:30
+    expect(d10(iso)).toBe(fmtDate(iso));
+    expect(d10(iso)).not.toBe('2026-07-31');
+  });
+
+  it('B091 DATE 列（纯 YYYY-MM-DD）照旧原样，空值出空单元格', () => {
+    expect(d10('2026-08-01')).toBe('2026-08-01');
+    expect(d10(null)).toBe('');
+    expect(d10('')).toBe('');
+  });
+
+  it('B142 合计按列精度舍入：4 位数量列传 digits=4，不再被压成 2 位', () => {
+    const rows = [{ qty: 12.3456 }, { qty: 12.3456 }, { qty: 12.3456 }];
+    expect(sum(rows, (r) => r.qty, 4)).toBe(37.0368); // 合同量
+    expect(sum(rows, (r) => r.qty)).toBe(37.04);      // 默认 2 位（金额列）
+  });
+
+  it('B142 金额列默认仍是 2 位，浮点尾数不外泄', () => {
+    expect(sum([{ a: 0.1 }, { a: 0.2 }], (r) => r.a)).toBe(0.3);
+  });
+});
 
 // .xls(HTML) 出口仍在服役——对账/付款/结算三张单还走它，下面这组是它的回归网
 describe('docExcel 公共层 · HTML 工作表出口', () => {

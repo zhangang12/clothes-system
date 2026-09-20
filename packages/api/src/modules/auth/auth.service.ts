@@ -1,12 +1,14 @@
-import { Injectable, UnauthorizedException, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, NotFoundException, Inject, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
+import Redis from 'ioredis';
 import { MENU_REGISTRY, isAdminRole } from '@i9/types';
 import { SysUser } from './sys-user.entity';
 import { SupplierAccount } from './supplier-account.entity';
 import { Factory } from '../factory/factory.entity';
+import { REDIS_CLIENT } from '../../common/services/numbering.service';
 
 export interface JwtPayload {
   sub: number;
@@ -14,7 +16,20 @@ export interface JwtPayload {
   role: string;
   type: 'admin' | 'supplier';
   factory_id?: number;
+  iat?: number; // jsonwebtoken 自动写入的签发时间（秒）；JwtStrategy 用它判断 token 是否早于最近一次改密
 }
+
+/**
+ * B031：改密/重置密码不吊销已签发的 JWT（门户令牌 30 天）。不加列，用 Redis 记「最近一次改密时间（秒）」，
+ * JwtStrategy 每请求比对 token.iat < 该时间 → 401。key 按账号类型分开（sys_user 与 supplier_account 的 id 会撞）。
+ * TTL 取 31 天 ≥ 最长的 JWT 有效期，过期后再没有比它更早签发的有效 token，记录自然可丢。
+ */
+export const pwdTsKey = (type: 'admin' | 'supplier', id: number | string) => `auth:pwdts:${type}:${id}`;
+export const PWD_TS_TTL_SEC = 31 * 24 * 3600;
+
+// B116：用户不存在/停用时也跑一次 bcrypt.compare，让响应耗时与「密码错误」同量级，不给枚举用户名留时序侧信道。
+// 任意合法格式的 bcrypt 哈希即可，永远不会与用户输入匹配。
+const DUMMY_HASH = '$2a$10$NVzPb4aLIvIVUxzyPXpYIuD8rRx1bxXKWz1sqGnR4rCMQNOgZGMu2';
 
 // 账号管理端点 @Roles(ADMIN, SUPERVISOR)；SUPERVISOR 权限视同 ADMIN（2026-07-22 用户拍板），
 // 早前「主管限指派 5 种角色/不能碰管理账号」的防线已随该决策移除。
@@ -27,19 +42,29 @@ function normMenuKeys(role: string, menuKeys?: string[] | null): string[] | null
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @InjectRepository(SysUser) private readonly userRepo: Repository<SysUser>,
     @InjectRepository(SupplierAccount) private readonly supplierRepo: Repository<SupplierAccount>,
     private readonly jwt: JwtService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
+
+  /** 记录改密时间（B031）。Redis 写失败只记日志不阻断改密：退化为旧行为（旧 token 用到自然过期），不能让人改不了密码。 */
+  private async markPasswordChanged(type: 'admin' | 'supplier', id: number | string): Promise<void> {
+    try {
+      await this.redis.set(pwdTsKey(type, id), String(Math.floor(Date.now() / 1000)), 'EX', PWD_TS_TTL_SEC);
+    } catch (e) {
+      this.logger.warn(`记录改密时间失败(${type}#${id})，旧 token 将用到自然过期: ${(e as Error)?.message}`);
+    }
+  }
 
   async loginAdmin(username: string, password: string) {
     const user = await this.userRepo.findOne({ where: { username } });
-    if (!user || user.status !== 1) {
-      throw new UnauthorizedException('用户名或密码错误');
-    }
-    const valid = await bcrypt.compare(password, user.password);
-    if (!valid) throw new UnauthorizedException('用户名或密码错误');
+    // B116：查无此人/已停用也照样比对一次（对 DUMMY_HASH），耗时与密码错误一致
+    const valid = await bcrypt.compare(password, user?.password ?? DUMMY_HASH);
+    if (!user || user.status !== 1 || !valid) throw new UnauthorizedException('用户名或密码错误');
 
     const payload: JwtPayload = {
       sub: user.id,
@@ -57,11 +82,9 @@ export class AuthService {
 
   async loginSupplier(account: string, password: string) {
     const supplier = await this.supplierRepo.findOne({ where: { account } });
-    if (!supplier || supplier.status !== 1) {
-      throw new UnauthorizedException('账号或密码错误');
-    }
-    const valid = await bcrypt.compare(password, supplier.password);
-    if (!valid) throw new UnauthorizedException('账号或密码错误');
+    // B116：同 loginAdmin
+    const valid = await bcrypt.compare(password, supplier?.password ?? DUMMY_HASH);
+    if (!supplier || supplier.status !== 1 || !valid) throw new UnauthorizedException('账号或密码错误');
 
     // 更新最后登录时间
     await this.supplierRepo.update(supplier.id, { last_login_at: new Date() });
@@ -100,11 +123,13 @@ export class AuthService {
       if (!acc || !(await bcrypt.compare(oldPwd, acc.password))) throw new BadRequestException('原密码不正确');
       if (await bcrypt.compare(newPwd, acc.password)) throw new BadRequestException('新密码不能与原密码相同');
       await this.supplierRepo.update(acc.id, { password: await bcrypt.hash(newPwd, 10) });
+      await this.markPasswordChanged('supplier', acc.id); // B031：旧 token 立即失效（本次请求的 token 也在内，前端会回登录页）
     } else {
       const u = await this.userRepo.findOne({ where: { id: user.id } });
       if (!u || !(await bcrypt.compare(oldPwd, u.password))) throw new BadRequestException('原密码不正确');
       if (await bcrypt.compare(newPwd, u.password)) throw new BadRequestException('新密码不能与原密码相同');
       await this.userRepo.update(u.id, { password: await bcrypt.hash(newPwd, 10) });
+      await this.markPasswordChanged('admin', u.id);
     }
     return { ok: true };
   }
@@ -159,6 +184,7 @@ export class AuthService {
     const u = await this.userRepo.findOne({ where: { id } });
     if (!u) throw new NotFoundException('用户不存在');
     await this.userRepo.update(id, { password: await bcrypt.hash(newPwd, 10) });
+    await this.markPasswordChanged('admin', id); // B031
     return { ok: true };
   }
 
@@ -179,6 +205,7 @@ export class AuthService {
     const acc = await this.supplierRepo.findOne({ where: { id } });
     if (!acc) throw new NotFoundException('供应商账号不存在');
     await this.supplierRepo.update(id, { password: await bcrypt.hash(newPwd, 10) });
+    await this.markPasswordChanged('supplier', id); // B031：供应商密码泄露后重置，30 天的旧门户令牌当场作废
     return { ok: true };
   }
 

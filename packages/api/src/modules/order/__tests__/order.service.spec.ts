@@ -14,6 +14,8 @@ import { QuotationItem } from '../../quote/quotation-item.entity';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
 import { SysConfigService } from '../../../common/config/sys-config.service';
 import { OrderStatus, QuoteStatus, ApprovalStatus } from '@i9/types';
+import { OrderService as OrderServiceStatic } from '../order.service';
+import { todayLocal } from '../../../common/utils/local-date';
 
 const makeOrder = (overrides = {}): any => ({
   id: 1,
@@ -297,6 +299,7 @@ describe('OrderService', () => {
     mockOrderRepo.findOne.mockResolvedValue(makeOrder({ status: OrderStatus.DRAFT }));
     await expect(service.revertToDraft(1)).rejects.toThrow('本就是草稿');
     mockOrderRepo.findOne.mockResolvedValue(makeOrder({ status: OrderStatus.CONTRACTED }));
+    mockDataSource.query.mockResolvedValueOnce([{ contract_no: 'HT-20260901-001' }]); // 名下还有活合同（B039 后按真实合同判）
     await expect(service.revertToDraft(1)).rejects.toThrow('已生成合同的订单不可撤回');
     expect(mockOrderRepo.save).not.toHaveBeenCalled();
   });
@@ -343,6 +346,7 @@ describe('OrderService', () => {
       create: jest.fn().mockImplementation((_, v) => v),
       save: jest.fn().mockImplementation((_, v) => Promise.resolve(v)),
       findOne: jest.fn().mockResolvedValue(null),
+      query: jest.fn().mockResolvedValue([]), // 被删的 12 号行没进过合同（B007）
     };
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.update(1, {
@@ -365,6 +369,7 @@ describe('OrderService', () => {
       create: jest.fn().mockImplementation((_, v) => v),
       save: jest.fn().mockImplementation((_, v) => Promise.resolve(v)),
       findOne: jest.fn().mockResolvedValue(null),
+      query: jest.fn().mockResolvedValue([]),
     };
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.update(1, { materials: [{ id: 999, item_name: '别单的料' }] } as any);
@@ -573,5 +578,234 @@ describe('OrderService', () => {
     expect(perColor).toMatchObject({ qty: 3000, total_purchase: 3000, final_purchase: 3000, budget: 30000 });
     expect(whole).toMatchObject({ qty: 4528, total_purchase: 4528 });   // 不拆的行重算结果不变
   });
-});
 
+  // ===== 2026-09-20 全系统审查 · 订单模块缺陷回归（B0xx/B1xx 为清单编号） =====
+
+  const txManager = (over: Record<string, any> = {}) => ({
+    create: jest.fn().mockImplementation((_: any, v: any) => v),
+    save: jest.fn().mockImplementation((_: any, v: any) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: v.id ?? 1 })),
+    find: jest.fn().mockResolvedValue([]),
+    findOne: jest.fn().mockResolvedValue(null),
+    delete: jest.fn().mockResolvedValue({}),
+    query: jest.fn().mockResolvedValue([]),
+    ...over,
+  });
+
+  it('B007 编辑订单删掉已进合同的材料行 → 拒绝并点名合同号，一行都不删', async () => {
+    mockOrderRepo.findOne.mockResolvedValue(makeOrder({ status: OrderStatus.DRAFT }));
+    const manager = txManager({
+      find: jest.fn().mockResolvedValue([{ id: 11, item_name: '面料A' }, { id: 12, item_name: '金属丝底PU' }]),
+      query: jest.fn().mockResolvedValue([{ omid: 12, contract_no: 'HT-20260910-003' }]),
+    });
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await expect(service.update(1, { materials: [{ id: 11, item_name: '面料A' }] } as any))
+      .rejects.toThrow(/金属丝底PU.*HT-20260910-003/);
+    // 查的就是被删的那一行，且事务内用 manager（不用 this.xxxRepo）
+    expect(manager.query.mock.calls[0][1]).toEqual([[12]]);
+    expect(manager.delete).not.toHaveBeenCalled();
+    expect(manager.save.mock.calls.some((c) => Array.isArray(c[1]))).toBe(false);
+  });
+
+  it('B007 没删任何行时不查合同（只回传全部旧行 + 新增行）', async () => {
+    mockOrderRepo.findOne.mockResolvedValue(makeOrder({ status: OrderStatus.DRAFT }));
+    const manager = txManager({ find: jest.fn().mockResolvedValue([{ id: 11, item_name: '面料A' }]) });
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await service.update(1, { materials: [{ id: 11, item_name: '面料A' }, { item_name: '新料' }] } as any);
+    expect(manager.query).not.toHaveBeenCalled();
+    expect(manager.delete).toHaveBeenCalled();
+  });
+
+  it('B050 整数单位：300×0.07 / 100×0.2×1.05 的浮点噪声不能让 ceil 多买 1 个', () => {
+    expect(OrderServiceStatic.calcPurchase(300, 0.07, 0, '个').total).toBe(21);
+    expect(OrderServiceStatic.calcPurchase(100, 0.2, 5, '个').total).toBe(21);
+    expect(OrderServiceStatic.calcPurchase(100, 0.2, 5, undefined, true).total).toBe(21);
+    // 真有小数照样向上取整、非整数单位仍保留 4 位
+    expect(OrderServiceStatic.calcPurchase(1454, 1, 3, '条').total).toBe(1498);
+    expect(OrderServiceStatic.calcPurchase(300, 0.07, 0, '米').total).toBe(21);
+    expect(OrderServiceStatic.calcPurchase(7, 0.3333, 0, '米').total).toBe(2.3331);
+  });
+
+  it('B052 编辑改买家 → 同步刷新 buyer_name 快照；清空买家 → 快照一起清', async () => {
+    const order = makeOrder({ status: OrderStatus.DRAFT, buyer_id: 5, buyer_name: 'A公司' });
+    mockOrderRepo.findOne.mockResolvedValue(order);
+    mockDataSource.query.mockResolvedValueOnce([{ name: 'B公司' }]);
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(txManager()));
+    await service.update(1, { buyer_id: 8 } as any);
+    expect(mockDataSource.query.mock.calls.at(-1)[1]).toEqual([8]);
+    expect(order).toMatchObject({ buyer_id: 8, buyer_name: 'B公司' });
+
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(txManager()));
+    await service.update(1, { buyer_id: null } as any);
+    expect(order.buyer_id).toBeNull();
+    expect(order.buyer_name).toBeNull();
+  });
+
+  it('B052 买家 ID 不存在 → 400，不落库', async () => {
+    mockOrderRepo.findOne.mockResolvedValue(makeOrder({ status: OrderStatus.DRAFT }));
+    mockDataSource.query.mockResolvedValueOnce([]);
+    mockDataSource.transaction.mockClear();
+    await expect(service.update(1, { buyer_id: 404 } as any)).rejects.toThrow(/最终买家客户 #404 不存在/);
+    expect(mockDataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('B053 从报价导入带入单价后重算 total_amount（否则直接「下单」拿陈旧金额绕过阈值审批）', async () => {
+    mockOrderRepo.findOne.mockResolvedValueOnce({ ...IMP_ORDER, qty_total: 1000, unit_price: null, total_amount: null });
+    mockQuoteRepo.findOne.mockResolvedValueOnce({ ...IMP_QUOTE, rmb_total: 500 });
+    mockQuoteItemRepo.find.mockResolvedValueOnce([]);
+    mockDataSource.query.mockResolvedValueOnce([]);
+    const m = impManager();
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(m));
+    await service.importFromQuote(32, 7);
+    const savedMain = m.save.mock.calls.find((c) => c[0] === OrderMain)![1];
+    expect(savedMain).toMatchObject({ unit_price: 500, total_amount: 500000 });
+  });
+
+  it('B054 报价明细损耗 0%、单价 0 元原样导入，不被当成「没填」', async () => {
+    mockOrderRepo.findOne.mockResolvedValueOnce({ ...IMP_ORDER, qty_total: 100 });
+    mockQuoteRepo.findOne.mockResolvedValueOnce({ ...IMP_QUOTE });
+    mockQuoteItemRepo.find.mockResolvedValueOnce([
+      { id: 71, item_name: '客供辅料', quote_usage: '2.0000', loss_rate: '0.00', rmb_price: '0.0000' }, // mysql decimal 回来是字符串
+      { id: 72, item_name: '主面料', quote_usage: 1.2, loss_rate: null, rmb_price: null },              // 真没填才回退默认
+    ]);
+    mockDataSource.query.mockResolvedValueOnce([]);
+    const m = impManager();
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(m));
+    await service.importFromQuote(32, 7);
+    const saved = m.save.mock.calls.find((c) => Array.isArray(c[1]))![1];
+    expect(saved[0]).toMatchObject({ item_name: '客供辅料', loss_rate: 0, unit_price: 0, total_purchase: 200 });
+    expect(saved[1]).toMatchObject({ item_name: '主面料', loss_rate: 3 });
+    expect(saved[1].unit_price).toBeUndefined();
+  });
+
+  it('B055 改矩阵把颜色改名后，按色单行对不上 → 拒绝，不把该行算成 0 也不落矩阵', async () => {
+    const order = makeOrder({ status: OrderStatus.CONFIRMED, qty_total: 4528, unit_price: 10 });
+    mockOrderRepo.findOne.mockResolvedValue(order);
+    mockMatrixRepo.findOne.mockResolvedValue({ id: 9, order_id: 1, matrix_data: MX });
+    const perColor = { id: 5, order_id: 1, item_name: '金属丝底PU', color: '米白11-0602', split_mode: 'PER_COLOR', unit: '米',
+      net_usage: 1, loss_rate: 0, round_up: 0, qty: 2264, total_purchase: 2264, final_purchase: 2264, unit_price: 10, budget: 22640 };
+    const manager = txManager({ find: jest.fn().mockResolvedValue([perColor]) });
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await expect(service.updateMatrix(1, { pos: [{ po_no: 'P1' }], rows: [
+      { color: '米白色11-0602', size: 'M', qtys: [3000] }, { color: '浅棕18-1048', size: 'M', qtys: [1528] },
+    ] })).rejects.toThrow(/金属丝底PU.*米白11-0602.*不在数量搭配矩阵里/);
+    expect(perColor.total_purchase).toBe(2264); // 没被改成 0
+    expect(manager.save.mock.calls.some((c) => c[0] === OrderSizeMatrix || c[0] === OrderMaterial)).toBe(false);
+  });
+
+  it('B056 草稿订单名下还有未删除合同 → 不能删', async () => {
+    mockOrderRepo.findOne.mockResolvedValue(makeOrder({ status: OrderStatus.DRAFT, quote_id: 7 }));
+    mockDataSource.query.mockResolvedValueOnce([{ contract_no: 'HT-20260905-001' }, { contract_no: 'HT-20260905-002' }]);
+    await expect(service.remove(1)).rejects.toThrow(/HT-20260905-001、HT-20260905-002.*先删除相关合同/);
+    expect(mockOrderRepo.save).not.toHaveBeenCalled();
+    expect(mockQuoteRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('B128 编辑 / 改矩阵 / 导入报价 清审批状态时一并清 approved_by / approved_at', async () => {
+    const stamp = { approval_status: ApprovalStatus.APPROVED, approved_by: 9, approved_at: new Date('2026-09-01') };
+    // update
+    const o1 = makeOrder({ status: OrderStatus.DRAFT, ...stamp });
+    mockOrderRepo.findOne.mockResolvedValue(o1);
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(txManager()));
+    await service.update(1, { unit_price: 99 } as any);
+    expect(o1).toMatchObject({ approval_status: ApprovalStatus.NONE, approved_by: null, approved_at: null });
+    // updateMatrix（数量变了）
+    const o2 = makeOrder({ status: OrderStatus.CONFIRMED, qty_total: 500, ...stamp });
+    mockOrderRepo.findOne.mockResolvedValue(o2);
+    mockMatrixRepo.findOne.mockResolvedValue(null);
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(txManager()));
+    await service.updateMatrix(1, { pos: [], rows: [{ style_no: 'A', qtys: [600] }] });
+    expect(o2).toMatchObject({ approval_status: ApprovalStatus.NONE, approved_by: null, approved_at: null });
+    // importFromQuote
+    const o3 = { ...IMP_ORDER, ...stamp };
+    mockOrderRepo.findOne.mockResolvedValueOnce(o3);
+    mockQuoteRepo.findOne.mockResolvedValueOnce({ ...IMP_QUOTE });
+    mockQuoteItemRepo.find.mockResolvedValueOnce([]);
+    mockDataSource.query.mockResolvedValueOnce([]);
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(impManager()));
+    await service.importFromQuote(32, 7);
+    expect(o3).toMatchObject({ approval_status: ApprovalStatus.NONE, approved_by: null, approved_at: null });
+  });
+
+  it('B129 复制订单：制单日期是今天、外部单号不带；报价 id 保留（1:N 关系，未拍板不动）', async () => {
+    mockOrderRepo.findOne.mockResolvedValue(makeOrder({
+      quote_id: 7, make_date: '2026-01-05', external_no: 'OLD-SYS-001', customer_po: 'PO1', status: OrderStatus.DONE,
+    }));
+    const manager = txManager();
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await service.copy(1, 2);
+    const created = manager.create.mock.calls.find((c) => c[0] === OrderMain)![1];
+    expect(created.make_date).toBe(todayLocal());
+    expect(created.external_no).toBeNull();
+    expect(created).toMatchObject({ quote_id: 7, customer_po: 'PO1', status: OrderStatus.DRAFT, created_by: 2 });
+  });
+
+  it('B130 撤回下单把报价从「已成单」放回「已报价」；还有别的非草稿订单挂着时不动', async () => {
+    const order = makeOrder({ status: OrderStatus.CONFIRMED, quote_id: 7 });
+    mockOrderRepo.findOne.mockResolvedValue(order);
+    mockOrderRepo.count.mockResolvedValueOnce(0);
+    await service.revertToDraft(1);
+    expect(order.status).toBe(OrderStatus.DRAFT);
+    const where = mockOrderRepo.count.mock.calls.at(-1)[0].where;
+    expect(where).toMatchObject({ quote_id: 7, deleted: 0 });
+    expect(where.id).toBeDefined();      // 排除自己
+    expect(where.status).toBeDefined();  // 只算非草稿
+    expect(mockQuoteRepo.update).toHaveBeenCalledWith({ id: 7, status: QuoteStatus.ORDERED }, { status: QuoteStatus.QUOTED });
+
+    mockQuoteRepo.update.mockClear();
+    mockOrderRepo.findOne.mockResolvedValue(makeOrder({ status: OrderStatus.CONFIRMED, quote_id: 7 }));
+    mockOrderRepo.count.mockResolvedValueOnce(1);
+    await service.revertToDraft(1);
+    expect(mockQuoteRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('B132 改矩阵时 final_purchase=0 视为未微调，跟随系统量重算（与合同侧拆行同口径）', async () => {
+    const order = makeOrder({ status: OrderStatus.CONFIRMED, qty_total: 500, unit_price: 10 });
+    mockOrderRepo.findOne.mockResolvedValue(order);
+    mockMatrixRepo.findOne.mockResolvedValue(null);
+    const zero = { id: 5, order_id: 1, item_name: '面料A', unit: 'M', net_usage: 1.5, loss_rate: 10,
+      loss_usage: 1.65, qty: 500, total_purchase: 825, final_purchase: 0, round_up: null, unit_price: 20, budget: 0 };
+    const manual = { id: 6, order_id: 1, item_name: '辅料B', unit: 'M', net_usage: 1, loss_rate: 0,
+      loss_usage: 1, qty: 500, total_purchase: 500, final_purchase: 480, round_up: null, unit_price: 2, budget: 960 };
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(txManager({ find: jest.fn().mockResolvedValue([zero, manual]) })));
+    await service.updateMatrix(1, { pos: [], rows: [{ style_no: 'A', qtys: [600] }] });
+    expect(zero.final_purchase).toBeCloseTo(990, 2);   // 0 → 跟随 600×1.5×1.1
+    expect(zero.budget).toBeCloseTo(19800, 2);
+    expect(manual.final_purchase).toBe(480);           // 真人工微调过的仍保留
+  });
+
+  // ── 次项（别组主项在本文件的同类位置） ──
+
+  it('B039(次项) 状态卡在「已生成合同」但名下合同已全删 → 允许撤回为草稿', async () => {
+    const order = makeOrder({ status: OrderStatus.CONTRACTED });
+    mockOrderRepo.findOne.mockResolvedValue(order);
+    mockDataSource.query.mockResolvedValueOnce([]); // 无活合同
+    await service.revertToDraft(1);
+    expect(order.status).toBe(OrderStatus.DRAFT);
+    expect(mockOrderRepo.save).toHaveBeenCalledWith(order);
+    // 生产中 / 已完成仍不可撤回
+    mockOrderRepo.save.mockClear();
+    mockOrderRepo.findOne.mockResolvedValue(makeOrder({ status: OrderStatus.PRODUCING }));
+    await expect(service.revertToDraft(1)).rejects.toThrow('不可撤回');
+    expect(mockOrderRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('B061(次项) 制单日期取本地日历日，不是 UTC 日期（凌晨建单「单号是今天、日期是昨天」）', async () => {
+    // 本地 00:30 —— 在 +08:00 的进程里 UTC 还是前一天
+    jest.useFakeTimers({ now: new Date(2026, 8, 20, 0, 30, 0), doNotFake: ['nextTick', 'setImmediate', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'queueMicrotask'] });
+    try {
+      const manager = txManager();
+      mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+      await service.create({ customer_id: 3, qty_total: 10 } as any, 1);
+      expect(manager.save.mock.calls[0][1].make_date).toBe('2026-09-20');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('B122(次项) 详情回查源报价带 deleted:0，已删报价不再被带出', async () => {
+    mockOrderRepo.findOne.mockResolvedValue(makeOrder({ quote_id: 55 }));
+    mockQuoteRepo.findOne.mockResolvedValue(null);
+    await service.findOne(1);
+    expect(mockQuoteRepo.findOne).toHaveBeenCalledWith({ where: { id: 55, deleted: 0 } });
+  });
+});

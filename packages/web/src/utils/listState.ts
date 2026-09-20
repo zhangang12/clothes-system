@@ -24,6 +24,21 @@ const session = () => (typeof sessionStorage === 'undefined' ? undefined : sessi
 const local = () => (typeof localStorage === 'undefined' ? undefined : localStorage);
 
 /**
+ * 登出/换账号时清掉列表筛选记忆（B144）：sessionStorage 跟标签页同寿命，同一个标签页里换账号登录，
+ * 上一个人的关键词/页码会原样还原到下一个人的列表上。列宽是个人偏好、不带业务信息，不清。
+ */
+export function clearListState(): void {
+  try {
+    const st = session();
+    if (!st) return;
+    for (let i = st.length - 1; i >= 0; i--) {
+      const k = st.key(i);
+      if (k && k.startsWith(LIST_PREFIX)) st.removeItem(k);
+    }
+  } catch { /* 隐私模式/无 storage：忽略 */ }
+}
+
+/**
  * 记住列表页的筛选状态。在 setup 里、onMounted(load) 之前调用即可（还原是同步的，首次加载就用上）。
  *
  * - `states`：要记的对象，reactive 的 query 或 ref（日期范围、高级筛选展开、页签）

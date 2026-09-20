@@ -91,3 +91,25 @@ describe('登录态失效时的跳转', () => {
     expect(href.value).toBe('');
   });
 });
+
+describe('silent 请求（下拉选项这类附加信息）', () => {
+  it('silent 的请求失败不弹全局红字——@MenuAccess 403 不该糊在不相干的页面上', async () => {
+    const { onReject } = await loadRejectHandler('/payments');
+    const { ElMessage } = await import('element-plus');
+    await onReject({ config: { silent: true }, response: { status: 403, data: { msg: '无权访问' } } }).catch(() => {});
+    expect(ElMessage.error).not.toHaveBeenCalled();
+  });
+
+  it('没标 silent 的请求照旧提示', async () => {
+    const { onReject } = await loadRejectHandler('/payments');
+    const { ElMessage } = await import('element-plus');
+    await onReject({ config: {}, response: { status: 403, data: { msg: '无权访问' } } }).catch(() => {});
+    expect(ElMessage.error).toHaveBeenCalledWith('无权访问');
+  });
+
+  it('silent 不能把 401 的跳登录一起吞掉（登录态失效仍要跳）', async () => {
+    const { onReject, href } = await loadRejectHandler('/payments');
+    await onReject({ config: { silent: true }, response: { status: 401, data: {} } }).catch(() => {});
+    expect(href.value).toContain('/login');
+  });
+});

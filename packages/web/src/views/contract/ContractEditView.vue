@@ -11,23 +11,23 @@
         </div>
         <div class="head-right">
           <el-button v-if="editable" type="primary" :loading="saving" @click="save">💾 保存</el-button>
-          <el-button v-if="!editable && contractId" :loading="saving" @click="saveRemarkOnly">保存备注</el-button>
+          <!-- B023：没有编辑权限的账号连「保存备注」也不给——后端 PATCH 只放 ADMIN/BUSINESS，摆着点下去只会 403 -->
+          <el-button v-if="!editable && contractId && canEdit" :loading="saving" @click="saveRemarkOnly">保存备注</el-button>
           <el-button v-if="editable" @click="importDialogVisible = true">{{ isProcess ? '🏭 选订单款号带入' : '🔵 选订单款号带入' }}</el-button>
-          <el-button v-if="contractId && form.portal_status === 'DRAFT'" type="warning" plain @click="doPush">
+          <el-button v-if="contractId && form.portal_status === 'DRAFT' && canEdit" type="warning" plain :loading="pushing" @click="doPush">
             📤 {{ isProcess ? '推送工厂' : '推送供应商' }}
           </el-button>
           <el-button v-if="contractId" @click="doPrint">📄 生成 PDF</el-button>
           <el-button v-if="contractId" @click="exportExcel">📊 导出Excel</el-button>
-          <el-button v-if="contractId && form.type === 'MATERIAL'" plain @click="goSupplement">🧩 补料</el-button>
-          <el-button v-if="contractId" plain @click="goCopy">复制</el-button>
+          <el-button v-if="contractId && form.type === 'MATERIAL' && canEdit" plain @click="goSupplement">🧩 补料</el-button>
+          <el-button v-if="contractId && canEdit" plain @click="goCopy">复制</el-button>
         </div>
       </div>
       <!-- 门户进度：待推送 ▸ 待盖章 ▸ 待发货 ▸ 待对账 ▸ 待开票（设计稿 E1） -->
       <el-steps :active="portalStep" simple class="portal-steps">
         <el-step title="待推送" /><el-step title="待盖章" /><el-step title="待发货" /><el-step title="待对账" /><el-step title="待开票" />
       </el-steps>
-      <el-alert v-if="!editable && contractId" type="warning" :closable="false" show-icon
-        title="合同已推送/盖章，关键字段已锁定（仅备注可改）；如需修改请先在列表「撤销推送」回草稿。" />
+      <el-alert v-if="!editable && (contractId || !canEdit)" type="warning" :closable="false" show-icon :title="lockHint" />
     </div>
 
     <!-- 关联单据快速跳转:上游 订单/报价单/母合同、下游 对账单。各 chip 随反查数据到达陆续出现(不用 loading:
@@ -46,9 +46,11 @@
             <!-- 材料合同可以不关联订单（挂卡/销样面料本来就没订单，2026-08-11 King #75）；
                  加工/补料合同仍然必填，后端也会挡 -->
             <el-form-item label="关联订单" :required="!isMaterial">
+              <!-- 远程搜索（B096）：订单已超 100 张，「拉前 100 条 + 本地过滤」的老订单永远搜不到，口径见 utils/remoteOptions.ts -->
               <el-select
-                v-model="form.order_id" filterable clearable
-                :placeholder="isMaterial ? '选择订单；挂卡/销样等无订单采购可留空' : '选择订单'"
+                v-model="form.order_id" filterable remote reserve-keyword clearable
+                :remote-method="searchOrders" :loading="orderSearching"
+                :placeholder="isMaterial ? '输入订单号 / 款号搜索；挂卡/销样等无订单采购可留空' : '输入订单号 / 款号搜索'"
                 style="width:100%" :disabled="!!contractId || isSupplement" @change="onOrderChange"
               >
                 <el-option v-for="o in orders" :key="o.id" :label="`${o.order_no} · ${o.style_no || ''}`" :value="o.id" />
@@ -119,7 +121,8 @@
               <el-date-picker v-model="form.last_ship_date" type="date" value-format="YYYY-MM-DD" style="width:100%" />
             </el-form-item>
           </el-col>
-          <el-col :span="8"><el-form-item label="备注"><el-input v-model="form.remark" :disabled="false" /></el-form-item></el-col>
+          <!-- 备注不随状态锁（推送后仍可改），但要随权限锁（B023） -->
+          <el-col :span="8"><el-form-item label="备注"><el-input v-model="form.remark" :disabled="!canEdit" /></el-form-item></el-col>
         </el-row>
         <div class="ratio-hint" :class="{ bad: ratioSum !== 100 }">定金+中期+尾款 = {{ ratioSum }}%（须=100%）</div>
       </el-form>
@@ -274,7 +277,9 @@
     <el-dialog v-model="importDialogVisible" :title="isProcess ? '选订单款号带入（款式/数量/交期）' : '选订单款号带入（勾选材料 · 默认 单耗×订单件数）'" :width="isProcess ? '560px' : '820px'">
       <el-form label-width="90px">
         <el-form-item label="关联订单">
-          <el-select v-model="importOrderId" filterable style="width:100%" @change="loadImportMaterials">
+          <!-- 同 B096：弹窗里这个也要走远程搜索，只修主下拉的回显救不了这里 -->
+          <el-select v-model="importOrderId" filterable remote reserve-keyword :remote-method="searchOrders" :loading="orderSearching"
+            placeholder="输入订单号 / 款号搜索" style="width:100%" @change="loadImportMaterials">
             <el-option v-for="o in orders" :key="o.id" :label="`${o.order_no} · ${o.style_no || ''}`" :value="o.id" />
           </el-select>
         </el-form-item>
@@ -306,9 +311,10 @@
               </el-table-column>
               <el-table-column label="带入数量" min-width="150">
                 <template #default="{ row }">
-                  <!-- 分色/分码材料：按订单尺码矩阵拆行（合同要分尺寸），显示拆行预览不可手改 -->
-                  <div v-if="splitLinesOf(row.raw, importMatrixRows).length">
-                    <el-tag v-for="l in splitLinesOf(row.raw, importMatrixRows)" :key="l.key" size="small" style="margin:1px 2px">{{ l.dim === 'both' ? `${l.color}·${l.size}` : l.key }}{{ l.size && dimOfRaw(row.raw, l.size) ? `(${dimOfRaw(row.raw, l.size)})` : '' }}: {{ l.qty }}</el-tag>
+                  <!-- 分色/分码材料：按订单尺码矩阵拆行（合同要分尺寸），显示拆行预览不可手改。
+                       拆行结果在装载候选时算好一次（row.splits），别在模板里每行反复算（B150 同类） -->
+                  <div v-if="row.splits.length">
+                    <el-tag v-for="l in row.splits" :key="l.key" size="small" style="margin:1px 2px">{{ l.dim === 'both' ? `${l.color}·${l.size}` : l.key }}{{ l.size && dimOfRaw(row.raw, l.size) ? `(${dimOfRaw(row.raw, l.size)})` : '' }}: {{ l.qty }}</el-tag>
                   </div>
                   <el-input-number v-else v-model="row.qty" :min="0" :precision="2" size="small" :controls="false" style="width:100%" />
                 </template>
@@ -330,7 +336,10 @@
 <script setup lang="ts">
 import { dateOrNull, txt } from '@/utils/clearable';
 import { splitLinesOf } from '@/utils/splitLines';
-import { ORDER_SPLIT_MODE_LABEL } from '@i9/types';
+import { ORDER_SPLIT_MODE_LABEL, UserRole } from '@i9/types';
+import { todayStr } from '@/utils/format';
+import { useRemoteOptions, listParams } from '@/utils/remoteOptions';
+import { blankPriceRows, blankPriceMessage } from './contractChecks';
 import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -385,7 +394,7 @@ const form = reactive<any>({
   contract_no: '', type: (route.query.type as string) || 'MATERIAL', parent_id: route.query.parent_id ? Number(route.query.parent_id) : undefined,
   order_id: route.query.order_id ? Number(route.query.order_id) : undefined,
   factory_id: undefined, company_id: undefined, company_rep: authStore.realName || '',
-  sign_place: '', sign_date: new Date().toISOString().slice(0, 10),
+  sign_place: '', sign_date: todayStr(),   // 本地日期（B097）：toISOString 是 UTC，早 8 点前建的合同签约日期会是昨天
   guarantor: '', guarantor_id_photo: '', ship_to_address: '', delivery_deadline: '',
   currency: 'CNY', deposit_ratio: 0, mid_ratio: 0, final_ratio: 100, // #127 业务：默认 0/0/100，免得每次改
   account_period_days: 90, last_ship_date: '', remark: '',
@@ -406,7 +415,15 @@ const draft = useFormDraft(`contract:${route.fullPath}`, form, {
 const isProcess = computed(() => form.type === 'PROCESS');
 const isSupplement = computed(() => form.type === 'SUPPLEMENT');
 const isMaterial = computed(() => form.type === 'MATERIAL');
-const editable = computed(() => form.portal_status === 'DRAFT');
+// 与列表页同一份口径（后端 PATCH /contracts/:id 只放 ADMIN/BUSINESS；主管视同 ADMIN）
+const canEdit = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.BUSINESS));
+const statusLocked = computed(() => form.portal_status !== 'DRAFT');
+// B023：以前只看门户状态不看角色——无权账号从列表点「查看」进草稿合同，整张表单可改、保存按钮也在，填完点保存才 403
+const editable = computed(() => !statusLocked.value && canEdit.value);
+const lockHint = computed(() => {
+  if (!canEdit.value) return '当前账号没有编辑合同的权限，本页仅供查看。';
+  return '合同已推送/盖章，关键字段已锁定（仅备注可改）；如需修改请先在列表「撤销推送」回草稿。';
+});
 const pageTitle = computed(() =>
   ({ MATERIAL: '材料合同 · 编辑（原料/辅料购销协议）', PROCESS: '生产加工合同 · 编辑（委托加工合同）', SUPPLEMENT: '补料合同 · 编辑' } as any)[form.type] ?? '合同编辑');
 const typeLabel = (t: string) => ({ MATERIAL: '材料合同', PROCESS: '生产加工合同', SUPPLEMENT: '补料合同' } as any)[t] ?? t;
@@ -417,8 +434,16 @@ const termDefs = computed(() => (isProcess.value ? PROCESS_TERMS : MATERIAL_TERM
 
 // 引用数据
 const factories = ref<any[]>([]);
-const orders = ref<any[]>([]);
 const companies = ref<any[]>([]);
+// 本司主体列表拉失败要记下来（B155 同类）：静默回 [] 会让合同不带本司抬头就存进去
+const companiesFailed = ref(false);
+// 订单下拉走远程搜索（B096）：主下拉与「选订单款号带入」弹窗共用同一份 orders。
+// 直接用 useRemoteOptions 的 options 当 orders，不另存一份——另存的那份绕过它的请求序号守卫（B147）
+const { options: orders, loading: orderSearching, search: searchOrders } = useRemoteOptions<any>({
+  // 订单 id 规范成数字:bigint 主键经 mysql2 出来是字符串,而 form.order_id 是数字,
+  // 类型不一致 el-select 匹配不到选项 → 「关联订单」回显裸数字(同 FactorySelect 的 Number() 归一惯例)
+  fetch: async (kw) => (((await orderApi.list(listParams(kw))) as any).data ?? []).map((o: any) => ({ ...o, id: Number(o.id) })),
+});
 // 甲方按工厂类型过滤（设计稿 B2）：材料合同=材料供应商(面/辅料)；加工合同=委外加工商；含附加身份
 const filteredFactories = computed(() => {
   const want = isProcess.value ? ['OUTSOURCE'] : ['FABRIC', 'ACCESSORY'];
@@ -482,13 +507,15 @@ async function loadDocLinks(id: number) {
           if (od?.quote_id) relatedQuote.value = { id: od.quote_id, no: od.quote_no || '#' + od.quote_id };
         }).catch(() => { /* 订单详情取不到就不显示报价单 chip */ })
       : Promise.resolve(),
-    reconciliationApi.list({ contract_id: id, page: 1, size: 100 }).then((res: any) => {
+    // 【没这个菜单就别发请求】对账只读接口挂了 @MenuAccess，菜单里没有「对账管理」的账号调用直接 403，
+    // axios 拦截器会当场冒红字。按「没权限就隐藏，别让后端报错」先判菜单，少一组 chip 即可
+    (!authStore.canMenu('reconciliations') ? Promise.resolve() : reconciliationApi.list({ contract_id: id, page: 1, size: 100 }).then((res: any) => {
       // 列表响应被 ResponseInterceptor 展开:数组在 res.data。后端若尚未支持 contract_id 过滤会回全量,前端再筛一道防串单。
       // bigint 归一:contract_id 经 mysql2 出来是字符串,入参 id 也可能是字符串(save 新建后传 created.id),统一转数字再比
       relatedRecons.value = ((res?.data ?? []) as any[])
         .filter((r: any) => Number(r?.contract_id) === Number(id))
         .map((r: any) => ({ id: r.id, no: r.reconcile_no || '#' + r.id }));
-    }).catch(() => { relatedRecons.value = []; }),
+    }).catch(() => { relatedRecons.value = []; })),
   ]);
 }
 
@@ -570,12 +597,14 @@ const importOrderQty = ref(0);
 const importMatrixRows = ref<any[]>([]); // 订单尺码矩阵行（分色/分码拆行用）
 const dimOfRaw = (m: any, key: string) => String(m?.size_specs?.[key] ?? '').trim();
 // 与后端 contract.service expandMaterialLines 同一公式：某色(码)该料量=该色(码)件数×单件耗用×(1+损耗率)，整数类单位向上取整
+// 按本地日历日往前推 N 天（B097 同类）：别经 new Date('YYYY-MM-DD') / toISOString 走 UTC 一圈
 function minusDays(d: string | null | undefined, days: number): string {
   if (!d) return '';
-  const t = new Date(String(d).slice(0, 10));
-  if (isNaN(t.getTime())) return '';
-  t.setDate(t.getDate() - days);
-  return t.toISOString().slice(0, 10);
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d));
+  if (!m) return '';
+  const t = new Date(+m[1], +m[2] - 1, +m[3] - days);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}`;
 }
 // 打开带入对话框：预填当前关联订单并列出材料候选（候选随订单切换重载）
 function openImportDialog() {
@@ -596,6 +625,8 @@ async function loadImportMaterials() {
     importMatrixRows.value = od.matrix?.matrix_data?.rows ?? [];
     importMaterials.value = (od.materials ?? []).map((m: any) => ({
       raw: m,
+      // 分色/分码拆行在这里算好一次，模板与带入都用它（B150 同类：原来模板里每行算两三遍）
+      splits: splitLinesOf(m, importMatrixRows.value),
       item_name: m.item_name,
       spec: [m.width, m.composition].filter(Boolean).join(' / '),
       color: m.color || '', unit: m.unit || '',
@@ -627,7 +658,7 @@ async function doImport() {
       if (!importChecked.value.length) { ElMessage.warning('请至少勾选 1 行材料'); return; }
       const dd = minusDays(od.delivery_date, 45);
       for (const c of importChecked.value) {
-        const splits = splitLinesOf(c.raw, importMatrixRows.value);
+        const splits: ReturnType<typeof splitLinesOf> = c.splits ?? splitLinesOf(c.raw, importMatrixRows.value);
         if (splits.length) {
           // 分色/分码材料：按订单尺码矩阵拆行（合同要分尺寸）——与后端 generateFromOrder 同公式；
           // 各码尺寸(size_specs)以 S(50) 形式带进 size 列，工厂按码裁料
@@ -727,12 +758,22 @@ function validateForm(): string | null {
   const goodsErr = checkGoodsLines(form.materials);
   if (goodsErr) return goodsErr;
   if (ratioSum.value !== 100) return '定金+中期+尾款须等于 100%';
+  // 本司主体列表没拉到就别存（B155 同类）：静默存下去的合同没有乙方抬头，PDF/Excel 都少一头
+  if (companiesFailed.value && !form.company_id) return '本司主体列表加载失败，请刷新页面后再保存';
   return null;
 }
 async function save() {
+  if (saving.value) return;   // 防连点：早退在任何 await 之前
   const err = validateForm();
   if (err) { ElMessage.warning(err); return; }
   saving.value = true;
+  // B098：单价留空原来一声不吭就存了，总价 0 照样能推送给供应商盖章——存之前先问一句（不硬拦：草稿阶段确实可能先不填价）
+  const noPrice = blankPriceMessage(blankPriceRows(form.materials));
+  if (noPrice) {
+    try {
+      await ElMessageBox.confirm(noPrice, '单价未填', { type: 'warning', confirmButtonText: '仍要保存', cancelButtonText: '回去补单价' });
+    } catch { saving.value = false; return; }
+  }
   try {
     if (contractId.value) {
       await contractApi.update(contractId.value, buildDto());
@@ -763,9 +804,18 @@ async function saveRemarkOnly() {
   finally { saving.value = false; }
 }
 
+// 推送中标志（B110 同类）：按钮 :loading，网络慢时再点一次不会发第二个请求
+const pushing = ref(false);
 async function doPush() {
-  if (!contractId.value) return;
+  if (!contractId.value || pushing.value) return;
+  pushing.value = true;
   try {
+    // B098：总价为 0 的合同推给供应商盖章前先确认——多半是单价没填
+    if (!(totalAmount.value > 0)) {
+      try {
+        await ElMessageBox.confirm('合同总金额为 0（货物明细没填单价？），确定推送给供应商盖章？', '总金额为 0', { type: 'warning', confirmButtonText: '仍要推送', cancelButtonText: '取消' });
+      } catch { return; }
+    }
     await contractApi.push(contractId.value);
     ElMessage.success(`已推送至${isProcess.value ? '工厂' : '供应商'}门户`);
     await loadDetail(contractId.value);
@@ -773,7 +823,7 @@ async function doPush() {
     const msg = e?.response?.data?.msg ?? '推送失败';
     if (String(msg).includes('审批')) { ElMessage.warning(msg + '（已转入待审批，主管审批通过后可推送）'); await loadDetail(contractId.value); }
     else ElMessage.error(msg);
-  }
+  } finally { pushing.value = false; }
 }
 async function doPrint() {
   if (!contractId.value) return;
@@ -802,19 +852,16 @@ function goBack() { router.push('/contracts'); }
 
 // 装载
 async function loadRefs() {
-  const [fs, os, cs] = await Promise.all([
+  const [fs, , cs] = await Promise.all([
     factoryApi.select(),
-    orderApi.list({ page: 1, size: 100 }),
-    companyApi.list().catch(() => ({ data: [] })),
+    searchOrders(''),   // 订单下拉走远程搜索，这里只先摆最近一批（B096）
+    companyApi.list().catch(() => { companiesFailed.value = true; return { data: [] }; }),
   ]);
   factories.value = (((fs as any).data ?? fs) as any[]) ?? [];
-  // 订单 id 规范成数字:bigint 主键经 mysql2 出来是字符串,而 form.order_id 是数字,
-  // 类型不一致 el-select 匹配不到选项 → 「关联订单」回显裸数字(同 FactorySelect 的 Number() 归一惯例)
-  orders.value = (((os as any).data ?? []) as any[]).map((o: any) => ({ ...o, id: Number(o.id) }));
   companies.value = ((cs as any).data ?? []) as any[];
   if (!form.company_id) form.company_id = companies.value.find((c: any) => c.is_default)?.id ?? companies.value[0]?.id;
 }
-// 订单下拉只装前 100 条(size:100):当前选中订单可能不在其中 → 回显裸 ID。
+// 订单下拉是远程搜索、每次只装一批:当前选中订单可能不在其中 → 回显裸 ID。
 // 选中值缺选项时按 id 单拉一条补进选项,保证回显正常(工厂/公司接口是全量不分页,无此问题)
 async function ensureOrderOption() {
   const oid = form.order_id;
@@ -838,7 +885,7 @@ function applyDetail(d: any, opts: { asCopy?: boolean; zeroQty?: boolean } = {})
   form.vat_rate = d.vat_rate != null ? +d.vat_rate : form.vat_rate;
   form.price_includes = Array.isArray(d.price_includes) ? d.price_includes : form.price_includes;
   form.last_ship_date = d.last_ship_date ? String(d.last_ship_date).slice(0, 10) : '';
-  form.sign_date = opts.asCopy ? new Date().toISOString().slice(0, 10) : (d.sign_date ? String(d.sign_date).slice(0, 10) : form.sign_date);
+  form.sign_date = opts.asCopy ? todayStr() : (d.sign_date ? String(d.sign_date).slice(0, 10) : form.sign_date);
   form.delivery_deadline = d.delivery_deadline ? String(d.delivery_deadline).slice(0, 10) : form.delivery_deadline;
   if (!opts.asCopy) {
     form.contract_no = d.contract_no; form.type = d.type; form.parent_id = d.parent_id ?? undefined;

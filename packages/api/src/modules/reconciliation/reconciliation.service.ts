@@ -17,6 +17,11 @@ import { ReconcileType, ContractPortalStatus, OrderStatus, SampleStatus, Contrac
 import { CreateReconciliationDto } from './dto/create-reconciliation.dto';
 import { GenerateLaborDto } from './dto/generate-labor.dto';
 import { QueryReconciliationDto } from './dto/query-reconciliation.dto';
+import { UpdateReconciliationDraftDto } from './dto/update-reconciliation-draft.dto';
+import { releasedInvoiceNo, isDupInvoiceNoError } from './invoice-no.util';
+
+// 金额统一四位小数：明细行先各自取整，再对取整后的行求和，表头总额 = 明细合计（B134）
+const r4 = (n: number) => +Number(n).toFixed(4);
 
 @Injectable()
 export class ReconciliationService {
@@ -57,11 +62,18 @@ export class ReconciliationService {
       // 合同类对账的扣款明细（#74）：已确认合同要打折/次品退货时，合同保持原样不动，
       // 在这里挂一条带符号的调整额（扣款为负），对账金额 = 发货金额 + Σ调整。
       const deductionLines = dto.deductions ?? [];
-      const goodsAmount = shipmentLines.reduce((sum, s) => sum + s.snapshot_unit_price * s.qty, 0);
-      const deductionSum = deductionLines.reduce((sum, d) => sum + (+d.amount || 0), 0);
+      // B018：发货批次与费用明细不能同时出现——此前 expenseLines 优先，货款被静默丢掉而批次照样被占用
+      if (shipmentLines.length && expenseLines.length) {
+        throw new BadRequestException(
+          '一张对账单只能含同一类型明细：发货批次（合同对账）与费用明细（无合同对账）不能同时填写，请分开建单',
+        );
+      }
+      // B134：逐行先取整再求和，与下面落库的明细行 amount 同一算法
+      const goodsAmount = r4(shipmentLines.reduce((sum, s) => sum + r4(s.snapshot_unit_price * s.qty), 0));
+      const deductionSum = r4(deductionLines.reduce((sum, d) => sum + r4(+d.amount || 0), 0));
       const totalAmount = expenseLines.length
-        ? expenseLines.reduce((sum, e) => sum + (+e.amount || 0), 0)
-        : goodsAmount + deductionSum;
+        ? r4(expenseLines.reduce((sum, e) => sum + r4(+e.amount || 0), 0))
+        : r4(goodsAmount + deductionSum);
       // 扣光甚至扣成负数，几乎一定是填错了（多填一位、把总额当扣款填）。
       // 放过去的话，后面付款申请的超付闸门、结算的毛利全跟着错，且很难回头查。
       if (deductionLines.length && totalAmount <= 0) {
@@ -89,6 +101,7 @@ export class ReconciliationService {
       if (shipmentLines.length) {
         const batches = await manager.find(ContractShipment, {
           where: { id: In(shipmentLines.map((s) => +s.shipment_id)) },
+          lock: { mode: 'pessimistic_write' }, // B019：先锁批次行再判占用，并发两单不能同时读到 reconcile_id=null
         });
         const batchById = new Map(batches.map((b) => [+b.id, b])); // bigint 归一：mysql 出来可能是字符串
         for (const s of shipmentLines) {
@@ -110,7 +123,15 @@ export class ReconciliationService {
           if (expectPrice == null) {
             const contract = await manager.findOne(Contract, { where: { id: lineContractId, deleted: 0 } });
             const snap = contract?.snapshot_json as any;
-            const item = (snap?.materials ?? []).find((m: any) => m.item_name === s.item_name);
+            const snapMaterials: any[] = snap?.materials ?? [];
+            const item = snapMaterials.find((m: any) => m.item_name === s.item_name);
+            // B070：批次没锁价、品名又对不上合同快照时，此前整段跳过、单价随便填就进付款。
+            // 快照里有材料行却对不上的拦下，让业务按合同品名填；快照本身没有材料行（存量无材料合同）无从核对，维持放行。
+            if (!item && snapMaterials.length) {
+              throw new BadRequestException(
+                `批次 ${batch.ship_no ?? s.shipment_id} 未锁价，且品名「${s.item_name}」不在合同快照材料中，无法核对单价——请按合同材料品名填写`,
+              );
+            }
             expectPrice = item?.unit_price != null ? +item.unit_price : null;
           }
           if (expectPrice != null && Math.abs(+s.snapshot_unit_price - expectPrice) > 0.0001) {
@@ -150,28 +171,35 @@ export class ReconciliationService {
         ? +(dto.invoice_amount - totalAmount).toFixed(4)
         : null;
 
-      const reconciliation = await manager.save(
-        Reconciliation,
-        manager.create(Reconciliation, {
-          reconcile_no,
-          type: dto.type,
-          sub_type: dto.type === ReconcileType.NO_CONTRACT ? (dto.subType ?? null) : null,
-          contract_id: effectiveContractId,
-          style_no: styleNo,
-          factory_id: dto.factory_id,
-          total_amount: +totalAmount.toFixed(4),
-          tax_rate: dto.tax_rate ?? null,
-          tax_amount: taxAmount,
-          invoice_no: dto.invoice_no || null, // 空串归一为 NULL:唯一索引允许多张「无发票」对账单并存,仅拦真实重复发票号
-          invoice_amount: dto.invoice_amount ?? null,
-          invoice_diff: invoiceDiff,
-          invoice_url: dto.invoice_url ?? null,
-          has_invoice: hasInvoice,
-          description: dto.description ?? null,
-          status: ReconciliationStatus.DRAFT,
-          created_by: createdBy,
-        }),
-      );
+      let reconciliation: Reconciliation;
+      try {
+        reconciliation = await manager.save(
+          Reconciliation,
+          manager.create(Reconciliation, {
+            reconcile_no,
+            type: dto.type,
+            sub_type: dto.type === ReconcileType.NO_CONTRACT ? (dto.subType ?? null) : null,
+            contract_id: effectiveContractId,
+            style_no: styleNo,
+            factory_id: dto.factory_id,
+            total_amount: +totalAmount.toFixed(4),
+            tax_rate: dto.tax_rate ?? null,
+            tax_amount: taxAmount,
+            invoice_no: dto.invoice_no || null, // 空串归一为 NULL:唯一索引允许多张「无发票」对账单并存,仅拦真实重复发票号
+            invoice_amount: dto.invoice_amount ?? null,
+            invoice_diff: invoiceDiff,
+            invoice_url: dto.invoice_url ?? null,
+            has_invoice: hasInvoice,
+            description: dto.description ?? null,
+            status: ReconciliationStatus.DRAFT,
+            created_by: createdBy,
+          }),
+        );
+      } catch (e) {
+        // 并发同号抢先落库时上面的查重看不到，撞唯一索引给中文提示（B069/B072 同口径）
+        if (isDupInvoiceNoError(e)) throw new BadRequestException(`发票号 ${dto.invoice_no} 已被其他对账单使用（防重复付）`);
+        throw e;
+      }
 
       if (shipmentLines.length) {
         const lines = shipmentLines.map((s) =>
@@ -258,7 +286,7 @@ export class ReconciliationService {
         }
       }
 
-      const total = +samples.reduce((s, x) => s + (+x.labor_amount || 0), 0).toFixed(2);
+      const total = r4(samples.reduce((s, x) => s + r4(+x.labor_amount || 0), 0)); // B134：与其他对账同一取整口径
       const firstStyle = samples[0].style_no;
       const styleNo = samples.length > 1 ? `${firstStyle} 等${samples.length}款` : firstStyle;
       const reconcile_no = await this.numbering.nextWithSegment(NUM_PREFIX.RECONCILIATION, '工时');
@@ -487,7 +515,13 @@ export class ReconciliationService {
         if (contract) {
           const [{ cq } = { cq: 0 }] = await manager.query(
             'SELECT COALESCE(SUM(qty),0) cq FROM contract_material WHERE contract_id = ?', [contract.id]);
-          const contractQty = +cq;
+          let contractQty = +cq;
+          // B071：合同没有材料行时此前整条闸门跳过。加工合同的合同量本就取订单大货数（合同 A4），
+          // 材料行为空就回退到订单 qty_total；订单也没数量才视为无从判断、维持放行。
+          if (!(contractQty > 0) && contract.order_id) {
+            const order = await manager.findOne(OrderMain, { where: { id: contract.order_id, deleted: 0 } });
+            contractQty = +(order?.qty_total ?? 0);
+          }
           const shipped = +(contract.shipped_qty ?? 0);
           if (contractQty > 0 && shipped > contractQty + 0.01) {
             if (!overReason?.trim()) {
@@ -564,7 +598,7 @@ export class ReconciliationService {
    */
   async updateDraft(
     id: number,
-    dto: { invoice_no?: string; invoice_amount?: number; tax_rate?: number; description?: string },
+    dto: UpdateReconciliationDraftDto,
     user: { id: number; role?: string },
   ): Promise<Reconciliation> {
     const rec = await this.repo.findOne({ where: { id, deleted: 0 } });
@@ -579,6 +613,13 @@ export class ReconciliationService {
       throw new ForbiddenException('只能修改自己创建的对账单草稿');
     }
     if (dto.invoice_no !== undefined) {
+      // B072：草稿改发票号也要全局查重（与 create 同口径），此前直接撞唯一索引 500
+      if (dto.invoice_no) {
+        const dup = await this.repo.findOne({ where: { invoice_no: dto.invoice_no, deleted: 0 } });
+        if (dup && +dup.id !== +id) {
+          throw new BadRequestException(`发票号 ${dto.invoice_no} 已被对账单 ${dup.reconcile_no} 使用（防重复付）`);
+        }
+      }
       rec.invoice_no = dto.invoice_no || null as any;   // 空串归一为 NULL：唯一索引允许多张「无发票」并存
       rec.has_invoice = dto.invoice_no ? 1 : 0;
     }
@@ -594,20 +635,32 @@ export class ReconciliationService {
         ? +(dto.invoice_amount - +rec.total_amount).toFixed(4) : null) as any;
     }
     if (dto.description !== undefined) rec.description = dto.description || null as any;
-    return this.repo.save(rec);
+    try {
+      return await this.repo.save(rec);
+    } catch (e) {
+      if (isDupInvoiceNoError(e)) throw new BadRequestException(`发票号 ${rec.invoice_no} 已被其他对账单使用（防重复付）`);
+      throw e;
+    }
   }
 
   async remove(id: number): Promise<void> {
-    const rec = await this.repo.findOne({ where: { id, deleted: 0 } });
-    if (!rec) throw new NotFoundException(`对账单 #${id} 不存在`);
-    if (rec.status !== ReconciliationStatus.DRAFT) {
-      throw new BadRequestException('只有草稿状态的对账单可以删除');
-    }
-    rec.deleted = 1;
-    await this.repo.save(rec);
-    // 释放被本单占用的发货批次（门户「我要对账」占用防重复；删单后供应商可重新勾选）
-    await this.dataSource.query(
-      'UPDATE contract_shipment SET reconcile_id = NULL WHERE reconcile_id = ?', [id],
-    );
+    // B135：软删与释放批次同一事务——此前分两步，第二步失败批次永久指向已删单，供应商再也对不了这批货
+    await this.dataSource.transaction(async (manager) => {
+      const rec = await manager.findOne(Reconciliation, {
+        where: { id, deleted: 0 },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!rec) throw new NotFoundException(`对账单 #${id} 不存在`);
+      if (rec.status !== ReconciliationStatus.DRAFT) {
+        throw new BadRequestException('只有草稿状态的对账单可以删除');
+      }
+      rec.deleted = 1;
+      // B069：唯一索引 uk_invoice_no 不区分软删行，软删时把发票号改写为「原号#del<id>」让出该号，
+      // 同号才能重新录到新单上；查重（create/updateDraft）仍按 deleted:0 口径。列宽 VARCHAR(100)。
+      if (rec.invoice_no) rec.invoice_no = releasedInvoiceNo(rec.invoice_no, id, 100);
+      await manager.save(Reconciliation, rec);
+      // 释放被本单占用的发货批次（门户「我要对账」占用防重复；删单后供应商可重新勾选）
+      await manager.update(ContractShipment, { reconcile_id: id }, { reconcile_id: null as any });
+    });
   }
 }

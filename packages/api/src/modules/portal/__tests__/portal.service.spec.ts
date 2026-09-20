@@ -17,7 +17,7 @@ import { OrderSizeMatrix } from '../../order/order-size-matrix.entity';
 import { Factory } from '../../factory/factory.entity';
 import { CompanyProfile } from '../../company/company-profile.entity';
 import { NumberingService } from '../../../common/services/numbering.service';
-import { ContractPortalStatus } from '@i9/types';
+import { ContractPortalStatus, PaymentApprovalStatus } from '@i9/types';
 
 const makeContract = (overrides = {}) => ({
   id: 1,
@@ -53,9 +53,12 @@ const makeRepo = () => {
   const repo: any = {
     findOne: jest.fn().mockResolvedValue(null),
     findAndCount: jest.fn().mockResolvedValue([[], 0]),
-    save: jest.fn().mockImplementation((v: any) => Promise.resolve(v)),
+    // 落库后带上主键（真库行为）：门户「我要对账」要拿新对账单 id 去占用批次
+    save: jest.fn().mockImplementation((v: any) => Promise.resolve(Array.isArray(v) || v?.id ? v : { ...v, id: 99 })),
     create: jest.fn().mockImplementation((v: any) => v),
     find: jest.fn().mockResolvedValue([]),
+    delete: jest.fn().mockResolvedValue({ affected: 1 }),
+    update: jest.fn().mockResolvedValue({ affected: 1 }),
   };
   repo.createQueryBuilder = jest.fn(() => {
     const qb: any = {
@@ -76,6 +79,9 @@ describe('PortalService', () => {
   let logRepo: any;
   let reconcileRepo: any;
   let shipmentRepo: any;
+  let shipmentItemRepo: any;
+  let orderRepo: any;
+  let prRepo: any;
   let mockManager: any;
 
   beforeEach(async () => {
@@ -84,10 +90,29 @@ describe('PortalService', () => {
     logRepo = makeRepo();
     reconcileRepo = makeRepo();
     shipmentRepo = makeRepo();
+    shipmentItemRepo = makeRepo();
+    orderRepo = makeRepo();
+    prRepo = makeRepo();
+    // B012~B015 之后，门户所有写动作都在事务内经 manager 走。这里让 manager 按实体分派回同一批 repo 桩，
+    // 既有用例的断言（contractRepo.save / logRepo.create / shipmentRepo.find…）不必改口径
+    const byEntity = new Map<any, any>([
+      [Contract, contractRepo], [ContractMaterial, materialRepo], [ContractShipment, shipmentRepo],
+      [ContractShipmentItem, shipmentItemRepo], [ContractPortalLog, logRepo], [OrderMain, orderRepo],
+      [Reconciliation, reconcileRepo], [PaymentRequest, prRepo],
+    ]);
+    const via = (name: string, fallback: (v?: any) => any) =>
+      jest.fn().mockImplementation((entity: any, ...args: any[]) => {
+        const repo = byEntity.get(entity);
+        return repo ? repo[name](...args) : fallback(args[0]);
+      });
     mockManager = {
-      create: jest.fn().mockImplementation((_: any, v: any) => v),
-      save: jest.fn().mockImplementation((_: any, v: any) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 99 })),
-      findOne: jest.fn().mockResolvedValue(null),
+      create: via('create', (v) => v),
+      save: via('save', (v) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 99 })),
+      findOne: via('findOne', () => Promise.resolve(null)),
+      find: via('find', () => Promise.resolve([])),
+      delete: via('delete', () => Promise.resolve({ affected: 1 })),
+      update: via('update', () => Promise.resolve({ affected: 1 })),
+      query: jest.fn().mockResolvedValue([]),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -96,14 +121,14 @@ describe('PortalService', () => {
         { provide: getRepositoryToken(Contract), useValue: contractRepo },
         { provide: getRepositoryToken(ContractMaterial), useValue: materialRepo },
         { provide: getRepositoryToken(ContractShipment), useValue: shipmentRepo },
-        { provide: getRepositoryToken(ContractShipmentItem), useValue: makeRepo() },
+        { provide: getRepositoryToken(ContractShipmentItem), useValue: shipmentItemRepo },
         { provide: getRepositoryToken(ContractPortalLog), useValue: logRepo },
-        { provide: getRepositoryToken(OrderMain), useValue: makeRepo() },
+        { provide: getRepositoryToken(OrderMain), useValue: orderRepo },
         { provide: getRepositoryToken(OrderMaterial), useValue: makeRepo() },
         { provide: getRepositoryToken(OrderSizeMatrix), useValue: makeRepo() },
         { provide: getRepositoryToken(Reconciliation), useValue: reconcileRepo },
         { provide: getRepositoryToken(ReconciliationShipment), useValue: makeRepo() },
-        { provide: getRepositoryToken(PaymentRequest), useValue: makeRepo() },
+        { provide: getRepositoryToken(PaymentRequest), useValue: prRepo },
         { provide: getRepositoryToken(Factory), useValue: makeRepo() },
         { provide: getRepositoryToken(CompanyProfile), useValue: makeRepo() },
         { provide: NumberingService, useValue: { nextWithSegment: jest.fn().mockResolvedValue('DZ-K-001'), next: jest.fn().mockResolvedValue('PR-20260709-001') } },
@@ -113,6 +138,14 @@ describe('PortalService', () => {
 
     service = module.get<PortalService>(PortalService);
   });
+
+  // 对账明细行落库参数（manager.save(ReconciliationShipment, lines)）
+  const reconcileShipmentSaves = () => {
+    const call = mockManager.save.mock.calls.find(
+      (c: any[]) => Array.isArray(c[1]) && c[1][0]?.reconcile_id !== undefined && c[1][0]?.item_name !== undefined,
+    );
+    return call ? call[1] : [];
+  };
 
   // UT-PORTAL-01: getContracts returns paginated list for supplier factory
   it('UT-PORTAL-01 getContracts returns list for supplier factory', async () => {
@@ -311,5 +344,151 @@ describe('PortalService', () => {
     await expect(service.withdrawShipment(1, 11, 'supplier_A', 10))
       .rejects.toThrow(BadRequestException);
     expect(shipmentRepo.findOne).not.toHaveBeenCalled();
+  });
+
+  // ── 2026-09-20 审查回归（B012/B013/B014/B015/B058/B059/B060/B061/B134）──
+  describe('审查回归', () => {
+    const LOCK = { mode: 'pessimistic_write' };
+    const ship = { express_company: '顺丰', express_no: 'SF1' };
+
+    it('B058 门户列表的 portal_status 只认可见白名单，草稿合同列不出来', async () => {
+      await expect(service.getContracts(10, 1, 20, 'DRAFT')).rejects.toThrow('不支持的合同状态筛选');
+      expect(contractRepo.createQueryBuilder).not.toHaveBeenCalled();
+      contractRepo.findAndCount.mockResolvedValue([[], 0]);
+      await service.getContracts(10, 1, 20, 'STAMPED'); // 白名单内照旧
+    });
+
+    it('B012 确认出货在事务内锁合同行，累计已发按未驳回批次重算（不再基于内存旧值加减）', async () => {
+      contractRepo.findOne.mockResolvedValue(makeContract({ portal_status: ContractPortalStatus.SHIPPING, shipped_qty: 0 }));
+      materialRepo.find.mockResolvedValue([makeMaterial()]);
+      // 库里已经有两批各 500（并发下第二次请求读到的 contract.shipped_qty 仍是 0）
+      shipmentRepo.find.mockResolvedValue([
+        { id: 1, qty: 500, approval_status: 'APPROVED' },
+        { id: 2, qty: 500, approval_status: 'APPROVED' },
+      ]);
+      const contract = await service.confirmShipping(1, 'supplier_A', 10, { qty: 500, ...ship } as any);
+      expect(contract.shipped_qty).toBe(1000); // 内存加减会得 500
+      expect(contractRepo.findOne).toHaveBeenCalledWith(expect.objectContaining({ lock: LOCK }));
+    });
+
+    it('B012 被驳回的批次不计入累计已发', async () => {
+      contractRepo.findOne.mockResolvedValue(makeContract({ portal_status: ContractPortalStatus.SHIPPING, shipped_qty: 0 }));
+      materialRepo.find.mockResolvedValue([makeMaterial()]);
+      shipmentRepo.find.mockResolvedValue([
+        { id: 1, qty: 500, approval_status: 'APPROVED' },
+        { id: 2, qty: 300, approval_status: 'REJECTED' },
+      ]);
+      const contract = await service.confirmShipping(1, 'supplier_A', 10, { qty: 500, ...ship } as any);
+      expect(contract.shipped_qty).toBe(500);
+    });
+
+    it('B061 发货日期取本地日历日，不用 UTC（凌晨建单会写成昨天）', async () => {
+      // 在本机时区里挑一个「本地日期 ≠ UTC 日期」的时刻；正好是 UTC 时区时退化为等值断言
+      const localStr = (d: Date) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const base = new Date(2026, 8, 20);
+      const candidates = [new Date(2026, 8, 20, 0, 1), new Date(2026, 8, 20, 23, 59), base];
+      const at = candidates.find((d) => d.toISOString().slice(0, 10) !== localStr(d)) ?? base;
+      jest.useFakeTimers().setSystemTime(at);
+      try {
+        contractRepo.findOne.mockResolvedValue(makeContract({ portal_status: ContractPortalStatus.SHIPPING, shipped_qty: 0 }));
+        materialRepo.find.mockResolvedValue([makeMaterial()]);
+        shipmentRepo.find.mockResolvedValue([{ id: 1, qty: 100, approval_status: 'APPROVED' }]);
+        await service.confirmShipping(1, 'supplier_A', 10, { qty: 100, ...ship } as any);
+        const saved = shipmentRepo.create.mock.calls.at(-1)[0];
+        expect(saved.ship_date).toBe(localStr(at));
+      } finally { jest.useRealTimers(); }
+    });
+
+    it('B059 合并发货整组一个事务：第 2 张报错时整组抛出，不留半截合并单', async () => {
+      contractRepo.findOne.mockImplementation((opts: any) =>
+        Promise.resolve(makeContract({ id: opts.where.id, portal_status: ContractPortalStatus.SHIPPING })));
+      materialRepo.find.mockResolvedValue([makeMaterial()]);
+      shipmentRepo.find.mockResolvedValue([{ id: 1, qty: 100, approval_status: 'APPROVED' }]);
+      await expect(service.mergeShip('supplier_A', 10, {
+        ...ship,
+        entries: [
+          { contract_id: 1, qty: 100 },
+          { contract_id: 2, items: [{ material_id: 1, qty: 0 }] }, // 物料行全 0 → 抛「请至少为一行物料填写实发数」
+        ],
+      } as any)).rejects.toThrow('请至少为一行物料填写实发数');
+      const ds: any = (service as any).dataSource;
+      expect(ds.transaction).toHaveBeenCalledTimes(1); // 整组一个事务（此前逐合同各自落库）
+    });
+
+    it('B060 撤回被驳回的批次不再二次扣减：累计已发按剩余未驳回批次重算', async () => {
+      // 业务驳回批次 22 时 recalcShippedQty 已把它扣掉（shipped_qty 停在 500）；供应商再撤回它
+      contractRepo.findOne.mockResolvedValue(makeContract({ portal_status: ContractPortalStatus.SHIPPING, shipped_qty: 500 }));
+      shipmentRepo.findOne.mockResolvedValue({ id: 22, contract_id: 1, ship_no: 'FH-2', qty: 300, approval_status: 'REJECTED', reconcile_id: null });
+      shipmentRepo.find.mockResolvedValue([{ id: 11, qty: 500, approval_status: 'APPROVED' }]); // 删掉 22 之后库里剩这一批
+      await service.withdrawShipment(1, 22, 'supplier_A', 10);
+      expect(contractRepo.save).toHaveBeenCalledWith(expect.objectContaining({ shipped_qty: 500 })); // 内存再减一次会得 200
+      expect(contractRepo.findOne).toHaveBeenCalledWith(expect.objectContaining({ lock: LOCK }));
+    });
+
+    it('B013 我要对账：合同行与批次行都在事务内加悲观写锁后再判占用', async () => {
+      contractRepo.findOne.mockResolvedValue(makeContract({ portal_status: ContractPortalStatus.SHIPPING, created_by: 7 }));
+      shipmentRepo.find.mockResolvedValue([makeBatch({ id: 11, amount: 1520 })]);
+      await service.createReconcile(1, 'supplier_A', 10, { shipment_ids: [11] });
+      expect(contractRepo.findOne).toHaveBeenCalledWith(expect.objectContaining({ lock: LOCK }));
+      expect(shipmentRepo.find).toHaveBeenCalledWith(expect.objectContaining({ lock: LOCK }));
+    });
+
+    it('B134 对账金额逐批先取整再求和，表头 = 明细合计', async () => {
+      contractRepo.findOne.mockResolvedValue(makeContract({ portal_status: ContractPortalStatus.SHIPPING, created_by: 7 }));
+      shipmentRepo.find.mockResolvedValue([1, 2, 3].map((id) =>
+        makeBatch({ id, ship_no: `FH-${id}`, qty: 1, snapshot_unit_price: 1.23456, amount: null })));
+      const rec: any = await service.createReconcile(1, 'supplier_A', 10, { shipment_ids: [1, 2, 3] });
+      expect(rec.total_amount).toBe(3.7038); // 旧算法先求和后取整 = 3.7037，与明细合计差 0.0001
+      const lines = reconcileShipmentSaves();
+      expect(lines.map((l: any) => l.amount)).toEqual([1.2346, 1.2346, 1.2346]);
+    });
+
+    // uploadInvoice 公共桩：合同已对账 + 一张待开票的已确认对账单
+    const invoiceSetup = (recOver: any = {}, prs: any[] = []) => {
+      contractRepo.findOne.mockResolvedValue(makeContract({ portal_status: ContractPortalStatus.RECONCILED }));
+      reconcileRepo.find.mockResolvedValue([
+        { id: 7, reconcile_no: 'DZ-1', total_amount: 5000, status: 'CONFIRMED', invoice_no: null, factory_id: 10, created_by: 7, ...recOver },
+      ]);
+      prRepo.find.mockResolvedValue(prs);
+    };
+
+    it('B014 开票整段进事务并锁合同/对账单行', async () => {
+      invoiceSetup();
+      await service.uploadInvoice(1, 'supplier_A', 10, { invoice_no: 'INV-001', invoice_amount: 5000 });
+      expect(contractRepo.findOne).toHaveBeenCalledWith(expect.objectContaining({ lock: LOCK }));
+      expect(reconcileRepo.find).toHaveBeenCalledWith(expect.objectContaining({ lock: LOCK }));
+      expect(prRepo.save).toHaveBeenCalledTimes(1); // 无既有申请 → 照常自动生成一张
+    });
+
+    it('B015 同一对账单已有在途/已批付款申请 → 不再重复生成（幂等）', async () => {
+      invoiceSetup({}, [{ id: 1, amount: 5000, approval_status: PaymentApprovalStatus.PENDING, deleted: 0 }]);
+      await service.uploadInvoice(1, 'supplier_A', 10, { invoice_no: 'INV-001', invoice_amount: 5000 });
+      expect(prRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('B015 先驳回过一张、后又批了一张 → 累计已达对账应付，不再补一张全额 PENDING', async () => {
+      invoiceSetup({}, [
+        { id: 1, amount: 5000, approval_status: PaymentApprovalStatus.REJECTED, deleted: 0 },
+        { id: 2, amount: 5000, approval_status: PaymentApprovalStatus.APPROVED, deleted: 0 },
+      ]);
+      await service.uploadInvoice(1, 'supplier_A', 10, { invoice_no: 'INV-001', invoice_amount: 5000 });
+      expect(prRepo.save).not.toHaveBeenCalled(); // 旧实现：findOne 取到 REJECTED 那条就再建一张 → 累计翻倍
+    });
+
+    it('B015 只被驳回过（没有在途/已批）→ 仍可自动生成，金额=对账应付', async () => {
+      invoiceSetup({}, [{ id: 1, amount: 5000, approval_status: PaymentApprovalStatus.REJECTED, deleted: 0 }]);
+      await service.uploadInvoice(1, 'supplier_A', 10, { invoice_no: 'INV-001', invoice_amount: 5000 });
+      expect(prRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+        reconcile_id: 7, factory_id: 10, amount: 5000, approval_status: PaymentApprovalStatus.PENDING,
+      }));
+    });
+
+    it('B015 对账单归属工厂与合同不一致 → 拦下，不往错的工厂自动建申请', async () => {
+      invoiceSetup({ factory_id: 99 });
+      await expect(service.uploadInvoice(1, 'supplier_A', 10, { invoice_no: 'INV-001', invoice_amount: 5000 }))
+        .rejects.toThrow('归属工厂与合同不一致');
+      expect(prRepo.save).not.toHaveBeenCalled();
+    });
   });
 });

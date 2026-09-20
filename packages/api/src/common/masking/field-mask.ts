@@ -41,12 +41,50 @@ export function maskOrder(payload: any, role: string): any {
 }
 
 // 合同：供应商单价/金额=成本（版师/打样脱敏）
+// B030（2026-09-20 审查）：只抹顶层与 materials[] 不够——盖章快照 snapshot_json.materials[]、
+// 发货批次 shipments[]（amount/snapshot_unit_price）及批次物料行 items[] 里的单价原样返回，
+// 版师查任一已盖章合同详情，成本价全在快照里。这里把三处一并抹掉。
+const LINE_PRICE_FIELDS = ['unit_price', 'amount'];
+const SHIPMENT_PRICE_FIELDS = ['amount', 'snapshot_unit_price'];
+function maskContractSnapshot(c: any): void {
+  let snap = c.snapshot_json;
+  if (snap == null) return;
+  // json 列经 TypeORM 出来是对象；万一是字符串就先解析，解析不了宁可整体抹掉也不能原样放出去
+  if (typeof snap === 'string') {
+    try { snap = JSON.parse(snap); } catch { c.snapshot_json = null; return; }
+    c.snapshot_json = snap;
+  }
+  if (!snap || typeof snap !== 'object') return;
+  strip(snap, ['total_amount']);
+  (Array.isArray(snap.materials) ? snap.materials : []).forEach((m: any) => strip(m, LINE_PRICE_FIELDS));
+}
 export function maskContract(payload: any, role: string): any {
   if (!MAKER_ROLES.includes(role)) return payload;
   return eachRecord(payload, (c) => {
-    strip(c, ['total_amount']);
-    (c.materials ?? []).forEach((m: any) => strip(m, ['unit_price', 'amount']));
+    strip(c, ['total_amount', 'unit_price']); // unit_price：price-hint 这类扁平行的单价
+    (c.materials ?? []).forEach((m: any) => strip(m, LINE_PRICE_FIELDS));
+    maskContractSnapshot(c);
+    (c.shipments ?? []).forEach((s: any) => {
+      strip(s, SHIPMENT_PRICE_FIELDS);
+      (s.items ?? []).forEach((it: any) => strip(it, LINE_PRICE_FIELDS));
+    });
   });
+}
+
+// 工厂：银行账号/税号/开票联系方式（版师/打样脱敏；B030 同批、G4 提出）
+// 版师/打样默认菜单里有「工厂」（老板定过的口径，不用 @Roles 砍），敏感字段靠这里抹——
+// 合同金额对这两个角色已脱敏，工厂的明文银行账号/税号却还在，口径不一致。
+// 【只抹这 8 个字段】开户行名称、注册资金、年销售额属于工厂档案的常规资料，不在本次范围内；
+// 要扩范围请与业务确认后再加，别顺手把页面抹空
+const FACTORY_SENSITIVE = [
+  'bank_account', 'bank_account2',
+  'tax_no', 'tax_no2',
+  'invoice_phone', 'invoice_phone2',
+  'invoice_address', 'invoice_address2',
+];
+export function maskFactory(payload: any, role: string): any {
+  if (!MAKER_ROLES.includes(role)) return payload;
+  return eachRecord(payload, (f) => strip(f, FACTORY_SENSITIVE));
 }
 
 // 结算：成本/毛利/净利（限财务/管理，其余角色脱敏）

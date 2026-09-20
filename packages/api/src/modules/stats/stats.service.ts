@@ -87,7 +87,13 @@ export class StatsService {
 
   // 利润汇总：按款号 / 月份 / 客户，含毛利率%，净利<0 标亏损预警
   async profit(dimension: 'style' | 'month' | 'customer') {
-    const settlements = await this.settlementRepo.find({ where: { deleted: 0 } });
+    // B087：只统计 profit_ready=1（收汇与汇率齐备）的结算单——草稿单填了收汇没填汇率时 settle_amount 进分母、
+    // gross_profit 为 0，会把毛利率稀释（结算模块的亏损筛选/亏损计数同样只认 profit_ready=1）；
+    // 只取聚合用到的列，不再整表整行读进内存。
+    const settlements = await this.settlementRepo.find({
+      where: { deleted: 0, profit_ready: 1 },
+      select: ['id', 'style_no', 'customer_name', 'created_at', 'settle_amount', 'gross_profit', 'net_profit', 'net_profit_ex_refund'],
+    });
     const map = new Map<string, {
       key: string; count: number; settleAmount: number;
       grossProfit: number; netProfit: number; netProfitExRefund: number;

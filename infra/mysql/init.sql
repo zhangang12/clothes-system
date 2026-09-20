@@ -38,7 +38,8 @@ CREATE TABLE IF NOT EXISTS `sys_dict` (
   `status`     TINYINT      NOT NULL DEFAULT 1,
   `created_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `idx_type` (`type`)
+  KEY `idx_type` (`type`),
+  UNIQUE KEY `uk_dict_type_label` (`type`,`label`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='通用字典(下拉自填自动累积)';
 
 INSERT INTO `sys_dict` (`type`,`label`,`value`,`sort`) VALUES

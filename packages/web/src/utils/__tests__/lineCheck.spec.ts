@@ -333,3 +333,43 @@ describe('按色单行的防呆与算量（前后端共用 @i9/types）', () => 
   });
 });
 
+describe('checkGoodsLines 单价校验（B098：单价留空 → 合同总价 0 照样推给供应商盖章）', () => {
+  const ok = (over: Record<string, unknown> = {}) => ({ item_name: '门襟拉链', qty: 105, unit_price: 1.2, ...over });
+
+  it('B098 默认不校验单价（草稿/报价类留空是允许的）', () => {
+    expect(checkGoodsLines([ok({ unit_price: undefined })])).toBeNull();
+  });
+
+  it('B098 开了 requireUnitPrice：单价留空点名到行', () => {
+    const msg = checkGoodsLines([ok(), ok({ unit_price: undefined })], { requireUnitPrice: true })!;
+    expect(msg).toContain('第 2 行');
+    expect(msg).toContain('单价');
+  });
+
+  it('B098 单价填 0 同样拦下（总价会是 0）', () => {
+    const msg = checkGoodsLines([ok({ unit_price: 0 })], { requireUnitPrice: true })!;
+    expect(msg).toContain('第 1 行');
+    expect(msg).toContain('须大于 0');
+  });
+
+  it('B098 单价填了非数字，把填的内容一起说出来', () => {
+    const msg = checkGoodsLines([ok({ unit_price: '待定' })], { requireUnitPrice: true })!;
+    expect(msg).toContain('「待定」');
+  });
+
+  it('B098 空行还是按「删掉空行」提示，不要求给空行补单价', () => {
+    const msg = checkGoodsLines([ok(), {}], { requireUnitPrice: true })!;
+    expect(msg).toContain('空行');
+    expect(msg).not.toContain('没填单价');
+  });
+
+  it('B098 单价齐全时放行', () => {
+    expect(checkGoodsLines([ok(), ok({ unit_price: '0.0350' })], { requireUnitPrice: true })).toBeNull();
+  });
+
+  it('B098 数量先报：一行既没数量又没单价时不堆两条噪音', () => {
+    const msg = checkGoodsLines([ok({ qty: 0 })], { requireUnitPrice: true })!;
+    expect(msg).toContain('数量');
+    expect(msg).not.toContain('单价');
+  });
+});

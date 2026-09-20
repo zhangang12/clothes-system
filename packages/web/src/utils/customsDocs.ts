@@ -1104,7 +1104,9 @@ export async function buildInvoiceWorkbook(lines: PoLine[], head: InvHeader): Pr
     const qty = list.reduce((s, l) => s + l.qty, 0);
     ws.getCell(tr, 1).value = 'Total:';
     ws.getCell(tr, 9).value = qty;
-    ws.getCell(tr, 11).value = r2(list.reduce((s, l) => s + l.qty * l.price, 0));
+    // 合计 = 各行已舍入金额之和：逐行显示的是 r2(qty×price)，合计若按未舍入累加再 r2，
+    // 与行金额相加可差 0.01，客户核单时对不平（B142 同类）
+    ws.getCell(tr, 11).value = r2(list.reduce((s, l) => s + r2(l.qty * l.price), 0));
     ws.getCell(tr, 15).value = qty;
     ws.getCell(tr, 16).value = 0;
     for (let c = 1; c <= 16; c++) { ws.getCell(tr, c).font = { bold: true }; ws.getCell(tr, c).border = BORDER; }

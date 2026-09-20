@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ExportInvoiceService } from '../../invoice/export-invoice.service';
 import { ChangeLogService } from '../../../common/changelog/change-log.service';
+import { ChangeLog } from '../../../common/changelog/change-log.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ReconciliationStatus } from '../../reconciliation/reconciliation.entity';
@@ -52,6 +53,14 @@ interface ManagerData {
   order?: any;
   costRow?: any;
   receiptRow?: any;
+  // B084 后 refreshCost 的聚合查询全走 manager：合同/对账/工厂/同款订单/费用明细/留痕
+  contracts?: any[];
+  recons?: any[];
+  factories?: any[];
+  orders?: any[];
+  expenseItems?: any[];
+  changeLogs?: any[];
+  qtyRows?: any[];
 }
 const makeManager = (findOneResult?: any, data: ManagerData = {}) => ({
   create: jest.fn().mockImplementation((_, v) => v),
@@ -66,8 +75,15 @@ const makeManager = (findOneResult?: any, data: ManagerData = {}) => ({
     if (entity === SettlementCost) return Promise.resolve(data.costs ?? []);
     if (entity === SettlementReceipt) return Promise.resolve(data.receipts ?? []);
     if (entity === OrderShipment) return Promise.resolve(data.shipments ?? []);
+    if (entity === Contract) return Promise.resolve(data.contracts ?? []);
+    if (entity === Reconciliation) return Promise.resolve(data.recons ?? []);
+    if (entity === Factory) return Promise.resolve(data.factories ?? []);
+    if (entity === OrderMain) return Promise.resolve(data.orders ?? []);
+    if (entity === ReconciliationExpenseItem) return Promise.resolve(data.expenseItems ?? []);
+    if (entity === ChangeLog) return Promise.resolve(data.changeLogs ?? []);
     return Promise.resolve([]);
   }),
+  query: jest.fn().mockResolvedValue(data.qtyRows ?? []),
   delete: jest.fn().mockResolvedValue({}),
 });
 
@@ -436,10 +452,11 @@ describe('SettlementService', () => {
   it('UT-SLT-21 refreshCost resyncs shipped_qty and rebuilds AUTO snapshot rows', async () => {
     const s = makeSettlement({ status: SettlementStatus.DRAFT, order_id: 10, receipt_usd: 1000, exchange_rate: 7 });
     const order = { id: 10, style_no: 'V27.230', deleted: 0 };
-    mockReconcileRepo.find.mockResolvedValueOnce([
-      { reconcile_no: 'DZ-3', total_amount: 1130, status: 'PAID', has_invoice: 1 },
-    ]);
-    const manager = makeManager(s, { order, shipments: [{ qty: 60 }, { qty: 40 }], costs: [], receipts: [] });
+    // B084 后对账单从事务 manager 取（按款号兜底：无合同）
+    const manager = makeManager(s, {
+      order, shipments: [{ qty: 60 }, { qty: 40 }], costs: [], receipts: [],
+      recons: [{ reconcile_no: 'DZ-3', total_amount: 1130, status: 'PAID', has_invoice: 1 }],
+    });
     mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.refreshCost(1);
     expect(manager.delete).toHaveBeenCalledWith(SettlementCost, { settlement_id: 1, source: 'AUTO' });
@@ -449,6 +466,173 @@ describe('SettlementService', () => {
       goods_amount_tax: 1130,
       goods_amount_extax: 1000,
     });
+  });
+
+  // ===== 2026-09-20 审查 =====
+  describe('B084 刷新付款汇总：事务内聚合一律走 manager，不再从连接池借第二条连接', () => {
+    it('对账/合同/工厂/费用明细/同款订单/出货全部经 manager.find，注入仓储一次都不碰；实发数 SQL 走 manager.query', async () => {
+      const s = makeSettlement({ status: SettlementStatus.DRAFT, order_id: 10 });
+      const order = { id: 10, style_no: 'V27.230', deleted: 0 };
+      const manager = makeManager(s, {
+        order,
+        contracts: [{ id: 77 }],
+        recons: [{ id: 5, reconcile_no: 'DZ-5', total_amount: 2260, status: 'PAID', has_invoice: 1, factory_id: 9 }],
+        factories: [{ id: 9, name: '甲厂', short_name: '甲' }],
+        orders: [{ id: 10 }],
+      });
+      mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+      await service.refreshCost(1);
+      const found = manager.find.mock.calls.map((c: any[]) => c[0]);
+      for (const e of [Contract, Reconciliation, Factory, OrderMain, OrderShipment]) expect(found).toContain(e);
+      expect(manager.query).toHaveBeenCalledWith(expect.stringContaining('reconciliation_shipment'), [[5]]);
+      expect(mockContractRepo.find).not.toHaveBeenCalled();
+      expect(mockReconcileRepo.find).not.toHaveBeenCalled();
+      expect(mockFactoryRepo.find).not.toHaveBeenCalled();
+      expect(mockOrderRepo.find).not.toHaveBeenCalled();
+      expect(mockShipmentRepo.find).not.toHaveBeenCalled();
+      expect(mockDataSource.query).not.toHaveBeenCalled();
+      const settleSave = manager.save.mock.calls.find((c: any[]) => c[0] === Settlement);
+      expect(settleSave[1]).toMatchObject({ goods_amount_tax: 2260, goods_amount_extax: 2000 });
+      const costSave = manager.save.mock.calls.find((c: any[]) => c[0] === SettlementCost);
+      expect(costSave[1][0]).toMatchObject({ reconcile_no: 'DZ-5', supplier_name: '甲', source: 'AUTO' });
+    });
+
+    it('建单/预览在事务外，仍用注入仓储（行为不变）', async () => {
+      mockContractRepo.find.mockResolvedValueOnce([{ id: 54 }]);
+      mockReconcileRepo.find.mockResolvedValueOnce([{ id: 1, reconcile_no: 'DZ-1', total_amount: 1130, status: 'PAID', has_invoice: 1 }]);
+      const res: any = await service.previewCosts(10);
+      expect(res.paid_tax).toBe(1130);
+      expect(mockDataSource.query).toHaveBeenCalledWith(expect.stringContaining('reconciliation_shipment'), [[1]]);
+    });
+  });
+
+  describe('B085 刷新付款汇总不覆盖人工定过的期间费用', () => {
+    const arm = (s: any, changeLogs: any[]) => {
+      const manager = makeManager(s, {
+        order: { id: 10, style_no: 'V27.230', deleted: 0 },
+        recons: [], changeLogs,
+      });
+      mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+      return manager;
+    };
+
+    it('财务手填过运杂费 8000（change_log 有 freight_fee 痕）→ 刷新后 8000 保留；其余三项仍按归集值（此处归集为 0）刷新', async () => {
+      const s = makeSettlement({ status: SettlementStatus.DRAFT, order_id: 10, freight_fee: 8000, express_fee: 300, sample_fee: 0, other_fee: 50 });
+      const manager = arm(s, [{ field: 'freight_fee', old_value: '0', new_value: '8000' }]);
+      await service.refreshCost(1);
+      const settleSave = manager.save.mock.calls.find((c: any[]) => c[0] === Settlement);
+      expect(settleSave[1]).toMatchObject({ freight_fee: 8000, express_fee: 0, sample_fee: 0, other_fee: 0 });
+      // 只按这四个字段查留痕，不受 RECALC/REOPEN 等事件行数量影响
+      const logQuery = manager.find.mock.calls.find((c: any[]) => c[0] === ChangeLog);
+      expect(logQuery[1].where).toMatchObject({ biz_type: 'SETTLEMENT', biz_id: 1 });
+    });
+
+    it('没有任何手填痕迹 → 四项照旧全部按归集值刷新（L7-③：作废对账单的费用要能清掉）', async () => {
+      const s = makeSettlement({ status: SettlementStatus.DRAFT, order_id: 10, freight_fee: 8000, express_fee: 300 });
+      const manager = arm(s, []);
+      await service.refreshCost(1);
+      const settleSave = manager.save.mock.calls.find((c: any[]) => c[0] === Settlement);
+      expect(settleSave[1]).toMatchObject({ freight_fee: 0, express_fee: 0, sample_fee: 0, other_fee: 0 });
+    });
+
+    it('建单时手填的期间费用留痕（字段名=列名），刷新据此认出是人工定的', async () => {
+      const manager = makeManager();
+      mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+      await service.create({ order_id: 10, freight_fee: 8000, other_fee: 0 } as any, 7);
+      expect(mockChangeLogDep.record).toHaveBeenCalledWith('SETTLEMENT', 1,
+        [{ field: 'freight_fee', new: 8000 }, { field: 'other_fee', new: 0 }], 7);
+    });
+
+    it('建单没填期间费用（走归集）→ 不留痕，刷新时仍可覆盖', async () => {
+      const manager = makeManager();
+      mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+      await service.create({ order_id: 10, receipt_usd: 100 } as any, 7);
+      expect(mockChangeLogDep.record).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('B020 加成本行：建单直录的总货款不能被第一行成本整个换掉', () => {
+    it('无成本行且总货款 50 万 → 先落一条「总货款（建单录入）」手工行，再加运费 1000；Σ行 = 501000', async () => {
+      const s = makeSettlement({ status: SettlementStatus.DRAFT, goods_amount_tax: 500000, goods_amount_extax: 442477.8761, receipt_usd: 100000, exchange_rate: 7 });
+      // 第一次 find 是「加行前」（空），之后是「加行后」（两行）
+      const manager = makeManager(s, { receipts: [] });
+      manager.find.mockImplementation((entity: any) => {
+        if (entity === SettlementReceipt) return Promise.resolve([]);
+        if (entity !== SettlementCost) return Promise.resolve([]);
+        const saved = manager.save.mock.calls.filter((c: any[]) => c[0] === SettlementCost).map((c: any[]) => c[1]);
+        return Promise.resolve(saved);
+      });
+      mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+      await service.addCost(1, { cost_name: '运费', amount: 1000, has_invoice: 1 });
+      const costSaves = manager.save.mock.calls.filter((c: any[]) => c[0] === SettlementCost).map((c: any[]) => c[1]);
+      expect(costSaves).toHaveLength(2);
+      expect(costSaves[0]).toMatchObject({ cost_name: '总货款（建单录入）', amount: 500000, has_invoice: 1, tax_rate: 13, source: 'MANUAL', included: 1 });
+      expect(costSaves[1]).toMatchObject({ cost_name: '运费', amount: 1000 });
+      const settleSave = manager.save.mock.calls.find((c: any[]) => c[0] === Settlement);
+      expect(settleSave[1].goods_amount_tax).toBe(501000);           // 而不是 1000
+      expect(settleSave[1].goods_amount_extax).toBeCloseTo(501000 / 1.13, 2);
+    });
+
+    it('已有成本行（自动聚合/手工）→ 不再另落底数行，Σ行照旧', async () => {
+      const s = makeSettlement({ status: SettlementStatus.DRAFT, goods_amount_tax: 1130 });
+      const manager = makeManager(s, { costs: [{ amount: 1130, has_invoice: 1, source: 'AUTO', included: 1 }, { amount: 1000, has_invoice: 1 }], receipts: [] });
+      mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+      await service.addCost(1, { cost_name: '运费', amount: 1000 });
+      const costSaves = manager.save.mock.calls.filter((c: any[]) => c[0] === SettlementCost);
+      expect(costSaves).toHaveLength(1);
+      expect(costSaves[0][1].cost_name).toBe('运费');
+    });
+
+    it('无成本行且总货款为 0（自动聚合一条对账都没有）→ 不落底数行', async () => {
+      const s = makeSettlement({ status: SettlementStatus.DRAFT, goods_amount_tax: 0 });
+      const manager = makeManager(s, { costs: [], receipts: [] });
+      mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+      await service.addCost(1, { cost_name: '运费', amount: 1000 });
+      expect(manager.save.mock.calls.filter((c: any[]) => c[0] === SettlementCost)).toHaveLength(1);
+    });
+  });
+
+  it('B083 实发数聚合 SQL 报错不再被吞掉：建单/预览直接失败，而不是生成一张数量单价全空的单', async () => {
+    mockContractRepo.find.mockResolvedValueOnce([{ id: 54 }]);
+    mockReconcileRepo.find.mockResolvedValueOnce([{ id: 1, reconcile_no: 'DZ-1', total_amount: 1130, status: 'PAID', has_invoice: 1 }]);
+    mockDataSource.query.mockRejectedValueOnce(new Error("Table 'reconciliation_shipment' doesn't exist"));
+    await expect(service.previewCosts(10)).rejects.toThrow(/reconciliation_shipment/);
+  });
+
+  describe('B115 编辑结算单：null=清空（undefined=不改）', () => {
+    it('运杂费/退税传 null → 落 0；汇率传 null → 落 null；没传的字段不动', async () => {
+      const s = makeSettlement({ status: SettlementStatus.DRAFT, freight_fee: 8000, tax_refund: 500, exchange_rate: 7, express_fee: 300, receipt_usd: 100 });
+      const manager = makeManager(s, { receipts: [], costs: [] });
+      mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+      await service.update(1, { freight_fee: null, tax_refund: null, exchange_rate: null } as any);
+      const settleSave = manager.save.mock.calls.find((c: any[]) => c[0] === Settlement);
+      expect(settleSave[1]).toMatchObject({ freight_fee: 0, tax_refund: 0, exchange_rate: null, express_fee: 300 });
+      expect(settleSave[1].profit_ready).toBe(0); // 汇率清掉后利润闸门关上
+    });
+
+    it('已有逐笔收汇时 receipt_usd 传 null 同样被拒（清空也是覆盖）', async () => {
+      const s = makeSettlement({ status: SettlementStatus.DRAFT });
+      const manager = makeManager(s, { receipts: [{ amount: 100 }] });
+      mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+      await expect(service.update(1, { receipt_usd: null } as any)).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  it('B122 详情回查源订单带 deleted:0，已删订单不再带出单号', async () => {
+    mockRepo.findOne.mockResolvedValue(makeSettlement({ order_id: 10 }));
+    mockOrderRepo.findOne.mockResolvedValue({ id: 10, order_no: 'SO-DELETED', deleted: 1 });
+    await service.findOne(1);
+    expect(mockOrderRepo.findOne).toHaveBeenLastCalledWith({ where: { id: 10, deleted: 0 } });
+  });
+
+  it('B136 历史成本行税率 -100 不再除以 0 写出 Infinity：除数不正按不换算处理', async () => {
+    const s = makeSettlement({ status: SettlementStatus.DRAFT, receipt_usd: 100, exchange_rate: 7 });
+    const manager = makeManager(s, { costs: [{ amount: 1000, has_invoice: 1, tax_rate: -100 }, { amount: 1130, has_invoice: 1, tax_rate: 13 }], receipts: [] });
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+    await service.addCost(1, { cost_name: 'x', amount: 1130 });
+    const settleSave = manager.save.mock.calls.find((c: any[]) => c[0] === Settlement);
+    expect(Number.isFinite(settleSave[1].goods_amount_extax)).toBe(true);
+    expect(settleSave[1].goods_amount_extax).toBe(2000); // 1000（不换算）+ 1000
   });
 
   // ── 关联单据（单据间跳转）：详情带出上游单据号 ──

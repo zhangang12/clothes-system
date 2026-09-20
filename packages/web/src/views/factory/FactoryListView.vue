@@ -22,10 +22,10 @@
         </div>
         <div class="tools-right">
           <el-input v-model="query.keyword" placeholder="编号/名称/省市/地址/业务范围/法人" clearable style="width:280px"
-            @keyup.enter="load" @clear="load">
+            @keyup.enter="search" @clear="search">
             <template #prefix><el-icon><Search /></el-icon></template>
           </el-input>
-          <el-button type="primary" @click="load">搜索</el-button>
+          <el-button type="primary" @click="search">搜索</el-button>
           <el-button @click="reset">清空</el-button>
           <el-button text @click="showAdvanced = !showAdvanced">高级筛选 <el-icon><ArrowDown /></el-icon></el-button>
         </div>
@@ -35,21 +35,21 @@
         <div v-show="showAdvanced" class="advanced">
           <el-form inline>
             <el-form-item label="状态">
-              <el-select v-model="query.status" clearable placeholder="全部" style="width:110px" @change="load">
+              <el-select v-model="query.status" clearable placeholder="全部" style="width:110px" @change="search">
                 <el-option label="启用" :value="1" /><el-option label="停用" :value="0" />
               </el-select>
             </el-form-item>
-            <el-form-item label="编号"><el-input v-model="query.factory_no" clearable style="width:120px" @keyup.enter="load" @clear="load" /></el-form-item>
-            <el-form-item label="名称"><el-input v-model="query.name" clearable style="width:150px" @keyup.enter="load" @clear="load" /></el-form-item>
-            <el-form-item label="开户银行"><el-input v-model="query.bank_name" clearable style="width:140px" @keyup.enter="load" @clear="load" /></el-form-item>
-            <el-form-item label="联系人/手机"><el-input v-model="query.contact" clearable style="width:140px" @keyup.enter="load" @clear="load" /></el-form-item>
+            <el-form-item label="编号"><el-input v-model="query.factory_no" clearable style="width:120px" @keyup.enter="search" @clear="search" /></el-form-item>
+            <el-form-item label="名称"><el-input v-model="query.name" clearable style="width:150px" @keyup.enter="search" @clear="search" /></el-form-item>
+            <el-form-item label="开户银行"><el-input v-model="query.bank_name" clearable style="width:140px" @keyup.enter="search" @clear="search" /></el-form-item>
+            <el-form-item label="联系人/手机"><el-input v-model="query.contact" clearable style="width:140px" @keyup.enter="search" @clear="search" /></el-form-item>
             <el-form-item label="开发日期">
-              <el-date-picker v-model="query.develop_start" type="date" value-format="YYYY-MM-DD" placeholder="起" style="width:130px" @change="load" />
+              <el-date-picker v-model="query.develop_start" type="date" value-format="YYYY-MM-DD" placeholder="起" style="width:130px" @change="search" />
               <span style="margin:0 4px">—</span>
-              <el-date-picker v-model="query.develop_end" type="date" value-format="YYYY-MM-DD" placeholder="止" style="width:130px" @change="load" />
+              <el-date-picker v-model="query.develop_end" type="date" value-format="YYYY-MM-DD" placeholder="止" style="width:130px" @change="search" />
             </el-form-item>
             <el-form-item label="工厂类型">
-              <el-select v-model="query.type" clearable placeholder="全部" style="width:150px" @change="load">
+              <el-select v-model="query.type" clearable placeholder="全部" style="width:150px" @change="search">
                 <el-option v-for="t in factoryTypes" :key="t.value" :label="t.label" :value="t.value" />
               </el-select>
             </el-form-item>
@@ -172,6 +172,8 @@ async function load() {
     loading.value = false;
   }
 }
+// 改了搜索条件要回第 1 页（B107）：翻到第 3 页再搜，结果不足 3 页就是一张空表；翻页本身仍走 load
+function search() { query.page = 1; load(); }
 function reset() {
   query.keyword = ''; query.type = undefined; query.status = undefined; query.page = 1; Object.assign(query, { factory_no: '', name: '', bank_name: '', contact: '', develop_start: '', develop_end: '' }); load();
 }

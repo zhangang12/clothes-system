@@ -7,7 +7,9 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole, PAYMENT_SLIP_ROLES } from '@i9/types';
-import { ExportInvoiceService, CreateInvoiceDto } from './export-invoice.service';
+import { ExportInvoiceService } from './export-invoice.service';
+import { CreateExportInvoiceDto } from './dto/create-export-invoice.dto';
+import { AddReceiptDto } from './dto/add-receipt.dto';
 
 @ApiTags('出口发票')
 @ApiBearerAuth()
@@ -19,7 +21,7 @@ export class ExportInvoiceController {
   @Post()
   @Roles(UserRole.ADMIN, UserRole.FINANCE, UserRole.BUSINESS)
   @ApiOperation({ summary: '登记出口发票（一票多款款项行，结算Q12）' })
-  create(@Body() dto: CreateInvoiceDto, @Request() req: any) {
+  create(@Body() dto: CreateExportInvoiceDto, @Request() req: any) { // B047：真 DTO，发票号必填/限长在门口拦
     return this.service.create(dto, req.user.id);
   }
 
@@ -43,7 +45,7 @@ export class ExportInvoiceController {
   @Post(':id/receipts')
   @Roles(...PAYMENT_SLIP_ROLES) // #130：页面早就给业务留了「登记收汇」按钮，后端却只放财务——点了必 403，这里对齐
   @ApiOperation({ summary: '登记逐笔收汇（多笔多汇率+水单，结算Q12/Q13）' })
-  addReceipt(@Param('id', ParseIntPipe) id: number, @Body() dto: any) {
+  addReceipt(@Param('id', ParseIntPipe) id: number, @Body() dto: AddReceiptDto) { // B006/B127：不再 any 绕过校验
     return this.service.addReceipt(id, dto);
   }
 

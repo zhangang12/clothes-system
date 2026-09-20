@@ -9,6 +9,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@i9/types';
 import { CustomerService } from './customer.service';
 import { CreateCustomerDto, ImportCustomerDto } from './dto/create-customer.dto';
+import { UpdateCustomerDto, GrantBatchDto } from './dto/update-customer.dto';
 import { QueryCustomerDto } from './dto/query-customer.dto';
 
 @ApiTags('客户管理')
@@ -48,10 +49,7 @@ export class CustomerController {
   @Post('grants')
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: '批量授权机密权限（多客户×多用户，仅管理员）' })
-  grantBatch(
-    @Body() dto: { customer_ids: number[]; user_ids: number[]; can_edit?: boolean; expire_at?: string; remark?: string },
-    @Request() req: any,
-  ) {
+  grantBatch(@Body() dto: GrantBatchDto, @Request() req: any) {
     return this.service.grantBatch(dto.customer_ids, dto.user_ids, !!dto.can_edit, req.user.id, dto.expire_at, dto.remark);
   }
 
@@ -78,7 +76,7 @@ export class CustomerController {
   @Put(':id')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
   @ApiOperation({ summary: '更新客户信息（机密：仅创建人/有修改授权者/管理员）' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: Partial<CreateCustomerDto>, @Request() req: any) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateCustomerDto, @Request() req: any) {
     return this.service.update(id, dto, req.user);
   }
 

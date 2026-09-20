@@ -11,8 +11,11 @@ export interface PageResult<T> {
 export const factoryApi = {
   list: (params?: { page?: number; size?: number; keyword?: string; type?: string; status?: number }) =>
     http.get<unknown, { data: PageResult<Factory> }>('/factories', { params }),
+  // 下拉选项：失败不走全局红字（silent）。/factories/select 已挂 @MenuAccess('factories')，
+  // 而财务等角色默认菜单里没有 factories，却要在付款/对账页用工厂选择器——
+  // 让它安静地回空列表并由组件就地说明，别在一个跟工厂管理无关的页面上冒红字。
   select: (type?: string) =>
-    http.get<unknown, { data: Factory[] }>('/factories/select', { params: type ? { type } : {} }),
+    http.get<unknown, { data: Factory[] }>('/factories/select', { params: type ? { type } : {}, silent: true } as any),
   get: (id: number) =>
     http.get<unknown, { data: Factory }>(`/factories/${id}`),
   create: (dto: CreateFactoryDto) =>

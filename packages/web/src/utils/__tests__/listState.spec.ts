@@ -6,7 +6,7 @@ import ElementPlus, { ElTable, ElTableColumn } from 'element-plus';
 const mockRoute: any = { query: {} };
 vi.mock('vue-router', () => ({ useRoute: () => mockRoute }));
 
-import { useListState, useColumnWidths } from '../listState';
+import { useListState, useColumnWidths, clearListState } from '../listState';
 
 /**
  * #139/#140（2026-09-15 EVA）：筛完款号进去改一张报价，关掉回来筛选条件、调过的列宽全没了。
@@ -77,6 +77,35 @@ describe('useListState 记住筛选条件', () => {
     mountWithListState(() => { q = reactive({ keyword: '' }); useListState('orders', { query: q }); return {}; });
     expect(q.keyword).toBe('A');
     expect('removed_field' in q).toBe(false);
+  });
+
+  it('B144 clearListState 只清 i9.list.*，页签与列宽不动', () => {
+    sessionStorage.setItem('i9.list.orders', JSON.stringify({ query: { keyword: 'A' } }));
+    sessionStorage.setItem('i9.list.quotes', JSON.stringify({ query: { keyword: 'B' } }));
+    sessionStorage.setItem('i9.tabs', '[]');
+    localStorage.setItem('i9.colw.orders', '{"款号":200}');
+    clearListState();
+    expect(sessionStorage.getItem('i9.list.orders')).toBeNull();
+    expect(sessionStorage.getItem('i9.list.quotes')).toBeNull();
+    expect(sessionStorage.getItem('i9.tabs')).toBe('[]');
+    expect(localStorage.getItem('i9.colw.orders')).toBe('{"款号":200}');
+  });
+
+  it('B144 清过之后页面重建就是干净的，不会还原上一个人的筛选', async () => {
+    const first = mountWithListState(() => {
+      const query = reactive({ page: 1, keyword: '' });
+      useListState('orders', { query });
+      query.keyword = '上一个人的款号'; query.page = 3;
+      return {};
+    });
+    await flushPromises();
+    first.unmount();
+    clearListState();
+
+    let q: any;
+    mountWithListState(() => { q = reactive({ page: 1, keyword: '' }); useListState('orders', { query: q }); return {}; });
+    expect(q.keyword).toBe('');
+    expect(q.page).toBe(1);
   });
 });
 

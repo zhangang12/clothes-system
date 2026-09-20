@@ -6,6 +6,7 @@ import { AuthService } from '../auth.service';
 import { SysUser } from '../sys-user.entity';
 import { SupplierAccount } from '../supplier-account.entity';
 import { Factory } from '../../factory/factory.entity';
+import { REDIS_CLIENT } from '../../../common/services/numbering.service';
 
 // Mock bcryptjs to keep unit tests fast and deterministic
 jest.mock('bcryptjs', () => ({
@@ -16,6 +17,7 @@ jest.mock('bcryptjs', () => ({
 const mockUserRepo = { findOne: jest.fn(), update: jest.fn(), count: jest.fn(), find: jest.fn(), save: jest.fn(), create: jest.fn((x) => x) };
 const mockSupplierRepo = { findOne: jest.fn(), update: jest.fn(), createQueryBuilder: jest.fn() };
 const mockJwt = { sign: jest.fn().mockReturnValue('mock-token') };
+const mockRedis = { set: jest.fn().mockResolvedValue('OK') };
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -29,9 +31,11 @@ describe('AuthService', () => {
         { provide: getRepositoryToken(SupplierAccount), useValue: mockSupplierRepo },
         { provide: getRepositoryToken(Factory), useValue: {} },
         { provide: JwtService, useValue: mockJwt },
+        { provide: REDIS_CLIENT, useValue: mockRedis },
       ],
     }).compile();
     service = module.get(AuthService);
+    mockRedis.set.mockResolvedValue('OK');
   });
 
   describe('loginAdmin()', () => {
@@ -273,6 +277,71 @@ describe('AuthService', () => {
       });
       const r2 = await service.loginAdmin('u7', 'pass');
       expect(r2.menu_keys).toBeNull();
+    });
+  });
+
+  // ── B116：登录接口用户名枚举（用户不存在/停用时也要跑一次 bcrypt.compare，耗时与密码错误一致）──
+  describe('B116 登录耗时不暴露用户名是否存在', () => {
+    const bcrypt = require('bcryptjs');
+
+    it('B116 内部用户不存在：仍调用一次 bcrypt.compare，且拒绝', async () => {
+      mockUserRepo.findOne.mockResolvedValue(null);
+      await expect(service.loginAdmin('nobody', 'pass1234')).rejects.toThrow(UnauthorizedException);
+      expect(bcrypt.compare).toHaveBeenCalledTimes(1);
+    });
+
+    it('B116 内部用户已停用：同样比对一次后拒绝（密码对也不放行）', async () => {
+      mockUserRepo.findOne.mockResolvedValue({ id: 1, username: 'x', password: 'hashed:pass1234', status: 0 });
+      await expect(service.loginAdmin('x', 'pass1234')).rejects.toThrow(UnauthorizedException);
+      expect(bcrypt.compare).toHaveBeenCalledTimes(1);
+    });
+
+    it('B116 供应商不存在：同样比对一次', async () => {
+      mockSupplierRepo.findOne.mockResolvedValue(null);
+      await expect(service.loginSupplier('nobody', 'pass1234')).rejects.toThrow(UnauthorizedException);
+      expect(bcrypt.compare).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ── B031：改密/重置密码写入 Redis 改密时间戳（秒），TTL ≥ 最长 JWT 有效期（门户 30 天）──
+  describe('B031 改密/重置写改密时间戳', () => {
+    const TTL_31D = 31 * 24 * 3600;
+    const nowSec = () => Math.floor(Date.now() / 1000);
+
+    it('B031 本人改密（内部用户）→ auth:pwdts:admin:<id>', async () => {
+      mockUserRepo.findOne.mockResolvedValue({ id: 1, password: 'hashed:old12345' });
+      await service.changePassword({ id: 1, type: 'admin' }, 'old12345', 'new12345');
+      expect(mockRedis.set).toHaveBeenCalledTimes(1);
+      const [key, ts, ex, ttl] = mockRedis.set.mock.calls[0];
+      expect(key).toBe('auth:pwdts:admin:1');
+      expect(Math.abs(Number(ts) - nowSec())).toBeLessThanOrEqual(2);
+      expect(ex).toBe('EX');
+      expect(ttl).toBeGreaterThanOrEqual(TTL_31D);
+    });
+
+    it('B031 本人改密（供应商）→ auth:pwdts:supplier:<id>', async () => {
+      mockSupplierRepo.findOne.mockResolvedValue({ id: 9, password: 'hashed:old12345' });
+      await service.changePassword({ id: 9, type: 'supplier' }, 'old12345', 'new12345');
+      expect(mockRedis.set).toHaveBeenCalledWith('auth:pwdts:supplier:9', expect.any(String), 'EX', expect.any(Number));
+    });
+
+    it('B031 管理员重置内部用户 / 供应商密码同样写入', async () => {
+      mockUserRepo.findOne.mockResolvedValue({ id: 4, role: 'BUSINESS', status: 1 });
+      await service.resetUserPassword(4, 'new12345', { role: 'ADMIN' });
+      expect(mockRedis.set).toHaveBeenCalledWith('auth:pwdts:admin:4', expect.any(String), 'EX', expect.any(Number));
+      mockSupplierRepo.findOne.mockResolvedValue({ id: 7 });
+      await service.resetSupplierPassword(7, 'new12345');
+      expect(mockRedis.set).toHaveBeenCalledWith('auth:pwdts:supplier:7', expect.any(String), 'EX', expect.any(Number));
+    });
+
+    it('B031 原密码错误不写时间戳；Redis 写失败不影响改密结果', async () => {
+      mockUserRepo.findOne.mockResolvedValue({ id: 1, password: 'hashed:correct1' });
+      await expect(service.changePassword({ id: 1, type: 'admin' }, 'wrong123', 'new12345')).rejects.toThrow(BadRequestException);
+      expect(mockRedis.set).not.toHaveBeenCalled();
+      mockUserRepo.findOne.mockResolvedValue({ id: 1, password: 'hashed:old12345' });
+      mockRedis.set.mockRejectedValue(new Error('ECONNREFUSED'));
+      await expect(service.changePassword({ id: 1, type: 'admin' }, 'old12345', 'new12345')).resolves.toEqual({ ok: true });
+      expect(mockUserRepo.update).toHaveBeenCalledWith(1, { password: 'hashed:new12345' });
     });
   });
 });

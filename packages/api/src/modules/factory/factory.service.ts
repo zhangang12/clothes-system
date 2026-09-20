@@ -2,13 +2,14 @@ import {
   Injectable, NotFoundException, ConflictException, BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, Like, Not, In, DataSource, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
+import { Repository, FindOptionsWhere, Like, Not, In, And, DataSource, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { Factory } from './factory.entity';
 import { FactoryContact } from './factory-contact.entity';
 import { Contract, ContractStatus } from '../contract/contract.entity';
 import { SupplierAccount } from '../auth/supplier-account.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
+import { todayLocal } from '../../common/utils/local-date';
 import { CreateFactoryDto } from './dto/create-factory.dto';
 import { QueryFactoryDto } from './dto/query-factory.dto';
 
@@ -88,7 +89,7 @@ export class FactoryService {
     const base = this.mapDto(dto);
     this.applyContactBackfill(base, dto.contacts);
     if (base.develop_date === undefined || base.develop_date === null) {
-      base.develop_date = new Date().toISOString().slice(0, 10);
+      base.develop_date = todayLocal(); // B061：本地日历日，不用 UTC
     }
     if (dto.canInvoice === undefined) base.can_invoice = 1;
 
@@ -162,8 +163,10 @@ export class FactoryService {
     }
     // 智能搜索：厂商编号/名称/省份/城市/地址/业务范围/法人代表（设计稿 §1.2）
     const searchable = ['factory_no', 'name', 'province', 'city', 'address', 'business_scope', 'legal_rep'];
+    // B063：关键词 OR 分支若直接覆盖同名列，会把高级筛选（factory_no/name）挤掉；同名时两者 AND
+    const kw = Like(`%${keyword}%`);
     const where: FindOptionsWhere<Factory> | FindOptionsWhere<Factory>[] = keyword
-      ? searchable.map((f) => ({ ...base, [f]: Like(`%${keyword}%`) }))
+      ? searchable.map((f) => ({ ...base, [f]: (base as any)[f] ? And((base as any)[f], kw) : kw }))
       : base;
     const [items, total] = await this.repo.findAndCount({
       where, skip: (page - 1) * size, take: size, order: { id: 'DESC' },
@@ -204,7 +207,7 @@ export class FactoryService {
     if (!entity) throw new NotFoundException(`工厂 #${id} 不存在`);
     if (entity.status === 1) {
       const openContracts = await this.contractRepo.count({
-        where: { factory_id: id, status: Not(In([ContractStatus.COMPLETED, ContractStatus.CANCELLED])) },
+        where: { factory_id: id, deleted: 0, status: Not(In([ContractStatus.COMPLETED, ContractStatus.CANCELLED])) }, // B042：已软删合同不算
       });
       if (openContracts > 0) {
         throw new BadRequestException(`该工厂有 ${openContracts} 个未完成合同，不可停用`);

@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { UserRole, resolveMenuKeys, isAdminRole } from '@i9/types';
+import { clearListState } from '@/utils/listState';
+import { clearAllDrafts } from '@/utils/formDraft';
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(localStorage.getItem('token'));
@@ -35,6 +37,10 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('role');
     localStorage.removeItem('realName');
     localStorage.removeItem('menuKeys');
+    // 登出连带清掉列表筛选记忆与本地草稿：同一浏览器换账号，不能还原上一个人的筛选条件、
+    // 也不能弹出上一个人的「未保存草稿」（B144）
+    clearListState();
+    clearAllDrafts();
   }
 
   // SUPERVISOR 权限视同 ADMIN（2026-07-22 用户拍板）：hasRole(ADMIN) 对主管同样为真

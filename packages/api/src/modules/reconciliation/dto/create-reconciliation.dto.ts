@@ -1,4 +1,4 @@
-import { IsEnum, IsNumber, IsOptional, IsString, IsArray, ValidateNested, Min, IsBoolean, MaxLength, IsIn } from 'class-validator';
+import { IsEnum, IsNumber, IsOptional, IsString, IsArray, ValidateNested, Min, Max, IsBoolean, MaxLength, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ReconcileType, ReconcileSubType, RECONCILE_SUBTYPE_OPTIONS } from '@i9/types';
 
@@ -98,6 +98,7 @@ export class CreateReconciliationDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(100) // B068 同口径：decimal(5,2) 装不下 ≥1000，前端也只到 100
   tax_rate?: number;
 
   @IsOptional()

@@ -3,6 +3,7 @@
 
 // 抬头默认公司名（当未传入本司主体时兜底）
 import { withPrintToolbar } from './printToolbar';
+import { currencySymbol } from './currency';
 
 const DEFAULT_COMPANY = 'DATEX 服装智造';
 
@@ -18,11 +19,16 @@ const esc = (v: unknown): string =>
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 
+// 空值（null/undefined/''）一律打「—」（B093）：Number(null) 是 0，人民币报价的 usd_total 为 null 时
+// 会印出「美金合计：$ 0.00」，未定价明细会印「单价 0.0000」——都是把「没有」印成了「零」
+const isBlank = (v: unknown): boolean => v === null || v === undefined || v === '';
 const n2 = (v: unknown): string => {
+  if (isBlank(v)) return '—';
   const x = Number(v);
   return Number.isFinite(x) ? x.toFixed(2) : '—';
 };
 const n4 = (v: unknown): string => {
+  if (isBlank(v)) return '—';
   const x = Number(v);
   return Number.isFinite(x) ? x.toFixed(4) : '—';
 };
@@ -60,6 +66,14 @@ const PRINT_STYLE = `
   .tip { margin-top:6px; font-size:10px; color:#999; }
   @media screen { body { max-width:820px; margin:20px auto; } }
 `;
+
+// 外销合计一行（B093）：币种名与符号跟单据 currency 走（列表/编辑页 #13 已是这个口径），不再写死「美金」「$」；
+// 没有外销金额（人民币报价 usd_total 为 null）就不出这一行，别印一个「$ 0.00」给客户
+function fxTotalLine(detail: any): string {
+  if (isBlank(detail.usd_total)) return '';
+  const code = String(detail.currency || 'USD').trim().toUpperCase();
+  return `<div>外销合计（${esc(code)}）：<b>${esc(currencySymbol(code))} ${n2(detail.usd_total)}</b></div>`;
+}
 
 // 单张报价单正文（printQuote / printQuoteBatch 复用；批量时多张之间以分页符分隔）
 function buildQuoteBody(detail: any, companyName: string, opts: QuotePrintOpts = {}): string {
@@ -130,7 +144,7 @@ function buildQuoteBody(detail: any, companyName: string, opts: QuotePrintOpts =
 
   <div class="totals">
     <div>人民币合计（含利润率）：<b>¥ ${n2(detail.rmb_total)}</b></div>
-    <div>美金合计：<b>$ ${n2(detail.usd_total)}</b></div>
+    ${fxTotalLine(detail)}
   </div>
 
   ${detail.total_remark ? `<div class="remark"><b>备注说明：</b>${esc(detail.total_remark)}</div>` : ''}

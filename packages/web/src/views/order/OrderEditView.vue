@@ -11,9 +11,10 @@
         <el-button v-if="!readonly" type="primary" :icon="Check" :loading="saving" @click="save">保存</el-button>
         <!-- 新建时也要有（#116/#117：两个人都在新建页找不到导入，Grace 还以为"系统不稳定"——
              其实是旧条件要求先保存草稿按钮才出现，但没人知道要先保存） -->
-        <el-button v-if="!readonly" :icon="Download" @click="importDialog = true">从报价导入</el-button>
-        <el-button v-if="!readonly && editId && form.status !== 'DONE'" type="success" :icon="Promotion" @click="advance">推进状态</el-button>
-        <el-button v-if="editId && form.status === 'CONFIRMED'" type="warning" :icon="RefreshLeft" @click="revert">撤回下单</el-button>
+        <el-button v-if="!readonly" :icon="Download" :loading="importing" @click="importDialog = true">从报价导入</el-button>
+        <!-- 状态流转按钮带 loading（B110 同类）：网络慢时用户会再点一次，后端多数流转没有锁 -->
+        <el-button v-if="!readonly && editId && form.status !== 'DONE'" type="success" :icon="Promotion" :loading="advancing" @click="advance">推进状态</el-button>
+        <el-button v-if="editId && form.status === 'CONFIRMED'" type="warning" :icon="RefreshLeft" :loading="reverting" @click="revert">撤回下单</el-button>
         <el-dropdown v-if="editId" trigger="click" @command="onPrintOrder">
           <el-button :icon="Printer">打印<el-icon><ArrowDown /></el-icon></el-button>
           <template #dropdown>
@@ -75,6 +76,7 @@
               <el-select
                 v-model="form.quoteId" filterable remote reserve-keyword :remote-method="searchQuotes"
                 :loading="quoteSearching" clearable placeholder="输入报价单号 / 款号搜索" style="width:100%"
+                @change="onQuoteChange"
               >
                 <el-option v-for="q in quotes" :key="q.id" :label="`${q.quote_no} · ${q.style_no || ''}`" :value="q.id" />
               </el-select>
@@ -359,7 +361,7 @@
       <p class="hint" style="margin-top:8px">带出款号/客户/中间商/最终买家 + 复制报价明细到材料明细（单件耗用=报价耗用），快照。新建页导入会先按该报价建立草稿订单。只列「已报价」及之后状态的报价；草稿报价请先在报价页发出。</p>
       <template #footer>
         <el-button @click="importDialog = false">取消</el-button>
-        <el-button type="primary" :disabled="!importQuoteId" @click="doImport">导入</el-button>
+        <el-button type="primary" :loading="importing" :disabled="!importQuoteId" @click="doImport">导入</el-button>
       </template>
     </el-dialog>
   </div>
@@ -367,7 +369,8 @@
 
 <script setup lang="ts">
 import { dateOrNull, txt } from '@/utils/clearable';
-import { INT_UNITS } from '@/utils/splitLines';
+import { INT_UNITS, splitLinesOf } from '@/utils/splitLines';
+import { todayStr } from '@/utils/format';
 import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted, h } from 'vue';
 import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
@@ -390,6 +393,7 @@ import { exportInvoiceApi } from '@/api/exportInvoice';
 import { factoryApi } from '@/api/factory';
 import FileUpload from '@/components/FileUpload.vue';
 import { ORDER_STATUS_LABEL, QuoteStatus, QUOTE_STATUS_LABEL, matrixColorsOf, colorPiecesOf, perColorRowErrors, draftOrderFromQuotePayload } from '@i9/types';
+import { useAuthStore } from '@/stores/auth';
 import { downloadBlob } from '@/utils/docExcel';
 
 const SectionBlock = (props: { title: string; badge?: string }, { slots }: any) =>
@@ -403,6 +407,7 @@ const SectionBlock = (props: { title: string; badge?: string }, { slots }: any) 
 
 const route = useRoute();
 const router = useRouter();
+const authStore = useAuthStore();
 
 // 三套脱敏打印(P3#32)。弹窗被浏览器拦截时 printOrder 会抛错,须 catch 提示用户允许弹窗(同报价/样衣侧)
 async function onExportOrder(mode: string) {
@@ -457,20 +462,52 @@ async function onGenContract(cmd: string) {
     errToast(e?.response?.data?.msg ?? '生成失败');
   }
 }
-// 只读=查看路由,或订单非草稿(非草稿仅可看不可改,与后端"只有草稿可编辑"一致,防误操作)
-const readonly = computed(() => !!route.meta.readonly || (!!editId.value && !!form.status && form.status !== 'DRAFT'));
+// 只读=查看路由,或订单非草稿(非草稿仅可看不可改,与后端"只有草稿可编辑"一致,防误操作),
+// 或本单没装载成功（B106：空白表单可编辑 + 可保存 = 一存就把矩阵和材料清空）
+const readonly = computed(() => !!route.meta.readonly || loadFailed.value
+  || (!!editId.value && !!form.status && form.status !== 'DRAFT'));
 const editId = computed(() => (route.params.id ? Number(route.params.id) : null));
 const modeLabel = computed(() => (readonly.value ? '查看' : editId.value ? '编辑' : '新建'));
 
-const quotes = ref<any[]>([]);
-// 报价下拉：远程搜索（口径与理由见 utils/remoteOptions.ts）
-const { loading: quoteSearching, search: searchQuotes } = useRemoteOptions<any>({
-  fetch: async (kw) => {
-    const rows = ((await quoteApi.list(listParams(kw))) as any).data ?? [];
-    quotes.value = rows;
-    return rows;
-  },
+// 报价下拉：远程搜索（口径与理由见 utils/remoteOptions.ts）。
+// 直接用它的 options 当 quotes，不另存一份——另存的那份绕过 useRemoteOptions 的请求序号守卫（B147）
+const { options: quotes, loading: quoteSearching, search: searchQuotes } = useRemoteOptions<any>({
+  fetch: async (kw) => ((await quoteApi.list(listParams(kw))) as any).data ?? [],
 });
+/**
+ * 选中报价带出的客户 ID（B105）。
+ *
+ * 【为什么不能保存时再去 quotes 里找】quotes 是远程搜索的结果，每搜一次就被整体替换：
+ * 选好报价后又打开下拉搜了别的关键字，保存时 `quotes.find(...)` 就找不到那张了，
+ * 于是报「请先选择关联报价单」——可框里明明还显示着它。所以选中那一刻就把客户记下来。
+ */
+const quoteCustomerId = ref<number | undefined>(undefined);
+function rememberQuoteCustomer(q: any) {
+  const cid = q?.customer_id;
+  if (cid !== undefined && cid !== null && String(cid) !== '') quoteCustomerId.value = Number(cid);
+}
+function onQuoteChange(id?: number) {
+  if (id == null) { quoteCustomerId.value = undefined; return; }
+  rememberQuoteCustomer(quotes.value.find((q: any) => String(q.id) === String(id)));
+}
+/**
+ * 当前关联报价不在已搜到的那一批里时按 id 补拉进选项（B103）。
+ * 报价页、合同页早就有这套（ensureSelectedOptions / ensureOrderOption），订单页一直没有——
+ * 打开一张三个月前的订单，「关联报价单」框里显示的是裸数字 ID。
+ */
+async function ensureQuoteOption() {
+  const qid = form.quoteId;
+  if (qid == null) return;
+  if (quotes.value.some((q: any) => String(q.id) === String(qid))) {
+    onQuoteChange(qid);
+    return;
+  }
+  try {
+    const res: any = await quoteApi.get(Number(qid));
+    const q = res.data ?? res;
+    if (q?.id != null) { quotes.value = [q, ...quotes.value]; rememberQuoteCustomer(q); }
+  } catch { /* 补拉失败不阻断编辑，最多回显裸 ID（与修复前一致） */ }
+}
 const factories = ref<any[]>([]);
 const supplierFactories = ref<any[]>([]);
 
@@ -482,7 +519,8 @@ const emptyMat = () => ({ id: undefined as number | undefined, itemName: '', par
 const form = reactive<any>({
   orderNo: '', quoteId: undefined, customerPo: '', styleNo: '', unitPrice: '', currency: 'USD',
   deliveryDate: '', commissionRate: 0, factoryId: undefined, middlemanName: '', buyerName: '',
-  salesperson: '', makeDate: new Date().toISOString().slice(0, 10), splitMode: 'NONE', status: '',
+  // 本地日期（B097）：toISOString 是 UTC 日期，早 8 点前建的单制单日期会是昨天
+  salesperson: '', makeDate: todayStr(), splitMode: 'NONE', status: '',
   att1: '', att2: '', att3: '', att4: '', att5: '',
   matrix: { pos: [emptyPo()], rows: [emptyMatrixRow(1)] }, materials: [emptyMat()],
 });
@@ -533,7 +571,17 @@ function splitKeyOf(mode: string, r: any): { key: string; label: string; color: 
   const both = color && size;
   return { key: both ? JSON.stringify([color, size]) : '', label: both ? `${color} ${size}` : '', color, size };
 }
-function splitPreview(mat: any) {
+/** 材料行（页面 camelCase）→ 共享拆行工具认的 snake_case 形状，保证与合同/打印一个口径 */
+function toSplitRow(mat: any) {
+  return {
+    split_mode: mat.splitMode, net_usage: mat.netUsage, loss_rate: mat.lossRate,
+    // 后端的「已核算采购量」= final_purchase>0 ? final_purchase : total_purchase；
+    // 页面上 total_purchase 的对应物就是 sysPurchase(mat)
+    final_purchase: mat.finalPurchase, total_purchase: sysPurchase(mat),
+    round_up: mat.roundUp, unit: mat.unit, color: mat.color, size_specs: mat.sizeSpecs,
+  };
+}
+function splitPreviewOf(mat: any) {
   const groups = new Map<string, number>();
   const dims = new Map<string, { color: string; size: string; label: string }>();
   for (const r of form.matrix.rows) {
@@ -546,12 +594,34 @@ function splitPreview(mat: any) {
   const per = Number(mat.netUsage) || 0;
   const loss = 1 + (Number(mat.lossRate) || 0) / 100;
   const shouldRound = mat.roundUp === 1 || mat.roundUp === 0 ? mat.roundUp === 1 : !!(mat.unit && INT_UNITS.includes(mat.unit));
+  // 【各组出量交给共享的 splitLinesOf 算】（B104）：单件耗用为空时后端是**按件数占比分摊已核算采购量**，
+  // 这里原来直接乘 0 —— 于是「只填最终采购量、没填单耗」的料在展开面板里每组都是 0，生成的合同却是有量的。
+  const qtyByKey = new Map(splitLinesOf(toSplitRow(mat), form.matrix.rows).map((l) => [l.key, l.qty]));
+  const base = (Number(mat.finalPurchase) > 0 ? Number(mat.finalPurchase) : sysPurchase(mat)) || 0;
   return [...groups].map(([key, groupQty]) => {
-    let qty = groupQty * per * loss;
-    qty = shouldRound ? Math.ceil(qty) : +qty.toFixed(2);
     const d = dims.get(key) ?? { color: '', size: '', label: key };
-    return { key, ...d, groupQty, qty, formula: `${groupQty} × ${per} × ${loss.toFixed(2)}${shouldRound ? ' ↑取整' : ''}` };
+    return {
+      key, ...d, groupQty, qty: qtyByKey.get(key) ?? 0,
+      formula: per > 0
+        ? `${groupQty} × ${per} × ${loss.toFixed(2)}${shouldRound ? ' ↑取整' : ''}`
+        : `未填单件耗用，按件数占比分摊采购量 ${base}`,
+    };
   });
+}
+/**
+ * 分组出量预览（模板里每行要读两三次）。
+ * 【为什么要缓存】（B150）el-table 对 :data 是深监听，矩阵 60 行 × 材料 30 行时，在任一格里每敲一个字符
+ * 都会把每行的分组重算两三遍（约 5000 次），输入明显发滞。这里整表算一次、模板只做 Map 查询。
+ */
+const splitPreviewCache = computed(() => {
+  const m = new Map<any, ReturnType<typeof splitPreviewOf>>();
+  for (const row of form.materials) {
+    if (row?.splitMode && row.splitMode !== 'NONE' && row.splitMode !== 'PER_COLOR') m.set(row, splitPreviewOf(row));
+  }
+  return m;
+});
+function splitPreview(mat: any) {
+  return splitPreviewCache.value.get(mat) ?? [];
 }
 /** 分组摘要（摆在「系统采购量」下面）：最多点 3 组，多了给总数——细节仍看展开面板 */
 /** 按色单行的小字：该色件数；同名的按色单行没把矩阵颜色建全时提示（不拦，可能确实只用于部分颜色） */
@@ -590,7 +660,9 @@ function sysPurchase(row: any) {
   const shouldRound = row.roundUp === 1 || row.roundUp === 0
     ? row.roundUp === 1
     : !!(row.unit && INT_UNITS.includes(row.unit));
-  v = shouldRound ? Math.ceil(v) : +v.toFixed(2);
+  // 精度跟库里一致（B151）：order.service 存的是 4 位，页面按 2 位显示的话，
+  // 「系统采购量」与库里的 total_purchase 对不上，±10% 偏离校验的基数也跟着差一截
+  v = shouldRound ? Math.ceil(v) : +v.toFixed(4);
   return v;
 }
 function deviated(row: any) {
@@ -609,6 +681,10 @@ const formRef = ref<FormInstance>();
 const saving = ref(false);
 const selSizes = ref<any[]>([]); const selMats = ref<any[]>([]);
 const importDialog = ref(false);
+const importing = ref(false);   // 导入进行中：按钮 :loading，慢网络下再点一次不会又建一张草稿单（B110 同类）
+// 参考数据/单据装载失败（B106）：接口挂了就停在空白表单上，且 form.status 为空导致 readonly=false 仍可编辑，
+// 补几个必填项一保存就把矩阵和材料清空。装载失败时整页转只读并说明。
+const loadFailed = ref(false);
 // 可导入的报价（与后端 importFromQuote 的 A7 校验同一份口径：QUOTED/ADJUSTING/ORDERED）。
 // 草稿报价不列——列出来也必被后端拒，只会让人反复撞墙
 const IMPORTABLE_QUOTE_STATUSES: string[] = [QuoteStatus.QUOTED, QuoteStatus.ADJUSTING, QuoteStatus.ORDERED];
@@ -667,17 +743,42 @@ function copyMatLine(idx: number) {
   if (!src) return;
   form.materials.splice(idx + 1, 0, { ...src, id: undefined, contracted: false, contracts: [] });
 }
-function delMats() { form.materials = form.materials.filter((r: any) => !selMats.value.includes(r)); if (!form.materials.length) form.materials.push(emptyMat()); }
+/**
+ * 删除勾选的材料行。
+ * 【已生成合同的行删不掉】后端会拦（400「已生成合同不能删除」）：合同行还挂着它的 order_material_id，
+ * 删了订单侧的料，合同那边的溯源就悬空了。按「没权限就隐藏，别让后端报错」的口径，前端先挑出来不删并点名，
+ * 勾选框保留（批量设置供应商/单位还要用）。要真删就先处理对应合同。
+ */
+function delMats() {
+  const picked = selMats.value;
+  const locked = picked.filter((r: any) => r.contracted);
+  const removable = picked.filter((r: any) => !r.contracted);
+  if (locked.length) {
+    const names = locked.map((r: any) => r.itemName || '（未填品名）').slice(0, 3).join('、');
+    ElMessage.warning(`${names}${locked.length > 3 ? ` 等 ${locked.length} 行` : ''} 已生成合同，不能删除，请先处理对应合同`);
+  }
+  if (!removable.length) return;
+  form.materials = form.materials.filter((r: any) => !removable.includes(r));
+  if (!form.materials.length) form.materials.push(emptyMat());
+}
 
+/**
+ * 装载参考数据。
+ * 【每一路各自 catch】（B106）原来是裸 Promise.all：工厂接口偶发 500 就整个 reject，
+ * 连带后面的 load() 不执行，编辑页停在空白表单上还能保存 —— 一存就把矩阵和材料清空。
+ * 下拉少几个选项是小事，单据本身必须照常装载。
+ */
 async function loadRefs() {
   // 生产工厂只选「委外加工商」(设计稿 订单 B3)；材料供应商从工厂库全量点选(设计稿 订单 B9)
+  const failed: string[] = [];
   const [, fs, allF] = await Promise.all([
-    searchQuotes(''),                       // 报价下拉走远程搜索，这里只先摆最近一批
-    factoryApi.select('OUTSOURCE'),
-    factoryApi.select('FABRIC,ACCESSORY'), // 材料供应商只可从工厂库点选且限面/辅料(总览走查P1#13)
+    searchQuotes('').catch(() => { failed.push('报价'); }),   // 报价下拉走远程搜索，这里只先摆最近一批
+    factoryApi.select('OUTSOURCE').catch(() => { failed.push('生产工厂'); return { data: [] }; }),
+    factoryApi.select('FABRIC,ACCESSORY').catch(() => { failed.push('材料供应商'); return { data: [] }; }), // 只可从工厂库点选且限面/辅料(总览走查P1#13)
   ]);
   factories.value = (((fs as any).data ?? fs) as any[]) ?? [];
   supplierFactories.value = (((allF as any).data ?? allF) as any[]) ?? [];
+  if (failed.length) ElMessage.warning(`${failed.join('、')}下拉加载失败，可刷新页面重试；单据内容不受影响`);
 }
 const flags = reactive({ sourceQuoteChanged: false, usageEstimated: false });
 
@@ -732,9 +833,13 @@ async function loadDocLinks() {
     // 列表响应被 ResponseInterceptor 展开({items,total,...} → data=items),故数组取 res.data
     const rows = (r: PromiseSettledResult<any>) =>
       (r.status === 'fulfilled' && Array.isArray(r.value?.data) ? r.value.data : []);
+    // 【没这个菜单就别发请求】合同/结算的只读接口挂了 @MenuAccess，菜单里没有这一项的角色（典型是船务）
+    // 调用直接 403，axios 拦截器会当场冒一条红字——按「没权限就隐藏，别让后端报错」的口径先判菜单，
+    // 少一组关联单据 chip 即可（canMenu 与后端 resolveMenuKeys 同一份口径，见 stores/auth.ts）
+    const skip = Promise.resolve({ data: [] });
     const [cs, ss, is] = await Promise.allSettled([
-      contractApi.list({ order_id: id, page: 1, size: 100 }),
-      settlementApi.list({ order_id: id, page: 1, size: 100 }),
+      authStore.canMenu('contracts') ? contractApi.list({ order_id: id, page: 1, size: 100 }) : skip,
+      authStore.canMenu('settlements') ? settlementApi.list({ order_id: id, page: 1, size: 100 }) : skip,
       exportInvoiceApi.list({ order_id: id, page: 1, size: 100 }),
     ]);
     // 后端若尚未支持 ?order_id= 会返回全量,故再按 order_id 兜一道(字段缺失的行放行)
@@ -816,18 +921,24 @@ function checkOrderNumbers(): string | null {
   // 按色单行：颜色必须是矩阵里的颜色（与后端 buildMaterials 同一份规则）
   const pc = perColorRowErrors(form.materials.filter((m: any) => m.itemName).map((m: any) => ({ color: m.color, mode: m.splitMode })), matrixColors.value);
   if (pc.length) return `材料明细第 ${pc[0].rowNo} 行：${pc[0].reason}${pc.length > 1 ? `（另有 ${pc.length - 1} 行同类问题）` : ''}`;
-  return checkNumericCells(form.materials.filter((m: any) => m.itemName), ORDER_MAT_NUM_COLS, '材料明细');
+  // 【整表传进去，别先按品名过滤】（B159）：过滤后的下标不是用户看到的行号——第 1 行是空占位行、
+  // 第 2 行数量填「若干」，报出来却成了「第 1 行」。空行的数值格本来就是空的，checkNumericCells 会跳过
+  return checkNumericCells(form.materials, ORDER_MAT_NUM_COLS, '材料明细');
 }
 
 function buildDto() {
-  const q = quotes.value.find((x) => x.id === form.quoteId);
+  // 客户取「选中那一刻记下的」而不是现在去 quotes 里找（B105）：quotes 每次远程搜索都被整体替换，
+  // 选好报价后又搜了别的关键字，find 就找不到了 → 保存报「请先选择关联报价单」
+  const q = quotes.value.find((x: any) => String(x.id) === String(form.quoteId));
   return {
     // 别把 `?? 0` 加回来：0 不是任何客户的 ID，等于把「没填客户」伪装成合法值送进
     // NOT NULL 列，后端只能回一句看不懂的 400。缺失时就让它是 undefined，由 save() 前置拦下并给中文提示。
-    quote_id: form.quoteId, customer_id: q?.customer_id ?? form.customerId,
+    quote_id: form.quoteId, customer_id: q?.customer_id ?? quoteCustomerId.value ?? form.customerId,
     customer_po: form.customerPo, style_no: form.styleNo,
-    unit_price: num(form.unitPrice), currency: form.currency, delivery_date: dateOrNull(form.deliveryDate),
-    commission_rate: num(form.commissionRate) ?? 0, factory_id: form.factoryId, salesperson: txt(form.salesperson),
+    // 清空要发 null 才清得掉（B024）：后端 `dto[k] !== undefined` 才写，发 undefined = 不改。
+    // 两列都是 nullable（order_main.unit_price / factory_id），DTO 上 @IsOptional 对 null 同样放行
+    unit_price: num(form.unitPrice) ?? null, currency: form.currency, delivery_date: dateOrNull(form.deliveryDate),
+    commission_rate: num(form.commissionRate) ?? 0, factory_id: form.factoryId ?? null, salesperson: txt(form.salesperson),
     split_mode: form.splitMode, qty_total: qtyTotal.value,
     att_artwork: txt(form.att1), att_sizechart: txt(form.att2), att_board: txt(form.att3),
     att_packing: txt(form.att4), att_filling: txt(form.att5),
@@ -921,7 +1032,10 @@ async function downloadTemplate() {
 async function readGrid(file: File): Promise<string[][]> {
   const { readGrid: read } = await import('@/utils/sheetGrid');
   const { parseXlsx } = await import('@/utils/sheetPreview');
-  return read(file, parseXlsx);
+  // 【导入不能吃预览的 200 行上限】（B095）parseXlsx 的截断是给「附件在线预览」定的，
+  // 导入链复用它会让 230 行的搭配表只进 200 行，还提示「校验通过 200 行」。这里把上限放开，
+  // 大文件仍有 15MB 的字节闸拦着
+  return read(file, (buf) => parseXlsx(buf, { maxRows: Number.MAX_SAFE_INTEGER }));
 }
 
 async function onCsvPicked(e: Event) {
@@ -1021,10 +1135,11 @@ function fillPoFromMatrix(opts: { silent?: boolean } = {}) {
 }
 
 async function doImport() {
-  if (!importQuoteId.value) return;
+  if (!importQuoteId.value || importing.value) return;
+  importing.value = true;
+  let id = editId.value;
+  const isNew = !id;
   try {
-    let id = editId.value;
-    const isNew = !id;
     if (isNew) {
       // 新建页：后端导入接口需要订单 id，而字段映射（quote_item_id 关联、「源报价已变更」水位、
       // 材料行展开）只在后端有一份——前端照抄一遍必然漂移（本周 #109/#110 就是这么错的）。
@@ -1036,31 +1151,64 @@ async function doImport() {
       const res: any = await orderApi.create(draftOrderFromQuotePayload({ quote_id: importQuoteId.value, customer_id: qd?.customer_id, style_no: qd?.style_no }));
       id = Number((res?.data ?? res)?.id);
       if (!id) throw new Error('草稿订单创建失败');
-      await router.replace({ name: 'OrderEdit', params: { id } }); // 同组件不同路由不重挂载，下面手动 load
     }
+    // 【先导入、后跳转】（B025）原来是先 router.replace 再导入：MainLayout 是 `<component :key="$route.fullPath">`，
+    // replace 必然整页重建，导入请求与其后的 load() 都落在**已销毁的旧实例**上，新实例自己并发拉了一遍数据——
+    // 于是「提示已导入，材料明细却空白，要手动刷新」。现在导入在本实例里跑完，再把人送到草稿页由新实例自己 load。
     await orderApi.importFromQuote(id!, importQuoteId.value);
     importDialog.value = false;
     ElMessage.success(isNew ? '已按报价建立草稿订单并导入明细' : '已从报价导入');
-    await load(); if (isNew) void loadDocLinks();
-  } catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导入失败'); }
+    if (isNew) { await router.replace({ name: 'OrderEdit', params: { id } }); return; }
+    await load();
+  } catch (e: any) {
+    const msg = e?.response?.data?.msg ?? e?.message ?? '导入失败';
+    // 草稿单已经建出来了、只是导入这一步失败：不能笼统说「导入失败」让人再点一次（会再建一张单，
+    // 同 B112 的口径）。照样把人送到这张草稿上，说清楚下一步怎么做
+    if (isNew && id) {
+      importDialog.value = false;
+      errToast(`已按报价建立草稿订单，但材料明细导入失败（${msg}），可在本页再点「从报价导入」重试`);
+      await router.replace({ name: 'OrderEdit', params: { id } });
+      return;
+    }
+    errToast(msg);
+  } finally { importing.value = false; }
 }
+const advancing = ref(false);
+const reverting = ref(false);
 async function advance() {
-  if (!editId.value) return;
-  try { await orderApi.advance(editId.value); ElMessage.success('状态已推进'); load(); }
+  if (!editId.value || advancing.value) return;
+  advancing.value = true;
+  try { await orderApi.advance(editId.value); ElMessage.success('状态已推进'); await load(); }
   catch (e: any) { errToast(e?.response?.data?.msg ?? '推进失败'); }
+  finally { advancing.value = false; }
 }
 // 撤回下单（已下单→草稿，可再编辑；已生成合同起不可撤回——后端拦截）
 async function revert() {
-  if (!editId.value) return;
+  if (!editId.value || reverting.value) return;
   try {
     await ElMessageBox.confirm('撤回后订单回到草稿可修改，重新下单需重走审批校验。确认撤回？', '撤回下单', { type: 'warning' });
   } catch { return; }
-  try { await orderApi.revert(editId.value); ElMessage.success('已撤回为草稿，可直接修改'); load(); }
+  reverting.value = true;
+  try { await orderApi.revert(editId.value); ElMessage.success('已撤回为草稿，可直接修改'); await load(); }
   catch (e: any) { errToast(e?.response?.data?.msg ?? '撤回失败'); }
+  finally { reverting.value = false; }
 }
 function goBack() { router.push({ name: 'Orders' }); }
 // 关联单据不阻塞主表单:不 await,拉回来再渲染 chip
-onMounted(async () => { await loadRefs(); await load(); void loadDocLinks(); await draft.restorePrompt(); });
+onMounted(async () => {
+  await loadRefs();
+  // 单据本体装不进来就转只读（B106）：空白表单还能编辑、能保存，一存就把矩阵和材料清空
+  try {
+    await load();
+    await ensureQuoteOption();   // 关联报价不在搜到的那批里时按 id 补拉，别回显裸 ID（B103）
+  } catch (e: any) {
+    loadFailed.value = true;
+    errToast(`${e?.response?.data?.msg ?? e?.message ?? '订单装载失败'}——请刷新页面重试，未加载完的单据不能编辑`);
+    return;   // 没装进来就别问草稿了，恢复上去等于往空表单里灌旧数据
+  }
+  void loadDocLinks();
+  await draft.restorePrompt();
+});
 </script>
 
 <style scoped>

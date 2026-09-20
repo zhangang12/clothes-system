@@ -25,6 +25,7 @@ const mockPrepayCreate = vi.fn();
 
 const mockPRList = vi.fn();
 const mockPRCreate = vi.fn();
+const mockPRUpdate = vi.fn();
 const mockPRSubmit = vi.fn();
 const mockPRApprove = vi.fn();
 const mockPRReject = vi.fn();
@@ -38,10 +39,14 @@ vi.mock('@/api/payment', () => ({
     list: (...a: any[]) => mockPrepayList(...a),
     getBalance: (...a: any[]) => mockPrepayGetBalance(...a),
     create: (...a: any[]) => mockPrepayCreate(...a),
+    attachSlip: vi.fn(),
+    attachStatement: vi.fn(),
   },
   paymentRequestApi: {
     list: (...a: any[]) => mockPRList(...a),
     create: (...a: any[]) => mockPRCreate(...a),
+    update: (...a: any[]) => mockPRUpdate(...a),
+    attachSlip: vi.fn(),
     submit: (...a: any[]) => mockPRSubmit(...a),
     approve: (...a: any[]) => mockPRApprove(...a),
     reject: (...a: any[]) => mockPRReject(...a),
@@ -50,6 +55,23 @@ vi.mock('@/api/payment', () => ({
     getRecords: (...a: any[]) => mockPRGetRecords(...a),
     remove: (...a: any[]) => mockPRRemove(...a),
   },
+}));
+
+// 导出走真实排版会去解 Blob，这里只关心「有没有导出」，把出口打桩；
+// payableOf 是被测口径（B146），保留真实实现
+const mockExportPR = vi.fn();
+vi.mock('@/utils/paymentExcel', async (orig) => ({
+  ...(await orig<typeof import('@/utils/paymentExcel')>()),
+  exportPaymentRequestExcel: (...a: any[]) => mockExportPR(...a),
+  exportPrepaymentExcel: vi.fn(),
+}));
+
+// 敏感附件签名（B027）：如实模拟「private/ 才加令牌」
+const mockSignedUrl = vi.fn(async (u: string) => (u.includes('private') ? `${u}&t=tok` : u));
+vi.mock('@/utils/secureFile', () => ({
+  signedUrl: (u: string) => mockSignedUrl(u),
+  openFile: vi.fn(),
+  isPrivateFile: (u: string) => u.includes('private'),
 }));
 
 // ── ElMessage spy ──────────────────────────────────────────────────────────
@@ -111,6 +133,12 @@ describe('PaymentListView', () => {
     ElMessageMock.success.mockClear();
     ElMessageMock.warning.mockClear();
     ElMessageMock.error.mockClear();
+    mockExportPR.mockClear();
+    mockSignedUrl.mockClear();
+    mockPRGetRecords.mockResolvedValue({ data: [] });
+    mockPRSubmit.mockResolvedValue({});
+    mockPRApprove.mockResolvedValue({});
+    mockPRUpdate.mockResolvedValue({});
   });
 
   afterEach(() => {
@@ -404,5 +432,265 @@ describe('PaymentListView', () => {
     await vi.waitFor(() => expect(mockPRList).toHaveBeenCalled());
     expect(mockPRList).toHaveBeenCalledWith(expect.objectContaining({ reconcile_id: undefined }));
     expect(wrapper.text()).not.toContain('仅显示对账单');
+  });
+
+  // ══════════════════════════ 2026-09-20 审查修复回归 ══════════════════════════
+
+  it('B107 点「搜索」时页码归 1（翻到第 3 页再搜会得到一张空表）', async () => {
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(mockPRList).toHaveBeenCalledTimes(1));
+    const vm = wrapper.vm as any;
+    vm.prQuery.page = 3;
+    await wrapper.vm.$nextTick();
+
+    const searchBtns = wrapper.findAll('button').filter((b) => b.text().trim() === '搜索');
+    await searchBtns[searchBtns.length - 1].trigger('click'); // 付款申请页签那个
+    await vi.waitFor(() => expect(mockPRList).toHaveBeenCalledTimes(2));
+    expect(mockPRList).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1 }));
+    expect(vm.prQuery.page).toBe(1);
+  });
+
+  it('B107 预付款页签的搜索同样归 1', async () => {
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(mockPrepayList).toHaveBeenCalledTimes(1));
+    const vm = wrapper.vm as any;
+    vm.prepayQuery.page = 2;
+    await wrapper.vm.$nextTick();
+
+    const searchBtns = wrapper.findAll('button').filter((b) => b.text().trim() === '搜索');
+    await searchBtns[0].trigger('click');
+    await vi.waitFor(() => expect(mockPrepayList).toHaveBeenCalledTimes(2));
+    expect(vm.prepayQuery.page).toBe(1);
+  });
+
+  it('B154 「重置」把四个日期筛选一起清掉（原来点了重置列表还是筛过的）', async () => {
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(mockPRList).toHaveBeenCalledTimes(1));
+    const vm = wrapper.vm as any;
+    Object.assign(vm.prQuery, {
+      factory_id: 7, approval_status: 'PAID',
+      due_start: '2026-09-01', due_end: '2026-09-30',
+      paid_start: '2026-09-02', paid_end: '2026-09-20',
+    });
+    vm.prDateRange = ['2026-09-01', '2026-09-30'];
+    await wrapper.vm.$nextTick();
+
+    const resetBtns = wrapper.findAll('button').filter((b) => b.text().trim() === '重置');
+    await resetBtns[resetBtns.length - 1].trigger('click');
+    await vi.waitFor(() => expect(mockPRList).toHaveBeenCalledTimes(2));
+
+    for (const k of ['due_start', 'due_end', 'paid_start', 'paid_end']) expect(vm.prQuery[k]).toBe('');
+    expect(vm.prQuery.factory_id).toBeUndefined();
+    expect(vm.prDateRange).toBeNull();
+    expect(mockPRList).toHaveBeenLastCalledWith(expect.objectContaining({
+      due_start: '', due_end: '', paid_start: '', paid_end: '', page: 1,
+    }));
+  });
+
+  it('B109 改草稿时清空的收款银行/账号/款号要发空串，不能 delete（后端 ?? 会保留旧值）', async () => {
+    mockPRCreate.mockResolvedValue({});
+    mockPRList.mockResolvedValue({
+      data: [makePR({
+        id: 12, approval_status: 'DRAFT', type: 'NO_CONTRACT', factory_id: 10, amount: '3000.00',
+        bank_name: '工行某支行', bank_account: '6222001', related_style_no: 'LM-01',
+      })],
+      total: 1,
+    });
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
+
+    await wrapper.findAll('button').find((b) => b.text() === '编辑')!.trigger('click');
+    await wrapper.vm.$nextTick();
+
+    const vm = wrapper.vm as any;
+    expect(vm.prForm.bank_account).toBe('6222001'); // 先确认带出来了
+    vm.prForm.bank_name = '';
+    vm.prForm.bank_account = '';
+    vm.prForm.related_style_no = '';
+    await wrapper.vm.$nextTick();
+
+    await wrapper.findAll('button').find((b) => b.text() === '保存')!.trigger('click');
+    await vi.waitFor(() => expect(mockPRUpdate).toHaveBeenCalled());
+    const dto = mockPRUpdate.mock.calls[0][1];
+    expect(dto.bank_name).toBe('');
+    expect(dto.bank_account).toBe('');
+    expect(dto.related_style_no).toBe('');
+  });
+
+  it('B109 新建时空的收款信息仍然不发（保持建单口径）', async () => {
+    mockPRCreate.mockResolvedValue({});
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(mockPRList).toHaveBeenCalled());
+
+    await wrapper.findAll('button').find((b) => b.text() === '新建付款申请')!.trigger('click');
+    await wrapper.vm.$nextTick();
+    const vm = wrapper.vm as any;
+    Object.assign(vm.prForm, { factory_id: 3, amount: 100 });
+    await wrapper.vm.$nextTick();
+
+    await wrapper.findAll('button').find((b) => b.text() === '保存')!.trigger('click');
+    await vi.waitFor(() => expect(mockPRCreate).toHaveBeenCalled());
+    const dto = mockPRCreate.mock.calls[0][0];
+    expect('bank_name' in dto).toBe(false);
+    expect('bank_account' in dto).toBe(false);
+  });
+
+  it('B146 未付余额按 amount − prepay_offset 回退（老单 actual_pay 为空时不能只退回 amount）', async () => {
+    mockPRList.mockResolvedValue({
+      data: [makePR({ actual_pay: null, amount: '3000.00', prepay_offset: '3000.00', paid_total: '0.00' })],
+      total: 1,
+    });
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
+    // 「已付 / 余额」列：0.00 / 0.00，而不是 0.00 / 3000.00
+    expect(wrapper.text()).toContain('0.00 / 0.00');
+    expect(wrapper.text()).not.toContain('0.00 / 3000.00');
+  });
+
+  it('B153 发票传了 3 份时逐份给入口（原来只开第一份）', async () => {
+    mockPRList.mockResolvedValue({
+      data: [makePR({ invoice_no: 'FP-1', invoice_url: '/f?p=private%2Fa.pdf,/f?p=private%2Fb.pdf,/f?p=private%2Fc.pdf' })],
+      total: 1,
+    });
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
+    expect(wrapper.text()).toContain('第1份');
+    expect(wrapper.text()).toContain('第2份');
+    expect(wrapper.text()).toContain('第3份');
+  });
+
+  it('B153 只有一份时仍显示「查看」', async () => {
+    mockPRList.mockResolvedValue({ data: [makePR({ invoice_url: '/f?p=private%2Fa.pdf' })], total: 1 });
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
+    expect(wrapper.text()).toContain('查看');
+    expect(wrapper.text()).not.toContain('第1份');
+  });
+
+  it('B155 分批付款记录拉不到就不出 Excel（财务不能拿到一份缺记录的文件）', async () => {
+    // 用默认文案那条路径：'网络错误' 会撞上 errToast 的 800ms 去重（本文件里未 mock 的真请求也在喊这句）
+    mockPRGetRecords.mockRejectedValueOnce(new Error('records down'));
+    mockPRList.mockResolvedValue({ data: [makePR({ id: 9 })], total: 1 });
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
+
+    await wrapper.findAll('button').find((b) => b.text() === '导出Excel')!.trigger('click');
+    await vi.waitFor(() => expect(ElMessageMock.error)
+      .toHaveBeenCalledWith(expect.stringContaining('分批付款记录获取失败')));
+    expect(mockExportPR).not.toHaveBeenCalled();
+  });
+
+  it('B155 记录拉得到时照常导出', async () => {
+    mockPRGetRecords.mockResolvedValueOnce({ data: [{ id: 1, amount: 100 }] });
+    mockPRList.mockResolvedValue({ data: [makePR({ id: 9 })], total: 1 });
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
+
+    await wrapper.findAll('button').find((b) => b.text() === '导出Excel')!.trigger('click');
+    await vi.waitFor(() => expect(mockExportPR).toHaveBeenCalled());
+    expect(mockExportPR.mock.calls[0][0].records).toHaveLength(1);
+  });
+
+  it('B110 「提交」连点两次只发一次请求', async () => {
+    let release!: (v: unknown) => void;
+    mockPRSubmit.mockImplementation(() => new Promise((res) => { release = res; }));
+    mockPRList.mockResolvedValue({ data: [makePR({ id: 3, approval_status: 'DRAFT' })], total: 1 });
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
+
+    // 【别只点两次按钮】点完第一次按钮就 :disabled 了，VTU 对 disabled 元素不再派发事件——
+    // 那样测的是 disabled 绑定，把函数里的防重闸删掉照样绿（变异实测）。这里直接连调两次处理函数。
+    const btn = wrapper.findAll('button').find((b) => b.text() === '提交')!;
+    await btn.trigger('click');
+    await (wrapper.vm as any).doSubmit({ id: 3 });
+    expect(mockPRSubmit).toHaveBeenCalledTimes(1);
+    await wrapper.vm.$nextTick();
+    expect(wrapper.findAll('button').find((b) => b.text() === '提交')!.attributes('disabled')).toBeDefined();
+    release({});
+  });
+
+  it('B110 「批准」连点两次只发一次请求', async () => {
+    let release!: (v: unknown) => void;
+    mockPRApprove.mockImplementation(() => new Promise((res) => { release = res; }));
+    mockPRList.mockResolvedValue({ data: [makePR({ id: 4, approval_status: 'PENDING' })], total: 1 });
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
+
+    const btn = wrapper.findAll('button').find((b) => b.text() === '批准')!;
+    await btn.trigger('click');
+    await (wrapper.vm as any).doApprove({ id: 4 }); // 同上：绕开 disabled，直接考防重闸
+    expect(mockPRApprove).toHaveBeenCalledTimes(1);
+    release({});
+  });
+
+  it('B027 付款弹窗里的水单用签名链接显示（裸 private 地址必 403 裂图）', async () => {
+    mockPRList.mockResolvedValue({ data: [makePR({ approval_status: 'APPROVED', actual_pay: 5000, paid_total: 0 })], total: 1 });
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
+
+    await wrapper.findAll('button').find((b) => b.text() === '付款')!.trigger('click');
+    await vi.waitFor(() => expect(wrapper.text()).toContain('财务付款'));
+
+    const vm = wrapper.vm as any;
+    vm.slipUrl = '/api/v1/uploads/file?p=private%2F2026%2F09%2Fslip.png';
+    await vi.waitFor(() => expect(mockSignedUrl).toHaveBeenCalled());
+    await wrapper.vm.$nextTick();
+    const img = wrapper.find('.slip-preview img');
+    expect(img.exists()).toBe(true);
+    expect(img.attributes('src')).toContain('t=tok');
+  });
+
+  it('B027 PDF 水单不套 <img>（套了必然裂图），给可点开的占位', async () => {
+    mockPRList.mockResolvedValue({ data: [makePR({ approval_status: 'APPROVED', actual_pay: 5000, paid_total: 0 })], total: 1 });
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
+
+    await wrapper.findAll('button').find((b) => b.text() === '付款')!.trigger('click');
+    await vi.waitFor(() => expect(wrapper.text()).toContain('财务付款'));
+
+    const vm = wrapper.vm as any;
+    vm.slipUrl = '/api/v1/uploads/file?p=private%2F2026%2F09%2Fslip.pdf';
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('.slip-preview img').exists()).toBe(false);
+    expect(wrapper.text()).toContain('PDF 水单已上传');
+  });
+
+  it('B097 付款日期默认取本地今天，不是 UTC 今天（早 8 点前会差一天）', async () => {
+    mockPRList.mockResolvedValue({ data: [makePR({ approval_status: 'APPROVED', actual_pay: 5000, paid_total: 0 })], total: 1 });
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
+
+    await wrapper.findAll('button').find((b) => b.text() === '付款')!.trigger('click');
+    await vi.waitFor(() => expect(wrapper.text()).toContain('财务付款'));
+
+    const d = new Date();
+    const p = (n: number) => String(n).padStart(2, '0');
+    expect((wrapper.vm as any).payForm.pay_date).toBe(`${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`);
+  });
+
+  it('B099 当天到期不算逾期（原来按 UTC 零点解析，早上 8:01 起就标逾期）', async () => {
+    // 把「现在」钉在本地 10:00：此刻 new Date('YYYY-MM-DD')（UTC 零点）已经早于现在，
+    // 旧写法必判逾期、新写法不判——不钉时间的话半夜跑这条用例两种实现都说「没逾期」，等于没测
+    const d = new Date();
+    d.setHours(10, 0, 0, 0);
+    vi.setSystemTime(d);
+    const p = (n: number) => String(n).padStart(2, '0');
+    const today = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    mockPRList.mockResolvedValue({ data: [makePR({ due_date: today, approval_status: 'APPROVED' })], total: 1 });
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
+    expect(wrapper.text()).not.toContain('逾期');
+    vi.useRealTimers();
+  });
+
+  it('B099 昨天到期照旧标逾期', async () => {
+    const d = new Date(Date.now() - 24 * 3600 * 1000);
+    const p = (n: number) => String(n).padStart(2, '0');
+    const yesterday = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    mockPRList.mockResolvedValue({ data: [makePR({ due_date: yesterday, approval_status: 'APPROVED' })], total: 1 });
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(wrapper.text()).toContain('PR-2024-001'));
+    expect(wrapper.text()).toContain('逾期');
   });
 });

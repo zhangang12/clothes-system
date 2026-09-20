@@ -15,7 +15,8 @@ import { Factory } from '../../factory/factory.entity';
 import { SupplierAccount } from '../../auth/supplier-account.entity';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
 import { SysConfigService } from '../../../common/config/sys-config.service';
-import { ContractPortalStatus, ContractType } from '@i9/types';
+import { todayLocal } from '../../../common/utils/local-date';
+import { ContractPortalStatus, ContractType, OrderStatus } from '@i9/types';
 import { Reconciliation } from '../../reconciliation/reconciliation.entity';
 import { ReconciliationShipment } from '../../reconciliation/reconciliation-shipment.entity';
 import { Prepayment } from '../../payment/prepayment.entity';
@@ -103,6 +104,16 @@ const mockDataSource = {
 };
 
 const mockChangeLogDep = { record: jest.fn().mockResolvedValue(undefined), list: jest.fn().mockResolvedValue([]) };
+
+// B004（2026-09-20 审查）：生成合同的按行幂等检查挪进了事务——事务里先锁订单行
+// （manager.findOne(OrderMain, {lock:'pessimistic_write'})），再用 manager.query 查「已下过合同」的行。
+// 所有 generateFromOrder 用例的 manager 桩都要能答这两问，否则会当场 NotFound。
+const LOCKED_ORDER = { id: 10, style_no: 'M525', currency: 'CNY', status: 'CONFIRMED', deleted: 0 };
+/** 事务内的 query 桩：按行幂等那条 SQL 回 contractedOmids（mysql2 的 bigint 可能是字符串），其余（按款号查加工厂地址）回 [] */
+const txQuery = (contractedOmids: Array<string | number> = []) =>
+  jest.fn().mockImplementation((sql: string) => Promise.resolve(
+    String(sql).includes('contract_material') ? contractedOmids.map((omid) => ({ omid })) : [],
+  ));
 
 describe('ContractService', () => {
   let service: ContractService;
@@ -250,11 +261,12 @@ describe('ContractService', () => {
           ].find((f) => f.name === name);
           return Promise.resolve(hit ?? null);
         }
-        return Promise.resolve(null);   // OrderMain / 加工合同查询等一律查不到
+        if (entity === OrderMain) return Promise.resolve({ ...LOCKED_ORDER }); // B004：事务内锁订单行
+        return Promise.resolve(null);   // 加工合同查询等一律查不到
       }),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
       find: jest.fn().mockResolvedValue([]),   // #89：事务内会查订单材料行
-      query: jest.fn().mockResolvedValue([]),   // #94：事务内会按款号查加工合同
+      query: txQuery(),   // #94 按款号查加工合同 + B004 按行幂等
     };
     mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
     const result = await service.generateFromOrder(10, 1);
@@ -334,19 +346,59 @@ describe('ContractService', () => {
     await expect(service.stamp(1, 'supplier')).rejects.toThrow(ForbiddenException);
   });
 
+  // remove 自 B039 起整个走事务（删合同 + 订单状态回退要么一起成、要么一起不成）
+  const removeManager = (contract: any, order: any = null, remaining = 0) => ({
+    findOne: jest.fn().mockImplementation((entity: any) =>
+      Promise.resolve(entity === Contract ? contract : (entity === OrderMain ? order : null))),
+    count: jest.fn().mockResolvedValue(remaining),
+    save: jest.fn().mockImplementation((_: any, v: any) => Promise.resolve(v)),
+  });
+
   // UT-CON-07: remove throws if not DRAFT
   it('UT-CON-07 remove throws BadRequest if portal_status is not DRAFT', async () => {
-    const contract = makeContract({ portal_status: ContractPortalStatus.PUSHED });
-    mockRepo.findOne.mockResolvedValue(contract);
+    const manager = removeManager(makeContract({ portal_status: ContractPortalStatus.PUSHED }));
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
     await expect(service.remove(1)).rejects.toThrow(BadRequestException);
+    expect(manager.save).not.toHaveBeenCalled();
   });
 
   // UT-CON-08: remove logical-deletes DRAFT contract
   it('UT-CON-08 remove logical-deletes a DRAFT contract', async () => {
-    const contract = makeContract({ portal_status: ContractPortalStatus.DRAFT });
-    mockRepo.findOne.mockResolvedValue(contract);
+    const manager = removeManager(makeContract({ portal_status: ContractPortalStatus.DRAFT, order_id: null }));
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
     await service.remove(1);
-    expect(mockRepo.save).toHaveBeenCalledWith(expect.objectContaining({ deleted: 1 }));
+    expect(manager.save).toHaveBeenCalledWith(Contract, expect.objectContaining({ deleted: 1 }));
+  });
+
+  // B039：删掉订单名下最后一张未删除合同 → 订单从「已生成合同」退回「已下单」，否则订单卡死
+  //（既不能编辑，也不能撤回——revert 只认 CONFIRMED，提示「先处理下游合同」但已无合同可处理）
+  it('B039 删掉最后一张合同后订单从 CONTRACTED 退回 CONFIRMED（锁订单行后再判）', async () => {
+    const order = { id: 10, status: OrderStatus.CONTRACTED, deleted: 0 };
+    const manager = removeManager(makeContract({ portal_status: ContractPortalStatus.DRAFT, order_id: 10 }), order, 0);
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+    await service.remove(1);
+    expect(manager.findOne).toHaveBeenCalledWith(OrderMain, expect.objectContaining({
+      where: { id: 10, deleted: 0 }, lock: { mode: 'pessimistic_write' },
+    }));
+    expect(manager.save).toHaveBeenCalledWith(OrderMain, expect.objectContaining({ status: OrderStatus.CONFIRMED }));
+  });
+
+  it('B039 订单下还有别的未删除合同 → 订单状态不动（只有最后一张删掉才回退）', async () => {
+    const order = { id: 10, status: OrderStatus.CONTRACTED, deleted: 0 };
+    const manager = removeManager(makeContract({ portal_status: ContractPortalStatus.DRAFT, order_id: 10 }), order, 2);
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+    await service.remove(1);
+    expect(manager.save).not.toHaveBeenCalledWith(OrderMain, expect.anything());
+    expect(order.status).toBe(OrderStatus.CONTRACTED);
+  });
+
+  it('B039 订单已推进到生产中/已完成就不回退（只从 CONTRACTED 退，别把下游状态冲掉）', async () => {
+    const order = { id: 10, status: OrderStatus.PRODUCING, deleted: 0 };
+    const manager = removeManager(makeContract({ portal_status: ContractPortalStatus.DRAFT, order_id: 10 }), order, 0);
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+    await service.remove(1);
+    expect(manager.save).not.toHaveBeenCalledWith(OrderMain, expect.anything());
+    expect(order.status).toBe(OrderStatus.PRODUCING);
   });
 
   // UT-CON-09: findOne throws NotFoundException for missing record
@@ -631,16 +683,18 @@ describe('ContractService', () => {
     await expect(service.priceHint('   ')).rejects.toThrow(BadRequestException);
   });
 
-  // UT-CON-27（#128 改版）: 幂等守卫改为按行——订单材料行全都进过合同 → 拒绝、不进事务，连点两次也不会重复建单
-  it('UT-CON-27 generateFromOrder 全部材料行都已进过合同 → 拒绝且不进事务（按行幂等）', async () => {
+  // UT-CON-27（#128 改版 / B004 再改版）: 幂等守卫按行，且已挪进事务（锁订单行后再查）——
+  // 订单材料行全都进过合同 → 拒绝，事务回滚、一张合同都不建，连点两次也不会重复建单
+  it('UT-CON-27 generateFromOrder 全部材料行都已进过合同 → 拒绝且一张合同都不建（按行幂等）', async () => {
     mockOrderRepo.findOne.mockResolvedValueOnce({ id: 10, currency: 'CNY', deleted: 0 });
     mockOrderMaterialRepo.find.mockResolvedValueOnce([
       { id: 101, item_name: '面料A', supplier: '面料厂A', unit_price: 8, total_purchase: 100, sort_order: 0 },
       { id: 102, item_name: '拉链', supplier: '辅料厂B', unit_price: 2, total_purchase: 200, sort_order: 1 },
     ]);
-    mockDataSource.query.mockResolvedValueOnce([{ omid: '101' }, { omid: 102 }]); // mysql2 会把 bigint 给成字符串
+    const manager = batchManager(['101', 102]); // mysql2 会把 bigint 给成字符串
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
     await expect(service.generateFromOrder(10, 1)).rejects.toThrow(/都已生成过合同/);
-    expect(mockDataSource.transaction).not.toHaveBeenCalled(); // 未进入生成事务
+    expect(manager.save).not.toHaveBeenCalled(); // 事务里什么都没落库
   });
 
   // UT-CON-28: updateStatus 非法值/跨档跳转 → 400（L6 状态机白名单）
@@ -743,12 +797,13 @@ describe('ContractService', () => {
         if (!Array.isArray(v) && v?.contract_no) savedContracts.push(v);
         return Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 });
       }),
-      findOne: jest.fn().mockResolvedValue(null),
+      findOne: jest.fn().mockImplementation((entity: any) =>
+        Promise.resolve(entity === OrderMain ? { ...LOCKED_ORDER, currency: 'USD' } : null)), // B004：事务内锁订单行
       delete: jest.fn(),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
       count: jest.fn().mockResolvedValue(0),
       find: jest.fn().mockResolvedValue([]),   // #89：事务内会查订单材料行
-      query: jest.fn().mockResolvedValue([]),   // #94：事务内会按款号查加工合同
+      query: txQuery(),   // #94 按款号查加工合同 + B004 按行幂等
     }));
     await service.generateFromOrder(10, 1);
     expect(savedContracts[0].currency).toBe('CNY');   // 不是 'USD'
@@ -1102,12 +1157,14 @@ describe('ContractService', () => {
       b.execute = jest.fn().mockResolvedValue({ affected: 1 });
       return b;
     };
-    const run = async (orderId: any, rows: any[], oms: any[]) => {
+    // taken = 已被别的合同行溯源的订单材料行（B033：这些行不再是候选）
+    const run = async (orderId: any, rows: any[], oms: any[], taken: Array<string | number> = []) => {
       const b = qb();
       const m: any = {
         find: jest.fn().mockResolvedValue(oms),
         save: jest.fn().mockResolvedValue(rows),
         createQueryBuilder: jest.fn().mockReturnValue(b),
+        query: txQuery(taken),
       };
       await (service as any).linkOrderMaterials(m, orderId, rows);
       return { m, b, rows };
@@ -1213,6 +1270,15 @@ describe('ContractService', () => {
     it('UT-ADDR-07 查库出错不能把建合同整个搞挂——发货地址只是锦上添花', async () => {
       const m = { query: jest.fn().mockRejectedValue(new Error('db down')), findOne: jest.fn() };
       await expect((service as any).resolveShipToAddress(m, 34, 'A001')).resolves.toBeNull();
+    });
+
+    // B120：但不能再无声吞掉——DB 报错与「加工厂没填地址」长得一模一样，业务以为是自己没填
+    it('B120 查库出错要落一条 warn 日志（此前 .catch(()=>[]) 把报错吞得一干二净）', async () => {
+      const warn = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => undefined);
+      const m = { query: jest.fn().mockRejectedValue(new Error('db down')), findOne: jest.fn() };
+      await (service as any).resolveShipToAddress(m, 34, 'A001');
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('db down'));
+      warn.mockRestore();
     });
   });
 
@@ -1381,12 +1447,13 @@ describe('ContractService', () => {
           const hit = [{ id: 7, name: '面料厂A', deleted: 0 }, { id: 8, name: '辅料厂B', deleted: 0 }].find((f) => f.name === opts?.where?.name);
           return Promise.resolve(hit ?? null);
         }
+        if (entity === OrderMain) return Promise.resolve({ ...LOCKED_ORDER }); // B004：事务内锁订单行
         return Promise.resolve(null);
       }),
       delete: jest.fn(),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
       find: jest.fn().mockResolvedValue([]),
-      query: jest.fn().mockResolvedValue([]),
+      query: txQuery(),
     }));
     const result = await service.generateFromOrder(10, 1);
     expect(result.created).toBe(2);
@@ -1424,11 +1491,12 @@ describe('ContractService', () => {
         if (entity === Factory && opts?.where?.factory_no === 'S000') {
           return Promise.resolve(s000Taken ? { id: 2, factory_no: 'S000', name: '苏州誉绸纺织有限公司', deleted: 0 } : null);
         }
-        return Promise.resolve(null); // 「待定供应商」尚不存在 → 走新建；OrderMain / 加工合同查询等一律查不到
+        if (entity === OrderMain) return Promise.resolve({ ...LOCKED_ORDER }); // B004：事务内锁订单行
+        return Promise.resolve(null); // 「待定供应商」尚不存在 → 走新建；加工合同查询等一律查不到
       }),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
       find: jest.fn().mockResolvedValue([]),
-      query: jest.fn().mockResolvedValue([]),
+      query: txQuery(),
     };
   }
   const unmatchedOrder = () => {
@@ -1471,7 +1539,8 @@ describe('ContractService', () => {
     { id: 102, item_name: '面料B', supplier: '面料厂A', unit_price: 5, total_purchase: 50, sort_order: 1 },
     { id: 103, item_name: '拉链', supplier: '辅料厂B', unit_price: 2, total_purchase: 200, sort_order: 2 },
   ];
-  function batchManager() {
+  // contractedOmids = 事务内那条「已下过合同」查询要回的行（B004 起改由 manager 查）
+  function batchManager(contractedOmids: Array<string | number> = []) {
     return {
       create: jest.fn().mockImplementation((_: any, v: any) => v),
       save: jest.fn().mockImplementation((_: any, v: any) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 })),
@@ -1480,11 +1549,12 @@ describe('ContractService', () => {
           const hit = [{ id: 7, name: '面料厂A', deleted: 0 }, { id: 8, name: '辅料厂B', deleted: 0 }].find((f) => f.name === opts?.where?.name);
           return Promise.resolve(hit ?? null);
         }
+        if (entity === OrderMain) return Promise.resolve({ ...LOCKED_ORDER }); // B004：事务内锁订单行
         return Promise.resolve(null);
       }),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
       find: jest.fn().mockResolvedValue([]),
-      query: jest.fn().mockResolvedValue([]),
+      query: txQuery(contractedOmids),
     };
   }
   const savedLineNames = (manager: any) => manager.save.mock.calls
@@ -1493,8 +1563,7 @@ describe('ContractService', () => {
   it('UT-CON-46 generateFromOrder 只为还没下过合同的行生成，已下过的行跳过并报回；同一供应商第二批照样成单', async () => {
     mockOrderRepo.findOne.mockResolvedValueOnce({ id: 10, currency: 'CNY', deleted: 0 });
     mockOrderMaterialRepo.find.mockResolvedValueOnce(batchMaterials());
-    mockDataSource.query.mockResolvedValueOnce([{ omid: '101' }]); // 面料A 上一批已下过
-    const manager = batchManager();
+    const manager = batchManager(['101']); // 面料A 上一批已下过
     mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
     const result = await service.generateFromOrder(10, 1);
     expect(result.created).toBe(2); // 面料厂A（面料B）+ 辅料厂B（拉链）——面料厂A 是第二张
@@ -1505,7 +1574,6 @@ describe('ContractService', () => {
   it('UT-CON-47 generateFromOrder 传 material_ids 只为勾选的行生成，不是本订单的 id 无视', async () => {
     mockOrderRepo.findOne.mockResolvedValueOnce({ id: 10, currency: 'CNY', deleted: 0 });
     mockOrderMaterialRepo.find.mockResolvedValueOnce(batchMaterials());
-    mockDataSource.query.mockResolvedValueOnce([]);
     const manager = batchManager();
     mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
     const result = await service.generateFromOrder(10, 1, [102, 999]);
@@ -1514,12 +1582,41 @@ describe('ContractService', () => {
     expect(savedLineNames(manager)).toEqual(['面料B']);
   });
 
-  it('UT-CON-48 generateFromOrder 勾选的行都已下过合同 → 报错、不进事务', async () => {
+  it('UT-CON-48 generateFromOrder 勾选的行都已下过合同 → 报错、事务里一张合同都不建', async () => {
     mockOrderRepo.findOne.mockResolvedValueOnce({ id: 10, currency: 'CNY', deleted: 0 });
     mockOrderMaterialRepo.find.mockResolvedValueOnce(batchMaterials());
-    mockDataSource.query.mockResolvedValueOnce([{ omid: 101 }, { omid: 102 }]);
+    const manager = batchManager([101, 102]);
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
     await expect(service.generateFromOrder(10, 1, [101, 102])).rejects.toThrow(/勾选的材料都已生成过合同/);
-    expect(mockDataSource.transaction).not.toHaveBeenCalled();
+    expect(manager.save).not.toHaveBeenCalled();
+  });
+
+  // B004：幂等检查必须在事务内、且先锁订单行——否则双击/两人同时点时两边都算出 contracted=∅，
+  // 同一批材料行生成两套合同、金额翻倍（审查 B004）
+  it('B004 generateFromOrder 先锁订单行再查「已下过合同」，两问都走事务的 manager（不是连接池外的 dataSource）', async () => {
+    mockOrderRepo.findOne.mockResolvedValueOnce({ id: 10, currency: 'CNY', deleted: 0 });
+    mockOrderMaterialRepo.find.mockResolvedValueOnce(batchMaterials());
+    const manager = batchManager();
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+    await service.generateFromOrder(10, 1);
+    const lockCall = manager.findOne.mock.calls.find((c: any[]) => c[0] === OrderMain);
+    expect(lockCall?.[1]).toMatchObject({ where: { id: 10, deleted: 0 }, lock: { mode: 'pessimistic_write' } });
+    // 幂等那条 SQL 在事务内执行（事务外的 dataSource.query 不再被用来做这件事）
+    expect(manager.query.mock.calls.some((c: any[]) => String(c[0]).includes('contract_material'))).toBe(true);
+    expect(mockDataSource.query.mock.calls.some((c: any[]) => String(c[0]).includes('contract_material'))).toBe(false);
+    // 锁在查之前：先拿到订单行的写锁，后来的并发请求才会排队等提交
+    const lockOrder = manager.findOne.mock.invocationCallOrder[manager.findOne.mock.calls.indexOf(lockCall!)];
+    const queryOrder = manager.query.mock.invocationCallOrder[0];
+    expect(lockOrder).toBeLessThan(queryOrder);
+  });
+
+  it('B004 并发第二次生成：锁后查到的已是第一次落下的行 → 全部跳过、报错、不重复建单', async () => {
+    mockOrderRepo.findOne.mockResolvedValueOnce({ id: 10, currency: 'CNY', deleted: 0 });
+    mockOrderMaterialRepo.find.mockResolvedValueOnce(batchMaterials());
+    const manager = batchManager([101, 102, 103]); // 第一个请求已提交，三行都挂上了合同
+    mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+    await expect(service.generateFromOrder(10, 1)).rejects.toThrow(/都已生成过合同/);
+    expect(manager.save).not.toHaveBeenCalled();
   });
 
   it('UT-CON-49 generateFromOrder 勾选的 id 全不属于该订单 → 报错，不会退化成整单生成', async () => {
@@ -1534,8 +1631,432 @@ describe('ContractService', () => {
       { id: 201, item_name: '面料', supplier: '面料厂A', color: '米白', split_mode: 'BY_COLOR', unit_price: 8, total_purchase: 100, sort_order: 0 },
       { id: 202, item_name: '面料', supplier: '面料厂A', color: '咖色', split_mode: 'BY_COLOR', unit_price: 8, total_purchase: 100, sort_order: 1 },
     ]);
-    mockDataSource.query.mockResolvedValueOnce([]); // 第一批：一行都没下过
+    // 闸在进事务之前就抛，不排 query 桩——排了也消费不掉，会漏给后面的用例（clearAllMocks 不清 once 队列）
     await expect(service.generateFromOrder(10, 1, [201])).rejects.toThrow(/有 2 行且标了拆分/);
     expect(mockDataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  // ===== 2026-09-20 审查修复（B003/B032～B039/B119～B124）=====
+  describe('审查修复', () => {
+    // 建合同事务里的 manager 桩：按实体分发，别按调用顺序排（多一次查询就全乱套）
+    const txManager = (opts: {
+      factory?: any; order?: any; contracted?: Array<string | number>; orderMaterialIds?: number[];
+      addressRows?: any[]; savedLines?: any[]; savedContracts?: any[]; failFinalSave?: boolean;
+    } = {}) => {
+      const b: any = {};
+      b.update = jest.fn().mockReturnValue(b);
+      b.set = jest.fn().mockReturnValue(b);
+      b.where = jest.fn().mockReturnValue(b);
+      b.andWhere = jest.fn().mockReturnValue(b);
+      b.execute = jest.fn().mockResolvedValue({ affected: 1 });
+      const m: any = {
+        qb: b,
+        create: jest.fn().mockImplementation((_: any, v: any) => v),
+        save: jest.fn().mockImplementation((entity: any, v: any) => {
+          if (Array.isArray(v)) { opts.savedLines?.push(...v); return Promise.resolve(v); }
+          if (v?.contract_no) {
+            opts.savedContracts?.push(v);
+            // B123：最后一次 manager.save(Contract) 失败 → 整事务回滚，变更日志不该已经落库
+            if (opts.failFinalSave && v.id) return Promise.reject(new Error('落库失败'));
+          }
+          return Promise.resolve({ ...v, id: v.id ?? 1 });
+        }),
+        findOne: jest.fn().mockImplementation((entity: any) => {
+          if (entity === Factory) return Promise.resolve(opts.factory ?? null);
+          if (entity === OrderMain) return Promise.resolve(opts.order ?? null);
+          return Promise.resolve(null);
+        }),
+        // 本订单有哪些用料行（B036 校验溯源归属时查）；linkOrderMaterials 也查它，拿到没品名的行不会误匹配
+        find: jest.fn().mockImplementation((entity: any) =>
+          Promise.resolve(entity === OrderMaterial ? (opts.orderMaterialIds ?? [11, 12, 77, 88]).map((id) => ({ id })) : [])),
+        update: jest.fn().mockResolvedValue({ affected: 1 }),
+        delete: jest.fn().mockResolvedValue({ affected: 1 }),
+        count: jest.fn().mockResolvedValue(0),
+        createQueryBuilder: jest.fn().mockReturnValue(b),
+        query: jest.fn().mockImplementation((sql: string) => Promise.resolve(
+          String(sql).includes('contract_material') ? (opts.contracted ?? []).map((omid) => ({ omid }))
+            : (String(sql).includes('SELECT DISTINCT f.address') ? (opts.addressRows ?? []) : []),
+        )),
+      };
+      return m;
+    };
+    const materialDto = (over: any = {}) => ({
+      type: ContractType.MATERIAL, factory_id: 5, order_id: 10,
+      materials: [{ item_name: '面料A', unit: '米', unit_price: 8, qty: 100 }],
+      ...over,
+    });
+
+    // ── B003：日志 remark 不能带初始密码（日志接口凡有合同菜单的人都看得到）──
+    it('B003 自动开号的 PUSH 日志不写初始密码，只说去哪儿拿', async () => {
+      mockRepo.findOne.mockResolvedValue(makeContract({ portal_status: ContractPortalStatus.DRAFT }));
+      mockRepo.save.mockImplementation((v: any) => Promise.resolve(v));
+      mockSupplierRepo.findOne.mockResolvedValue(null);
+      mockFactoryRepo.findOne.mockResolvedValue({ id: 5, factory_no: 'S007', name: '面料厂A', deleted: 0 });
+      await service.push(1, 'admin');
+      const log = mockLogRepo.create.mock.calls.at(-1)![0] as any;
+      expect(log.remark).not.toMatch(/Factory@123/);
+      expect(log.remark).not.toMatch(/密码[:：]\S/);
+      expect(log.remark).toContain('s007');
+      expect(log.remark).toContain('账号管理');
+      mockSupplierRepo.findOne.mockResolvedValue({ id: 1, status: 1 });
+    });
+
+    // ── B124：占位合同不能推送；停用过的供应商不再开第二个账号 ──
+    it('B124 「待定供应商」占位合同不许推送（推了就开出一个所有待定单共用的门户登录）', async () => {
+      mockRepo.findOne.mockResolvedValue(makeContract({ portal_status: ContractPortalStatus.DRAFT }));
+      mockFactoryRepo.findOne.mockResolvedValue({ id: 99, factory_no: 'S000', name: '待定供应商', deleted: 0 });
+      await expect(service.push(1, 'admin')).rejects.toThrow(/待定|改绑真实供应商/);
+      expect(mockSupplierRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('B124 供应商账号被停用过：不再建第二个账号，日志提示去账号管理启用', async () => {
+      mockRepo.findOne.mockResolvedValue(makeContract({ portal_status: ContractPortalStatus.DRAFT }));
+      mockRepo.save.mockImplementation((v: any) => Promise.resolve(v));
+      mockFactoryRepo.findOne.mockResolvedValue({ id: 5, factory_no: 'S007', name: '面料厂A', deleted: 0 });
+      mockSupplierRepo.findOne
+        .mockResolvedValueOnce(null)                                        // 启用的账号：没有
+        .mockResolvedValueOnce({ id: 3, account: 's007', status: 0 });      // 但停用的那个还在
+      const result: any = await service.push(1, 'admin');
+      expect(mockSupplierRepo.save).not.toHaveBeenCalled();
+      expect(result.auto_opened_account).toBeNull();
+      expect((mockLogRepo.create.mock.calls.at(-1)![0] as any).remark).toMatch(/停用/);
+      mockSupplierRepo.findOne.mockResolvedValue({ id: 1, status: 1 });
+    });
+
+    // ── B033：按品名认回时，已被别的合同溯源的订单行不再是候选 ──
+    it('B033 手建第二张同名合同不会再认回已被第一张溯源的那行（否则第二行永远不绿、再生成会重买）', async () => {
+      const rows = [{ item_name: '面料', qty: 50 }];
+      const b: any = { update: jest.fn(), set: jest.fn(), where: jest.fn(), execute: jest.fn().mockResolvedValue({}) };
+      b.update.mockReturnValue(b); b.set.mockReturnValue(b); b.where.mockReturnValue(b);
+      const m: any = {
+        find: jest.fn().mockResolvedValue([{ id: 11, item_name: '面料' }, { id: 12, item_name: '面料' }]),
+        save: jest.fn().mockResolvedValue(rows),
+        createQueryBuilder: jest.fn().mockReturnValue(b),
+        query: txQuery([11]), // 11 号行已被第一张合同溯源
+      };
+      await (service as any).linkOrderMaterials(m, 43, rows);
+      expect(rows[0]).toMatchObject({ order_material_id: 12 }); // 认到还没被占的那行，不是 11
+    });
+
+    it('B033 订单行全被别的合同溯源完了就一行都不认（宁可少标，也不能标错行）', async () => {
+      const rows = [{ item_name: '面料', qty: 50 }];
+      const m: any = {
+        find: jest.fn().mockResolvedValue([{ id: 11, item_name: '面料' }]),
+        save: jest.fn(), createQueryBuilder: jest.fn(), query: txQuery([11]),
+      };
+      await (service as any).linkOrderMaterials(m, 43, rows);
+      expect((rows[0] as any).order_material_id).toBeUndefined();
+      expect(m.save).not.toHaveBeenCalled();
+    });
+
+    // ── B034：手建合同不填明细自动带出时，跳过已下过合同的行 ──
+    it('B034 手建材料合同自动带出时跳过已下过合同的行（已分批下过面料就不该再进一次）', async () => {
+      mockRedis.eval.mockResolvedValue('HT-20260920-001');
+      mockOrderRepo.findOne.mockResolvedValue({ id: 10, style_no: 'M525', delivery_date: null, deleted: 0 });
+      mockOrderMaterialRepo.find.mockResolvedValue([
+        { id: 101, item_name: '面料A', unit: '米', unit_price: 8, split_mode: 'NONE', final_purchase: 100, sort_order: 0 },
+        { id: 102, item_name: '拉链', unit: '条', unit_price: 2, split_mode: 'NONE', final_purchase: 200, sort_order: 1 },
+      ]);
+      mockDataSource.query.mockResolvedValue([{ omid: 101 }]); // 面料A 已下过
+      const savedLines: any[] = [];
+      const m = txManager({ savedLines, factory: { id: 7, name: '面料厂A' } });
+      mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(m));
+      await service.create({ type: ContractType.MATERIAL, factory_id: 5, order_id: 10 } as any, 1);
+      expect(savedLines.map((l) => l.item_name)).toEqual(['拉链']);
+      mockDataSource.query.mockResolvedValue([]);
+    });
+
+    it('B034 全部行都下过合同 → 明确报错，不再把已下过的料又带进一张合同', async () => {
+      mockRedis.eval.mockResolvedValue('HT-20260920-002');
+      mockOrderRepo.findOne.mockResolvedValue({ id: 10, style_no: 'M525', delivery_date: null, deleted: 0 });
+      mockOrderMaterialRepo.find.mockResolvedValue([
+        { id: 101, item_name: '面料A', unit: '米', unit_price: 8, split_mode: 'NONE', final_purchase: 100, sort_order: 0 },
+      ]);
+      mockDataSource.query.mockResolvedValue([{ omid: 101 }]);
+      await expect(service.create({ type: ContractType.MATERIAL, factory_id: 5, order_id: 10 } as any, 1))
+        .rejects.toThrow(/都已生成过合同/);
+      expect(mockDataSource.transaction).not.toHaveBeenCalled();
+      mockDataSource.query.mockResolvedValue([]);
+    });
+
+    // ── B035：合同总额 = Σ已舍入的行金额（否则原样保存一次就把已过的审批清掉）──
+    it('B035 建合同的总额等于明细之和（Σ已舍入，不是 Σ未舍入再舍）', async () => {
+      mockRedis.eval.mockResolvedValue('HT-20260920-003');
+      mockOrderRepo.findOne.mockResolvedValue(null);
+      const savedLines: any[] = []; const savedContracts: any[] = [];
+      const m = txManager({ savedLines, savedContracts, factory: { id: 5, name: '面料厂A' } });
+      mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(m));
+      await service.create(materialDto({
+        order_id: undefined,
+        materials: [1, 2, 3].map(() => ({ item_name: '面料', unit: '米', unit_price: 1.2345, qty: 1.5 })),
+      }) as any, 1);
+      const sumOfLines = +savedLines.reduce((s, l) => s + +l.amount, 0).toFixed(4);
+      expect(savedContracts[0].total_amount).toBe(sumOfLines); // 5.5554，不是 Σ未舍入再舍的 5.5553
+      expect(savedContracts[0].total_amount).toBe(5.5554);
+    });
+
+    it('B035 原样保存一次不再有总额漂移 → 已通过的审批不被清掉', async () => {
+      mockRepo.save.mockImplementation((v: any) => Promise.resolve({ ...v, id: v.id ?? 1 }));
+      const lines = [1, 2, 3].map(() => ({ item_name: '面料', unit: '米', unit_price: 1.2345, qty: 1.5 }));
+      mockRepo.findOne.mockResolvedValue(makeContract({
+        portal_status: ContractPortalStatus.DRAFT, total_amount: 5.5554,
+        deposit_ratio: 0, mid_ratio: 0, final_ratio: 100,
+        approval_status: 'APPROVED', approved_by: 2, approved_at: new Date(),
+      }));
+      const manager = txManager({ factory: { id: 5, name: '面料厂A' } });
+      manager.find = jest.fn().mockResolvedValue([]);
+      mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+      const result: any = await service.update(1, { materials: lines } as any);
+      expect(result.total_amount).toBe(5.5554);
+      expect(result.approval_status).toBe('APPROVED'); // 没被重置
+    });
+
+    // ── B037：已推送/已盖章的材料合同地址不许被事后改写 ──
+    it('B037 建加工合同回填材料合同发货地址：只补草稿，签过的文件不动', async () => {
+      mockRedis.eval.mockResolvedValue('HT-20260920-004');
+      mockOrderRepo.findOne.mockResolvedValue({ id: 10, style_no: 'M525', qty_total: 100, delivery_date: null, deleted: 0 });
+      const m = txManager({ factory: { id: 9, name: '合肥鑫凯', address: '合肥市某某路 1 号', deleted: 0 } });
+      mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(m));
+      await service.create({ type: ContractType.PROCESS, factory_id: 9, order_id: 10 } as any, 1);
+      const upd = m.query.mock.calls.find((c: any[]) => String(c[0]).includes('UPDATE contract SET ship_to_address'));
+      expect(upd).toBeTruthy();
+      expect(String(upd![0])).toContain('portal_status = ?');
+      expect(upd![1]).toContain(ContractPortalStatus.DRAFT);
+    });
+
+    // ── B038：编辑合同接力 order_material_id 要按出现顺序，同键不能互相覆盖 ──
+    it('B038 同键两行指向不同订单行时，编辑后各自保持原溯源（订单42版型：同名面料按部位分两行）', async () => {
+      mockRepo.save.mockImplementation((v: any) => Promise.resolve({ ...v, id: v.id ?? 1 }));
+      mockRepo.findOne.mockResolvedValue(makeContract({
+        portal_status: ContractPortalStatus.DRAFT, approval_status: 'NONE',
+        deposit_ratio: 0, mid_ratio: 0, final_ratio: 100,
+      }));
+      const savedLines: any[] = [];
+      const manager = txManager({ savedLines, factory: { id: 5, name: '面料厂A' } });
+      manager.find = jest.fn().mockResolvedValue([
+        { item_name: '双面呢', color: '米白', size: null, qty: 100, unit_price: 1, amount: 100, order_material_id: 77, sort_order: 0 },
+        { item_name: '双面呢', color: '米白', size: null, qty: 60, unit_price: 1, amount: 60, order_material_id: 88, sort_order: 1 },
+      ]);
+      mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+      await service.update(3, {
+        materials: [
+          { item_name: '双面呢', color: '米白', unit: '米', unit_price: 1, qty: 100 },
+          { item_name: '双面呢', color: '米白', unit: '米', unit_price: 1, qty: 60 },
+        ],
+      } as any);
+      expect(savedLines.map((l) => l.order_material_id)).toEqual([77, 88]); // 不是 [88, 88]
+    });
+
+    // ── B036：手建合同带上来的溯源行必须属于本合同的订单 ──
+    it('B036 明细里混进别的订单的用料行 id → 400，不再原样落库（那行会在别处永远显示「已订」）', async () => {
+      mockRedis.eval.mockResolvedValue('HT-20260920-009');
+      mockOrderRepo.findOne.mockResolvedValue({ id: 10, style_no: 'M525', delivery_date: null, deleted: 0 });
+      const m = txManager({ factory: { id: 5, name: '面料厂A' } });
+      m.find = jest.fn().mockResolvedValue([{ id: 11 }]); // 本订单只有 11 号行
+      mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(m));
+      await expect(service.create(materialDto({
+        materials: [
+          { item_name: '面料A', unit: '米', unit_price: 8, qty: 100, order_material_id: 11 },
+          { item_name: '别家的料', unit: '米', unit_price: 8, qty: 100, order_material_id: 999 },
+        ],
+      }) as any, 1)).rejects.toThrow(/不属于本合同订单/);
+      expect(m.save).not.toHaveBeenCalledWith(ContractMaterial, expect.anything());
+    });
+
+    it('B036 合同没挂订单时清掉溯源字段（无从校验，留着就是悬空指向）', async () => {
+      mockRedis.eval.mockResolvedValue('HT-20260920-010');
+      mockOrderRepo.findOne.mockResolvedValue(null);
+      const savedLines: any[] = [];
+      const m = txManager({ savedLines, factory: { id: 5, name: '面料厂A' } });
+      mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(m));
+      await service.create(materialDto({
+        order_id: undefined,
+        materials: [{ item_name: '挂卡面料', unit: '米', unit_price: 8, qty: 100, order_material_id: 999 }],
+      }) as any, 1);
+      expect(savedLines[0].order_material_id).toBeNull();
+    });
+
+    it('B036 编辑合同这扇门同样校验（订单侧有越权守卫，合同侧此前没有）', async () => {
+      mockRepo.findOne.mockResolvedValue(makeContract({
+        id: 3, order_id: 10, portal_status: ContractPortalStatus.DRAFT, approval_status: 'NONE',
+        deposit_ratio: 0, mid_ratio: 0, final_ratio: 100,
+      }));
+      const manager = txManager({ factory: { id: 5, name: '面料厂A' } });
+      manager.find = jest.fn().mockImplementation((entity: any) =>
+        Promise.resolve(entity === OrderMaterial ? [{ id: 11 }] : []));
+      mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+      await expect(service.update(3, {
+        materials: [{ item_name: '别家的料', unit: '米', unit_price: 8, qty: 1, order_material_id: 999 }],
+      } as any)).rejects.toThrow(/不属于本合同订单/);
+    });
+
+    // ── B050 / B032：拆行取整与口径留痕 ──
+    it('B050 整数单位先抹浮点尾差再进一：300×0.07 = 21 而不是 22（与订单侧 calcPurchase 同口径）', () => {
+      const line = (service as any).expandMaterialLines(
+        { item_name: '织唛', unit: '个', unit_price: 1, net_usage: 0.07, loss_rate: 0, split_mode: 'BY_COLOR' },
+        [{ color: '黑色', size: 'S', qtys: [300] }], 'M525', null,
+      );
+      expect(line[0].qty).toBe(21);
+    });
+
+    it('B032 按矩阵算的行在 qty_source 里写明「未用微调量」（不改算量，只把两种口径说清楚）', () => {
+      const withManual = (service as any).expandMaterialLines(
+        { item_name: '面料', unit: '米', unit_price: 8, net_usage: 1, loss_rate: 0, split_mode: 'BY_COLOR', final_purchase: 1200 },
+        [{ color: '黑色', size: 'S', qtys: [1030] }], 'M525', null,
+      );
+      expect(withManual[0].qty).toBe(1030);                       // 算量一个字没改（DECISION）
+      expect(withManual[0].qty_source).toBe('采购量·分色(未用微调量)');
+      expect(withManual[0].qty_source.length).toBeLessThanOrEqual(20); // qty_source 是 varchar(20)
+      const noManual = (service as any).expandMaterialLines(
+        { item_name: '面料', unit: '米', unit_price: 8, net_usage: 1, loss_rate: 0, split_mode: 'BY_COLOR', final_purchase: 0 },
+        [{ color: '黑色', size: 'S', qtys: [1030] }], 'M525', null,
+      );
+      expect(noManual[0].qty_source).toBe('采购量·分色');            // 没微调过就不加尾巴
+    });
+
+    // ── B055 同类：按色单行的颜色必须还在矩阵里 ──
+    it('B055 按色单行的颜色不在矩阵里 → 400 点名材料与颜色，不再带出算成 0 的行', async () => {
+      mockOrderRepo.findOne.mockResolvedValueOnce({ id: 10, currency: 'CNY', deleted: 0 });
+      mockOrderMaterialRepo.find.mockResolvedValueOnce([
+        { id: 201, item_name: '金属丝底PU', color: '米白11-0602', split_mode: 'PER_COLOR', supplier: '面料厂A', unit: '米', unit_price: 10, total_purchase: 3988, sort_order: 0 },
+      ]);
+      mockMatrixRepo.findOne.mockResolvedValue({ matrix_data: { rows: [{ color: '藏青', size: 'M', qtys: [2264] }] } });
+      const manager = batchManager();
+      mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+      await expect(service.generateFromOrder(10, 1)).rejects.toThrow(/金属丝底PU.*米白11-0602.*不在数量搭配矩阵里/s);
+      expect(manager.save).not.toHaveBeenCalled();
+    });
+
+    it('B055 颜色还在矩阵里就照常生成；矩阵一个颜色都没有（还没填矩阵）不拦', async () => {
+      mockOrderRepo.findOne.mockResolvedValueOnce({ id: 10, currency: 'CNY', deleted: 0 });
+      mockOrderMaterialRepo.find.mockResolvedValueOnce([
+        { id: 201, item_name: '金属丝底PU', color: '藏青', split_mode: 'PER_COLOR', supplier: '面料厂A', unit: '米', unit_price: 10, total_purchase: 3988, sort_order: 0 },
+      ]);
+      mockMatrixRepo.findOne.mockResolvedValue({ matrix_data: { rows: [{ color: '藏青', size: 'M', qtys: [2264] }] } });
+      const manager = batchManager();
+      mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+      await expect(service.generateFromOrder(10, 1)).resolves.toMatchObject({ created: 1 });
+      mockMatrixRepo.findOne.mockResolvedValue(null);
+    });
+
+    // ── B061：业务日期一律本地日历日 ──
+    it('B061 建合同的签约日期取本地今天；工厂最近交易日期同理（不再是 UTC 日期）', async () => {
+      mockRedis.eval.mockResolvedValue('HT-20260920-005');
+      mockOrderRepo.findOne.mockResolvedValue(null);
+      const savedContracts: any[] = [];
+      const m = txManager({ savedContracts, factory: { id: 5, name: '面料厂A' } });
+      mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(m));
+      await service.create(materialDto({ order_id: undefined }) as any, 1);
+      const today = todayLocal();
+      expect(savedContracts[0].sign_date).toBe(today);
+      expect(m.update).toHaveBeenCalledWith(Factory, { id: 5 }, { last_trade_date: today });
+    });
+
+    it('B061 交货期限按本地日历日回推：DATE 列给的是本地零点 Date，减 45 天不能差一天', async () => {
+      mockRedis.eval.mockResolvedValue('HT-20260920-006');
+      // mysql2 把 DATE 列解析成**本地零点**的 Date；旧代码 toISOString() 会退回前一天
+      mockOrderRepo.findOne.mockResolvedValue({ id: 10, style_no: 'M525', delivery_date: new Date(2026, 6, 30), deleted: 0 });
+      const savedContracts: any[] = [];
+      const m = txManager({ savedContracts, factory: { id: 5, name: '面料厂A' } });
+      mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(m));
+      await service.create(materialDto() as any, 1);
+      expect(savedContracts[0].delivery_deadline).toBe('2026-06-15'); // 7-30 减 45 天
+    });
+
+    // ── B119：合同供应商回填订单（此前从未被调用）──
+    it('B119 建材料合同把供应商回填到订单用料（只补空的，由 SQL 的 andWhere 保证）', async () => {
+      mockRedis.eval.mockResolvedValue('HT-20260920-007');
+      mockOrderRepo.findOne.mockResolvedValue({ id: 10, style_no: 'M525', delivery_date: null, deleted: 0 });
+      const m = txManager({ factory: { id: 7, name: '昆山领威纺织品有限公司', deleted: 0 } });
+      mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(m));
+      await service.create(materialDto({
+        factory_id: 7,
+        materials: [{ item_name: '面料A', unit: '米', unit_price: 8, qty: 100, order_material_id: 11 }],
+      }) as any, 1);
+      expect(m.qb.set).toHaveBeenCalledWith({ supplier: '昆山领威纺织品有限公司' });
+      expect(m.qb.andWhere).toHaveBeenCalledWith('(supplier IS NULL OR supplier = :empty)', { empty: '' });
+    });
+
+    it('B119 加工合同不回填（那是加工厂，不是材料供应商）；占位「待定供应商」也不写进去', async () => {
+      mockRedis.eval.mockResolvedValue('HT-20260920-008');
+      mockOrderRepo.findOne.mockResolvedValue({ id: 10, style_no: 'M525', qty_total: 100, delivery_date: null, deleted: 0 });
+      const m1 = txManager({ factory: { id: 9, name: '合肥鑫凯', deleted: 0 } });
+      mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(m1));
+      await service.create({ type: ContractType.PROCESS, factory_id: 9, order_id: 10 } as any, 1);
+      expect(m1.qb.set).not.toHaveBeenCalledWith(expect.objectContaining({ supplier: expect.anything() }));
+
+      const m2 = txManager({ factory: { id: 99, name: '待定供应商', deleted: 0 } });
+      mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(m2));
+      await service.create(materialDto({
+        factory_id: 99,
+        materials: [{ item_name: '面料A', unit: '米', unit_price: 8, qty: 100, order_material_id: 11 }],
+      }) as any, 1);
+      expect(m2.qb.set).not.toHaveBeenCalledWith(expect.objectContaining({ supplier: '待定供应商' }));
+    });
+
+    // ── B121：行交期与合同头读同一个系统参数 ──
+    it('B121 行交期不再写死 45 天：合同头与明细行都按 contract.delivery_offset_material', async () => {
+      // generateFromOrder 查一次、内部 create 再查一次：两次都要给到带交期的订单
+      mockOrderRepo.findOne.mockResolvedValue({ id: 10, currency: 'CNY', delivery_date: '2026-07-30', deleted: 0 });
+      mockOrderMaterialRepo.find.mockResolvedValueOnce([
+        { id: 101, item_name: '面料A', supplier: '面料厂A', unit: '米', unit_price: 8, split_mode: 'NONE', final_purchase: 100, sort_order: 0 },
+      ]);
+      (service as any).config.getNumber.mockImplementation((k: string, fb = 0) =>
+        Promise.resolve(k === 'contract.delivery_offset_material' ? 30 : fb));
+      const savedLines: any[] = [];
+      const manager = batchManager();
+      manager.save = jest.fn().mockImplementation((_: any, v: any) => {
+        if (Array.isArray(v)) savedLines.push(...v);
+        return Promise.resolve(Array.isArray(v) ? v : { ...v, id: 1 });
+      });
+      mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+      const result: any = await service.generateFromOrder(10, 1);
+      expect(savedLines[0].delivery_date).toBe('2026-06-30');            // 行交期 −30 天
+      expect(result.contracts[0].delivery_deadline).toBe('2026-06-30');  // 与合同头一致
+      (service as any).config.getNumber.mockImplementation((_k: string, fb = 0) => Promise.resolve(fb));
+    });
+
+    // ── B122：按 id 回查关联单据要带 deleted:0 ──
+    it('B122 合同详情回查源订单/母合同都带 deleted:0（已软删的不再给出可跳转的链接）', async () => {
+      mockRepo.findOne.mockResolvedValue(makeContract({ id: 1, order_id: 10, parent_id: 2 }));
+      mockMaterialRepo.find.mockResolvedValue([]);
+      mockOrderRepo.findOne.mockResolvedValue(null);
+      await service.findOne(1);
+      expect(mockOrderRepo.findOne).toHaveBeenCalledWith({ where: { id: 10, deleted: 0 } });
+      expect(mockRepo.findOne).toHaveBeenCalledWith({ where: { id: 2, deleted: 0 } });
+    });
+
+    // ── B123：变更日志在事务提交之后写 ──
+    it('B123 明细改完后最终落库失败 → 事务回滚，变更日志不能已经写进去', async () => {
+      mockRepo.findOne.mockResolvedValue(makeContract({
+        id: 3, portal_status: ContractPortalStatus.DRAFT, approval_status: 'NONE',
+        deposit_ratio: 0, mid_ratio: 0, final_ratio: 100,
+      }));
+      const manager = txManager({ factory: { id: 5, name: '面料厂A' } });
+      manager.find = jest.fn().mockResolvedValue([]);
+      manager.save = jest.fn().mockImplementation((entity: any, v: any) =>
+        (Array.isArray(v) ? Promise.resolve(v) : Promise.reject(new Error('落库失败'))));
+      mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+      await expect(service.update(3, {
+        materials: [{ item_name: '面料', unit: '米', unit_price: 8, qty: 120 }],
+      } as any)).rejects.toThrow('落库失败');
+      expect(mockChangeLogDep.record).not.toHaveBeenCalled();
+    });
+
+    it('B123 提交成功才留痕：数量/金额的原值→新值照常记一条', async () => {
+      mockRepo.save.mockImplementation((v: any) => Promise.resolve({ ...v, id: v.id ?? 1 }));
+      mockRepo.findOne.mockResolvedValue(makeContract({
+        id: 3, portal_status: ContractPortalStatus.DRAFT, approval_status: 'NONE', total_amount: 100,
+        deposit_ratio: 0, mid_ratio: 0, final_ratio: 100,
+      }));
+      const manager = txManager({ factory: { id: 5, name: '面料厂A' } });
+      manager.find = jest.fn().mockResolvedValue([]);
+      mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+      await service.update(3, { materials: [{ item_name: '面料', unit: '米', unit_price: 8, qty: 10 }] } as any);
+      expect(mockChangeLogDep.record).toHaveBeenCalledWith('CONTRACT', 3, [
+        { field: 'qty_total', old: 0, new: 10 },
+        { field: 'total_amount', old: 100, new: 80 },
+      ]);
+    });
   });
 });

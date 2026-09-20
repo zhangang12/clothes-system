@@ -16,6 +16,25 @@ export function errToast(msg?: string) {
 // 401 只跳一次登录页：并发请求会同时 401（见下方拦截器里的说明）
 let redirectingToLogin = false;
 
+/**
+ * 登录态失效时的统一出口：清本地登录态、带 redirect 跳登录页。
+ * 拦截器与绕过 axios 的裸 fetch（导出 HTML 等）共用这一份，口径不会分叉（B137）。
+ * 返回 false 表示已经有人在跳了（并发 401 去重）。
+ */
+export function redirectToLogin(): boolean {
+  if (redirectingToLogin) return false;
+  redirectingToLogin = true;
+  try { useTabsStore().reset(); } catch { /* 忽略 */ }
+  localStorage.removeItem('token');
+  localStorage.removeItem('menuKeys'); // 与 clearAuth 口径一致，防下一账号读到上一人的菜单配置
+  // 带上当前地址，登录后回到原来那一页（LoginView 已经在读 route.query.redirect）。
+  // 不带的话，做到一半被踢出去的人重新登录只能回工作台、自己找回原来那页。
+  const back = window.location.pathname + window.location.search;
+  const skip = !back || back === '/' || back.startsWith('/login');
+  window.location.href = skip ? '/login' : `/login?redirect=${encodeURIComponent(back)}`;
+  return true;
+}
+
 export const http = axios.create({
   baseURL: '/api/v1',
   timeout: 15000,
@@ -59,18 +78,13 @@ http.interceptors.response.use(
       // token 一过期就**同时**401。生产日志实证：8 个列表接口各 17~18 次 401 挤在同一刻，
       // 原来每一条都执行一次 `location.href='/login'`，等于连着赋值七八次，
       // 还会把后面那几条的错误提示一起弹出来。这里只放行第一条。
-      if (redirectingToLogin) return Promise.reject(err);
-      redirectingToLogin = true;
-      try { useTabsStore().reset(); } catch { /* 忽略 */ }
-      localStorage.removeItem('token');
-      localStorage.removeItem('menuKeys'); // 与 clearAuth 口径一致，防下一账号读到上一人的菜单配置
-      // 带上当前地址，登录后回到原来那一页（LoginView 已经在读 route.query.redirect）。
-      // 不带的话，做到一半被踢出去的人重新登录只能回工作台、自己找回原来那页。
-      const back = window.location.pathname + window.location.search;
-      const skip = !back || back === '/' || back.startsWith('/login');
-      window.location.href = skip ? '/login' : `/login?redirect=${encodeURIComponent(back)}`;
-    } else {
+      redirectToLogin();
+    } else if ((err.config as any)?.silent !== true) {
       // 登录页密码错(401)或其它错误:提示而非刷新丢失输入
+      //
+      // 【silent】给「页面附加信息」类请求用（下拉选项、徽标统计这种）：后端只读接口挂了
+      // @MenuAccess 之后，没有该菜单的账号取选项必 403，红字会糊在一个跟他要做的事无关的地方。
+      // 调用方自己处理失败（给空列表 + 就地说明），不走全局红字。**动钱/保存类请求一律不许用它。**
       errToast(err.response?.data?.msg ?? (status === 401 ? '用户名或密码错误' : '网络错误'));
     }
     return Promise.reject(err);

@@ -65,7 +65,8 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Plus, Upload } from '@element-plus/icons-vue';
 import { http } from '@/api';
-import { signedUrl } from '@/utils/secureFile';
+import { UPLOAD_TIMEOUT_MS } from '@/api/upload';
+import { signedUrl, openFile } from '@/utils/secureFile';
 import { parseXlsx, isXlsxName, isLegacyXlsName, type SheetData } from '@/utils/sheetPreview';
 import { compressImage } from '@/utils/imageCompress';
 
@@ -73,13 +74,18 @@ import { compressImage } from '@/utils/imageCompress';
 // 由这里决定交给谁。**从后往前找**——后挂载的在视觉上更靠前（弹窗 > 页面表单），
 // 谁"没满"谁接；都满了才提示。这样反馈弹窗一开就自然接管粘贴，关掉又还给页面表单，
 // 不会出现"粘贴到反馈弹窗、图却传进了样衣表单"这种串台（原来的 globalPaste 注释担心的正是它）。
-const pasteStack: Array<(e: ClipboardEvent) => void> = [];
+type PasteResult = 'handled' | 'full' | 'skip';
+const pasteStack: Array<(e: ClipboardEvent) => PasteResult> = [];
 let pasteBound = false;
 function dispatchPaste(e: ClipboardEvent) {
+  let anyFull = false;
   for (let i = pasteStack.length - 1; i >= 0; i--) {
-    pasteStack[i](e);
-    if ((e as any)._fuHandled) return;
+    const r = pasteStack[i](e);
+    if (r === 'handled' || (e as any)._fuHandled) return;
+    if (r === 'full') anyFull = true;
   }
+  // 粘贴的是文件、页面上的上传框却都满了：以前静默吞掉，用户以为粘贴坏了（B141）。说一声，并告诉他怎么办
+  if (anyFull) ElMessage.warning('上传框已满：请先删除已有文件，或换一个还有空位的上传框再粘贴');
 }
 
 const props = withDefaults(defineProps<{
@@ -103,10 +109,14 @@ const urls = () => (props.modelValue ? props.modelValue.split(',').filter(Boolea
 const toList = () => urls().map((u, i) => ({ name: decodeURIComponent(u.split('=').pop() || `文件${i + 1}`).split('/').pop() || `文件${i + 1}`, url: u }));
 const fileList = ref<any[]>([]);
 // 敏感附件缩略图/预览用短时签名链接展示;v-model 始终存原始 URL(令牌会过期,不入库)
+// 【请求序号】快速连传/连删时会并发几次重建，先发的慢响应后到会把新列表盖回旧的（B140）；只认最后一次。
+// 令牌 5 分钟过期：点大图/下载时 onPreview/download 都会重新取签名，缩略图已加载的不受影响。
+let rebuildSeq = 0;
 async function rebuildList() {
+  const mine = ++rebuildSeq;
   const list = toList().map((it) => ({ ...it, raw: it.url }));
   for (const it of list) it.url = await signedUrl(it.raw);
-  fileList.value = list;
+  if (mine === rebuildSeq) fileList.value = list;
 }
 watch(() => props.modelValue, rebuildList, { immediate: true });
 
@@ -121,20 +131,21 @@ const sheetLoading = ref(false);
 const curSheet = computed(() => sheets.value[Number(activeSheet.value)] ?? null);
 
 // 粘贴截图 / 拖拽文件 → 复用同一上传通道(设计稿:①点选 ②Ctrl+V 粘贴 ③拖文件)
-function onPaste(e: ClipboardEvent) {
-  if (props.disabled) return;
+// 返回值给 dispatchPaste 用：'full' = 粘的是文件但本框满了（都满时由派发方统一提示一次）
+function onPaste(e: ClipboardEvent): PasteResult {
+  if (props.disabled) return 'skip';
   // wrap 的 @paste 与 document 监听会对同一事件各触发一次(冒泡),用标记去重防重复上传
-  if ((e as any)._fuHandled) return;
+  if ((e as any)._fuHandled) return 'handled';
   const items = e.clipboardData?.items;
-  if (!items) return;
+  if (!items) return 'skip';
   // 只接"文件型"剪贴板内容：粘贴纯文本一律不拦，输入框里的 Ctrl+V 行为不受影响
   const files = Array.from(items)
     .filter((it) => it.kind === 'file')
     .map((it) => it.getAsFile())
     .filter(Boolean) as File[];
-  if (!files.length) return;
+  if (!files.length) return 'skip';
   let room = effectiveLimit.value - urls().length;
-  if (room <= 0) return; // 本框已满：不吃这次粘贴，交给栈里下一个（原来会在这弹警告并中断，多个上传框会连弹好几条）
+  if (room <= 0) return 'full'; // 本框已满：不吃这次粘贴，交给栈里下一个（原来会在这弹警告并中断，多个上传框会连弹好几条）
   (e as any)._fuHandled = true;
   e.preventDefault();
   for (const f of files) {
@@ -142,6 +153,7 @@ function onPaste(e: ClipboardEvent) {
     room -= 1;
     doUpload({ file: f });
   }
+  return 'handled';
 }
 // 粘贴不再要求先点一下上传框（Grace 反馈：反馈弹窗里能直接 Ctrl+V，样衣表单却要先聚焦）。
 // 所有实例都进 pasteStack，由 document 上的单个监听按"后挂载优先"派发，见文件顶部说明。
@@ -168,7 +180,10 @@ async function doUpload(opt: any) {
   const file = await compressImage(opt.file);
   fd.append('file', file);
   try {
-    const res: any = await http.post(props.sensitive ? '/uploads?sensitive=1' : '/uploads', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+    // 上传单独给 120s 超时（B089）：大文件慢上行走全局 15s 必报失败，服务端却可能已落盘
+    const res: any = await http.post(props.sensitive ? '/uploads?sensitive=1' : '/uploads', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' }, timeout: UPLOAD_TIMEOUT_MS,
+    });
     const url = res.data?.url ?? res.url;
     const next = props.multiple ? [...urls(), url] : [url];
     emit('update:modelValue', next.join(','));
@@ -202,17 +217,19 @@ async function onPreview(file: any) {
   // PDF、Excel 都被当附件强制下载。按文件名判类型（URL 带查询串，靠 URL 尾巴认扩展名不准）：
   //   图片  → 弹窗；PDF → 浏览器直接开（后端本就发 inline）；
   //   .xlsx → 取回解析成表格弹窗；.xls(BIFF 老格式) / Word 等 → 只能下载。
-  const url = await signedUrl(origUrlOf(file)); // 敏感附件换新令牌，防列表停留过久令牌过期
   previewFile.value = file;
+  if (isPdfName(file.name)) {
+    // PDF 必须在 await 之前开窗（B090）：签名回来再 window.open 已脱离点击手势，会被弹窗拦截；
+    // openFile 先同步开空窗占住手势、签名回来再换地址
+    try { await openFile(origUrlOf(file)); } catch { ElMessage.error('取文件链接失败'); }
+    return;
+  }
+  const url = await signedUrl(origUrlOf(file)); // 敏感附件换新令牌，防列表停留过久令牌过期
 
   if (isImageName(file.name)) {
     previewKind.value = 'image';
     previewUrl.value = url;
     previewVisible.value = true;
-    return;
-  }
-  if (isPdfName(file.name)) {
-    window.open(url, '_blank', 'noopener');
     return;
   }
   if (isXlsxName(file.name)) {

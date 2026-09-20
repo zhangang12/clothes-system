@@ -21,13 +21,17 @@
 // 【为什么可以引 exceljs】它已是 packages/web 既有依赖（导入功能解析 .xlsx 在用），且一律
 // **动态 import**：不点导出就不加载，主包体积不受影响（解包 20MB+，见 sheetPreview.ts 说明）。
 
+import { fmtDate } from './format';
+
 const BOM = String.fromCharCode(0xfeff);
 
 export const esc = (v: unknown): string =>
   String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-/** 日期取前 10 位(后端回的是 ISO 串,Excel 里不需要时分秒) */
-export const d10 = (v: unknown): string => (v ? String(v).slice(0, 10) : '');
+/** 日期取到「天」(Excel 里不需要时分秒)。datetime 列以 UTC ISO 下发，必须先转本地再取日期——
+ *  直接 slice(0,10) 拿到的是 UTC 日期，本地早 8 点前的确认/盖章时间会显示成前一天（B091）。
+ *  纯 YYYY-MM-DD 的 DATE 列不受影响，仍原样取前 10 位。 */
+export const d10 = (v: unknown): string => (v ? fmtDate(v) : '');
 
 /** 图片单元格：放进 Block 的 rows 里，由 exportDocXlsx 真正嵌图（HTML 路径退回 fallback 文字）。
  *  box 是**最长边**上限（px），实际尺寸按原图比例缩进去，不是硬拉成 box×box。 */
@@ -170,9 +174,11 @@ export const n4 = (v: unknown): string => {
   return Number.isFinite(x) ? x.toFixed(4) : '';
 };
 
-/** 求和:忽略非数字,保留两位(浮点累加会出 0.1+0.2 那类尾数) */
-export const sum = (rows: any[], pick: (r: any) => unknown): number =>
-  +rows.reduce((s, r) => s + (Number(pick(r)) || 0), 0).toFixed(2);
+/** 求和:忽略非数字,按列精度舍入(浮点累加会出 0.1+0.2 那类尾数)。
+ *  金额列默认 2 位；数量/单价这类 4 位小数的列要传 digits=4，否则表尾合计与合同量对不上
+ *  （3 行 12.3456 → 合计 37.04 vs 合同量 37.0368，B142）。 */
+export const sum = (rows: any[], pick: (r: any) => unknown, digits = 2): number =>
+  +rows.reduce((s, r) => s + (Number(pick(r)) || 0), 0).toFixed(digits);
 
 /** 键值区:成对字段,按 perRow 对/行自动排版 */
 export interface KvBlock {

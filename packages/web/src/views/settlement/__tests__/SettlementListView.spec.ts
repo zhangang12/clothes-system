@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import ElementPlus from 'element-plus';
+import ElementPlus, { ElMessageBox } from 'element-plus';
 import SettlementListView from '../SettlementListView.vue';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole } from '@i9/types';
@@ -26,6 +26,20 @@ const mockConfirm = vi.fn();
 const mockRemove = vi.fn();
 const mockAddCost = vi.fn();
 const mockAddReceipt = vi.fn();
+const mockUpdate = vi.fn();
+const mockCostPreview = vi.fn();
+const mockChangeLogs = vi.fn();
+const mockStats = vi.fn();
+const mockOrderList = vi.fn();
+const mockOrderGet = vi.fn();
+
+// 订单接口此前没打桩，测试里会真的发请求（jsdom XHR 噪音），B102/B108 也要靠它断言
+vi.mock('@/api/order', () => ({
+  orderApi: {
+    list: (...a: any[]) => mockOrderList(...a),
+    get: (...a: any[]) => mockOrderGet(...a),
+  },
+}));
 
 vi.mock('@/api/settlement', () => ({
   settlementApi: {
@@ -36,6 +50,17 @@ vi.mock('@/api/settlement', () => ({
     remove: (...a: any[]) => mockRemove(...a),
     addCost: (...a: any[]) => mockAddCost(...a),
     addReceipt: (...a: any[]) => mockAddReceipt(...a),
+    update: (...a: any[]) => mockUpdate(...a),
+    costPreview: (...a: any[]) => mockCostPreview(...a),
+    changeLogs: (...a: any[]) => mockChangeLogs(...a),
+    stats: (...a: any[]) => mockStats(...a),
+    refreshCost: vi.fn(),
+    removeCost: vi.fn(),
+    removeReceipt: vi.fn(),
+    reopen: vi.fn(),
+    refundReceived: vi.fn(),
+    pullInvoiceReceipts: vi.fn(),
+    aggregate: vi.fn(),
   },
 }));
 
@@ -74,6 +99,12 @@ describe('SettlementListView', () => {
     mockCreate.mockResolvedValue({});
     mockConfirm.mockResolvedValue({});
     mockRemove.mockResolvedValue({});
+    mockUpdate.mockResolvedValue({});
+    mockCostPreview.mockResolvedValue({ data: { rows: [], paid_tax: 0, unpaid_tax: 0, unpaid_count: 0 } });
+    mockChangeLogs.mockResolvedValue({ data: [] });
+    mockStats.mockResolvedValue({ data: { pending: 0, loss: 0, recalc: 0 } });
+    mockOrderList.mockResolvedValue({ data: [] });
+    mockOrderGet.mockResolvedValue({ data: { shipments: [], currency: 'USD' } });
   });
 
   afterEach(() => {
@@ -269,5 +300,142 @@ describe('SettlementListView', () => {
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(mockGet).toHaveBeenCalledWith(999));
     expect(wrapper.exists()).toBe(true);
+  });
+
+  // ══════════════════════════ 2026-09-20 审查修复回归 ══════════════════════════
+
+  it('B107 点「搜索」时页码归 1（翻到第 3 页再搜会得到一张空表）', async () => {
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(mockList).toHaveBeenCalledTimes(1));
+    const vm = wrapper.vm as any;
+    vm.query.page = 3;
+    vm.query.keyword = 'LM';
+    await wrapper.vm.$nextTick();
+
+    await wrapper.findAll('button').find((b) => b.text().trim() === '搜索')!.trigger('click');
+    await vi.waitFor(() => expect(mockList).toHaveBeenCalledTimes(2));
+    expect(mockList).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, keyword: 'LM' }));
+  });
+
+  it('B161 「确认」要先二次确认——误点一次就得走红冲重开', async () => {
+    const confirmBox = vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as any);
+    mockList.mockResolvedValue({ data: [makeSettlement({ id: 8, status: 'DRAFT' })], total: 1 });
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(wrapper.text()).toContain('JS-2024-001'));
+
+    await wrapper.findAll('button').find((b) => b.text() === '确认')!.trigger('click');
+    await vi.waitFor(() => expect(mockConfirm).toHaveBeenCalledWith(8));
+    expect(confirmBox).toHaveBeenCalled();
+    expect(String(confirmBox.mock.calls[0][0])).toContain('红冲重开'); // 说清后果
+  });
+
+  it('B161 二次确认点「再看看」就不发请求', async () => {
+    vi.spyOn(ElMessageBox, 'confirm').mockRejectedValue(new Error('cancel'));
+    mockList.mockResolvedValue({ data: [makeSettlement({ id: 8, status: 'DRAFT' })], total: 1 });
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(wrapper.text()).toContain('JS-2024-001'));
+
+    await wrapper.findAll('button').find((b) => b.text() === '确认')!.trigger('click');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(mockConfirm).not.toHaveBeenCalled();
+  });
+
+  it('B161 确认在途时不给点第二次（防重）', async () => {
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as any);
+    let release!: (v: unknown) => void;
+    mockConfirm.mockImplementation(() => new Promise((res) => { release = res; }));
+    mockList.mockResolvedValue({ data: [makeSettlement({ id: 8, status: 'DRAFT' })], total: 1 });
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(wrapper.text()).toContain('JS-2024-001'));
+
+    const btn = wrapper.findAll('button').find((b) => b.text() === '确认')!;
+    await btn.trigger('click');
+    await vi.waitFor(() => expect(mockConfirm).toHaveBeenCalledTimes(1));
+    await btn.trigger('click');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(mockConfirm).toHaveBeenCalledTimes(1);
+    release({});
+  });
+
+  it('B115 编辑结算单清空出口退税/运杂费要发 0，后端才写得进去（原来只能改成 0）', async () => {
+    mockGet.mockResolvedValue({
+      id: 5, settlement_no: 'JS-005', status: 'DRAFT', costs: [], receipts: [],
+      tax_refund: '800.00', freight_fee: '120.00', exchange_rate: '7.1000',
+    });
+    mockList.mockResolvedValue({ data: [makeSettlement({ id: 5, status: 'DRAFT' })], total: 1 });
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(wrapper.text()).toContain('JS-2024-001'));
+
+    await wrapper.findAll('button').find((b) => b.text() === '详情')!.trigger('click');
+    await vi.waitFor(() => expect(mockGet).toHaveBeenCalledWith(5));
+    await wrapper.findAll('button').find((b) => b.text().includes('编辑'))!.trigger('click');
+    await wrapper.vm.$nextTick();
+
+    const vm = wrapper.vm as any;
+    expect(vm.editForm.tax_refund).toBe(800); // 先确认带出来了
+    vm.editForm.tax_refund = null;            // el-input-number 清空给的就是 null
+    vm.editForm.freight_fee = null;
+    await wrapper.vm.$nextTick();
+
+    await wrapper.findAll('button').find((b) => b.text().includes('保存并重算'))!.trigger('click');
+    await vi.waitFor(() => expect(mockUpdate).toHaveBeenCalled());
+    const dto = mockUpdate.mock.calls[0][1];
+    expect(dto.tax_refund).toBe(0);
+    expect(dto.freight_fee).toBe(0);
+  });
+
+  it('B115 没清空的费用原样发，不会被强行归零', async () => {
+    mockGet.mockResolvedValue({
+      id: 5, settlement_no: 'JS-005', status: 'DRAFT', costs: [], receipts: [],
+      tax_refund: '800.00', freight_fee: '120.00',
+    });
+    mockList.mockResolvedValue({ data: [makeSettlement({ id: 5, status: 'DRAFT' })], total: 1 });
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(wrapper.text()).toContain('JS-2024-001'));
+    await wrapper.findAll('button').find((b) => b.text() === '详情')!.trigger('click');
+    await vi.waitFor(() => expect(mockGet).toHaveBeenCalledWith(5));
+    await wrapper.findAll('button').find((b) => b.text().includes('编辑'))!.trigger('click');
+    await wrapper.vm.$nextTick();
+
+    await wrapper.findAll('button').find((b) => b.text().includes('保存并重算'))!.trigger('click');
+    await vi.waitFor(() => expect(mockUpdate).toHaveBeenCalled());
+    expect(mockUpdate.mock.calls[0][1].tax_refund).toBe(800);
+    expect(mockUpdate.mock.calls[0][1].freight_fee).toBe(120);
+  });
+
+  it('B102 关联订单下拉走后端搜索，不再只拉前 100 张当「全部」', async () => {
+    mockOrderList.mockResolvedValue({ data: [{ id: 1, order_no: 'DD-1', style_no: 'LM' }] });
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(mockOrderList).toHaveBeenCalled());
+    // 进页面先摆一批（无关键词）
+    expect(mockOrderList).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, size: 100 }));
+    expect(mockOrderList.mock.calls[0][0].keyword).toBeUndefined();
+
+    await (wrapper.vm as any).searchOrders('DD-2026');
+    expect(mockOrderList).toHaveBeenLastCalledWith(expect.objectContaining({ keyword: 'DD-2026' }));
+  });
+
+  it('B108 连切两个订单：先发的慢响应不能盖掉后发的成本预览', async () => {
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(mockList).toHaveBeenCalled());
+    const vm = wrapper.vm as any;
+
+    let releaseSlow!: (v: any) => void;
+    mockOrderGet
+      .mockImplementationOnce(() => new Promise((res) => { releaseSlow = res; }))
+      .mockImplementationOnce(async () => ({ data: { shipments: [], currency: 'USD' } }));
+    mockCostPreview.mockResolvedValue({ data: { rows: [{ cost_name: '第二个订单的成本', amount: 1 }], paid_tax: 1 } });
+
+    vm.createForm.order_id = 11;
+    await wrapper.vm.$nextTick();
+    vm.createForm.order_id = 22;
+    await vi.waitFor(() => expect(mockCostPreview).toHaveBeenCalledWith(22));
+
+    releaseSlow({ data: { shipments: [{ id: 99, qty: 5, shipment_date: '2026-09-01' }], currency: 'CNY' } });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(mockCostPreview).not.toHaveBeenCalledWith(11);   // 旧订单的预览根本不该发
+    expect(vm.orderShipments).toEqual([]);                  // 慢到的旧出货批没盖上来
+    expect(vm.createForm.currency).not.toBe('CNY');
   });
 });

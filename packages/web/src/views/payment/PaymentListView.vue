@@ -11,10 +11,10 @@
         <el-card class="search-card" shadow="never">
           <el-form :model="prepayQuery" inline>
             <el-form-item label="工厂">
-              <div style="width:200px"><factory-select v-model="prepayQuery.factory_id" placeholder="按名称筛选工厂" @update:model-value="loadPrepay" /></div>
+              <div style="width:200px"><factory-select v-model="prepayQuery.factory_id" placeholder="按名称筛选工厂" @update:model-value="searchPrepay" /></div>
             </el-form-item>
             <el-form-item>
-              <el-button type="primary" :icon="Search" @click="loadPrepay">搜索</el-button>
+              <el-button type="primary" :icon="Search" @click="searchPrepay">搜索</el-button>
               <el-button :icon="Refresh" @click="resetPrepay">重置</el-button>
             </el-form-item>
           </el-form>
@@ -129,10 +129,10 @@
         <el-card class="search-card" shadow="never">
           <el-form :model="prQuery" inline>
             <el-form-item label="工厂">
-              <div style="width:200px"><factory-select v-model="prQuery.factory_id" placeholder="按名称筛选工厂" @update:model-value="loadPR" /></div>
+              <div style="width:200px"><factory-select v-model="prQuery.factory_id" placeholder="按名称筛选工厂" @update:model-value="searchPR" /></div>
             </el-form-item>
             <el-form-item label="状态">
-              <el-select v-model="prQuery.approval_status" clearable placeholder="全部" style="width:110px" @change="loadPR">
+              <el-select v-model="prQuery.approval_status" clearable placeholder="全部" style="width:110px" @change="searchPR">
                 <el-option label="草稿" value="DRAFT" />
                 <el-option label="待审批" value="PENDING" />
                 <el-option label="已批准" value="APPROVED" />
@@ -149,21 +149,21 @@
                 start-placeholder="开始日期"
                 end-placeholder="结束日期"
                 style="width:240px"
-                @change="loadPR"
+                @change="searchPR"
               />
             </el-form-item>
           <el-form-item label="到期日">
-            <el-date-picker v-model="prQuery.due_start" type="date" value-format="YYYY-MM-DD" placeholder="起" style="width:130px" @change="loadPR" />
+            <el-date-picker v-model="prQuery.due_start" type="date" value-format="YYYY-MM-DD" placeholder="起" style="width:130px" @change="searchPR" />
             <span style="margin:0 4px">—</span>
-            <el-date-picker v-model="prQuery.due_end" type="date" value-format="YYYY-MM-DD" placeholder="止" style="width:130px" @change="loadPR" />
+            <el-date-picker v-model="prQuery.due_end" type="date" value-format="YYYY-MM-DD" placeholder="止" style="width:130px" @change="searchPR" />
           </el-form-item>
           <el-form-item label="付款日">
-            <el-date-picker v-model="prQuery.paid_start" type="date" value-format="YYYY-MM-DD" placeholder="起" style="width:130px" @change="loadPR" />
+            <el-date-picker v-model="prQuery.paid_start" type="date" value-format="YYYY-MM-DD" placeholder="起" style="width:130px" @change="searchPR" />
             <span style="margin:0 4px">—</span>
-            <el-date-picker v-model="prQuery.paid_end" type="date" value-format="YYYY-MM-DD" placeholder="止" style="width:130px" @change="loadPR" />
+            <el-date-picker v-model="prQuery.paid_end" type="date" value-format="YYYY-MM-DD" placeholder="止" style="width:130px" @change="searchPR" />
           </el-form-item>
             <el-form-item>
-              <el-button type="primary" :icon="Search" @click="loadPR">搜索</el-button>
+              <el-button type="primary" :icon="Search" @click="searchPR">搜索</el-button>
               <el-button :icon="Refresh" @click="resetPR">重置</el-button>
             </el-form-item>
           </el-form>
@@ -221,10 +221,14 @@
               {{ (+(row.paid_total ?? 0)).toFixed(2) }} / <b :class="{ 'text-danger': prBalance(row) > 0 && row.approval_status === 'APPROVED' }">{{ prBalance(row).toFixed(2) }}</b>
             </template>
           </el-table-column>
-          <el-table-column label="发票" width="72" align="center">
+          <el-table-column label="发票" width="96" align="center">
             <template #default="{ row }">
-              <el-tooltip v-if="row.invoice_url" :content="row.invoice_no || '发票附件'" placement="top">
-                <el-link type="primary" @click="preview?.open(String(row.invoice_url).split(',')[0], '发票')">查看</el-link>
+              <!-- 发票附件可传 3 份，逐份给入口（B153：此前只开第一份，第二、三份从列表里看不到） -->
+              <el-tooltip v-if="filesOf(row.invoice_url).length" :content="row.invoice_no || '发票附件'" placement="top">
+                <span>
+                  <el-link v-for="(u, i) in filesOf(row.invoice_url)" :key="u" type="primary" style="margin-right:6px"
+                    @click="preview?.open(u, `发票 ${row.invoice_no || ''}`.trim())">{{ filesOf(row.invoice_url).length > 1 ? `第${i + 1}份` : '查看' }}</el-link>
+                </span>
               </el-tooltip>
               <span v-else-if="row.invoice_no" class="mono">{{ row.invoice_no }}</span>
               <span v-else class="muted">—</span>
@@ -255,6 +259,7 @@
               <el-button
                 v-if="row.approval_status === 'DRAFT' && canEdit"
                 link type="primary" size="small"
+                :loading="busyKey === `submit:${row.id}`" :disabled="!!busyKey"
                 @click="doSubmit(row)"
               >提交</el-button>
               <!-- 无权提交时把原因说出来，别让草稿看起来是个死胡同 -->
@@ -265,6 +270,7 @@
               <el-button
                 v-if="row.approval_status === 'PENDING' && isAdmin"
                 link type="success" size="small"
+                :loading="busyKey === `approve:${row.id}`" :disabled="!!busyKey"
                 @click="doApprove(row)"
               >批准</el-button>
               <el-button
@@ -489,7 +495,7 @@
     <!-- 财务付款（分批 v1.1：多次付款累计已付/未付，余额=0 整单转已付清；水单支持上传/拖拽/Ctrl+V 粘贴） -->
     <el-dialog v-model="markPaidVisible" :title="payMode ? '💰 财务付款（可分批）' : '付款水单'" width="560px" @closed="resetSlip">
       <el-descriptions :column="3" border size="small" style="margin-bottom:12px">
-        <el-descriptions-item label="应付总额">{{ payTarget ? (+(payTarget.actual_pay ?? payTarget.amount)).toFixed(2) : '—' }}</el-descriptions-item>
+        <el-descriptions-item label="应付总额">{{ payTarget ? payableOf(payTarget).toFixed(2) : '—' }}</el-descriptions-item>
         <el-descriptions-item label="已付总额">{{ payTarget ? (+(payTarget.paid_total ?? 0)).toFixed(2) : '—' }}</el-descriptions-item>
         <el-descriptions-item label="未付余额"><b class="text-danger">{{ payTarget ? prBalance(payTarget).toFixed(2) : '—' }}</b></el-descriptions-item>
       </el-descriptions>
@@ -533,8 +539,14 @@
               accept="image/*,application/pdf"
               drag
             >
-              <div v-if="slipUrl" class="slip-preview">
-                <img :src="slipUrl" alt="付款水单" />
+              <!-- 水单落 private/，裸地址直接放进 <img> 必 403 裂图（B027）：显示用签名链接；PDF 水单没法用 img 显示，给个可点开的占位 -->
+              <div v-if="slipUrl" class="slip-preview" @click.stop>
+                <img v-if="slipPreviewKind === 'image' && slipPreviewUrl" :src="slipPreviewUrl" alt="付款水单" />
+                <div v-else-if="slipPreviewKind === 'pdf'" class="slip-pdf">
+                  📄 PDF 水单已上传
+                  <el-link type="primary" style="margin-left:6px" @click.stop="preview?.open(slipUrl, '付款水单')">查看</el-link>
+                </div>
+                <div v-else class="slip-pdf">已上传：{{ fileNameOf(slipUrl) || slipUrl }}</div>
               </div>
               <div v-else class="slip-empty">
                 <el-icon :size="34"><UploadFilled /></el-icon>
@@ -566,7 +578,7 @@ import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { useListState, useColumnWidths } from '@/utils/listState';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { fmtDateTime } from '@/utils/format';
+import { fmtDateTime, todayStr } from '@/utils/format';
 import { Search, Refresh, Plus, UploadFilled, Download } from '@element-plus/icons-vue';
 import FilePreviewDialog from '@/components/FilePreviewDialog.vue';
 import FileUpload from '@/components/FileUpload.vue';
@@ -575,8 +587,10 @@ import { prepaymentApi, paymentRequestApi } from '@/api/payment';
 import FactorySelect from '@/components/FactorySelect.vue';
 import ContractPicker from '@/components/ContractPicker.vue';
 import { uploadApi } from '@/api/upload';
-import { openFile } from '@/utils/secureFile';
-import { exportPaymentRequestExcel, exportPrepaymentExcel } from '@/utils/paymentExcel';
+import { signedUrl } from '@/utils/secureFile';
+import { fileNameOf, kindOf } from '@/utils/filePreview';
+import { txt } from '@/utils/clearable';
+import { exportPaymentRequestExcel, exportPrepaymentExcel, payableOf } from '@/utils/paymentExcel';
 import { exportFactoryStatementExcel } from '@/utils/factoryStatementExcel';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole, PAYMENT_SLIP_ROLES } from '@i9/types';
@@ -638,6 +652,8 @@ async function loadBalance() {
 
 watch(() => prepayQuery.factory_id, (v) => { if (v) loadBalance(); else prepayBalance.value = 0; });
 
+// 点「搜索」/改筛选条件时页码归 1（B107）：翻到第 3 页再搜，结果不足 3 页会得到一张空表
+function searchPrepay() { prepayQuery.page = 1; loadPrepay(); }
 function resetPrepay() {
   prepayQuery.factory_id = undefined;
   prepayQuery.page = 1;
@@ -790,31 +806,47 @@ async function loadPR() {
   } finally { prLoading.value = false; }
 }
 
+function searchPR() { prQuery.page = 1; loadPR(); }
 function resetPR() {
-  Object.assign(prQuery, { factory_id: undefined, approval_status: undefined, page: 1 });
+  // 四个日期筛选也要清（B154）：不清的话点了重置列表还是筛过的
+  Object.assign(prQuery, {
+    factory_id: undefined, approval_status: undefined, page: 1,
+    due_start: '', due_end: '', paid_start: '', paid_end: '',
+  });
   prDateRange.value = null;
   loadPR();
 }
 
-// 导出 Excel(无详情接口,用列表行;先拉分批付款记录,拉不到则降级为不带记录表)
+// 导出 Excel(无详情接口,用列表行;先拉分批付款记录)
+// 记录拉不到就不出文件（B155）：以前降级成不带记录的表，财务拿到一份缺付款记录的 Excel 还以为没付过
 async function exportPRRow(row: any) {
-  try {
-    let records: any[] = [];
-    try { records = ((await paymentRequestApi.getRecords(row.id)) as any).data ?? []; } catch { records = []; }
-    exportPaymentRequestExcel({ ...row, records });
-  } catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
+  let records: any[] = [];
+  try { records = ((await paymentRequestApi.getRecords(row.id)) as any).data ?? []; }
+  catch (e: any) { errToast(e?.response?.data?.msg ?? '分批付款记录获取失败，未生成文件，请稍后重试'); return; }
+  try { exportPaymentRequestExcel({ ...row, records }); }
+  catch (e: any) { errToast(e?.message ?? '导出失败'); }
 }
 
+// 状态流转按钮的进行中标志（B110）：双击会发两次请求
+const busyKey = ref<string | null>(null);
 async function doSubmit(row: any) {
-  await paymentRequestApi.submit(row.id);
-  ElMessage.success('已提交审批');
-  loadPR();
+  if (busyKey.value) return;
+  busyKey.value = `submit:${row.id}`;
+  try {
+    await paymentRequestApi.submit(row.id);
+    ElMessage.success('已提交审批');
+    loadPR();
+  } finally { busyKey.value = null; }
 }
 
 async function doApprove(row: any) {
-  await paymentRequestApi.approve(row.id);
-  ElMessage.success('审批通过');
-  loadPR();
+  if (busyKey.value) return;
+  busyKey.value = `approve:${row.id}`;
+  try {
+    await paymentRequestApi.approve(row.id);
+    ElMessage.success('审批通过');
+    loadPR();
+  } finally { busyKey.value = null; }
 }
 
 const rejectVisible = ref(false);
@@ -837,7 +869,7 @@ const slipUrl = ref('');
 const slipUploading = ref(false);
 const payTarget = ref<any>(null);
 const payRecords = ref<any[]>([]);
-const payForm = reactive<any>({ pay_method: 'BANK', pay_date: new Date().toISOString().slice(0, 10), amount: undefined, remark: '' });
+const payForm = reactive<any>({ pay_method: 'BANK', pay_date: todayStr(), amount: undefined, remark: '' });
 // 行着色（2026-08-10 qiao：已付清的要标一个颜色，付了一部分的标另一个颜色）。
 // 判定按**金额**而不是状态：状态可能因为审批流还没流转到 PAID，但钱确实已经付清了，
 // 财务看的是钱。余额<=0.01 视为付清（分批付款的小数尾差）。
@@ -846,18 +878,21 @@ function prRowClass({ row }: { row: any }): string {
   if (paid <= 0) return '';
   return prBalance(row) <= 0.01 ? 'pr-paid' : 'pr-partial';
 }
-const prBalance = (row: any) => +((+(row.actual_pay ?? row.amount ?? 0)) - (+(row.paid_total ?? 0))).toFixed(2);
+// 应付总额回退口径与后端汇总/工厂账单一致：amount − prepay_offset（B146，见 paymentExcel.payableOf）
+const prBalance = (row: any) => +(payableOf(row) - (+(row.paid_total ?? 0))).toFixed(2);
+// 逾期 = 到期日早于今天（按本地日期字符串比较）。别 new Date('YYYY-MM-DD')：那是 UTC 零点，
+// 当天到期从早上 8:01 起就会被标成逾期（B099）
 const isOverdue = (row: any) => {
   if (!row?.due_date || row.approval_status === 'PAID') return false;
-  const d = new Date(String(row.due_date).slice(0, 10));
-  return !isNaN(d.getTime()) && d < new Date();
+  const due = String(row.due_date).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(due) && due < todayStr();
 };
 const payMethodLabel = (m: string) => ({ BANK: '银行转账', ACCEPTANCE: '承兑汇票', OTHER: '其他' } as any)[m] ?? m;
 async function openMarkPaid(row: any) {
   payTarget.value = row;
   slipUrl.value = row.slip_url ?? ''; // 申请上已挂的水单（业务先传的）带入，财务确认付款不用再传一遍
 
-  Object.assign(payForm, { pay_method: 'BANK', pay_date: new Date().toISOString().slice(0, 10), amount: prBalance(row) > 0 ? prBalance(row) : undefined, remark: '' });
+  Object.assign(payForm, { pay_method: 'BANK', pay_date: todayStr(), amount: prBalance(row) > 0 ? prBalance(row) : undefined, remark: '' });
   try { payRecords.value = ((await paymentRequestApi.getRecords(row.id)) as any).data ?? []; } catch { payRecords.value = []; }
   markPaidVisible.value = true;
 }
@@ -891,6 +926,19 @@ async function doAttachSlip() {
   finally { saving.value = false; }
 }
 function resetSlip() { slipUrl.value = ''; slipUploading.value = false; }
+// 水单预览：private/ 目录的附件要换签名链接才显示得出来（B027）；PDF 走占位 + 查看
+const slipPreviewUrl = ref('');
+const slipPreviewKind = computed(() => kindOf(slipUrl.value));
+let slipPreviewSeq = 0;
+watch(slipUrl, async (u) => {
+  const mine = ++slipPreviewSeq;
+  slipPreviewUrl.value = '';
+  if (!u || slipPreviewKind.value !== 'image') return;
+  try {
+    const signed = await signedUrl(u);
+    if (mine === slipPreviewSeq) slipPreviewUrl.value = signed;
+  } catch { /* 拿不到签名就不显示缩略图，链接仍在输入框里 */ }
+}, { immediate: true });
 
 // 上传水单文件（点击/拖拽/粘贴共用）：走后端 /uploads，成功后写入 slip_url
 async function uploadSlipFile(file: File) {
@@ -975,15 +1023,18 @@ function resetPRForm() {
   prPrepayBalance.value = 0;
 }
 // 选择工厂后自动提示是否存在可用预付款余额（付款申请设计稿：存在预付时提示冲抵）
+// 【请求序号】连续切两个工厂，第一个响应更慢会把第二个工厂的余额盖掉，「一键冲抵」填的就是别家的钱（B108）
+let balanceSeq = 0;
 watch(() => prForm.factory_id, async (fid) => {
+  const mine = ++balanceSeq;
   prPrepayBalance.value = 0;
   // getBalance 现在是 @Roles(ADMIN, FINANCE, BUSINESS)；版师等角色仍会被拦截器弹红字、
   // 本地 catch 拦不住，所以这里按同一份权限早退
   if (!createPRVisible.value || !fid || !canPrepay.value) return;
   try {
     const res: any = await prepaymentApi.getBalance(fid);
-    prPrepayBalance.value = +(res?.data ?? res ?? 0) || 0;
-  } catch { prPrepayBalance.value = 0; }
+    if (mine === balanceSeq) prPrepayBalance.value = +(res?.data ?? res ?? 0) || 0;
+  } catch { if (mine === balanceSeq) prPrepayBalance.value = 0; }
 });
 // 一键把可用预付款余额（不超过申请金额）填入冲抵栏
 function applyPrepayOffset() {
@@ -996,7 +1047,12 @@ async function doCreatePR() {
   saving.value = true;
   try {
     const dto: any = { ...prForm };
-    for (const k of ['bank_name', 'bank_account', 'related_style_no']) if (!dto[k]) delete dto[k];
+    // 新建：空的收款信息不发（保持后端建单时的空值口径）；
+    // 改草稿：清空要发 ''（后端 dto.x ?? pr.x，delete 掉等于「不改」，清空永远存不进去，B109）
+    for (const k of ['bank_name', 'bank_account', 'related_style_no']) {
+      if (editingPRId.value) dto[k] = txt(dto[k]);
+      else if (!dto[k]) delete dto[k];
+    }
     if (editingPRId.value) {
       await paymentRequestApi.update(editingPRId.value, dto);
       ElMessage.success('已保存修改');
@@ -1071,5 +1127,6 @@ function clearReconcileFilter() {
 .slip-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; color: #909399; padding: 8px 0; }
 .slip-tip { font-size: 13px; line-height: 1.5; }
 .slip-preview img { max-width: 100%; max-height: 200px; object-fit: contain; }
+.slip-pdf { padding: 18px 8px; font-size: 13px; color: var(--el-text-color-regular); }
 .slip-loading { margin-top: 6px; font-size: 13px; color: #409eff; text-align: center; }
 </style>

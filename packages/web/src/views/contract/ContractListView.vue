@@ -1,24 +1,24 @@
 <template>
   <div class="list-page">
-    <RuleHint>合同金额超阈值需主管审批后才可推送;<b>首次推送自动开通供应商门户账号</b>(初始密码 Factory@123,请提醒供应商改密);未匹配供应商的材料会生成「待定供应商」占位合同,确定后改绑。</RuleHint>
+    <RuleHint>合同金额超阈值需主管审批后才可推送;<b>首次推送自动开通供应商门户账号</b>(账号=工厂编号;初始密码请在「系统·账号管理」重置后告知供应商);未匹配供应商的材料会生成「待定供应商」占位合同,确定后改绑。</RuleHint>
     <div class="toolbar-card">
       <div class="toolbar">
         <div class="tools-left">
           <el-button v-if="canEdit" type="primary" :icon="Plus" @click="$router.push('/contracts/new?type=MATERIAL')">新建材料合同</el-button>
           <el-button v-if="canEdit" type="primary" plain :icon="Plus" @click="$router.push('/contracts/new?type=PROCESS')">新建加工合同</el-button>
-          <el-button plain :icon="Download" @click="exportCsv">导出</el-button>
+          <el-button plain :icon="Download" :loading="exporting" @click="exportCsv">导出</el-button>
         </div>
         <div class="tools-right">
-          <el-input v-model="query.keyword" placeholder="合同号 / 供应商 / 款号" clearable style="width:220px" @keyup.enter="load" @clear="load">
+          <el-input v-model="query.keyword" placeholder="合同号 / 供应商 / 款号" clearable style="width:220px" @keyup.enter="search" @clear="search">
             <template #prefix><el-icon><Search /></el-icon></template>
           </el-input>
-          <el-select v-model="query.type" clearable placeholder="全部类型" style="width:130px" @change="load">
+          <el-select v-model="query.type" clearable placeholder="全部类型" style="width:130px" @change="search">
             <el-option label="材料合同" value="MATERIAL" /><el-option label="加工合同" value="PROCESS" /><el-option label="补料合同" value="SUPPLEMENT" />
           </el-select>
-          <el-select v-model="query.portal_status" clearable placeholder="门户状态（当前停在哪一步）" style="width:150px" @change="load">
+          <el-select v-model="query.portal_status" clearable placeholder="门户状态（当前停在哪一步）" style="width:150px" @change="search">
             <el-option v-for="s in portalStatuses" :key="s.v" :label="s.l" :value="s.v" />
           </el-select>
-          <el-button type="primary" @click="load">搜索</el-button>
+          <el-button type="primary" @click="search">搜索</el-button>
           <el-button @click="reset">清空</el-button>
         </div>
       </div>
@@ -26,7 +26,9 @@
 
     <div class="table-card">
       <el-table ref="colTableRef" :data="list" v-loading="loading" border stripe @header-dragend="onHeaderDragend" @row-dblclick="viewDetail">
-        <el-table-column prop="contract_no" label="合同编号" width="160" sortable />
+        <!-- 列头排序只在「本页即全部」时开放（B160）：后端按 id 倒序分页且不收排序参数，
+             跨页时本地排序只是把当前 20 条颠倒一下，第 1 页仍然不是全库最大的那几条 -->
+        <el-table-column prop="contract_no" label="合同编号" width="160" :sortable="sortableLocal" />
         <el-table-column label="类型" width="100"><template #default="{ row }"><el-tag size="small" effect="light">{{ typeLabel(row.type) }}</el-tag></template></el-table-column>
         <el-table-column label="供应商/加工厂" min-width="140"><template #default="{ row }">{{ factoryName(row.factory_id) }}</template></el-table-column>
         <el-table-column label="关联款号" min-width="120"><template #default="{ row }">{{ row.style_nos || '—' }}</template></el-table-column>
@@ -43,13 +45,14 @@
             <el-button v-if="canEdit && row.type === 'MATERIAL'" link size="small" @click="$router.push(`/contracts/new?type=SUPPLEMENT&parent_id=${row.id}&copy_from=${row.id}`)">补料</el-button>
             <el-button link size="small" @click="printRow(row)">PDF</el-button>
             <el-button link size="small" @click="exportRow(row)">导出Excel</el-button>
-            <el-button v-if="row.approval_status === 'PENDING' && canReview" link type="success" size="small" @click="doApprove(row)">审批</el-button>
-            <el-button v-if="row.portal_status === 'DRAFT' && canEdit" link type="warning" size="small" @click="doPush(row)">推送门户</el-button>
+            <!-- 状态流转按钮带 loading（B110 同类）：网络慢时再点一次不会发第二个请求 -->
+            <el-button v-if="row.approval_status === 'PENDING' && canReview" link type="success" size="small" :loading="acting === `approve:${row.id}`" @click="doApprove(row)">审批</el-button>
+            <el-button v-if="row.portal_status === 'DRAFT' && canEdit" link type="warning" size="small" :loading="acting === `push:${row.id}`" @click="doPush(row)">推送门户</el-button>
             <el-popconfirm v-if="row.portal_status === 'PUSHED' && canEdit" title="撤销后合同回到草稿，可修改后重新推送。确认撤销？" @confirm="doRecall(row)">
-              <template #reference><el-button link type="warning" size="small">撤销推送</el-button></template>
+              <template #reference><el-button link type="warning" size="small" :loading="acting === `recall:${row.id}`">撤销推送</el-button></template>
             </el-popconfirm>
             <el-popconfirm v-if="row.portal_status === 'DRAFT' && isAdmin" title="确认删除？" @confirm="remove(row.id)">
-              <template #reference><el-button link type="danger" size="small">删除</el-button></template>
+              <template #reference><el-button link type="danger" size="small" :loading="acting === `remove:${row.id}`">删除</el-button></template>
             </el-popconfirm>
           </template>
         </el-table-column>
@@ -67,7 +70,8 @@
         <el-descriptions :column="2" border size="small">
           <el-descriptions-item label="类型">{{ typeLabel(detail.type) }}</el-descriptions-item>
           <el-descriptions-item label="门户状态"><el-tag :type="portalTagType(detail.portal_status)" size="small">{{ portalLabel(detail.portal_status) }}</el-tag></el-descriptions-item>
-          <el-descriptions-item label="合同金额">{{ detail.currency }} {{ (+detail.total_amount).toFixed(2) }}</el-descriptions-item>
+          <!-- B149：金额 NULL 不能显示成 CNY 0.00，字段缺失更不能显示 NaN -->
+          <el-descriptions-item label="合同金额">{{ amountText(detail.currency, detail.total_amount) }}</el-descriptions-item>
           <el-descriptions-item label="账期">{{ detail.account_period_days }} 天</el-descriptions-item>
           <el-descriptions-item label="定金/中期/尾款">{{ detail.deposit_ratio }}/{{ detail.mid_ratio }}/{{ detail.final_ratio }}%</el-descriptions-item>
           <el-descriptions-item label="最后发货日">{{ detail.last_ship_date || '—' }}</el-descriptions-item>
@@ -94,7 +98,7 @@
             <span :class="{ 'text-danger': (detail.qtyStats?.diffQty ?? 0) < 0 }">{{ detail.qtyStats?.diffQty ?? '—' }}</span>
           </el-descriptions-item>
           <el-descriptions-item label="到期日">
-            <span :class="{ 'text-danger': isOverdue(detail) }">{{ detail.due_date ? String(detail.due_date).slice(0, 10) : '—' }}</span>
+            <span :class="{ 'text-danger': isOverdue(detail) }">{{ localDateStr(detail.due_date) || '—' }}</span>
             <el-tag v-if="isOverdue(detail)" type="danger" size="small" style="margin-left:4px">逾期</el-tag>
           </el-descriptions-item>
         </el-descriptions>
@@ -144,8 +148,8 @@
             <el-table-column v-if="canEdit" label="操作" width="110" align="center">
               <template #default="{ row }">
                 <template v-if="!row.reconcile_id && row.approval_status !== 'APPROVED'">
-                  <el-button link type="success" size="small" @click="doApproveShipment(row, true)">通过</el-button>
-                  <el-button v-if="row.approval_status !== 'REJECTED'" link type="danger" size="small" @click="doApproveShipment(row, false)">驳回</el-button>
+                  <el-button link type="success" size="small" :loading="acting === `ship-ok:${row.id}`" :disabled="!!acting && acting !== `ship-ok:${row.id}`" @click="doApproveShipment(row, true)">通过</el-button>
+                  <el-button v-if="row.approval_status !== 'REJECTED'" link type="danger" size="small" :loading="acting === `ship-no:${row.id}`" :disabled="!!acting && acting !== `ship-no:${row.id}`" @click="doApproveShipment(row, false)">驳回</el-button>
                 </template>
                 <span v-else>—</span>
               </template>
@@ -231,17 +235,18 @@ import { errToast } from '@/api';
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useListState, useColumnWidths } from '@/utils/listState';
 import { useRoute } from 'vue-router';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search, Plus, Download } from '@element-plus/icons-vue';
 import { contractApi } from '@/api/contract';
 import { factoryApi } from '@/api/factory';
 import { printContract } from '@/utils/contractPrint';
 import { exportContractExcel } from '@/utils/contractExcel';
-import { fmtDateTime } from '@/utils/format';
+import { exportAll } from '@/utils/exportAll';
+import { fmtDateTime, todayStr } from '@/utils/format';
 import { companyApi } from '@/api/company';
-import { orderApi } from '@/api/order';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole } from '@i9/types';
+import { localDateStr, isPastDue, amountText } from './contractChecks';
 
 const authStore = useAuthStore();
 const route = useRoute();
@@ -250,10 +255,10 @@ const canEdit = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.ha
 const canReview = computed(() => authStore.hasRole(UserRole.ADMIN) || authStore.hasRole(UserRole.SUPERVISOR));
 
 // 到期日逾期判断（今日>到期日 且未结束对账，对账付款串流程 D15）
+// B099：按本地日历日比（到期日当天不算逾期）。原来 new Date('YYYY-MM-DD') 按 UTC 零点解析再和 new Date() 比，
+// 北京时间早上 8:01 起当天到期的合同就标红「逾期」
 function isOverdue(row: any): boolean {
-  if (!row?.due_date) return false;
-  const due = new Date(String(row.due_date).slice(0, 10));
-  return !isNaN(due.getTime()) && due < new Date() && row.portal_status !== 'RECONCILED';
+  return isPastDue(row?.due_date, todayStr()) && row?.portal_status !== 'RECONCILED';
 }
 // 【筛选按「当前停在哪一步」精确匹配，不是「走过哪一步」】门户状态是条流水线：
 // 草稿→已推送→已盖章→出货中→已对账→已完成。选「已盖章」只会列出**正停在**这一步的，
@@ -275,7 +280,6 @@ const loading = ref(false);
 const list = ref<any[]>([]);
 const total = ref(0);
 const factories = ref<any[]>([]);
-const orders = ref<any[]>([]);
 const query = reactive({ page: 1, size: 20, keyword: '', type: undefined as string | undefined, portal_status: undefined as string | undefined });
 // 返回列表时筛选条件、页码、调过的列宽保持原样（#139/#140，见 utils/listState.ts）
 useListState('contracts', { query });
@@ -289,11 +293,22 @@ async function load() {
     total.value = res.data?.total ?? res.total ?? 0;
   } finally { loading.value = false; }
 }
+// 改了搜索条件要回第 1 页（B107 同类）：翻到第 3 页再搜，结果不足 3 页就是一张空表；翻页本身仍走 load
+function search() { query.page = 1; load(); }
+// 列头排序只在「本页即全部」时开放（B160，理由见模板注释）
+const sortableLocal = computed(() => total.value <= list.value.length);
 function reset() { query.keyword = ''; query.type = undefined; query.portal_status = undefined; query.page = 1; load(); }
 async function loadRefs() {
-  const [fs, os] = await Promise.all([factoryApi.select(), orderApi.list({ page: 1, size: 100 })]);
-  factories.value = (((fs as any).data ?? fs) as any[]) ?? [];
-  orders.value = (os as any).data ?? [];
+  // 只拉工厂（列显示供应商名）；原来还顺带拉了前 100 条订单，页面上根本没用到（B102 同类）
+  const fs: any = await factoryApi.select();
+  factories.value = ((fs.data ?? fs) as any[]) ?? [];
+}
+// 行内状态动作的进行中标志（B110 同类）：同一时刻只跑一个，按钮 :loading
+const acting = ref<string | null>(null);
+async function runAction(key: string, fn: () => Promise<void>) {
+  if (acting.value) return;
+  acting.value = key;
+  try { await fn(); } finally { acting.value = null; }
 }
 onMounted(() => {
   load();
@@ -365,16 +380,20 @@ async function viewDetail(row: any) {
   detailVisible.value = true;
 }
 async function doApprove(row: any) {
-  try { await contractApi.approve(row.id); ElMessage.success('已审批，合同可推送'); load(); }
-  catch (e: any) { errToast(e?.response?.data?.msg ?? '审批失败'); }
+  await runAction(`approve:${row.id}`, async () => {
+    try { await contractApi.approve(row.id); ElMessage.success('已审批，合同可推送'); load(); }
+    catch (e: any) { errToast(e?.response?.data?.msg ?? '审批失败'); }
+  });
 }
 // 发货批次审批（门户 B2：通过后供应商方可勾选该批次对账）
 async function doApproveShipment(row: any, approve: boolean) {
-  try {
-    await contractApi.approveShipment(detail.value.id, row.id, approve);
-    ElMessage.success(approve ? '批次已审批通过，供应商可对账' : '批次已驳回');
-    await viewDetail({ id: detail.value.id });
-  } catch (e: any) { errToast(e?.response?.data?.msg ?? '操作失败'); }
+  await runAction(`${approve ? 'ship-ok' : 'ship-no'}:${row.id}`, async () => {
+    try {
+      await contractApi.approveShipment(detail.value.id, row.id, approve);
+      ElMessage.success(approve ? '批次已审批通过，供应商可对账' : '批次已驳回');
+      await viewDetail({ id: detail.value.id });
+    } catch (e: any) { errToast(e?.response?.data?.msg ?? '操作失败'); }
+  });
 }
 let cachedCompany: any = null;
 async function printRow(row: any) {
@@ -399,27 +418,44 @@ async function exportRow(row: any) {
   } catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
 }
 async function doPush(row: any) {
-  try { await contractApi.push(row.id); ElMessage.success('已推送至供应商门户'); load(); }
-  catch (e: any) { errToast(e?.response?.data?.msg ?? '推送失败'); }
+  await runAction(`push:${row.id}`, async () => {
+    // B098：总价为 0 的合同推给供应商盖章前先确认——多半是货物明细单价没填
+    if (!(Number(row.total_amount) > 0)) {
+      try {
+        await ElMessageBox.confirm(`合同 ${row.contract_no ?? ''} 总金额为 0（货物明细没填单价？），确定推送给供应商盖章？`, '总金额为 0', { type: 'warning', confirmButtonText: '仍要推送', cancelButtonText: '取消' });
+      } catch { return; }
+    }
+    try { await contractApi.push(row.id); ElMessage.success('已推送至供应商门户'); load(); }
+    catch (e: any) { errToast(e?.response?.data?.msg ?? '推送失败'); }
+  });
 }
 async function doRecall(row: any) {
-  try { await contractApi.recall(row.id); ElMessage.success('已撤销推送，合同回到草稿，可修改后重新推送'); load(); }
-  catch (e: any) { errToast(e?.response?.data?.msg ?? '撤销失败'); }
+  await runAction(`recall:${row.id}`, async () => {
+    try { await contractApi.recall(row.id); ElMessage.success('已撤销推送，合同回到草稿，可修改后重新推送'); load(); }
+    catch (e: any) { errToast(e?.response?.data?.msg ?? '撤销失败'); }
+  });
 }
 async function remove(id: number) {
-  try { await contractApi.remove(id); ElMessage.success('删除成功'); load(); }
-  catch (e: any) { errToast(e?.response?.data?.msg ?? '删除失败'); }
+  await runAction(`remove:${id}`, async () => {
+    try { await contractApi.remove(id); ElMessage.success('删除成功'); load(); }
+    catch (e: any) { errToast(e?.response?.data?.msg ?? '删除失败'); }
+  });
 }
-function exportCsv() {
-  const cols = ['contract_no', 'type', 'total_amount', 'currency', 'account_period_days', 'portal_status'];
-  const head = ['合同编号', '类型', '金额', '币种', '账期', '门户状态'];
-  // 转义同 utils/exportAll：内嵌双引号翻倍，防破列
-  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const rows = list.value.map((r) => cols.map((c) => esc(r[c])).join(','));
-  const csv = '﻿' + [head.join(','), ...rows].join('\n');
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-  const a = document.createElement('a'); a.href = url; a.download = '合同.csv'; a.click();
-  URL.revokeObjectURL(url);
+// 导出：当前筛选下全量、逐页拉取（B152：原来只导当前一页，文件名却像全量；口径同客户/工厂列表的 exportAll）
+const exporting = ref(false);
+const EXPORT_COLS = [
+  { key: 'contract_no', title: '合同编号' }, { key: 'type', title: '类型', format: (r: any) => typeLabel(r.type) },
+  { key: 'total_amount', title: '金额' }, { key: 'currency', title: '币种' },
+  { key: 'account_period_days', title: '账期' }, { key: 'portal_status', title: '门户状态', format: (r: any) => portalLabel(r.portal_status) },
+];
+async function exportCsv() {
+  if (exporting.value) return;
+  exporting.value = true;
+  try {
+    const n = await exportAll((p, sz) => contractApi.list({ ...query, page: p, size: sz }) as any, EXPORT_COLS, '合同');
+    ElMessage.success(`已导出全部 ${n} 条`);
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
+  finally { exporting.value = false; }
 }
 
 // 供应商/加工厂列显示（factories 引用已在 loadRefs 装载）

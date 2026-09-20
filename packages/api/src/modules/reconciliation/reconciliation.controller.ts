@@ -5,16 +5,18 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { MenuGuard, MenuAccess } from '../../common/guards/menu.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@i9/types';
 import { ReconciliationService } from './reconciliation.service';
 import { CreateReconciliationDto } from './dto/create-reconciliation.dto';
 import { GenerateLaborDto } from './dto/generate-labor.dto';
 import { QueryReconciliationDto } from './dto/query-reconciliation.dto';
+import { UpdateReconciliationDraftDto } from './dto/update-reconciliation-draft.dto';
 
 @ApiTags('对账管理')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, MenuGuard)
 @Controller('reconciliations')
 export class ReconciliationController {
   constructor(private readonly service: ReconciliationService) {}
@@ -33,13 +35,17 @@ export class ReconciliationController {
     return this.service.generateLabor(dto, req.user.id);
   }
 
+  // 只读接口按「对账管理」菜单授权（B079 同类）：能看见这个菜单的人才能读，不再任何登录账号都能拉全部财务数据；
+  // 不收窄 @Roles——版师/打样默认菜单里有对账，那是定过的口径，账号级菜单配置由主管掌握
   @Get()
+  @MenuAccess('reconciliations')
   @ApiOperation({ summary: '对账单列表（分页）' })
   findAll(@Query() query: QueryReconciliationDto) {
     return this.service.findAll(query);
   }
 
   @Get(':id')
+  @MenuAccess('reconciliations')
   @ApiOperation({ summary: '对账单详情（含出货明细）' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.service.findOne(id);
@@ -73,7 +79,7 @@ export class ReconciliationController {
   @ApiOperation({ summary: '修改草稿态对账单（发票/税率/说明；业务限本人创建的）' })
   updateDraft(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: { invoice_no?: string; invoice_amount?: number; tax_rate?: number; description?: string },
+    @Body() dto: UpdateReconciliationDraftDto, // B068：真 DTO 进全局 ValidationPipe，NaN/越列宽税率在门口拦下
     @Request() req: any,
   ) {
     return this.service.updateDraft(id, dto, { id: req.user.id, role: req.user.role });

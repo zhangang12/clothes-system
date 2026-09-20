@@ -85,6 +85,15 @@ describe('FactoryService', () => {
       expect(result.factory_no).toBe('S001');
     });
 
+    it('B061 develop_date 缺省取本地日历日（不是 UTC 日期）', async () => {
+      jest.useFakeTimers().setSystemTime(new Date(2026, 8, 20, 1, 30, 0)); // 本地 09-20 01:30，UTC 仍是 09-19
+      try {
+        mockRedis.incr.mockResolvedValue(3);
+        await service.create({ name: '凌晨工厂', type: 'FABRIC', contacts: CONTACTS } as any, 1);
+        expect(mockManager.save.mock.calls[0][1].develop_date).toBe('2026-09-20');
+      } finally { jest.useRealTimers(); }
+    });
+
     it('UT-FAC-14: throws when no contacts provided (保存前·联系人非空校验)', async () => {
       mockRedis.incr.mockResolvedValue(2);
       await expect(service.create({ name: 'X', type: 'FABRIC' } as any, 1))
@@ -126,6 +135,28 @@ describe('FactoryService', () => {
       mockRepo.findAndCount.mockResolvedValue([[], 0]);
       await service.findAll({ page: 3, size: 10 } as any);
       expect(mockRepo.findAndCount).toHaveBeenCalledWith(expect.objectContaining({ skip: 20, take: 10 }));
+    });
+
+    it('B063 keyword 与同名高级筛选（name / factory_no）同用时为 AND，不被 OR 分支覆盖', async () => {
+      mockRepo.findAndCount.mockResolvedValue([[], 0]);
+      await service.findAll({ page: 1, size: 20, keyword: 'abc', name: '福利', factory_no: 'S00' } as any);
+      const where = mockRepo.findAndCount.mock.calls[0][0].where;
+      expect(Array.isArray(where)).toBe(true);
+      let andHits = 0;
+      for (const w of where) {
+        for (const [col, filt] of [['name', '%福利%'], ['factory_no', '%S00%']] as const) {
+          const op = w[col] as any;
+          expect(op).toBeDefined();
+          if (op._type === 'and') {
+            andHits++;
+            expect(op._value.map((x: any) => x._value)).toEqual(expect.arrayContaining([filt, '%abc%']));
+          } else {
+            expect(op._type).toBe('like');
+            expect(op._value).toBe(filt);
+          }
+        }
+      }
+      expect(andHits).toBe(2); // name 分支、factory_no 分支各一次 AND
     });
 
     it('UT-FAC-17: keyword 与 contact 同用时为 AND 关系(L8:contact 过滤不丢失)', async () => {
@@ -174,6 +205,13 @@ describe('FactoryService', () => {
       mockRepo.save.mockResolvedValue({ id: 1, status: 1 });
       await service.toggleStatus(1);
       expect(mockRepo.save).toHaveBeenCalledWith(expect.objectContaining({ status: 1 }));
+    });
+
+    it('B042 停用时统计未完成合同必须排除已软删（deleted:0）', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 1, status: 1, deleted: 0 });
+      mockRepo.save.mockResolvedValue({ id: 1, status: 0 });
+      await service.toggleStatus(1);
+      expect(mockContractRepo.count).toHaveBeenCalledWith({ where: expect.objectContaining({ factory_id: 1, deleted: 0 }) });
     });
 
     it('UT-FAC-13: throws when disabling a factory with open (non-terminal) contracts', async () => {

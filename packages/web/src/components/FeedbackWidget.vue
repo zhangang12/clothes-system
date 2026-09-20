@@ -57,7 +57,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { ChatDotRound, ChatLineRound } from '@element-plus/icons-vue';
@@ -69,7 +69,9 @@ const open = ref(false);
 const content = ref('');
 const images = ref(''); // FileUpload：逗号分隔 URL
 const saving = ref(false);
-const pageUrl = ref(route.fullPath);
+// 跟着当前路由走：布局只挂载一次，写成 ref(route.fullPath) 会永远显示 /dashboard，
+// 与实际提交的 page_url 对不上、排查时被误导（B139）
+const pageUrl = computed(() => route.fullPath);
 
 // 未读回复红点 + 我的反馈面板
 const unread = ref(0);

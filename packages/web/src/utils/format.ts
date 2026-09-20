@@ -8,11 +8,18 @@ export function fmtDateTime(v: unknown): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+/**
+ * 带时区标记的 ISO 串（2026-07-31T23:30:00.000Z / …+08:00）——这类值是 datetime 列（created_at /
+ * confirmed_at / stamped_at），直接截前 10 位得到的是 UTC 日期，本地早 8 点前的时间会少一天（B091）。
+ * 纯 YYYY-MM-DD（DATE 列）或不带时区的 'YYYY-MM-DD HH:mm:ss' 本来就是本地口径，照旧截取。
+ */
+const hasZone = (s: string): boolean => /^\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{2}:?\d{2})$/i.test(s);
+
 export function fmtDate(v: unknown): string {
   if (v == null || v === '') return '—';
   const s = String(v);
-  // 已是 YYYY-MM-DD 直接取前 10 位
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  // 已是 YYYY-MM-DD（且不带时区）直接取前 10 位
+  if (/^\d{4}-\d{2}-\d{2}/.test(s) && !hasZone(s)) return s.slice(0, 10);
   const d = new Date(s);
   if (isNaN(d.getTime())) return s;
   const p = (n: number) => String(n).padStart(2, '0');

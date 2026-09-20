@@ -5,18 +5,25 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { MenuGuard, MenuAccess } from '../../common/guards/menu.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole, PAYMENT_SLIP_ROLES } from '@i9/types';
 import { PaymentService } from './payment.service';
 import { CreatePrepaymentDto } from './dto/create-prepayment.dto';
 import { CreatePaymentRequestDto } from './dto/create-payment-request.dto';
+import { UpdatePaymentRequestDto } from './dto/update-payment-request.dto';
+import { AddPaymentRecordDto } from './dto/add-payment-record.dto';
+import { AttachPrepayStatementDto } from './dto/attach-prepay-statement.dto';
 import { MarkPaidDto } from './dto/mark-paid.dto';
 import { QueryPaymentRequestDto } from './dto/query-payment-request.dto';
 import { QueryFactoryStatementDto } from './dto/query-factory-statement.dto';
 
+// B079：只读接口此前无任何权限声明（RolesGuard 无声明即放行），任何内部账号都能拉全部付款申请（含供应商银行账号）。
+// 按「付款管理」菜单授权（MenuGuard，与侧栏同一份 resolveMenuKeys 口径）：看得见这个菜单的人才能调它的读取接口，
+// 不用收窄 @Roles 去砍版师/打样默认菜单里的付款（那是老板定过的口径）。
 @ApiTags('付款管理')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, MenuGuard)
 @Controller('payments')
 export class PaymentController {
   constructor(private readonly service: PaymentService) {}
@@ -33,6 +40,7 @@ export class PaymentController {
   }
 
   @Get('prepayments')
+  @MenuAccess('payments')
   @ApiOperation({ summary: '预付款列表' })
   findPrepayments(
     @Query('factory_id') factoryId?: string,
@@ -55,8 +63,8 @@ export class PaymentController {
   @Patch('prepayments/:id/statement')
   @Roles(...PAYMENT_SLIP_ROLES)
   @ApiOperation({ summary: '给预付款挂/换对账单附件（不改金额与余额；传空串可清除）' })
-  attachPrepayStatement(@Param('id', ParseIntPipe) id: number, @Body('statement_url') statementUrl: string) {
-    return this.service.attachPrepayStatement(id, statementUrl);
+  attachPrepayStatement(@Param('id', ParseIntPipe) id: number, @Body() dto: AttachPrepayStatementDto) {
+    return this.service.attachPrepayStatement(id, dto.statement_url ?? '');
   }
 
   @Get('prepayments/balance')
@@ -75,6 +83,7 @@ export class PaymentController {
   }
 
   @Get('requests')
+  @MenuAccess('payments')
   @ApiOperation({ summary: '付款申请列表（工厂+申请日期组合检索；reconcile_id 可按对账单反查）' })
   // 散参收为 DTO：原 10 个 Query 参数散落无校验，收敛后 forbidNonWhitelisted 生效，
   // 但日期/状态字段用 @IsString() 宽松校验——前端清空筛选项时发出空串 ''（不通过 IsDateString/IsEnum）
@@ -85,6 +94,7 @@ export class PaymentController {
   // 工厂账单（2026-08-11 qiao）。**不额外加 @Roles**：内容与本页两个 Tab 列表逐字段一致，
   // 只是按工厂汇到一起，没有新增任何暴露面；加了反而让业务看不到导出按钮、又来一条"找不到入口"。
   @Get('factory-statement')
+  @MenuAccess('payments')
   @ApiOperation({ summary: '工厂账单：某工厂的付款申请/实付记录/预付款/对账单 + 汇总（导出用）' })
   getFactoryStatement(@Query() query: QueryFactoryStatementDto) {
     return this.service.getFactoryStatement(query.factory_id, query.start_date, query.end_date);
@@ -118,11 +128,12 @@ export class PaymentController {
   @Post('requests/:id/records')
   @Roles(UserRole.ADMIN, UserRole.FINANCE)
   @ApiOperation({ summary: '分批付款登记（多次付款自动累计已付/未付，余额=0 整单转已付清，设计稿 06 v1.1）' })
-  addRecord(@Param('id', ParseIntPipe) id: number, @Body() dto: any, @Request() req: any) {
+  addRecord(@Param('id', ParseIntPipe) id: number, @Body() dto: AddPaymentRecordDto, @Request() req: any) {
     return this.service.addPaymentRecord(id, dto, req.user.id);
   }
 
   @Get('requests/:id/records')
+  @MenuAccess('payments')
   @ApiOperation({ summary: '付款申请的分批付款记录' })
   getRecords(@Param('id', ParseIntPipe) id: number) {
     return this.service.getPaymentRecords(id);
@@ -159,7 +170,7 @@ export class PaymentController {
   @ApiOperation({ summary: '修改草稿态付款申请（仅 DRAFT；业务限本人创建的）' })
   updatePaymentRequest(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: Partial<CreatePaymentRequestDto>,
+    @Body() dto: UpdatePaymentRequestDto,
     @Request() req: any,
   ) {
     return this.service.updatePaymentRequest(id, dto, { id: req.user.id, role: req.user.role });

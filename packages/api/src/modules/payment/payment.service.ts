@@ -2,16 +2,28 @@ import {
   Injectable, NotFoundException, BadRequestException, ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, Between, MoreThanOrEqual, LessThanOrEqual, In } from 'typeorm';
+import { Repository, DataSource, EntityManager, Between, MoreThanOrEqual, LessThanOrEqual, In } from 'typeorm';
 import { Prepayment } from './prepayment.entity';
 import { PaymentRequest } from './payment-request.entity';
 import { PaymentRecord } from './payment-record.entity';
 import { Reconciliation, ReconciliationStatus } from '../reconciliation/reconciliation.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
+import { todayLocal } from '../../common/utils/local-date';
 import { PaymentApprovalStatus, ReconcileType, UserRole, isAdminRole } from '@i9/types';
 import { CreatePrepaymentDto } from './dto/create-prepayment.dto';
 import { CreatePaymentRequestDto } from './dto/create-payment-request.dto';
+import { UpdatePaymentRequestDto } from './dto/update-payment-request.dto';
+import { AddPaymentRecordDto } from './dto/add-payment-record.dto';
 import { QueryPaymentRequestDto } from './dto/query-payment-request.dto';
+
+// 付款日期须是真实存在的 YYYY-MM-DD（B127）：'2026-13-45' 这类只判非空就写 DATE 列会 500，前置成 400
+const isRealYmd = (s: unknown): boolean => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s ?? ''));
+  if (!m) return false;
+  const [y, mo, d] = [+m[1], +m[2], +m[3]];
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
+};
 
 @Injectable()
 export class PaymentService {
@@ -110,9 +122,77 @@ export class PaymentService {
     return { items, total, page, size };
   }
 
-  async getAvailablePrepayBalance(factoryId: number): Promise<number> {
-    const rows = await this.prepayRepo.find({ where: { factory_id: factoryId } });
+  // 事务内传 manager（B084：持锁时别再从连接池借第二条连接），事务外用注入仓储
+  async getAvailablePrepayBalance(factoryId: number, manager?: EntityManager): Promise<number> {
+    const where = { factory_id: factoryId };
+    const rows = manager
+      ? await manager.find(Prepayment, { where })
+      : await this.prepayRepo.find({ where });
     return rows.reduce((sum, r) => sum + (+r.balance), 0);
+  }
+
+  // ===== 付款申请的闸门（建单 / 改草稿共用，B009/B010/B011）=====
+  /**
+   * 冲抵预付的三条：不能为负（负数会让实付 > 申请额，付款登记闸门按实付放行就多付了）、
+   * 不能超过申请金额、不能超过该工厂可用预付余额。
+   */
+  private async _assertPrepayOffset(
+    factoryId: number, amount: number, prepayOffset: number, manager?: EntityManager,
+  ): Promise<void> {
+    if (!(prepayOffset >= 0)) throw new BadRequestException('预付款冲抵金额不能为负数');
+    if (prepayOffset > amount) {
+      throw new BadRequestException('预付款冲抵金额不能超过付款申请金额');
+    }
+    // Overpayment guard: prepay_offset cannot exceed available balance
+    if (prepayOffset > 0) {
+      const availableBalance = await this.getAvailablePrepayBalance(factoryId, manager);
+      if (prepayOffset > availableBalance) {
+        throw new BadRequestException(
+          `预付款冲抵金额 ${prepayOffset} 超过可用余额 ${availableBalance.toFixed(2)}`,
+        );
+      }
+    }
+  }
+
+  /**
+   * 挂对账单的付款申请三道闸（事务内锁对账单行，串行化同一对账单的并发建单/改单）：
+   *  ① 状态闸门(H8)：仅「已确认」对账单可申请付款——DRAFT/PENDING 未完成二级审批，直接付款会架空超发闸门/发票校验，且付清联动无法落地；
+   *  ② 工厂一致性(M4)：申请工厂须与对账单供应商一致，防「按 B 厂扣预付款付 A 厂的账」；工时对账无工厂(factory_id 空)不校验；
+   *  ③ 累计申请 ≤ 对账应付（不含已驳回；改草稿时不含本单，excludePrId）。
+   * 此前只有 create 过这三道，updatePaymentRequest 一道都没有：1 元草稿过闸后 PATCH 成全额，重复一次就是双倍付款。
+   */
+  private async _assertReconcileGates(
+    manager: EntityManager,
+    args: { reconcileId: number; factoryId: number; amount: number; excludePrId?: number },
+  ): Promise<Reconciliation> {
+    const rec = await manager.findOne(Reconciliation, {
+      where: { id: args.reconcileId, deleted: 0 },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!rec) throw new NotFoundException(`对账单 #${args.reconcileId} 不存在`);
+    if (rec.status !== ReconciliationStatus.CONFIRMED) {
+      throw new BadRequestException(
+        `对账单 #${args.reconcileId} 未复核确认（当前状态 ${rec.status}），不可申请付款`,
+      );
+    }
+    if (rec.factory_id != null && Number(rec.factory_id) !== Number(args.factoryId)) {
+      throw new BadRequestException(
+        `付款工厂 #${args.factoryId} 与对账单 #${args.reconcileId} 归属工厂 #${rec.factory_id} 不一致`,
+      );
+    }
+    const existing = await manager.find(PaymentRequest, {
+      where: { reconcile_id: args.reconcileId, deleted: 0 },
+    });
+    const requested = existing
+      .filter((p) => p.approval_status !== PaymentApprovalStatus.REJECTED)
+      .filter((p) => args.excludePrId == null || Number(p.id) !== Number(args.excludePrId))
+      .reduce((s, p) => s + +p.amount, 0);
+    if (requested + args.amount > +rec.total_amount + 0.01) {
+      throw new BadRequestException(
+        `累计付款申请 ${(requested + args.amount).toFixed(2)} 超过对账应付 ${(+rec.total_amount).toFixed(2)}（已申请 ${requested.toFixed(2)}，本次 ${args.amount}）`,
+      );
+    }
+    return rec;
   }
 
   // ——————————————————————————————————————————
@@ -120,20 +200,7 @@ export class PaymentService {
   // ——————————————————————————————————————————
   async createPaymentRequest(dto: CreatePaymentRequestDto, createdBy: number): Promise<PaymentRequest> {
     const prepayOffset = dto.prepay_offset ?? 0;
-
-    if (prepayOffset > dto.amount) {
-      throw new BadRequestException('预付款冲抵金额不能超过付款申请金额');
-    }
-
-    // Overpayment guard: prepay_offset cannot exceed available balance
-    if (prepayOffset > 0) {
-      const availableBalance = await this.getAvailablePrepayBalance(dto.factory_id);
-      if (prepayOffset > availableBalance) {
-        throw new BadRequestException(
-          `预付款冲抵金额 ${prepayOffset} 超过可用余额 ${availableBalance.toFixed(2)}`,
-        );
-      }
-    }
+    await this._assertPrepayOffset(dto.factory_id, dto.amount, prepayOffset);
 
     const prefix = dto.type === ReconcileType.NO_CONTRACT
       ? `${NUM_PREFIX.PAYMENT}-NC`
@@ -148,36 +215,10 @@ export class PaymentService {
       // 此前只有手填的 dto.related_style_no，合同类付款一律为空，结算那边自然一条也带不出来。
       let recStyleNo: string | null = null;
       if (dto.reconcile_id) {
-        const rec = await manager.findOne(Reconciliation, {
-          where: { id: dto.reconcile_id, deleted: 0 },
-          lock: { mode: 'pessimistic_write' },
+        // 三道闸（状态/工厂一致/累计≤应付）与改草稿共用一份，见 _assertReconcileGates
+        const rec = await this._assertReconcileGates(manager, {
+          reconcileId: dto.reconcile_id, factoryId: dto.factory_id, amount: dto.amount,
         });
-        if (!rec) throw new NotFoundException(`对账单 #${dto.reconcile_id} 不存在`);
-        // 状态闸门(H8):仅「已确认」对账单可建付款申请——DRAFT/PENDING 未完成二级审批,
-        // 直接付款会架空超发闸门/发票校验,且付清联动(CONFIRMED→PAID)无法落地
-        if (rec.status !== ReconciliationStatus.CONFIRMED) {
-          throw new BadRequestException(
-            `对账单 #${dto.reconcile_id} 未复核确认（当前状态 ${rec.status}），不可申请付款`,
-          );
-        }
-        // 工厂一致性(M4):申请的 factory_id 必须与对账单供应商一致,
-        // 防「按 B 厂扣预付款付 A 厂的账」;工时对账无工厂(factory_id 空)不校验
-        if (rec.factory_id != null && Number(rec.factory_id) !== Number(dto.factory_id)) {
-          throw new BadRequestException(
-            `付款工厂 #${dto.factory_id} 与对账单 #${dto.reconcile_id} 归属工厂 #${rec.factory_id} 不一致`,
-          );
-        }
-        const existing = await manager.find(PaymentRequest, {
-          where: { reconcile_id: dto.reconcile_id, deleted: 0 },
-        });
-        const requested = existing
-          .filter((p) => p.approval_status !== PaymentApprovalStatus.REJECTED)
-          .reduce((s, p) => s + +p.amount, 0);
-        if (requested + dto.amount > +rec.total_amount + 0.01) {
-          throw new BadRequestException(
-            `累计付款申请 ${(requested + dto.amount).toFixed(2)} 超过对账应付 ${(+rec.total_amount).toFixed(2)}（已申请 ${requested.toFixed(2)}，本次 ${dto.amount}）`,
-          );
-        }
         recStyleNo = rec.style_no ?? null;
         // 账期/到期日从合同带入（设计稿 06：账期取合同结算条款；到期日=出货日+账期，可人工改）
         if (rec.contract_id) {
@@ -212,15 +253,15 @@ export class PaymentService {
   }
 
   // ===== 分批付款（设计稿 06 v1.1）：多次付款自动累计已付/未付，余额=0 整单转已付清 =====
-  async addPaymentRecord(
-    id: number,
-    dto: { pay_method?: string; pay_date: string; amount: number; slip_url?: string; remark?: string },
-    userId: number,
-  ) {
+  async addPaymentRecord(id: number, dto: AddPaymentRecordDto, userId: number) {
     // 水单必填(P3#40/对账E2):付款动作必须留水单凭证
     if (!dto?.slip_url) throw new BadRequestException('请上传银行水单后再登记付款');
-    if (!(dto.amount > 0)) throw new BadRequestException('本次付款金额须大于 0');
+    // B057：控制器此前 body 是 any，"5000" 这种字符串会让 paidTotal + amount 变成字符串拼接；
+    // 现在 DTO 已 @Type(() => Number)，这里再显式转数，service 单独被调用时也不吃字符串
+    const amount = Number(dto.amount);
+    if (!(amount > 0)) throw new BadRequestException('本次付款金额须大于 0');
     if (!dto.pay_date) throw new BadRequestException('请选择付款日期'); // '' 写 DATE NOT NULL 列必 500，前置拦截（举一反三 B8）
+    if (!isRealYmd(dto.pay_date)) throw new BadRequestException('付款日期格式不正确（应为 YYYY-MM-DD）'); // B127
     return this.dataSource.transaction(async (manager) => {
       const pr = await manager.findOne(PaymentRequest, {
         where: { id, deleted: 0 },
@@ -236,9 +277,9 @@ export class PaymentService {
       }
       const payable = +(pr.actual_pay ?? pr.amount); // 应付总额
       const paidTotal = +(pr.paid_total ?? 0);
-      if (paidTotal + dto.amount > payable + 0.01) {
+      if (paidTotal + amount > payable + 0.01) {
         throw new BadRequestException(
-          `本次付款后累计 ${(paidTotal + dto.amount).toFixed(2)} 超过应付总额 ${payable.toFixed(2)}（已付 ${paidTotal.toFixed(2)}）`,
+          `本次付款后累计 ${(paidTotal + amount).toFixed(2)} 超过应付总额 ${payable.toFixed(2)}（已付 ${paidTotal.toFixed(2)}）`,
         );
       }
 
@@ -246,13 +287,13 @@ export class PaymentService {
         pr_id: id,
         pay_method: dto.pay_method || 'BANK', // '' 写 ENUM 列 1265（举一反三 B8）
         pay_date: dto.pay_date,
-        amount: +(+dto.amount).toFixed(4),
+        amount: +amount.toFixed(4),
         slip_url: dto.slip_url ?? null,
         remark: dto.remark ?? null,
         created_by: userId,
       }));
 
-      pr.paid_total = +(paidTotal + dto.amount).toFixed(4);
+      pr.paid_total = +(paidTotal + amount).toFixed(4);
       // 余额=0（±0.01）→ 整单转已付清 + 联动对账单已付款
       if (payable - pr.paid_total <= 0.01) {
         pr.approval_status = PaymentApprovalStatus.PAID;
@@ -393,7 +434,13 @@ export class PaymentService {
       r.contract_no = meta?.contract_no ?? null;
       r.style_no = r.related_style_no || meta?.style_no || null;
       r.records = byPr.get(+r.id) ?? [];
-      r.paid_sum = +(r.records as any[]).reduce((sn: number, x: any) => sn + (Number(x.amount) || 0), 0).toFixed(2);
+      // B008：markPaid 现在会同步补一条实付记录；但在此之前「确认付款」只写 paid_total 不留流水，
+      // 这些历史已付清单据若只按流水合计，账单上会全额躺在「未付」里。状态 PAID 就是付清了——
+      // 没有流水的按 paid_total（早期为空则按应付）计已付，不让供应商拿着账单来要一笔已经付过的钱。
+      const recordSum = (r.records as any[]).reduce((sn: number, x: any) => sn + (Number(x.amount) || 0), 0);
+      const payableOf = r.actual_pay != null ? Number(r.actual_pay) || 0 : (Number(r.amount) || 0) - (Number(r.prepay_offset) || 0);
+      const paidNoRecords = r.approval_status === PaymentApprovalStatus.PAID ? (Number(r.paid_total) || payableOf) : 0;
+      r.paid_sum = +((r.records as any[]).length ? recordSum : paidNoRecords).toFixed(2);
     });
 
     // 预付款/对账单的合同号
@@ -439,16 +486,23 @@ export class PaymentService {
     };
   }
 
+  // B065 同类：状态流转「先查后存」改为事务内锁行再判断——与 approve/markPaid 同一范式，
+  // 否则「提交」与「改草稿」并发时，改单读到的还是草稿、写回去就把已进审批的金额换掉了
   async submitPaymentRequest(id: number, userId: number): Promise<PaymentRequest> {
-    const pr = await this.prRepo.findOne({ where: { id, deleted: 0 } });
-    if (!pr) throw new NotFoundException(`付款申请 #${id} 不存在`);
-    if (pr.approval_status !== PaymentApprovalStatus.DRAFT) {
-      throw new BadRequestException('只有草稿状态才可提交');
-    }
-    pr.approval_status = PaymentApprovalStatus.PENDING;
-    pr.submitted_by = userId;
-    pr.submitted_at = new Date();
-    return this.prRepo.save(pr);
+    return this.dataSource.transaction(async (manager) => {
+      const pr = await manager.findOne(PaymentRequest, {
+        where: { id, deleted: 0 },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!pr) throw new NotFoundException(`付款申请 #${id} 不存在`);
+      if (pr.approval_status !== PaymentApprovalStatus.DRAFT) {
+        throw new BadRequestException('只有草稿状态才可提交');
+      }
+      pr.approval_status = PaymentApprovalStatus.PENDING;
+      pr.submitted_by = userId;
+      pr.submitted_at = new Date();
+      return manager.save(PaymentRequest, pr);
+    });
   }
 
   async approvePaymentRequest(id: number, userId: number): Promise<PaymentRequest> {
@@ -519,12 +573,30 @@ export class PaymentService {
       if (pr.approval_status !== PaymentApprovalStatus.APPROVED) {
         throw new BadRequestException('只有已审批状态才可标记付款');
       }
+      const payable = +(pr.actual_pay ?? pr.amount);
+      const paidBefore = +(pr.paid_total ?? 0);
       pr.approval_status = PaymentApprovalStatus.PAID;
       pr.slip_url = slipUrl;
       pr.paid_by = paidBy;
       pr.slip_uploaded_at = new Date();
-      pr.paid_total = +(pr.actual_pay ?? pr.amount); // 一次性付清兼容口径：已付=应付
+      pr.paid_total = payable; // 一次性付清兼容口径：已付=应付
       const saved = await manager.save(PaymentRequest, pr);
+
+      // B008：工厂账单的已付/未付只统计 payment_record；此前「确认付款」只写 paid_total 不留流水，
+      // 导出供应商账单时这笔仍全额躺在「未付合计」里。这里把差额（应付−此前分批已付）补成一条实付记录，
+      // 与分批付款的口径对齐；已被分批付满（差额≤0）就不再补空记录。
+      const remaining = +(payable - paidBefore).toFixed(4);
+      if (remaining > 0) {
+        await manager.save(PaymentRecord, manager.create(PaymentRecord, {
+          pr_id: id,
+          pay_method: 'BANK',
+          pay_date: todayLocal(),
+          amount: remaining,
+          slip_url: slipUrl,
+          remark: '确认付款（一次性付清）',
+          created_by: paidBy,
+        }));
+      }
 
       // 付款完成后联动关联对账单进入已付款状态（系统开发手册·状态流转规则）
       if (pr.reconcile_id) {
@@ -547,51 +619,60 @@ export class PaymentService {
    */
   async updatePaymentRequest(
     id: number,
-    dto: Partial<CreatePaymentRequestDto>,
+    dto: UpdatePaymentRequestDto,
     user: { id: number; role?: string },
   ): Promise<PaymentRequest> {
-    const pr = await this.prRepo.findOne({ where: { id, deleted: 0 } });
-    if (!pr) throw new NotFoundException(`付款申请 #${id} 不存在`);
-    if (pr.approval_status !== PaymentApprovalStatus.DRAFT) {
-      throw new BadRequestException(
-        `只有草稿状态可以修改（当前 ${pr.approval_status}）；已提交的请先驳回，已付款的不可修改`,
-      );
-    }
-    // 【用 isAdminRole，别手写 role === ADMIN】主管权限视同 ADMIN（2026-07-22 拍板）；
-    // 手写比较会漏掉 SUPERVISOR：前端按 hasRole(ADMIN) 把「编辑」按钮显示给主管、
-    // 控制器的 RolesGuard 也放行，结果卡在这一行 403——按钮看得见、点不动。
-    // 2026-08-13 由前端错误上报抓到（主管点了 3 次）。
-    const privileged = isAdminRole(user.role) || user.role === UserRole.FINANCE;
-    if (!privileged && Number(pr.created_by) !== Number(user.id)) {
-      throw new ForbiddenException('只能修改自己创建的付款申请草稿');
-    }
-    // 冲抵预付不能超过该工厂可用余额——与创建时同一道闸门，改单同样要过
-    const factoryId = dto.factory_id ?? pr.factory_id;
-    const offset = dto.prepay_offset ?? +pr.prepay_offset;
-    if (offset) {
-      const balance = await this.getAvailablePrepayBalance(factoryId);
-      if (offset > balance + 0.0001) {
-        throw new BadRequestException(`冲抵预付 ${offset} 超过该工厂可用预付余额 ${balance.toFixed(2)}`);
+    // B009/B010/B011（2026-09-20 审查）：改草稿此前一道闸都不过——1 元草稿建成后 PATCH 成全额可双倍付款、
+    // 改 factory_id 能把钱付给别的厂、prepay_offset 传负数实付反而比申请额多。
+    // 现在与 create 共用同一组闸门，并在事务内锁申请行 + 对账单行（B065 同类：先查后存无锁）。
+    return this.dataSource.transaction(async (manager) => {
+      const pr = await manager.findOne(PaymentRequest, {
+        where: { id, deleted: 0 },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!pr) throw new NotFoundException(`付款申请 #${id} 不存在`);
+      if (pr.approval_status !== PaymentApprovalStatus.DRAFT) {
+        throw new BadRequestException(
+          `只有草稿状态可以修改（当前 ${pr.approval_status}）；已提交的请先驳回，已付款的不可修改`,
+        );
       }
-    }
-    const amount = dto.amount ?? +pr.amount;
-    if (amount <= 0) throw new BadRequestException('申请金额须大于 0');
+      // 【用 isAdminRole，别手写 role === ADMIN】主管权限视同 ADMIN（2026-07-22 拍板）；
+      // 手写比较会漏掉 SUPERVISOR：前端按 hasRole(ADMIN) 把「编辑」按钮显示给主管、
+      // 控制器的 RolesGuard 也放行，结果卡在这一行 403——按钮看得见、点不动。
+      // 2026-08-13 由前端错误上报抓到（主管点了 3 次）。
+      const privileged = isAdminRole(user.role) || user.role === UserRole.FINANCE;
+      if (!privileged && Number(pr.created_by) !== Number(user.id)) {
+        throw new ForbiddenException('只能修改自己创建的付款申请草稿');
+      }
+      const factoryId = Number(dto.factory_id ?? pr.factory_id);
+      const offset = Number(dto.prepay_offset ?? pr.prepay_offset ?? 0);
+      const amount = Number(dto.amount ?? pr.amount);
+      if (!(amount > 0)) throw new BadRequestException('申请金额须大于 0');
+      // 冲抵预付：不能为负、不超申请额、不超该工厂可用余额——与创建时同一道闸门，改单同样要过
+      await this._assertPrepayOffset(factoryId, amount, offset, manager);
+      // 挂了对账单的：工厂须与对账单一致（改 factory_id 绕不过去）、累计申请（不含本单）≤ 对账应付
+      if (pr.reconcile_id) {
+        await this._assertReconcileGates(manager, {
+          reconcileId: +pr.reconcile_id, factoryId, amount, excludePrId: +pr.id,
+        });
+      }
 
-    Object.assign(pr, {
-      factory_id: factoryId,
-      amount,
-      prepay_offset: offset,
-      actual_pay: +(amount - offset).toFixed(4),
-      description: dto.description ?? pr.description,
-      bank_name: dto.bank_name ?? pr.bank_name,
-      bank_account: dto.bank_account ?? pr.bank_account,
-      invoice_no: dto.invoice_no ?? pr.invoice_no,     // #92
-      invoice_url: dto.invoice_url ?? pr.invoice_url,
-      related_style_no: dto.related_style_no ?? pr.related_style_no,
-      account_period_days: dto.account_period_days ?? pr.account_period_days,
-      due_date: (dto.due_date ?? pr.due_date) as any,
+      Object.assign(pr, {
+        factory_id: factoryId,
+        amount,
+        prepay_offset: offset,
+        actual_pay: +(amount - offset).toFixed(4),
+        description: dto.description ?? pr.description,
+        bank_name: dto.bank_name ?? pr.bank_name,
+        bank_account: dto.bank_account ?? pr.bank_account,
+        invoice_no: dto.invoice_no ?? pr.invoice_no,     // #92
+        invoice_url: dto.invoice_url ?? pr.invoice_url,
+        related_style_no: dto.related_style_no ?? pr.related_style_no,
+        account_period_days: dto.account_period_days ?? pr.account_period_days,
+        due_date: (dto.due_date ?? pr.due_date) as any,
+      });
+      return manager.save(PaymentRequest, pr);
     });
-    return this.prRepo.save(pr);
   }
 
   async removePaymentRequest(id: number): Promise<void> {

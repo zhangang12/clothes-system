@@ -11,6 +11,9 @@ const localStorageMock = (() => {
     setItem: (key: string, value: string) => { store[key] = value; },
     removeItem: (key: string) => { delete store[key]; },
     clear: () => { store = {}; },
+    // 登出要按前缀遍历清草稿（B144），真 Storage 的 length/key() 得有
+    get length() { return Object.keys(store).length; },
+    key: (i: number) => Object.keys(store)[i] ?? null,
   };
 })();
 
@@ -19,6 +22,7 @@ describe('auth store', () => {
     // Replace localStorage with our mock so the store reads empty state
     vi.stubGlobal('localStorage', localStorageMock);
     localStorageMock.clear();
+    sessionStorage.clear();
     setActivePinia(createPinia());
   });
 
@@ -57,6 +61,32 @@ describe('auth store', () => {
       expect(store.token).toBeNull();
       expect(store.role).toBeNull();
       expect(store.realName).toBeNull();
+    });
+
+    // ── B144：同一浏览器标签页换账号登录，列表还原上一个人的关键词/页码、
+    //    编辑页还弹出上一个人的「未保存草稿」。登出时一并清掉。
+    it('B144 登出清掉列表筛选记忆（i9.list.*，sessionStorage）', () => {
+      sessionStorage.setItem('i9.list.orders', JSON.stringify({ query: { keyword: '上一个人的款号', page: 3 } }));
+      sessionStorage.setItem('i9.list.payments', JSON.stringify({ prQuery: { factory_id: 7 } }));
+      sessionStorage.setItem('i9.tabs', '[]'); // 页签由 tabs store 自己管，不归这里
+      const store = useAuthStore();
+      store.setAuth({ access_token: 'tok', role: UserRole.BUSINESS, real_name: '王五' });
+      store.clearAuth();
+
+      expect(sessionStorage.getItem('i9.list.orders')).toBeNull();
+      expect(sessionStorage.getItem('i9.list.payments')).toBeNull();
+      expect(sessionStorage.getItem('i9.tabs')).toBe('[]');
+    });
+
+    it('B144 登出清掉本地草稿（i9.draft.*），换账号不会弹出上一个人的未保存草稿', () => {
+      localStorageMock.setItem('i9.draft./orders/5/edit', '{"t":1,"data":{"a":"上一个人填的"}}');
+      localStorageMock.setItem('i9.colw.orders', '{"款号":200}'); // 列宽是个人偏好，不清
+      const store = useAuthStore();
+      store.setAuth({ access_token: 'tok', role: UserRole.FINANCE, real_name: '李四' });
+      store.clearAuth();
+
+      expect(localStorageMock.getItem('i9.draft./orders/5/edit')).toBeNull();
+      expect(localStorageMock.getItem('i9.colw.orders')).toBe('{"款号":200}');
     });
 
     it('removes all keys from localStorage', () => {

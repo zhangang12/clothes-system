@@ -11,6 +11,7 @@ import { OrderService } from './order.service';
 import { maskOrder } from '../../common/masking/field-mask';
 import { CreateOrderDto, AddShipmentDto } from './dto/create-order.dto';
 import { QueryOrderDto } from './dto/query-order.dto';
+import { UpdateOrderDto, UpdateMatrixDto } from './dto/update-order.dto';
 
 @ApiTags('订单管理')
 @ApiBearerAuth()
@@ -55,7 +56,7 @@ export class OrderController {
   @Put(':id')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
   @ApiOperation({ summary: '编辑订单（草稿状态）' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: Partial<CreateOrderDto>) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateOrderDto) {
     return this.service.update(id, dto);
   }
 
@@ -97,7 +98,7 @@ export class OrderController {
   @Patch(':id/matrix')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
   @ApiOperation({ summary: '更新尺码矩阵' })
-  updateMatrix(@Param('id', ParseIntPipe) id: number, @Body() body: { matrix_data: Record<string, unknown> }) {
+  updateMatrix(@Param('id', ParseIntPipe) id: number, @Body() body: UpdateMatrixDto) {
     return this.service.updateMatrix(id, body.matrix_data);
   }
 

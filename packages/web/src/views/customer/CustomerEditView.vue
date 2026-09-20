@@ -130,6 +130,7 @@ import type { FormInstance, FormRules } from 'element-plus';
 import { Back, Check, Plus, Minus, CopyDocument } from '@element-plus/icons-vue';
 import { ElButton, ElSelect, ElOption } from 'element-plus';
 import { customerApi } from '@/api/customer';
+import { todayStr } from '@/utils/format';
 import DictField from '@/components/DictSelect.vue';
 import { useAuthStore } from '@/stores/auth';
 import { factoryApi } from '@/api/factory';
@@ -183,7 +184,8 @@ const form = reactive<any>({
   customerNo: '', name: '', type: '', relatedMiddleman: '', tradeCountry: '', countryRegion: '',
   city: '', homepage: '', address: '', priceTerms: '', settlementMethod: '', grade: '',
   cooperationLevel: '', customerSource: '', paymentDays: '', businessScope: '', salesperson: authStore.realName || '',
-  developDate: new Date().toISOString().slice(0, 10), currency: 'USD', spare1: '', spare2: '', spare3: '',
+  // 本地日期（B097）：toISOString 是 UTC 日期，早 8 点前建的客户开发时间会是昨天
+  developDate: todayStr(), currency: 'USD', spare1: '', spare2: '', spare3: '',
   deliveryAddress: '', frontMark: '', sideMark: '', innerBoxText: '', customerRemark: '', commissionRate: undefined as number | undefined,
   contacts: [emptyContact()], banks: [emptyBank()], expresses: [emptyExpress()],
 });
@@ -282,14 +284,17 @@ function buildDto() {
     city: txt(form.city), homepage: txt(form.homepage), address: txt(form.address),
     priceTerms: txt(form.priceTerms), settlementMethod: txt(form.settlementMethod),
     grade: form.grade || undefined, cooperationLevel: txt(form.cooperationLevel),
-    customerSource: txt(form.customerSource), paymentDays: num(form.paymentDays),
+    // 数字清空要发 null 才清得掉（B100）：后端 mapDto 只在 `!== undefined` 时才写，发 undefined = 不改。
+    // customer.payment_days / commission_rate 都是 nullable，DTO 上 @IsOptional 对 null 同样放行
+    customerSource: txt(form.customerSource), paymentDays: num(form.paymentDays) ?? null,
     businessScope: txt(form.businessScope), salesperson: txt(form.salesperson),
     developDate: dateOrNull(form.developDate), currency: form.currency || undefined,
     spare1: txt(form.spare1), spare2: txt(form.spare2), spare3: txt(form.spare3),
     deliveryAddress: txt(form.deliveryAddress), frontMark: txt(form.frontMark),
     sideMark: txt(form.sideMark), innerBoxText: txt(form.innerBoxText),
     customerRemark: txt(form.customerRemark),
-    commissionRate: form.commissionRate ?? undefined,
+    // 同 B100：清空「默认佣金率」要真能清掉，否则重开还在、还会继续自动带进报价
+    commissionRate: form.commissionRate ?? null,
     contacts: clean(form.contacts, ['name', 'mobile', 'phone']),
     banks: clean(form.banks, ['bankName', 'bankAccount', 'accountName']),
     expresses: clean(form.expresses, ['company', 'account']),

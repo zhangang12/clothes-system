@@ -4,23 +4,23 @@
     <el-card class="search-card">
       <el-form :model="query" inline>
         <el-form-item label="关键词">
-          <el-input v-model="query.keyword" placeholder="结算单号 / 款号" clearable style="width:180px" @clear="load" />
+          <el-input v-model="query.keyword" placeholder="结算单号 / 款号" clearable style="width:180px" @clear="search" @keyup.enter="search" />
         </el-form-item>
         <el-form-item label="状态">
-          <el-select v-model="query.status" clearable placeholder="全部" style="width:110px" @change="load">
+          <el-select v-model="query.status" clearable placeholder="全部" style="width:110px" @change="search">
             <el-option label="待收汇" value="DRAFT" />
             <el-option label="已结算" value="CONFIRMED" />
           </el-select>
         </el-form-item>
         <el-form-item label="订单ID">
-          <el-input-number v-model="query.order_id" :min="1" :controls="false" placeholder="订单ID" style="width:100px" @change="load" />
+          <el-input-number v-model="query.order_id" :min="1" :controls="false" placeholder="订单ID" style="width:100px" @change="search" />
         </el-form-item>
         <el-form-item label="高级">
-          <el-checkbox v-model="onlyLoss" @change="load">仅看亏损</el-checkbox>
-          <el-checkbox v-model="onlyRecalc" @change="load" style="margin-left:8px">仅看待重算</el-checkbox>
+          <el-checkbox v-model="onlyLoss" @change="search">仅看亏损</el-checkbox>
+          <el-checkbox v-model="onlyRecalc" @change="search" style="margin-left:8px">仅看待重算</el-checkbox>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" :icon="Search" @click="load">搜索</el-button>
+          <el-button type="primary" :icon="Search" @click="search">搜索</el-button>
           <el-button :icon="Refresh" @click="reset">重置</el-button>
         </el-form-item>
       </el-form>
@@ -108,6 +108,7 @@
             <el-button
               v-if="row.status === 'DRAFT' && canEdit"
               link type="success" size="small"
+              :loading="confirmingId === row.id" :disabled="confirmingId != null"
               @click="doConfirm(row)"
             >确认</el-button>
             <el-popconfirm v-if="row.status === 'DRAFT' && isAdmin" title="确认删除？" @confirm="doRemove(row.id)">
@@ -384,7 +385,11 @@
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="订单/款号" prop="order_id">
-              <el-select v-model="createForm.order_id" filterable placeholder="搜款号或订单号选择" style="width:100%">
+              <!-- 远程搜索（B102）：原来只拉前 100 张当「全部」，订单超过 100 张后最老的从下拉里消失 -->
+              <el-select
+                v-model="createForm.order_id" filterable remote reserve-keyword :remote-method="searchOrders" :loading="ordersLoading"
+                placeholder="输入款号或订单号搜索" style="width:100%"
+              >
                 <el-option v-for="o in orders" :key="o.id" :label="`${o.style_no || '无款号'} · ${o.order_no}`" :value="o.id" />
               </el-select>
             </el-form-item>
@@ -605,6 +610,7 @@ import FilePreviewDialog from '@/components/FilePreviewDialog.vue';
 import type { FormInstance, FormRules } from 'element-plus';
 import { settlementApi } from '@/api/settlement';
 import { orderApi } from '@/api/order';
+import { useRemoteOptions, listParams } from '@/utils/remoteOptions';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole, PAYMENT_SLIP_ROLES } from '@i9/types';
 import FileUpload from '@/components/FileUpload.vue';
@@ -661,6 +667,8 @@ async function load() {
   } finally { loading.value = false; }
 }
 
+// 点「搜索」/改筛选条件时页码归 1（B107）：翻到第 3 页再搜，结果不足 3 页会得到一张空表
+function search() { query.page = 1; load(); }
 function reset() {
   Object.assign(query, { keyword: '', status: undefined, order_id: undefined, page: 1 });
   onlyLoss.value = false;
@@ -668,10 +676,11 @@ function reset() {
   load();
 }
 
-const orders = ref<any[]>([]);
-async function loadOrders() {
-  try { orders.value = ((await orderApi.list({ page: 1, size: 100 })) as any).data ?? []; } catch { orders.value = []; }
-}
+// 关联订单下拉走后端搜索（B102）：进页面先摆最近一批，输入时按款号/订单号去后端搜
+const { options: orders, loading: ordersLoading, search: searchOrders } = useRemoteOptions<any>({
+  fetch: async (kw) => ((await orderApi.list(listParams(kw))) as any).data ?? [],
+});
+const loadOrders = () => searchOrders('');
 onMounted(async () => {
   await Promise.all([load(), loadOrders()]);
   // 别的单据跳过来(/settlements/:id/view):自动打开该单详情
@@ -790,11 +799,15 @@ function openEdit() {
   });
   editVisible.value = true;
 }
+// 期间费用/出口退税是 NOT NULL default 0 的列：清空 = 0。el-input-number 清空给的是 null，
+// 后端 `!= null` 才写 → 清空保存无效、只能手改成 0（B115）；这里把清空翻译成 0 发过去
+const FEE_FIELDS = ['freight_fee', 'express_fee', 'sample_fee', 'other_fee', 'tax_refund'] as const;
 async function doUpdate() {
   saving.value = true;
   try {
     const dto: Record<string, unknown> = { ...editForm };
     if (hasReceiptRows.value) delete dto.receipt_usd; // 已有逐笔收汇由后端累计
+    for (const k of FEE_FIELDS) if (dto[k] == null) dto[k] = 0;
     await settlementApi.update(detailData.value.id, dto);
     await reloadDetail();
     ElMessage.success('已保存并重算');
@@ -803,10 +816,24 @@ async function doUpdate() {
   } finally { saving.value = false; }
 }
 
+// 确认结算单要二次确认 + 防重（B161）：一点即确认，回退只能管理员红冲重开
+const confirmingId = ref<number | null>(null);
 async function doConfirm(row: any) {
-  await settlementApi.confirm(row.id);
-  ElMessage.success('已确认结算单');
-  load();
+  if (confirmingId.value != null) return;
+  try {
+    await ElMessageBox.confirm(
+      `确认结算单 ${row.settlement_no ?? ''}？确认后毛利/净利即定稿，如需修改只能由管理员「红冲重开」。`,
+      '确认结算', { confirmButtonText: '确认结算', cancelButtonText: '再看看', type: 'warning' },
+    );
+  } catch { return; }
+  confirmingId.value = row.id;
+  try {
+    await settlementApi.confirm(row.id);
+    ElMessage.success('已确认结算单');
+    load();
+  } catch (e: any) {
+    errToast(e?.response?.data?.msg ?? '确认失败');
+  } finally { confirmingId.value = null; }
 }
 
 async function doRemove(id: number) {
@@ -856,22 +883,28 @@ const previewLoading = ref(false);
 const previewTotal = computed(() => (costPreview.value?.rows ?? [])
   .reduce((s: number, r: any) => s + (+r.amount || 0), 0));
 
+// 【请求序号】连续切两个订单，第一个响应更慢会把第二个订单的出货批/成本预览盖掉（B108）
+let previewSeq = 0;
 watch(() => createForm.order_id, async (oid) => {
+  const mine = ++previewSeq;
   orderShipments.value = [];
   createForm.shipment_ids = [];
   costPreview.value = null;
   if (!oid) return;
   try {
     const res: any = await orderApi.get(oid);
+    if (mine !== previewSeq) return;
     const od = res?.data ?? res;
     orderShipments.value = od?.shipments ?? [];
     if (od?.currency) createForm.currency = od.currency;   // #90：币种默认跟订单走
-  } catch { orderShipments.value = []; }
+  } catch { if (mine === previewSeq) orderShipments.value = []; }
+  if (mine !== previewSeq) return;
   previewLoading.value = true;
   try {
     const r: any = await settlementApi.costPreview(oid);
-    costPreview.value = r?.data ?? r;
-  } catch { costPreview.value = null; } finally { previewLoading.value = false; }
+    if (mine === previewSeq) costPreview.value = r?.data ?? r;
+  } catch { if (mine === previewSeq) costPreview.value = null; }
+  finally { if (mine === previewSeq) previewLoading.value = false; }
 });
 
 // 同步发票收汇(Q12/Q3):按订单在各发票款项占比分摊逐笔收汇

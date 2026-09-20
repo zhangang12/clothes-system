@@ -11,6 +11,7 @@ import { SampleService } from './sample.service';
 import {
   CreateSampleDto, PushPatternmakerDto, PatternmakerSaveDto, ShipSampleDto, ImportSampleDto,
 } from './dto/create-sample.dto';
+import { UpdateSampleDto } from './dto/update-sample.dto';
 import { QuerySampleDto } from './dto/query-sample.dto';
 
 @ApiTags('样衣管理')
@@ -55,7 +56,7 @@ export class SampleController {
   @Put(':id')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
   @ApiOperation({ summary: '更新样衣基本信息（业务视图）' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: Partial<CreateSampleDto>, @Request() req: any) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateSampleDto, @Request() req: any) { // 真 DTO 才过 ValidationPipe(B006 同类)
     return this.service.update(id, dto, req.user.id);
   }
 

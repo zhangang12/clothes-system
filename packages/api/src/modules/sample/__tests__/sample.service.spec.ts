@@ -12,6 +12,7 @@ import { Customer } from '../../customer/customer.entity';
 import { Quotation } from '../../quote/quotation.entity';
 import { SampleService } from '../sample.service';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
+import { toLocalDateStr } from '../../../common/utils/local-date';
 import { SampleStatus } from '@i9/types';
 
 const mockRepo = {
@@ -36,6 +37,9 @@ const mockManager = {
   create: jest.fn().mockImplementation((_e: any, v: any) => v),
   save: jest.fn().mockImplementation((_e: any, v: any) => Promise.resolve(Array.isArray(v) ? v : { ...v, id: v.id ?? 1 })),
   delete: jest.fn().mockResolvedValue({}),
+  find: jest.fn().mockResolvedValue([]),      // patternmakerSave 校验材料行归属(B077)
+  findOne: jest.fn(),                          // markShipped 加锁重查(B065)
+  update: jest.fn().mockResolvedValue({}),     // 版师实耗逐行 update 进事务(B077)
 };
 const mockDataSource = {
   transaction: jest.fn((cb: any) => cb(mockManager)),
@@ -53,6 +57,8 @@ describe('SampleService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockManager.find.mockReset().mockResolvedValue([]);
+    mockManager.findOne.mockReset();
     mockCustomerRepo.findOne.mockResolvedValue({ id: 1, deleted: 0, name: '中间商A', customer_no: 'CN001' });
     mockQuoteRepo.find.mockResolvedValue([]);
     mockDataSource.transaction.mockImplementation((cb: any) => cb(mockManager));
@@ -233,20 +239,21 @@ describe('SampleService', () => {
   });
 
   describe('patternmakerSave()', () => {
+    // 版师保存现在整体在一个事务里(B077)，主表落库走 manager.save(SampleGarment, …)
+    const savedGarment = () => mockManager.save.mock.calls.find((c: any[]) => c[0] === SampleGarment)?.[1];
+
     it('UT-SAM-03: piece + unit price → labor amount + 已对账', async () => {
       mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.SAMPLING, version: 1, deleted: 0 });
       await service.patternmakerSave(1, { pieceCount: 3, laborUnitPrice: 50 } as any, 7);
-      expect(mockRepo.save).toHaveBeenCalledWith(expect.objectContaining({
+      expect(savedGarment()).toMatchObject({
         piece_count: 3, labor_unit_price: 50, labor_amount: 150, status: SampleStatus.RECONCILED,
-      }));
+      });
     });
 
     it('UT-SAM-04: return no → 已寄回 + return date', async () => {
       mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.SAMPLING, version: 1, deleted: 0 });
       await service.patternmakerSave(1, { returnNo: 'RT99' } as any, 7);
-      expect(mockRepo.save).toHaveBeenCalledWith(expect.objectContaining({
-        return_no: 'RT99', status: SampleStatus.RETURNED,
-      }));
+      expect(savedGarment()).toMatchObject({ return_no: 'RT99', status: SampleStatus.RETURNED });
     });
 
     it('UT-SAM-05: piece without unit price throws', async () => {
@@ -260,30 +267,93 @@ describe('SampleService', () => {
       await expect(service.patternmakerSave(1, { pieceCount: 3, laborUnitPrice: 50 } as any, 7))
         .rejects.toThrow(ForbiddenException);
       expect(mockRepo.save).not.toHaveBeenCalled();
+      expect(mockManager.save).not.toHaveBeenCalled();
     });
 
     it('UT-SAM-16: 指派版师本人可保存(bigint 字符串 id 归一匹配)', async () => {
       mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.SAMPLING, version: 1, deleted: 0, patternmaker_id: '5' });
       mockSysUserRepo.findOne.mockResolvedValue({ id: 5, role: 'PATTERNMAKER' });
       await service.patternmakerSave(1, { pieceCount: 3, laborUnitPrice: 50 } as any, 5);
-      expect(mockRepo.save).toHaveBeenCalledWith(expect.objectContaining({
-        piece_count: 3, labor_amount: 150, status: SampleStatus.RECONCILED,
-      }));
+      expect(savedGarment()).toMatchObject({ piece_count: 3, labor_amount: 150, status: SampleStatus.RECONCILED });
+      expect(savedGarment().patternmaker_id).toBe('5'); // 已指派的不动
     });
 
     it('UT-SAM-17: 管理员代保存不受指派限制', async () => {
       mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.SAMPLING, version: 1, deleted: 0, patternmaker_id: 5 });
       mockSysUserRepo.findOne.mockResolvedValue({ id: 1, role: 'ADMIN' });
       await service.patternmakerSave(1, { pieceCount: 3, laborUnitPrice: 50 } as any, 1);
-      expect(mockRepo.save).toHaveBeenCalled();
+      expect(savedGarment()).toBeDefined();
+      expect(savedGarment().patternmaker_id).toBe(5); // 管理员代存不抢指派
+    });
+
+    // B076：未指派版师的样衣，原来任一版师都能写工价
+    it('B076 未指派版师：第一个保存的版师被绑成指派版师并留记录，之后别的版师再存被拒', async () => {
+      const sample: any = { id: 1, status: SampleStatus.SAMPLING, version: 1, deleted: 0, patternmaker_id: null, patternmaker_name: null };
+      mockRepo.findOne.mockResolvedValue(sample);
+      mockSysUserRepo.findOne.mockResolvedValue({ id: 7, role: 'PATTERNMAKER', real_name: '李四' });
+      await service.patternmakerSave(1, { pieceCount: 3, laborUnitPrice: 50 } as any, 7);
+      expect(savedGarment()).toMatchObject({ patternmaker_id: 7, patternmaker_name: '李四', labor_amount: 150 });
+      expect(mockVersionRepo.save).toHaveBeenCalledWith(expect.objectContaining({ action: 'PATTERNMAKER_CLAIM', operator_id: 7 }));
+      // 绑定后（库里 patternmaker_id 已是 7）另一个版师 8 再来 → 403
+      mockRepo.findOne.mockResolvedValue({ ...sample, patternmaker_id: 7 });
+      mockSysUserRepo.findOne.mockResolvedValue({ id: 8, role: 'PATTERNMAKER', real_name: '王五' });
+      await expect(service.patternmakerSave(1, { pieceCount: 1, laborUnitPrice: 1 } as any, 8)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('B076 管理员/未指派：管理员代存不自动绑定', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.SAMPLING, version: 1, deleted: 0, patternmaker_id: null });
+      mockSysUserRepo.findOne.mockResolvedValue({ id: 1, role: 'ADMIN', real_name: '管理员' });
+      await service.patternmakerSave(1, { pieceCount: 3, laborUnitPrice: 50 } as any, 1);
+      expect(savedGarment().patternmaker_id ?? null).toBeNull();
+      expect(mockVersionRepo.save).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'PATTERNMAKER_CLAIM' }));
+    });
+
+    // B077：版师实耗逐行 update 无事务、无 id 的行静默跳过
+    describe('B077 版师实耗行更新', () => {
+      const sample = { id: 1, status: SampleStatus.SAMPLING, version: 1, deleted: 0, patternmaker_id: 7 };
+      beforeEach(() => { mockRepo.findOne.mockResolvedValue(sample); mockManager.find.mockResolvedValue([{ id: 11 }, { id: 12 }]); });
+
+      it('没有 id 的行不再静默消失：整单 400，一行都不写', async () => {
+        await expect(service.patternmakerSave(1, { materials: [{ id: 11, actualUsage: 1 }, { actualUsage: 2 }] } as any, 7))
+          .rejects.toThrow('第 2 行缺少行号');
+        expect(mockManager.update).not.toHaveBeenCalled();
+        expect(mockMaterialRepo.update).not.toHaveBeenCalled();
+        expect(mockQuoteServiceDep.syncFromSample).not.toHaveBeenCalled();
+      });
+
+      it('不属于本样衣的行 id 直接拒绝', async () => {
+        await expect(service.patternmakerSave(1, { materials: [{ id: 11, actualUsage: 1 }, { id: 99, actualUsage: 2 }] } as any, 7))
+          .rejects.toThrow('材料行 #99 不属于该样衣');
+        expect(mockManager.update).not.toHaveBeenCalled();
+      });
+
+      it('正常行：逐行 update 走事务 manager，同步报价也在同一事务里(B075)', async () => {
+        await service.patternmakerSave(1, { materials: [{ id: 11, actualUsage: 1.5, zipperLength: '20cm' }, { id: 12, actualUsage: 2 }] } as any, 7);
+        expect(mockManager.update).toHaveBeenCalledWith(SampleMaterial, { id: 11, sample_id: 1 }, { actual_usage: 1.5, zipper_length: '20cm' });
+        expect(mockManager.update).toHaveBeenCalledWith(SampleMaterial, { id: 12, sample_id: 1 }, { actual_usage: 2, zipper_length: undefined });
+        expect(mockMaterialRepo.update).not.toHaveBeenCalled();
+        expect(mockQuoteServiceDep.syncFromSample).toHaveBeenCalledWith(1, mockManager);
+        expect(savedGarment()).toBeDefined();
+      });
     });
   });
 
   describe('markShipped() / complete()', () => {
     it('UT-SAM-06: markShipped sets 已寄出', async () => {
-      mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.SAMPLING, deleted: 0 });
+      mockManager.findOne.mockResolvedValue({ id: 1, status: SampleStatus.SAMPLING, deleted: 0 });
       await service.markShipped(1, {} as any);
-      expect(mockRepo.save).toHaveBeenCalledWith(expect.objectContaining({ status: SampleStatus.SHIPPED }));
+      expect(mockManager.save).toHaveBeenCalledWith(SampleGarment, expect.objectContaining({ status: SampleStatus.SHIPPED }));
+    });
+
+    it('B065 markShipped 在事务内加 pessimistic_write 锁重查后再判状态', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.SAMPLING, deleted: 0 }); // 事务外的旧读不该被用到
+      mockManager.findOne.mockResolvedValue({ id: 1, status: SampleStatus.RECONCILED, deleted: 0 });
+      await expect(service.markShipped(1, {} as any)).rejects.toThrow('当前状态不允许标记寄出');
+      expect(mockManager.findOne).toHaveBeenCalledWith(SampleGarment, expect.objectContaining({
+        where: { id: 1, deleted: 0 }, lock: { mode: 'pessimistic_write' },
+      }));
+      expect(mockManager.save).not.toHaveBeenCalled();
+      expect(mockRepo.save).not.toHaveBeenCalled();
     });
 
     it('UT-SAM-07: complete sets 已完成', async () => {
@@ -330,6 +400,51 @@ describe('SampleService', () => {
       await service.copy(1, 42);
       const savedArg = mockManager.save.mock.calls[0][1];
       expect(savedArg).toMatchObject({ status: SampleStatus.PENDING, style_no: 'X' });
+    });
+
+    it('B078 复制样衣带上克重与拉齿', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 1, deleted: 0, style_no: 'X', customer_id: 1 });
+      mockMaterialRepo.find.mockResolvedValue([{ item_name: '面料', gram_weight: '350gsm', zipper_teeth: '配色' }]);
+      await service.copy(1, 42);
+      const copied = mockManager.save.mock.calls.find((c: any[]) => c[0] === SampleMaterial)![1];
+      expect(copied[0]).toMatchObject({ item_name: '面料', gram_weight: '350gsm', zipper_teeth: '配色' });
+    });
+  });
+
+  describe('B073 / B075 / B061', () => {
+    it('B073 材料的拉齿 zipperTeeth 要写进 zipper_teeth', async () => {
+      await service.create({
+        middlemanId: 1, styleNo: 'X', categories: '外套',
+        materials: [{ itemName: '拉链', zipperTeeth: '配色', gramWeight: '' }],
+      } as any, 9);
+      const rows = mockManager.save.mock.calls.find((c: any[]) => c[0] === SampleMaterial)![1];
+      expect(rows[0]).toMatchObject({ item_name: '拉链', zipper_teeth: '配色' });
+    });
+
+    it('B075 业务改材料 → 报价同步在样衣事务内、用同一个 manager', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.SAMPLING, version: 1, deleted: 0 });
+      await service.update(1, { materials: [{ itemName: '面料' }] } as any, 10);
+      expect(mockQuoteServiceDep.syncFromSample).toHaveBeenCalledWith(1, mockManager);
+    });
+
+    it('B075 没传材料就不同步', async () => {
+      mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.SAMPLING, version: 1, deleted: 0 });
+      await service.update(1, { recipient: '张三' } as any, 10);
+      expect(mockQuoteServiceDep.syncFromSample).not.toHaveBeenCalled();
+    });
+
+    it('B061 制单日期/寄出日期取本地日历日，不是 UTC 日期', async () => {
+      // 北京时间 09-21 01:30 = UTC 09-20 17:30：UTC 日期与本地日期分叉的时段
+      jest.useFakeTimers({ now: new Date('2026-09-20T17:30:00Z'), doNotFake: ['nextTick', 'setImmediate', 'setTimeout', 'setInterval', 'queueMicrotask'] });
+      try {
+        const expected = toLocalDateStr(new Date());
+        mockRedis.eval.mockResolvedValue(1);
+        await service.create({ middlemanId: 1, styleNo: 'X', categories: '外套', materials: MATERIALS } as any, 9);
+        expect(mockManager.save.mock.calls[0][1].make_date).toBe(expected);
+        mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.PENDING, version: 1, deleted: 0 });
+        await service.pushPatternmaker(1, { materialShipNo: 'SF1' } as any, 10);
+        expect(mockRepo.save.mock.calls.at(-1)![0].material_ship_date).toBe(expected);
+      } finally { jest.useRealTimers(); }
     });
   });
 

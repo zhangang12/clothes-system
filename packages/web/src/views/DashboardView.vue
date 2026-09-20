@@ -15,7 +15,7 @@
     <!-- 单据统计 -->
     <div class="section-title">单据统计</div>
     <div class="stat-grid" v-loading="loading">
-      <div v-for="s in stats" :key="s.route" class="stat-card" :style="{ '--accent': s.color }" @click="goPath(s.route)">
+      <div v-for="s in visibleStats" :key="s.route" class="stat-card" :style="{ '--accent': s.color }" @click="goPath(s.route)">
         <div class="stat-icon"><el-icon :size="22"><component :is="s.icon" /></el-icon></div>
         <div class="stat-body">
           <div class="stat-num">{{ s.count == null ? '—' : s.shown }}</div>
@@ -28,7 +28,7 @@
     <!-- 待处理 -->
     <div class="section-title">待处理事项</div>
     <div class="todo-grid" v-loading="loading">
-      <div v-for="t in todos" :key="t.label" class="todo-card" :class="{ clear: t.count === 0 }" @click="goPath(t.route)">
+      <div v-for="t in visibleTodos" :key="t.label" class="todo-card" :class="{ clear: t.count === 0 }" @click="goPath(t.route)">
         <el-icon v-if="t.count === 0" class="todo-ok"><CircleCheck /></el-icon>
         <div v-else class="todo-num" :class="{ hot: (t.count ?? 0) > 0 }">{{ t.count == null ? '—' : t.shown }}</div>
         <div class="todo-label">{{ t.label }}<span v-if="t.count === 0" class="todo-clear-txt">已清</span></div>
@@ -66,26 +66,35 @@ const hour = new Date().getHours();
 const greeting = hour < 6 ? '凌晨好' : hour < 9 ? '早上好' : hour < 12 ? '上午好' : hour < 14 ? '中午好' : hour < 18 ? '下午好' : '晚上好';
 const today = new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' });
 
-type Card = { label: string; route: string; count: number | null; shown: number; api: () => Promise<unknown>; color?: string; icon?: unknown };
+// menu：该卡片对应的菜单键。后端只读接口已挂 @MenuAccess（payments/settlements/factories/
+// contracts/reconciliations/reports），**没有这个菜单的账号调了必 403**——而 axios 拦截器对非 401
+// 一律 errToast，工作台一进来就冒一片红字（船务默认只有 orders/contracts/reconciliations；
+// 被自定义 menu_keys 的账号同理）。所以卡片按菜单权限过滤：没权限的既不显示、也不发请求，
+// 免得留一张永远是「—」的空卡。
+type Card = { label: string; route: string; menu: string; count: number | null; shown: number; api: () => Promise<unknown>; color?: string; icon?: unknown };
 
 const stats = reactive<Card[]>([
-  { label: '工厂', route: '/factories', color: '#1E3A5F', icon: markRaw(Setting), count: null, shown: 0, api: () => factoryApi.list({ page: 1, size: 1 }) },
-  { label: '客户', route: '/customers', color: '#3E8E7E', icon: markRaw(Avatar), count: null, shown: 0, api: () => customerApi.list({ page: 1, size: 1 }) },
-  { label: '样衣', route: '/samples', color: '#C8901E', icon: markRaw(Goods), count: null, shown: 0, api: () => sampleApi.list({ page: 1, size: 1 }) },
-  { label: '报价', route: '/quotes', color: '#D17A40', icon: markRaw(Document), count: null, shown: 0, api: () => quoteApi.list({ page: 1, size: 1 }) },
-  { label: '订单', route: '/orders', color: '#1E3A5F', icon: markRaw(List), count: null, shown: 0, api: () => orderApi.list({ page: 1, size: 1 }) },
-  { label: '合同', route: '/contracts', color: '#3E8E7E', icon: markRaw(Tickets), count: null, shown: 0, api: () => contractApi.list({ page: 1, size: 1 }) },
-  { label: '对账单', route: '/reconciliations', color: '#C8901E', icon: markRaw(DataAnalysis), count: null, shown: 0, api: () => reconciliationApi.list({ page: 1, size: 1 }) },
-  { label: '付款单', route: '/payments', color: '#C04042', icon: markRaw(CreditCard), count: null, shown: 0, api: () => paymentRequestApi.list({ page: 1, size: 1 }) },
-  { label: '结算单', route: '/settlements', color: '#1E3A5F', icon: markRaw(TrendCharts), count: null, shown: 0, api: () => settlementApi.list({ page: 1, size: 1 }) },
+  { label: '工厂', route: '/factories', menu: 'factories', color: '#1E3A5F', icon: markRaw(Setting), count: null, shown: 0, api: () => factoryApi.list({ page: 1, size: 1 }) },
+  { label: '客户', route: '/customers', menu: 'customers', color: '#3E8E7E', icon: markRaw(Avatar), count: null, shown: 0, api: () => customerApi.list({ page: 1, size: 1 }) },
+  { label: '样衣', route: '/samples', menu: 'samples', color: '#C8901E', icon: markRaw(Goods), count: null, shown: 0, api: () => sampleApi.list({ page: 1, size: 1 }) },
+  { label: '报价', route: '/quotes', menu: 'quotes', color: '#D17A40', icon: markRaw(Document), count: null, shown: 0, api: () => quoteApi.list({ page: 1, size: 1 }) },
+  { label: '订单', route: '/orders', menu: 'orders', color: '#1E3A5F', icon: markRaw(List), count: null, shown: 0, api: () => orderApi.list({ page: 1, size: 1 }) },
+  { label: '合同', route: '/contracts', menu: 'contracts', color: '#3E8E7E', icon: markRaw(Tickets), count: null, shown: 0, api: () => contractApi.list({ page: 1, size: 1 }) },
+  { label: '对账单', route: '/reconciliations', menu: 'reconciliations', color: '#C8901E', icon: markRaw(DataAnalysis), count: null, shown: 0, api: () => reconciliationApi.list({ page: 1, size: 1 }) },
+  { label: '付款单', route: '/payments', menu: 'payments', color: '#C04042', icon: markRaw(CreditCard), count: null, shown: 0, api: () => paymentRequestApi.list({ page: 1, size: 1 }) },
+  { label: '结算单', route: '/settlements', menu: 'settlements', color: '#1E3A5F', icon: markRaw(TrendCharts), count: null, shown: 0, api: () => settlementApi.list({ page: 1, size: 1 }) },
 ]);
 
 const todos = reactive<Card[]>([
-  { label: '草稿报价待发出', route: '/quotes', count: null, shown: 0, api: () => quoteApi.list({ page: 1, size: 1, status: 'DRAFT' }) },
-  { label: '待盖章合同', route: '/contracts', count: null, shown: 0, api: () => contractApi.list({ page: 1, size: 1, portal_status: 'PUSHED' }) },
-  { label: '生产中订单', route: '/orders', count: null, shown: 0, api: () => orderApi.list({ page: 1, size: 1, status: 'PRODUCING' }) },
-  { label: '待审批付款', route: '/payments?tab=request', count: null, shown: 0, api: () => paymentRequestApi.list({ page: 1, size: 1, approval_status: 'PENDING' }) },
+  { label: '草稿报价待发出', route: '/quotes', menu: 'quotes', count: null, shown: 0, api: () => quoteApi.list({ page: 1, size: 1, status: 'DRAFT' }) },
+  { label: '待盖章合同', route: '/contracts', menu: 'contracts', count: null, shown: 0, api: () => contractApi.list({ page: 1, size: 1, portal_status: 'PUSHED' }) },
+  { label: '生产中订单', route: '/orders', menu: 'orders', count: null, shown: 0, api: () => orderApi.list({ page: 1, size: 1, status: 'PRODUCING' }) },
+  { label: '待审批付款', route: '/payments?tab=request', menu: 'payments', count: null, shown: 0, api: () => paymentRequestApi.list({ page: 1, size: 1, approval_status: 'PENDING' }) },
 ]);
+
+// 与侧栏/路由同一份口径（auth.canMenu → resolveMenuKeys），不另写一套判断
+const visibleStats = computed(() => stats.filter((c) => auth.canMenu(c.menu)));
+const visibleTodos = computed(() => todos.filter((c) => auth.canMenu(c.menu)));
 
 function go(name: string) { router.push({ name }); }
 function goPath(p: string) { router.push(p); }
@@ -110,7 +119,8 @@ function countUp(cards: Card[]) {
 }
 
 onMounted(async () => {
-  const all = [...stats, ...todos];
+  // 只打有菜单权限的那些：无权限的接口现在是 403，打了只会在工作台冒红字
+  const all = [...visibleStats.value, ...visibleTodos.value];
   const results = await Promise.allSettled(all.map((s) => s.api()));
   results.forEach((res, i) => { all[i].count = res.status === 'fulfilled' ? totalOf(res.value) : 0; });
   loading.value = false;

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like, In, LessThan, FindOptionsWhere, DataSource } from 'typeorm';
+import { Repository, Like, In, LessThan, FindOptionsWhere, DataSource, EntityManager } from 'typeorm';
 import { SettlementStatus, ReconcileType } from '@i9/types';
 import { Settlement } from './settlement.entity';
 import { SettlementCost } from './settlement-cost.entity';
@@ -14,6 +14,7 @@ import { ReconciliationExpenseItem } from '../reconciliation/reconciliation-expe
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { SysConfigService } from '../../common/config/sys-config.service';
 import { ChangeLogService } from '../../common/changelog/change-log.service';
+import { ChangeLog } from '../../common/changelog/change-log.entity';
 import { ExportInvoiceService } from '../invoice/export-invoice.service';
 import { CreateSettlementDto } from './dto/create-settlement.dto';
 import { AddCostDto } from './dto/add-cost.dto';
@@ -31,8 +32,15 @@ interface CostLike {
   included?: number; // 0=未付不计入
 }
 
+// 含税→不含税的除数（B136 同类）：税率 ≤ -100 时 1+rate/100 ≤ 0，除出来是 Infinity/负数写 decimal 列直接 500；
+// DTO 已把税率限在 0~100，这里再兜历史脏数据——除数不正就按 0 税率（不换算）处理
+const taxDenom = (rate: number) => {
+  const d = 1 + (Number(rate) || 0) / 100;
+  return d > 0 ? d : 1;
+};
+
 const extaxOf = (amount: number, hasInvoice: number | undefined, rate: number) =>
-  hasInvoice === 0 ? amount : amount / (1 + rate / 100);
+  hasInvoice === 0 ? amount : amount / taxDenom(rate);
 
 // 总货款含税/不含税（无票计税：有票按各自税率换不含税，无票按含税全额计入，防毛利虚高）
 // 只统计 included≠0 的行（已确认未付行不计入·结算Q8）；另给可退税不含税采购额（仅有票行）
@@ -41,9 +49,12 @@ function sumCostRows(rows: CostLike[], defaultRate: number) {
   const tax = inc.reduce((s, c) => s + +c.amount, 0);
   const extax = inc.reduce((s, c) => s + extaxOf(+c.amount, c.has_invoice, c.tax_rate != null ? +c.tax_rate : defaultRate), 0);
   const refundableExtax = inc.reduce(
-    (s, c) => s + (c.has_invoice === 0 ? 0 : +c.amount / (1 + (c.tax_rate != null ? +c.tax_rate : defaultRate) / 100)), 0);
+    (s, c) => s + (c.has_invoice === 0 ? 0 : +c.amount / taxDenom(c.tax_rate != null ? +c.tax_rate : defaultRate)), 0);
   return { rows: inc.length, tax: r4(tax), extax: r4(extax), refundableExtax: r4(refundableExtax) };
 }
+
+// 期间费用四列（B085：刷新付款汇总时，人工定过的不被归集值覆盖）
+const PERIOD_FEE_FIELDS = ['freight_fee', 'express_fee', 'sample_fee', 'other_fee'] as const;
 
 interface GoodsAgg {
   paidTax: number;
@@ -140,30 +151,40 @@ export class SettlementService {
     };
   }
 
-  private async aggregateGoods(order: OrderMain, vatRate: number): Promise<GoodsAgg> {
+  // 事务内用 manager（同一条连接），事务外用注入仓储（B084）：refreshCost 持着结算单行锁再用 this.xxxRepo
+  // 就是从连接池借第二条连接——池只有 10 个，多人同时刷时持锁者等池、池被等锁者占满，互相等到超时
+  private find<T>(manager: EntityManager | undefined, entity: any, repo: Repository<T>, opts: any): Promise<T[]> {
+    return manager ? manager.find(entity, opts) : repo.find(opts);
+  }
+
+  private async aggregateGoods(order: OrderMain, vatRate: number, manager?: EntityManager): Promise<GoodsAgg> {
     const goodsType = ReconcileType.CONTRACT; // 无合同费用走期间费用，样衣工时(LABOR)排除
     const statuses = In([ReconciliationStatus.CONFIRMED, ReconciliationStatus.PAID]);
-    const contracts = await this.contractRepo.find({ where: { order_id: order.id, deleted: 0 } });
+    const contracts = await this.find(manager, Contract, this.contractRepo, { where: { order_id: order.id, deleted: 0 } });
     let recons: Reconciliation[] = [];
     if (contracts.length) {
-      recons = await this.reconcileRepo.find({
+      recons = await this.find(manager, Reconciliation, this.reconcileRepo, {
         where: { contract_id: In(contracts.map((c) => c.id)), type: goodsType, status: statuses as any, deleted: 0 },
       });
     } else if (order.style_no) {
-      recons = await this.reconcileRepo.find({
+      recons = await this.find(manager, Reconciliation, this.reconcileRepo, {
         where: { style_no: order.style_no, type: goodsType, status: statuses as any, deleted: 0 },
       });
     }
     if (!recons.length) return { ...EMPTY_AGG, autoRows: [] };
 
     const factoryIds = [...new Set(recons.map((rc) => +rc.factory_id).filter(Boolean))];
-    const factories = factoryIds.length ? await this.factoryRepo.find({ where: { id: In(factoryIds) } }) : [];
+    const factories = factoryIds.length
+      ? await this.find(manager, Factory, this.factoryRepo, { where: { id: In(factoryIds) } })
+      : [];
     const factoryName = new Map(factories.map((f) => [+f.id, f.short_name || f.name]));
     // 实发数(P2#26):对账批次快照合计 → AUTO 行 qty,加权单价=金额/数量
-    const qtyRows: Array<{ rid: string; q: string }> = await this.dataSource.query(
+    // B083：此前 .catch(() => []) 把 SQL 报错吞掉，AUTO 行 qty/unit_price 全空、结算单照常生成且无任何提示；
+    // 现在让错误照常抛出（500 会进 error_log），宁可建不成也别生成一张算不出单价的单
+    const qtyRows: Array<{ rid: string; q: string }> = await (manager ?? this.dataSource).query(
       'SELECT reconcile_id rid, SUM(qty) q FROM reconciliation_shipment WHERE reconcile_id IN (?) GROUP BY reconcile_id',
       [recons.map((rc) => rc.id)],
-    ).catch(() => []);
+    );
     const qtyByRec = new Map(qtyRows.map((r) => [+r.rid, +r.q]));
 
     const agg: GoodsAgg = { ...EMPTY_AGG, autoRows: [] };
@@ -204,11 +225,11 @@ export class SettlementService {
   // 期间费用按款号从无合同费用对账归集（结算串流程 rec：账实一致，从对账付款带入）；
   // 四项分列(P3#39/结算Q5):按费用名关键词归 运杂/快邮/打样/其它 四桶;
   // 同款多订单按出货份额分摊（无出货则均分），防期间费用重复背（结算Q1 同源）。
-  private async aggregatePeriodExpense(order: OrderMain): Promise<{ freight: number; express: number; sample: number; other: number }> {
+  private async aggregatePeriodExpense(order: OrderMain, manager?: EntityManager): Promise<{ freight: number; express: number; sample: number; other: number }> {
     const empty = { freight: 0, express: 0, sample: 0, other: 0 };
     const styleNo = order.style_no;
     if (!styleNo) return empty;
-    const recons = await this.reconcileRepo.find({
+    const recons = await this.find(manager, Reconciliation, this.reconcileRepo, {
       where: [
         { style_no: styleNo, type: ReconcileType.NO_CONTRACT, status: ReconciliationStatus.CONFIRMED, deleted: 0 },
         { style_no: styleNo, type: ReconcileType.NO_CONTRACT, status: ReconciliationStatus.PAID, deleted: 0 },
@@ -227,7 +248,7 @@ export class SettlementService {
     // 杜绝软删/作废母单的孤儿行混入，itemSum 与 headerSum 严格同口径。
     const recIds = recons.map((rc) => rc.id);
     const items = recIds.length
-      ? await this.expenseItemRepo.find({ where: { style_no: styleNo, reconcile_id: In(recIds) } })
+      ? await this.find(manager, ReconciliationExpenseItem, this.expenseItemRepo, { where: { style_no: styleNo, reconcile_id: In(recIds) } })
       : [];
     let itemSum = 0;
     for (const it of items) {
@@ -243,9 +264,9 @@ export class SettlementService {
     if (!total) return empty;
 
     let share = 1;
-    const siblings = await this.orderRepo.find({ where: { style_no: styleNo, deleted: 0 } });
+    const siblings = await this.find(manager, OrderMain, this.orderRepo, { where: { style_no: styleNo, deleted: 0 } });
     if (siblings.length > 1) {
-      const ships = await this.shipmentRepo.find({ where: { order_id: In(siblings.map((o) => o.id)) } });
+      const ships = await this.find(manager, OrderShipment, this.shipmentRepo, { where: { order_id: In(siblings.map((o) => o.id)) } });
       const totalQty = ships.reduce((s, x) => s + x.qty, 0);
       const myQty = ships.filter((x) => +x.order_id === +order.id).reduce((s, x) => s + x.qty, 0);
       share = totalQty > 0 ? myQty / totalQty : 1 / siblings.length;
@@ -410,6 +431,17 @@ export class SettlementService {
       ];
       if (costLines.length) await manager.save(SettlementCost, costLines);
 
+      // B085：建单时业务/财务手填的期间费用留一条痕（原值空→填的值），「刷新付款汇总」据此认出这是人工定的，不拿归集值覆盖。
+      // 与 update() 的留痕同一张表同一口径（P2#21）；留痕失败不阻断建单（ChangeLogService 尽力而为）
+      if (!noPeriodInput) {
+        await this.changeLog.record('SETTLEMENT', settlement.id, [
+          { field: 'freight_fee', new: dto.freight_fee },
+          { field: 'express_fee', new: dto.express_fee },
+          { field: 'sample_fee', new: dto.sample_fee },
+          { field: 'other_fee', new: dto.other_fee },
+        ].filter((d) => d.new != null), createdBy);
+      }
+
       return settlement;
     });
   }
@@ -456,10 +488,10 @@ export class SettlementService {
     if (!settlement) throw new NotFoundException(`结算单 #${id} 不存在`);
     const costs = await this.costRepo.find({ where: { settlement_id: id }, order: { included: 'DESC', id: 'ASC' } });
     const receipts = await this.receiptRepo.find({ where: { settlement_id: id }, order: { receipt_date: 'ASC' } });
-    // 上游单据号（关联单据 chip 显示单据号而非裸 ID）：源订单号；订单已删→降级 null
+    // 上游单据号（关联单据 chip 显示单据号而非裸 ID）：源订单号；订单已删→降级 null（B122 同类：回查要带 deleted:0）
     let order_no: string | null = null;
     if (settlement.order_id) {
-      const order = await this.orderRepo.findOne({ where: { id: settlement.order_id } });
+      const order = await this.orderRepo.findOne({ where: { id: settlement.order_id, deleted: 0 } });
       order_no = order?.order_no ?? null;
     }
     return { ...settlement, costs, receipts, order_no };
@@ -485,17 +517,19 @@ export class SettlementService {
         sample_fee: settlement.sample_fee, other_fee: settlement.other_fee, tax_refund: settlement.tax_refund,
       };
       const receipts = await manager.find(SettlementReceipt, { where: { settlement_id: id } });
-      if (dto.receipt_usd != null) {
+      // B115 同类：后端约定 undefined=不改、null=清空。此前一律 != null 才写，前端把运杂费/退税清空
+      // （el-input-number 清空发 null）保存后纹丝不动，只能改成 0。金额列 NOT NULL DEFAULT 0，清空即 0；汇率列可空，清空即 null
+      if (dto.receipt_usd !== undefined) {
         if (receipts.length) throw new BadRequestException('已有逐笔收汇记录，收汇总额由记录累计，不可手工覆盖');
-        settlement.receipt_usd = r4(dto.receipt_usd);
+        settlement.receipt_usd = r4(dto.receipt_usd ?? 0);
       }
-      if (dto.exchange_rate != null) settlement.exchange_rate = r4(dto.exchange_rate);
-      if (dto.invoice_amount_usd != null) settlement.invoice_amount_usd = r4(dto.invoice_amount_usd);
-      if (dto.freight_fee != null) settlement.freight_fee = r4(dto.freight_fee);
-      if (dto.express_fee != null) settlement.express_fee = r4(dto.express_fee);
-      if (dto.sample_fee != null) settlement.sample_fee = r4(dto.sample_fee);
-      if (dto.other_fee != null) settlement.other_fee = r4(dto.other_fee);
-      if (dto.tax_refund != null) settlement.tax_refund = r4(dto.tax_refund);
+      if (dto.exchange_rate !== undefined) settlement.exchange_rate = dto.exchange_rate == null ? (null as any) : r4(dto.exchange_rate);
+      if (dto.invoice_amount_usd !== undefined) settlement.invoice_amount_usd = r4(dto.invoice_amount_usd ?? 0);
+      if (dto.freight_fee !== undefined) settlement.freight_fee = r4(dto.freight_fee ?? 0);
+      if (dto.express_fee !== undefined) settlement.express_fee = r4(dto.express_fee ?? 0);
+      if (dto.sample_fee !== undefined) settlement.sample_fee = r4(dto.sample_fee ?? 0);
+      if (dto.other_fee !== undefined) settlement.other_fee = r4(dto.other_fee ?? 0);
+      if (dto.tax_refund !== undefined) settlement.tax_refund = r4(dto.tax_refund ?? 0);
       if (dto.description !== undefined) settlement.description = dto.description;
 
       const rows = await manager.find(SettlementCost, { where: { settlement_id: id } });
@@ -528,6 +562,27 @@ export class SettlementService {
       if (!settlement) throw new NotFoundException(`结算单 #${id} 不存在`);
       if (settlement.status !== SettlementStatus.DRAFT) {
         throw new BadRequestException('只有草稿状态才可添加成本明细');
+      }
+
+      // B020：总货款一直以「Σ成本行」为准，而建单时直接录总货款（goods_amount_tax，无成本行）的单据没有行可以加——
+      // 此前加第一行运费 1000，总货款就从 50 万被换成 1000（删掉这行又归零）。这里在**没有任何成本行且已有总货款**时，
+      // 先把建单录入的总货款落成一条手工行（有票、按缺省税率，与建单时的不含税换算同口径），再加新行；
+      // 之后 Σ行 = 原总货款 + 新增行，加/删/收汇重算都能对上。界面建单一定带行或走自动聚合，此分支只会在直录总货款的单上触发。
+      const existingRows = await manager.find(SettlementCost, { where: { settlement_id: id } });
+      const storedGoods = +(settlement.goods_amount_tax ?? 0);
+      if (!existingRows.length && storedGoods > 0) {
+        await manager.save(
+          SettlementCost,
+          manager.create(SettlementCost, {
+            settlement_id: id,
+            cost_name: '总货款（建单录入）',
+            amount: r4(storedGoods),
+            has_invoice: 1,
+            tax_rate: vatRate,
+            source: 'MANUAL',
+            included: 1,
+          }),
+        );
       }
 
       await manager.save(
@@ -662,15 +717,23 @@ export class SettlementService {
       settlement.shipped_qty = scoped.reduce((sum, s) => sum + s.qty, 0);
 
       const order = await manager.findOne(OrderMain, { where: { id: settlement.order_id, deleted: 0 } });
-      const agg = order ? await this.aggregateGoods(order, vatRate) : { ...EMPTY_AGG, autoRows: [] };
+      // B084：聚合查询一律走 manager——这段代码持着结算单的行锁，再用 this.xxxRepo 就是去池里借第二条连接
+      const agg = order ? await this.aggregateGoods(order, vatRate, manager) : { ...EMPTY_AGG, autoRows: [] };
       // 期间费用分列同步重聚合（与 create 同口径），否则软删/作废对账单的费用长期滞留(L7-③)
       const aggPeriod = order
-        ? await this.aggregatePeriodExpense(order)
+        ? await this.aggregatePeriodExpense(order, manager)
         : { freight: 0, express: 0, sample: 0, other: 0 };
-      settlement.freight_fee = aggPeriod.freight;
-      settlement.express_fee = aggPeriod.express;
-      settlement.sample_fee = aggPeriod.sample;
-      settlement.other_fee = aggPeriod.other;
+      // B085：人工定过的期间费用不被归集值静默覆盖。哪些是人工定的？建单手填与编辑改值都会在 change_log 留痕
+      // （字段名就是这四列），有痕的保留、没痕的照旧按对账归集刷新（L7-③ 的清理能力不丢）。
+      // 直接按字段查（不用 changeLog.list 的最近 100 条——每次刷新都会追加一条 RECALC，久了会把早年的手填痕挤出窗口）
+      const logs = await manager.find(ChangeLog, {
+        where: { biz_type: 'SETTLEMENT', biz_id: id, field: In([...PERIOD_FEE_FIELDS]) },
+      });
+      const manualFee = new Set(logs.map((l) => l.field));
+      if (!manualFee.has('freight_fee')) settlement.freight_fee = aggPeriod.freight;
+      if (!manualFee.has('express_fee')) settlement.express_fee = aggPeriod.express;
+      if (!manualFee.has('sample_fee')) settlement.sample_fee = aggPeriod.sample;
+      if (!manualFee.has('other_fee')) settlement.other_fee = aggPeriod.other;
 
       await manager.delete(SettlementCost, { settlement_id: id, source: 'AUTO' });
       if (agg.autoRows.length) {

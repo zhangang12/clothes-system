@@ -30,15 +30,20 @@ export function useRemoteOptions<T>(cfg: RemoteOptionsCfg<T>) {
   // 用 Ref<T[]> 而不是裸对象：模板里要靠 ref 自动解包，写成普通对象后 v-for 的类型会歪掉
   const options = ref([]) as Ref<T[]>;
   const loading = ref(false);
+  // 请求序号：快速连打几个字会并发几次搜索，先发的慢响应后到会把后发的结果盖掉，
+  // 选项列表与输入框里的关键字对不上（B147）。只认最后一次发出的那次。
+  let seq = 0;
 
   async function search(kw: string): Promise<void> {
+    const mine = ++seq;
     loading.value = true;
     try {
-      options.value = await cfg.fetch((kw ?? '').trim());
+      const rows = await cfg.fetch((kw ?? '').trim());
+      if (mine === seq) options.value = rows;
     } catch {
       /* 保留上一批，别把已选项也弄没了 */
     } finally {
-      loading.value = false;
+      if (mine === seq) loading.value = false;
     }
   }
 

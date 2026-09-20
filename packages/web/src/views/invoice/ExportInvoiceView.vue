@@ -4,10 +4,10 @@
     <el-card class="search-card">
       <el-form inline>
         <el-form-item label="关键词">
-          <el-input v-model="keyword" placeholder="发票号 / 客户" clearable style="width:200px" @clear="load" @keyup.enter="load" />
+          <el-input v-model="keyword" placeholder="发票号 / 客户" clearable style="width:200px" @clear="search" @keyup.enter="search" />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" :icon="Search" @click="load">搜索</el-button>
+          <el-button type="primary" :icon="Search" @click="search">搜索</el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -90,7 +90,11 @@
         <div v-for="(it, idx) in form.items" :key="idx" class="item-row">
           <el-row :gutter="8" align="middle">
             <el-col :span="10">
-              <el-select v-model="it.order_id" filterable clearable placeholder="关联订单(结算据此拉收汇)" style="width:100%" @change="(v: any) => onPickOrder(it, v)">
+              <!-- 远程搜索（B102）：原来只拉前 100 张当「全部」，订单超过 100 张后最老的从下拉里消失 -->
+              <el-select
+                v-model="it.order_id" filterable remote reserve-keyword clearable :remote-method="searchOrders" :loading="ordersLoading"
+                placeholder="关联订单(输入款号/订单号搜索)" style="width:100%" @change="(v: any) => onPickOrder(it, v)"
+              >
                 <el-option v-for="o in orders" :key="o.id" :label="`${o.style_no || '无款号'} · ${o.order_no}`" :value="o.id" />
               </el-select>
             </el-col>
@@ -202,6 +206,7 @@ import { Search, Plus } from '@element-plus/icons-vue';
 import FilePreviewDialog from '@/components/FilePreviewDialog.vue';
 import { exportInvoiceApi } from '@/api/exportInvoice';
 import { orderApi } from '@/api/order';
+import { useRemoteOptions, listParams } from '@/utils/remoteOptions';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole } from '@i9/types';
 import FileUpload from '@/components/FileUpload.vue';
@@ -230,10 +235,14 @@ async function load() {
   } finally { loading.value = false; }
 }
 
-const orders = ref<any[]>([]);
-async function loadOrders() {
-  try { orders.value = ((await orderApi.list({ page: 1, size: 100 })) as any).data ?? []; } catch { orders.value = []; }
-}
+// 点「搜索」时页码归 1（B107）：翻到第 3 页再搜，结果不足 3 页会得到一张空表
+function search() { page.value = 1; load(); }
+
+// 关联订单下拉走后端搜索（B102）：进页面先摆最近一批，输入时按款号/订单号去后端搜
+const { options: orders, loading: ordersLoading, search: searchOrders } = useRemoteOptions<any>({
+  fetch: async (kw) => ((await orderApi.list(listParams(kw))) as any).data ?? [],
+});
+const loadOrders = () => searchOrders('');
 function onPickOrder(it: any, id: number) {
   const o = orders.value.find((x: any) => x.id === id);
   if (o?.style_no && !it.style_no) it.style_no = o.style_no;

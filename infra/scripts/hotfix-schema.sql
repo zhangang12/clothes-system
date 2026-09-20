@@ -196,7 +196,8 @@ CREATE TABLE IF NOT EXISTS `sys_dict` (
   `status`     TINYINT      NOT NULL DEFAULT 1,
   `created_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `idx_type` (`type`)
+  KEY `idx_type` (`type`),
+  UNIQUE KEY `uk_dict_type_label` (`type`,`label`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='通用字典(下拉自填自动累积)';
 
 CREATE TABLE IF NOT EXISTS `supplier_account` (
@@ -2611,6 +2612,7 @@ CALL _i9_add_unique('sys_user','uk_username','`username`');
 
 -- sys_dict
 CALL _i9_add_index('sys_dict','idx_type','`type`');
+CALL _i9_add_unique('sys_dict','uk_dict_type_label','`type`,`label`');
 
 -- supplier_account
 CALL _i9_add_unique('supplier_account','uk_account','`account`');

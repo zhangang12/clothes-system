@@ -8,7 +8,9 @@
 // 逻辑单独抽出来是因为其中两条是**踩过才知道**的：中文 Windows 的 CSV 编码、
 // 以及 .xls 老格式根本读不了——两者的表现都是「文件明明有内容，系统说读不出来」。
 
-/** 轻量 CSV 解析：支持引号包裹（"帽子,大身" 不被拆开）与转义双引号（""→"），跳过全空行 */
+/** 轻量 CSV 解析：支持引号包裹（"帽子,大身" 不被拆开）与转义双引号（""→"），跳过全空行。
+ *  只有**字段开头**的引号才进入引号态：字段中间的引号（5" 拉链、20"×30" 尺寸）当普通字符，
+ *  否则后文整行被吞进这一格（B148，与 parseTable.ts 同口径） */
 export function parseCsv(text: string): string[][] {
   const rows: string[][] = []; let cur = ''; let row: string[] = []; let inQ = false;
   const src = text.replace(/^﻿/, '');
@@ -17,7 +19,7 @@ export function parseCsv(text: string): string[][] {
     if (inQ) {
       if (c === '"') { if (src[i + 1] === '"') { cur += '"'; i++; } else inQ = false; }
       else cur += c;
-    } else if (c === '"') inQ = true;
+    } else if (c === '"') { if (cur === '') inQ = true; else cur += c; }
     else if (c === ',') { row.push(cur); cur = ''; }
     else if (c === '\n' || c === '\r') {
       if (c === '\r' && src[i + 1] === '\n') i++;

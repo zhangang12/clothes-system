@@ -6,6 +6,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiProperty } from '@nestjs/swagg
 import { IsEnum } from 'class-validator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { MenuGuard, MenuAccess } from '../../common/guards/menu.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@i9/types';
 import { ContractService } from './contract.service';
@@ -15,6 +16,7 @@ import { CreateContractDto } from './dto/create-contract.dto';
 import { GenerateFromOrderDto } from './dto/generate-from-order.dto';
 import { UpdateContractDto } from './dto/update-contract.dto';
 import { QueryContractDto } from './dto/query-contract.dto';
+import { ApproveShipmentDto } from './dto/approve-shipment.dto';
 
 // 合同状态更新 DTO（2026-07-19 排查 L6）：status 必须过 class-validator 枚举校验，
 // 非法值在入口 400，不再裸打到 MySQL enum 列报 500
@@ -26,7 +28,10 @@ export class UpdateContractStatusDto {
 
 @ApiTags('合同管理')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+// 只读接口按「合同」菜单授权（B003/B079，2026-09-20 审查）：此前列表/详情/日志三个 GET 无任何角色限制。
+// 不用收窄的 @Roles 砍版师/打样（他们默认菜单里有合同，老板定过的口径），价格靠 maskContract 脱敏；
+// MenuGuard 认账号级 menu_keys，与侧栏同一套口径（先例 feedback.controller）
+@UseGuards(JwtAuthGuard, RolesGuard, MenuGuard)
 @Controller('contracts')
 export class ContractController {
   constructor(private readonly service: ContractService) {}
@@ -70,18 +75,23 @@ export class ContractController {
   }
 
   @Get()
+  @MenuAccess('contracts')
   @ApiOperation({ summary: '合同列表（分页；版师/打样脱敏供应商成本）' })
   async findAll(@Query() query: QueryContractDto, @Request() req: any) {
     return maskContract(await this.service.findAll(query), req.user.role);
   }
 
   @Get(':id')
+  @MenuAccess('contracts')
   @ApiOperation({ summary: '合同详情（含材料明细；版师/打样脱敏供应商成本）' })
   async findOne(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
     return maskContract(await this.service.findOne(id), req.user.role);
   }
 
+  // B003：日志里曾把自动开通的门户账号与初始密码写进 remark（service.push 已改为不含密码的文案），
+  // 接口本身此前也无任何限制——没有合同菜单的账号（如财务默认菜单）一律 403
   @Get(':id/logs')
+  @MenuAccess('contracts')
   @ApiOperation({ summary: '合同门户操作日志' })
   getLogs(@Param('id', ParseIntPipe) id: number) {
     return this.service.getLogs(id);
@@ -121,10 +131,10 @@ export class ContractController {
   approveShipment(
     @Param('id', ParseIntPipe) id: number,
     @Param('sid', ParseIntPipe) sid: number,
-    @Body('approve') approve: boolean,
+    @Body() dto: ApproveShipmentDto, // B118：过 DTO 校验，字符串 "false" 在入口 400，不再被当成通过
     @Request() req: any,
   ) {
-    return this.service.approveShipment(id, sid, req.user.id, approve !== false);
+    return this.service.approveShipment(id, sid, req.user.id, dto.approve !== false);
   }
 
   @Patch(':id/status')

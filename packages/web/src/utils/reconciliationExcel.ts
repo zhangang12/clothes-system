@@ -64,7 +64,7 @@ export function exportReconciliationExcel(detail: any): void {
         i + 1, s.shipment_id, s.contract_id ? `#${s.contract_id}` : '', s.style_no,
         s.item_name, n4(s.snapshot_unit_price), s.qty, n2(s.amount), s.remark,
       ]),
-      foot: ['合计', '', '', '', '', '', sum(ships, (r) => r.qty), n2(sum(ships, (r) => r.amount)), ''],
+      foot: ['合计', '', '', '', '', '', sum(ships, (r) => r.qty, 4), n2(sum(ships, (r) => r.amount)), ''],
     });
   }
 

@@ -1,5 +1,5 @@
 import {
-  Injectable, NotFoundException, BadRequestException, ForbiddenException,
+  Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, Like, DataSource, In, EntityManager, Not, IsNull } from 'typeorm';
@@ -19,7 +19,11 @@ import { Prepayment } from '../payment/prepayment.entity';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
 import { ChangeLogService } from '../../common/changelog/change-log.service';
 import { SysConfigService } from '../../common/config/sys-config.service';
-import { ContractPortalStatus, ContractType, OrderStatus, ApprovalStatus, APPROVAL_THRESHOLD_KEYS, findSplitDupConflicts } from '@i9/types';
+import { todayLocal, toLocalDateStr, dateColToStr } from '../../common/utils/local-date';
+import {
+  ContractPortalStatus, ContractType, OrderStatus, ApprovalStatus, APPROVAL_THRESHOLD_KEYS,
+  findSplitDupConflicts, perColorRowErrors, matrixColorsOf,
+} from '@i9/types';
 
 // 账期规则（06-对账付款设计稿 v1.4「v1.3 业务定」+ 补充确认清单 C）：材料 = 发货日+90天，加工 = 发货日+45天（可人工改）
 const DEFAULT_ACCOUNT_PERIOD_DAYS: Record<ContractType, number> = {
@@ -43,11 +47,18 @@ const DELIVERY_OFFSET_DAYS: Record<ContractType, number> = {
 
 function minusDays(date: Date | string | null | undefined, days: number): string | null {
   if (!date) return null;
-  const d = new Date(typeof date === 'string' ? date : date.toISOString());
+  // B061：业务日期取本地日历日。DATE 列经 mysql2 出来是本地零点的 Date，走 toISOString 会退回前一天，
+  // 减完再 toISOString 又退一天——凌晨/任何时段都差一天。先归一成 'YYYY-MM-DD' 再按本地日期减
+  const s = dateColToStr(date);
+  if (!s) return null;
+  const d = new Date(`${s.slice(0, 10)}T00:00:00`);
   if (isNaN(d.getTime())) return null;
   d.setDate(d.getDate() - days);
-  return d.toISOString().slice(0, 10);
+  return toLocalDateStr(d);
 }
+
+// 占位工厂只认名字（见 generateFromOrder 的 getPlaceholder）：推送/回填供应商都要把它排除在「真实供应商」之外
+const PLACEHOLDER_FACTORY_NAME = '待定供应商';
 
 // 整数类单位（设计稿 订单⑤：损耗后向上取整）
 const INT_UNITS = ['个', '条', '只', '件', '粒', '套', '对', 'pcs', 'PCS', 'PC'];
@@ -61,6 +72,8 @@ function isDuplicateContractNo(e: any): boolean {
 
 @Injectable()
 export class ContractService {
+  private readonly logger = new Logger(ContractService.name);
+
   constructor(
     @InjectRepository(Contract) private readonly repo: Repository<Contract>,
     @InjectRepository(ContractMaterial) private readonly materialRepo: Repository<ContractMaterial>,
@@ -105,6 +118,7 @@ export class ContractService {
     const mode = om.split_mode;
     // 按色单行（#122）：这一行本来就只代表一个颜色，量已按该色件数算好——原样成一行，
     // 颜色就是行上选的矩阵颜色；不同供应商由外层按供应商分单，自然落到不同合同
+    // 颜色不在矩阵里的按色单行在进入这里之前就被 assertPerColorRowsValid 拦下（B055 同类），不会带出 qty 0 的行
     if (mode === 'PER_COLOR') {
       return [{
         ...base,
@@ -150,11 +164,18 @@ export class ContractService {
         const fallbackBase = (+om.final_purchase! > 0 ? +om.final_purchase! : +om.total_purchase!) || 0;
         const round = om.round_up === 1
           || (om.round_up == null && INT_UNITS.includes(om.unit ?? ''));
+        // B032【DECISION 不改算量，只把口径写清楚】per>0 时按「矩阵组数×单件耗用×损耗」算，
+        // 业务人工调过的最终采购量（final_purchase）在这条路上是**不参与**的——同一张单于是出现两种口径
+        // （NONE/PER_COLOR 行用 final_purchase）。改算量要老板拍板，这里先让合同上看得出来这行没用微调量。
+        const ignoredManualQty = per > 0 && +om.final_purchase! > 0;
+        const tag = (s: string) => (ignoredManualQty ? `${s}(未用微调量)` : s); // qty_source 是 varchar(20)，最长 15 字
         return [...groups].map(([key, groupQty]) => {
           let qty = per > 0
             ? groupQty * per * loss
             : (totalGroupQty ? (fallbackBase * groupQty) / totalGroupQty : 0);
-          qty = round ? Math.ceil(qty) : +qty.toFixed(2);
+          // B050 同类：整数单位先抹掉浮点尾差再进一（300×0.07 = 21.000000000000004，直接 ceil 会多买 1 个）；
+          // 与订单侧 calcPurchase 同样取 8 位，否则两边算出的数对不上
+          qty = round ? Math.ceil(+qty.toFixed(8)) : +qty.toFixed(2);
           const d = dims.get(key) ?? { color: '', size: '' };
           // 各码尺寸（拉链/织带按码不同尺寸）：size 列写 S(50) 直观带出，工厂按码裁料。
           // BY_BOTH 时按尺码维度取（size_specs 本就是按尺码建的表）
@@ -165,8 +186,8 @@ export class ContractService {
             color: mode === 'BY_SIZE' ? (om.color || undefined) : (d.color || key),
             size: sizeKey ? (spec ? `${sizeKey}(${spec})` : sizeKey) : undefined,
             qty,
-            qty_source: mode === 'BY_COLOR' ? '采购量·分色'
-              : (mode === 'BY_SIZE' ? '采购量·分码' : '采购量·分色分码'),
+            qty_source: tag(mode === 'BY_COLOR' ? '采购量·分色'
+              : (mode === 'BY_SIZE' ? '采购量·分码' : '采购量·分色分码')),
           };
         });
       }
@@ -200,7 +221,8 @@ export class ContractService {
     if (!ids.length) return;
     const factory = await m.findOne(Factory, { where: { id: factoryId } });
     const name = factory?.name?.trim();
-    if (!name) return;
+    // 占位工厂不是真实供应商（B119 接入时补）：回填「待定供应商」等于把占位符写进业务决策字段
+    if (!name || name === PLACEHOLDER_FACTORY_NAME) return;
     await m.createQueryBuilder()
       .update(OrderMaterial)
       .set({ supplier: name })
@@ -209,10 +231,88 @@ export class ContractService {
       .execute();
   }
 
+  /**
+   * 本订单下已进过任一未删除合同的材料行 id——与订单页「已订」标记（OrderService.findOne）同一条 SQL 口径。
+   * generateFromOrder 的按行幂等（B004，事务内锁后查）、手建合同带出（B034）、按品名认回（B033）三处共用，
+   * 口径只此一份，别再各写一条。
+   */
+  private async contractedOrderMaterialIds(runner: EntityManager | DataSource, orderId: number): Promise<Set<number>> {
+    const rows: Array<{ omid: string | number }> = (await runner.query(
+      `SELECT DISTINCT cm.order_material_id AS omid
+         FROM contract_material cm JOIN contract c ON c.id = cm.contract_id
+        WHERE c.order_id = ? AND c.deleted = 0 AND cm.order_material_id IS NOT NULL`,
+      [orderId],
+    )) ?? [];
+    return new Set(rows.map((r) => +r.omid));
+  }
+
   private async getMatrixRows(orderId: number | null | undefined): Promise<any[]> {
     if (!orderId) return [];
     const matrix = await this.matrixRepo.findOne({ where: { order_id: orderId } });
     return ((matrix?.matrix_data as any)?.rows ?? []) as any[];
+  }
+
+  /** 请求体里自带的溯源 id（只校验这些：服务端从本订单行展开出来的 id 按构造就属于本订单） */
+  private clientSuppliedOmIds(materials?: Array<{ order_material_id?: number | null }>): Set<number> {
+    return new Set((materials ?? [])
+      .map((x) => x.order_material_id)
+      .filter((v): v is number => v != null)
+      .map(Number));
+  }
+
+  /**
+   * B036：手建/编辑合同带上来的 `order_material_id` 必须属于本合同挂的那张订单。
+   *
+   * 【为什么是钱的问题】订单侧有越权守卫，合同侧没有：带别的订单的行 id 进来，那张订单的该行就会显示
+   * 「已订」，生成合同时被永远跳过 → 那份料没有人买。前端正常流程不会这么发（id 来自本订单的带出），
+   * 所以这里直接 400 点名，不做静默纠正——静默是比报错更糟的失败方式。
+   * 合同没挂订单时（挂卡/销样面料）根本无从校验，一律清空该字段。
+   */
+  private async assertOwnOrderMaterials(
+    m: EntityManager,
+    orderId: number | null,
+    rows: Array<{ item_name?: string; order_material_id?: number | null }>,
+    clientSupplied: Set<number>,
+  ): Promise<void> {
+    if (!clientSupplied.size) return;
+    const mine = (r: { order_material_id?: number | null }) =>
+      r.order_material_id != null && clientSupplied.has(+r.order_material_id);
+    if (!orderId) {
+      rows.forEach((r) => { if (mine(r)) r.order_material_id = null; });
+      return;
+    }
+    const own = await m.find(OrderMaterial, { where: { order_id: orderId, id: In([...clientSupplied]) }, select: ['id'] });
+    const ownIds = new Set(own.map((o) => +o.id));
+    const bad = rows.filter((r) => mine(r) && !ownIds.has(+r.order_material_id!));
+    if (bad.length) {
+      const names = [...new Set(bad.map((r) => r.item_name ?? ''))].filter(Boolean).slice(0, 3).join('、');
+      throw new BadRequestException(
+        `材料明细里有不属于本合同订单的用料行${names ? `（${names}）` : ''}，请重新从订单带出明细后再保存`,
+      );
+    }
+  }
+
+  /**
+   * B055 同类（订单侧 updateMatrix 已同规则）：按色单行的颜色必须还在数量搭配矩阵里。
+   * 矩阵改过（该色删了/改名）后这行的量算出来是 0，此前合同照样把 qty 0 的行带出去、不报——
+   * 在两扇带出的门（generateFromOrder / 手建合同自动带出）都拦下，点名材料与颜色让业务回订单改
+   */
+  private assertPerColorRowsValid(rows: OrderMaterial[], matrixRows: any[]): void {
+    const matrixColors = matrixColorsOf(matrixRows);
+    // 【矩阵一个颜色都没有就不拦】那是「矩阵还没填」，不是「颜色对不上矩阵」——存量订单里确有这种行
+    // （拆分走兜底单行、qty_source 已留痕）。拦下来等于让一批老订单突然生成不了合同，超出本次修复范围
+    if (!matrixColors.length) return;
+    const errors = perColorRowErrors(
+      rows.map((m) => ({ color: m.color ?? '', mode: m.split_mode ?? 'NONE' })),
+      matrixColors,
+    );
+    if (!errors.length) return;
+    const detail = errors.slice(0, 3)
+      .map((e) => `材料「${rows[e.rowNo - 1]?.item_name ?? ''}」：${e.reason}`)
+      .join('；');
+    throw new BadRequestException(
+      `${detail}${errors.length > 3 ? `（共 ${errors.length} 行）` : ''}。请先回订单核对该行颜色（矩阵改过后颜色要重新选），再生成合同`,
+    );
   }
 
   // 供应商拆单：按订单材料的供应商分组，每个供应商生成一张材料合同（设计稿 合同 A1）
@@ -243,8 +343,13 @@ export class ContractService {
 
     const oms = await m.find(OrderMaterial, { where: { order_id: orderId }, order: { sort_order: 'ASC' } });
     if (!oms.length) return;
+    // B033：已被合同行溯源的订单行不再是候选。否则订单面料两行、第一行已由拆单合同溯源，
+    // 手建第二张「面料」合同又对到第一行——第二行永远不绿、再「为未下单的材料生成」会重买。
+    // 本合同刚存下的带 order_material_id 的行也算在内（它们已占了那条订单行）
+    const taken = await this.contractedOrderMaterialIds(m, orderId);
     const byName = new Map<string, OrderMaterial[]>();
     for (const om of oms) {
+      if (taken.has(+om.id)) continue;
       const k = String(om.item_name ?? '').trim();
       if (!k) continue;
       if (!byName.has(k)) byName.set(k, []);
@@ -312,7 +417,12 @@ export class ContractService {
           AND f.address IS NOT NULL AND f.address <> ''
           AND (${keys.map(() => 'FIND_IN_SET(?, c.style_nos)').join(' OR ')})`,
       [ContractType.PROCESS, ...keys],
-    ).catch(() => []);
+    ).catch((e: any) => {
+      // B120：查库出错仍不阻断建合同（发货地址只是锦上添花，UT-ADDR-07），但不能再无声吞掉——
+      // 此前 DB 报错与「加工厂没填地址」长得一样，业务以为是自己没填
+      this.logger.warn(`发货地址回查失败（合同照常创建、地址留空）款号=${keys.join(',')}: ${e?.message ?? e}`);
+      return [];
+    });
 
     const addrs = [...new Set(rows.map((r) => (r.address ?? '').trim()).filter(Boolean))];
     // 命中多个不同加工厂时**不猜**：这批料真要分送两家，系统表达不了，
@@ -339,24 +449,6 @@ export class ContractService {
     const chosen = wanted ? allRows.filter((m) => wanted.has(+m.id)) : allRows;
     if (wanted && !chosen.length) throw new BadRequestException('所选材料行不属于该订单');
 
-    // 行级「已下过合同」：与 OrderService.findOne 打「已订」标记用同一条 SQL 口径
-    const linked: Array<{ omid: string | number }> = (await this.dataSource.query(
-      `SELECT DISTINCT cm.order_material_id AS omid
-         FROM contract_material cm JOIN contract c ON c.id = cm.contract_id
-        WHERE c.order_id = ? AND c.deleted = 0 AND cm.order_material_id IS NOT NULL`,
-      [orderId],
-    )) ?? [];
-    const contracted = new Set(linked.map((r) => +r.omid));
-    const skipped = chosen
-      .filter((m) => contracted.has(+m.id))
-      .map((m) => ({ id: +m.id, item_name: m.item_name ?? '', reason: '已生成过合同' }));
-    const materials = chosen.filter((m) => !contracted.has(+m.id));
-    if (!materials.length) {
-      throw new BadRequestException(wanted
-        ? '勾选的材料都已生成过合同（订单页绿色「已订」的行），请勾选还没下单的行'
-        : '该订单的材料都已生成过合同，没有可下单的行（如需重建请先删除原有草稿合同）');
-    }
-
     // 【#120 防线·后端闸】同名材料多行且标了拆分：每行都会把矩阵拆一遍，行数×组数翻倍
     // （订单 73 因此多签 20.2 万）。前端保存时已有同一规则的提示，但**出事的动作是生成合同**：
     // 存量脏数据、复制出来的订单、API 直写都不经过前端保存——必须在这里再拦一次。
@@ -376,20 +468,48 @@ export class ContractService {
       );
     }
 
-    // 按供应商名分组
-    const groups = new Map<string, OrderMaterial[]>();
-    for (const m of materials) {
-      const key = (m.supplier || '').trim() || '未指定供应商';
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(m);
-    }
-
-    // 分色/分码按订单尺码矩阵拆行（设计稿 合同 A4）；行交期默认=订单交期−45天
+    // 分色/分码按订单尺码矩阵拆行（设计稿 合同 A4）
     const matrixRows = await this.getMatrixRows(orderId);
-    const lineDelivery = minusDays(order.delivery_date as any, DELIVERY_OFFSET_DAYS[ContractType.MATERIAL]);
+    // B121：行交期与合同头（create 里的 delivery_deadline）读同一个系统参数，不再写死 45 天——
+    // 否则把 contract.delivery_offset_material 配成 30，合同头 −30 天、明细行 −45 天
+    const lineOffsetDays = await this.config.getNumber(
+      'contract.delivery_offset_material', DELIVERY_OFFSET_DAYS[ContractType.MATERIAL],
+    );
+    const lineDelivery = minusDays(order.delivery_date as any, lineOffsetDays);
 
     // 整体事务（L1）：任一供应商建单失败则整批回滚，不留半成品合同
     return this.dataSource.transaction(async (manager) => {
+      // 【B004 并发闸】按行幂等检查必须在事务内、且先锁订单行：此前查在事务外无锁，
+      // 同一订单两次「生成合同」并发到达（双击/两人同时点）→ 两边都算出 contracted=∅ →
+      // 同一批材料行生成两套合同、金额翻倍。锁住订单行后，第二个请求要等第一个提交才能查，
+      // 查到的就是已带 order_material_id 的新合同行 → 全部跳过 → 报错，不重复建单（范式同 payment.markPaid）
+      const lockedOrder = await manager.findOne(OrderMain, {
+        where: { id: orderId, deleted: 0 },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!lockedOrder) throw new NotFoundException(`订单 #${orderId} 不存在`);
+      // 行级「已下过合同」：与 OrderService.findOne 打「已订」标记用同一条 SQL 口径（事务内用 manager 查）
+      const contracted = await this.contractedOrderMaterialIds(manager, orderId);
+      const skipped = chosen
+        .filter((m) => contracted.has(+m.id))
+        .map((m) => ({ id: +m.id, item_name: m.item_name ?? '', reason: '已生成过合同' }));
+      const materials = chosen.filter((m) => !contracted.has(+m.id));
+      if (!materials.length) {
+        throw new BadRequestException(wanted
+          ? '勾选的材料都已生成过合同（订单页绿色「已订」的行），请勾选还没下单的行'
+          : '该订单的材料都已生成过合同，没有可下单的行（如需重建请先删除原有草稿合同）');
+      }
+      // 只查真要生成的行：已下过合同而被跳过的行，颜色旧了也不该拦住别的行（B055 同类）
+      this.assertPerColorRowsValid(materials, matrixRows);
+
+      // 按供应商名分组
+      const groups = new Map<string, OrderMaterial[]>();
+      for (const m of materials) {
+        const key = (m.supplier || '').trim() || '未指定供应商';
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(m);
+      }
+
       const created: Contract[] = [];
       const unmatched: string[] = [];
       // 待定供应商占位(P3#41/CON C2):未匹配供应商也生成合同,挂「待定供应商」占位工厂,后续改绑
@@ -439,6 +559,7 @@ export class ContractService {
           } as CreateContractDto,
           createdBy,
           manager,
+          { trustedOrderMaterialIds: true }, // 明细是本订单行展开出来的（B036）
         );
         created.push(contract);
       }
@@ -446,7 +567,14 @@ export class ContractService {
     });
   }
 
-  async create(dto: CreateContractDto, createdBy: number, manager?: EntityManager): Promise<Contract> {
+  async create(
+    dto: CreateContractDto,
+    createdBy: number,
+    manager?: EntityManager,
+    // B036：generateFromOrder 把自己从本订单行展开出来的明细当 dto 传进来，那些 order_material_id
+    // 按构造就属于本订单，不必也不该再当「请求体自带的 id」去校验
+    opts: { trustedOrderMaterialIds?: boolean } = {},
+  ): Promise<Contract> {
     // 补料合同号在事务内生成（见下方 run），这里只做前置校验；
     // 非补料合同走 Redis 发号服务，撞号概率为零，维持事务外取号（事务失败跳号与现状一致）
     let contract_no: string | null = null;
@@ -509,8 +637,16 @@ export class ContractService {
           `订单材料「${g.name}」第 ${g.rowNos.join('、')} 行重复且标了拆分：${g.reason}。请先在订单里删掉多余行或改为「不拆」`,
         );
       }
+      // B034：与 generateFromOrder 同口径——已进过未删除合同的行不再带出（订单页绿色「已订」的行）。
+      // 此前手建路径不跳：已分批下过面料，再手建一张挂该订单、不填明细 → 面料再次进合同
+      const contracted = await this.contractedOrderMaterialIds(this.dataSource, dto.order_id);
+      const pendingRows = orderMaterials.filter((om) => !contracted.has(+om.id));
+      if (!pendingRows.length) {
+        throw new BadRequestException('该订单的材料都已生成过合同，没有可带出的行（如需重建请先删除原有草稿合同，或手工填写明细）');
+      }
       const matrixRows = await this.getMatrixRows(dto.order_id);
-      materialInputs = orderMaterials.flatMap((om) =>
+      this.assertPerColorRowsValid(pendingRows, matrixRows); // B055 同类：手建带出这扇门同样拦
+      materialInputs = pendingRows.flatMap((om) =>
         this.expandMaterialLines(om, matrixRows, order?.style_no ?? null, deliveryDeadline));
     }
     // 加工合同：数量取订单大货数（设计稿 合同 A4）；单价由业务填写
@@ -548,7 +684,9 @@ export class ContractService {
         no = `补料-${parent.contract_no}-${String(seq + 1).padStart(2, '0')}`;
       }
 
-      const totalAmount = materialInputs.reduce((sum, m2) => sum + m2.unit_price * m2.qty, 0);
+      // B035：合同总额 = Σ「已按 4 位舍入的行金额」，与下面每行落库的 amount、以及 update 里的重算口径完全一致。
+      // 此前是「Σ未舍入再舍」：3 行 1.2345×1.5 就能让总额≠明细之和，原样保存一次漂移 >0.0001 → 已过的审批被清掉
+      const totalAmount = materialInputs.reduce((sum, m2) => sum + +(m2.unit_price * m2.qty).toFixed(4), 0);
 
       const contract = await m.save(Contract, m.create(Contract, {
         contract_no: no!,
@@ -567,7 +705,7 @@ export class ContractService {
         remark: dto.remark,
         // 编辑页扩展字段（设计稿 04 v1.3）
         sign_place: dto.sign_place,
-        sign_date: (dto.sign_date ?? new Date().toISOString().slice(0, 10)) as any,
+        sign_date: (dto.sign_date ?? todayLocal()) as any, // B061：本地日历日，不是 UTC
         company_id: dto.company_id,
         company_rep: dto.company_rep,
         guarantor: dto.guarantor,
@@ -602,8 +740,18 @@ export class ContractService {
         remark: mi.remark,
         order_material_id: mi.order_material_id ?? null,
       }));
+      // B036：落库前校验请求体自带的溯源 id 确实属于本合同的订单
+      await this.assertOwnOrderMaterials(
+        m, dto.order_id ?? null, materials,
+        opts.trustedOrderMaterialIds ? new Set<number>() : this.clientSuppliedOmIds(dto.materials),
+      );
       await m.save(ContractMaterial, materials);
       await this.linkOrderMaterials(m, dto.order_id ?? null, materials);
+      // B119：文档承诺的「合同供应商回填订单」此前从未被调用（只有测试在调）。材料合同才是材料供应商；
+      // 加工合同的工厂是加工厂，不能回填到用料的供应商列。只补空的，占位工厂不填（见 backfillOrderSupplier）
+      if (dto.type === ContractType.MATERIAL) {
+        await this.backfillOrderSupplier(m, materials, dto.factory_id);
+      }
       // 发货地址（#87）：材料合同没指定时自动带该款加工厂地址；已填的不覆盖
       if (dto.type === ContractType.MATERIAL && !dto.ship_to_address) {
         const addr = await this.resolveShipToAddress(m, dto.order_id ?? null, contract.style_nos ?? null);
@@ -617,18 +765,22 @@ export class ContractService {
         const addr = f?.address?.trim();
         const keys = String(contract.style_nos ?? '').split(',').map((x) => x.trim()).filter(Boolean);
         if (addr && keys.length) {
+          // B037：只补**草稿**材料合同。已推送/已盖章的是供应商看过、签过的文件，地址为空也不能事后改写（无留痕）
           await m.query(
             `UPDATE contract SET ship_to_address = ?
-              WHERE type = ? AND deleted = 0
+              WHERE type = ? AND deleted = 0 AND portal_status = ?
                 AND (ship_to_address IS NULL OR ship_to_address = '')
                 AND (${keys.map(() => 'FIND_IN_SET(?, style_nos)').join(' OR ')})`,
-            [addr, ContractType.MATERIAL, ...keys],
-          ).catch(() => undefined);
+            [addr, ContractType.MATERIAL, ContractPortalStatus.DRAFT, ...keys],
+          ).catch((e: any) => {
+            // B120：回填失败不阻断建加工合同，但要留日志，不能再无声吞掉
+            this.logger.warn(`材料合同发货地址回填失败（加工合同照常创建）款号=${keys.join(',')}: ${e?.message ?? e}`);
+          });
         }
       }
 
       // 最近交易日期回写（基础资料稿 §1.2：列表按最近交易超期标红——此前该字段无任何写入方，规则恒不触发）
-      await m.update(Factory, { id: dto.factory_id }, { last_trade_date: new Date().toISOString().slice(0, 10) as any });
+      await m.update(Factory, { id: dto.factory_id }, { last_trade_date: todayLocal() as any }); // B061
 
       // 生成合同后订单自动置「已生成合同」（设计稿 合同 A9）：仅从「已下单」推进，补料合同不改订单态
       if (dto.order_id && dto.type !== ContractType.SUPPLEMENT) {
@@ -767,7 +919,7 @@ export class ContractService {
     // 上游单据号（关联单据 chip 显示单据号而非裸 ID）：源订单号；关联单据已删→降级 null，不影响详情
     let order_no: string | null = null;
     if (contract.order_id) {
-      const order = await this.orderRepo.findOne({ where: { id: contract.order_id } });
+      const order = await this.orderRepo.findOne({ where: { id: contract.order_id, deleted: 0 } }); // B122：已删订单不带出
       order_no = order?.order_no ?? null;
       if (order?.content_updated_at) {
         source_order_changed = new Date(order.content_updated_at) > new Date(contract.created_at);
@@ -776,7 +928,7 @@ export class ContractService {
     // 补料合同 → 母合同号
     let parent_contract_no: string | null = null;
     if (contract.parent_id) {
-      const parent = await this.repo.findOne({ where: { id: +contract.parent_id } });
+      const parent = await this.repo.findOne({ where: { id: +contract.parent_id, deleted: 0 } }); // B122
       parent_contract_no = parent?.contract_no ?? null;
     }
     return { ...contract, materials, shipments, qtyStats, source_order_changed, order_no, parent_contract_no };
@@ -811,7 +963,10 @@ export class ContractService {
       );
     }
 
-    return this.dataSource.transaction(async (manager) => {
+    // B123：变更日志改到事务提交之后再写。ChangeLogService 用自己的仓储、且 catch 吞错，
+    // 放在事务里等于「日志先落库、后面 manager.save 失败回滚」→ 留痕与数据不符
+    let pendingLog: Array<{ field: string; old: any; new: any }> | null = null;
+    const saved = await this.dataSource.transaction(async (manager) => {
       const assignable: Array<keyof UpdateContractDto> = [
         'factory_id', 'currency', 'deposit_ratio', 'mid_ratio', 'final_ratio',
         'last_ship_date', 'ship_to_address', 'account_period_days', 'remark',
@@ -831,16 +986,31 @@ export class ContractService {
       if (dto.materials) {
         if (!dto.materials.length) throw new BadRequestException('货物明细不能为空');
         // 数量微调留痕(P2#21/qc C6):记录总数量/总金额 原值→新值
-        const oldRows = await manager.find(ContractMaterial, { where: { contract_id: id } });
+        const oldRows = await manager.find(ContractMaterial, { where: { contract_id: id }, order: { sort_order: 'ASC' } });
         const oldQty = +oldRows.reduce((sum, r) => sum + +r.qty, 0).toFixed(4);
         const newQty = +dto.materials.reduce((sum, m) => sum + +m.qty, 0).toFixed(4);
         const oldAmount = +contract.total_amount;
         // 明细是「整表删了重建」，若不接力 order_material_id，编辑一次合同就把订单侧的
-        // 「已生成合同」标记冲没了。按 品名|颜色|尺码 从旧行接力（前端不回传该字段）。
+        // 「已生成合同」标记冲没了。按 品名|颜色|尺码 从旧行接力（前端不回传该字段时）。
+        // B038：同键可能对应**不同**订单行——订单 42 版型同名面料按部位分两行、各 BY_COLOR，
+        // 生成的合同里两组「面料|米白|」指向不同订单行；原来 Map 同键覆盖，编辑一次全指向最后一行，
+        // 另一订单行「已订」消失、再生成会重买。改成按出现顺序排队一一接力；新行比旧行多时沿用同键上一个
         const srcKey = (r: { item_name?: string; color?: string | null; size?: string | null }) =>
           `${r.item_name ?? ''}|${r.color ?? ''}|${r.size ?? ''}`;
-        const prevSrc = new Map<string, number | null>();
-        for (const r of oldRows) if (r.order_material_id != null) prevSrc.set(srcKey(r), r.order_material_id);
+        const prevSrc = new Map<string, number[]>();
+        for (const r of oldRows) {
+          if (r.order_material_id == null) continue;
+          const k = srcKey(r);
+          if (!prevSrc.has(k)) prevSrc.set(k, []);
+          prevSrc.get(k)!.push(r.order_material_id);
+        }
+        const lastUsed = new Map<string, number>();
+        const inherit = (r: { item_name?: string; color?: string | null; size?: string | null }): number | null => {
+          const k = srcKey(r);
+          const next = prevSrc.get(k)?.shift();
+          if (next != null) { lastUsed.set(k, next); return next; }
+          return lastUsed.get(k) ?? null;
+        };
         await manager.delete(ContractMaterial, { contract_id: id });
         const rows = dto.materials.map((m, idx) => manager.create(ContractMaterial, {
           contract_id: id,
@@ -858,11 +1028,19 @@ export class ContractService {
           amount: +(m.unit_price * m.qty).toFixed(4),
           qty_source: m.qty_source ?? null,
           remark: m.remark,
-          order_material_id: m.order_material_id ?? prevSrc.get(srcKey(m)) ?? null,
+          order_material_id: m.order_material_id ?? inherit(m),
         }));
+        // B036：同 create——只校验请求体自带的 id，从旧行接力回来的那些本来就是本订单的
+        await this.assertOwnOrderMaterials(
+          manager, contract.order_id ?? null, rows as any, this.clientSuppliedOmIds(dto.materials),
+        );
         await manager.save(ContractMaterial, rows);
         // 手工合同在编辑时才补齐明细的情况同样要认回订单行（#89），口径与新建一致
         await this.linkOrderMaterials(manager, contract.order_id ?? null, rows as any);
+        // B119：编辑时补齐明细同样回填供应商（只补空的，口径与新建一致）
+        if (contract.type === ContractType.MATERIAL) {
+          await this.backfillOrderSupplier(manager, rows as any, contract.factory_id);
+        }
         const newTotal = +rows.reduce((s, r) => s + +r.amount, 0).toFixed(4);
         // 金额变化则重置已通过的审批（防"审批后改金额"绕过阈值管控，同付款申请口径）
         if (Math.abs(newTotal - +contract.total_amount) > 0.0001
@@ -872,14 +1050,16 @@ export class ContractService {
           contract.approved_at = null as any;
         }
         contract.total_amount = newTotal;
-        await this.changeLog.record('CONTRACT', id, [
+        pendingLog = [
           { field: 'qty_total', old: oldQty, new: newQty },
           { field: 'total_amount', old: oldAmount, new: newTotal },
-        ]);
+        ];
       }
 
       return manager.save(Contract, contract);
     });
+    if (pendingLog) await this.changeLog.record('CONTRACT', id, pendingLog); // 提交成功才留痕（B123）
+    return saved;
   }
 
   // 推送给供应商门户 (DRAFT → PUSHED)
@@ -888,6 +1068,12 @@ export class ContractService {
     if (!contract) throw new NotFoundException(`合同 #${id} 不存在`);
     if (contract.portal_status !== ContractPortalStatus.DRAFT) {
       throw new BadRequestException('只有草稿状态才可推送');
+    }
+    // B124：占位合同不能推送——「待定供应商」不是真实供应商，推送会为它开出一个所有待定单共用的门户登录。
+    // 工厂档案在这里查一次，下面自动开号也用它（别查两遍：测试桩按调用顺序排值）
+    const factory = await this.factoryRepo.findOne({ where: { id: contract.factory_id, deleted: 0 } });
+    if (factory?.name === PLACEHOLDER_FACTORY_NAME) {
+      throw new BadRequestException('供应商待定的合同不能推送，请先在草稿里改绑真实供应商');
     }
     // 金额阈值审批：合同金额超阈值需主管审批后方可推送（设计稿 审批矩阵，阈值可配）
     if (contract.approval_status !== ApprovalStatus.APPROVED) {
@@ -902,9 +1088,13 @@ export class ContractService {
     }
     // 首次推送自动开通门户账号(P3#41/CON B3):无账号时按工厂编号自动建(默认密码 Factory@123,提示改密)
     let account = await this.supplierRepo.findOne({ where: { factory_id: contract.factory_id, status: 1 } });
+    // B124：停用过的账号也算「已有」——此前只找启用的，停用过的供应商再推合同就建出同工厂第二个账号。
+    // 停用是管理员的决定，这里不替他重新启用，只在日志里提醒去「账号管理」处理
+    const disabledAccount = account
+      ? null
+      : await this.supplierRepo.findOne({ where: { factory_id: contract.factory_id } });
     let autoOpened: string | null = null;
-    if (!account) {
-      const factory = await this.factoryRepo.findOne({ where: { id: contract.factory_id, deleted: 0 } });
+    if (!account && !disabledAccount) {
       const base = (factory?.factory_no || `f${contract.factory_id}`).toLowerCase();
       let username = base;
       for (let i = 0; i < 5; i++) {
@@ -930,7 +1120,12 @@ export class ContractService {
       action: 'PUSH',
       operator: operatorUsername,
       operator_type: PortalOperatorType.INTERNAL,
-      remark: autoOpened ? `首次推送自动开通门户账号:${autoOpened}(初始密码 Factory@123,请通知供应商修改)` : undefined,
+      // B003：日志 remark 不再写初始密码——日志接口凡有合同菜单的人都能看，写进去等于把供应商门户登录发给全员
+      remark: autoOpened
+        ? `首次推送自动开通门户账号:${autoOpened}，请管理员在「账号管理」告知供应商初始密码并提醒其登录后修改`
+        : (disabledAccount
+          ? `该供应商门户账号 ${disabledAccount.account} 已停用，供应商暂无法登录处理合同；如需启用请到「账号管理」`
+          : undefined),
     }));
 
     return { ...(contract as any), auto_opened_account: autoOpened } as any;
@@ -1066,17 +1261,39 @@ export class ContractService {
   }
 
   async remove(id: number): Promise<void> {
-    const contract = await this.repo.findOne({ where: { id, deleted: 0 } });
-    if (!contract) throw new NotFoundException(`合同 #${id} 不存在`);
-    if (contract.portal_status !== ContractPortalStatus.DRAFT) {
-      throw new BadRequestException('只有草稿状态的合同可以删除');
-    }
-    contract.deleted = 1;
-    await this.repo.save(contract);
+    await this.dataSource.transaction(async (manager) => {
+      const contract = await manager.findOne(Contract, { where: { id, deleted: 0 } });
+      if (!contract) throw new NotFoundException(`合同 #${id} 不存在`);
+      if (contract.portal_status !== ContractPortalStatus.DRAFT) {
+        throw new BadRequestException('只有草稿状态的合同可以删除');
+      }
+      contract.deleted = 1;
+      await manager.save(Contract, contract);
+
+      // B039 状态机回退：订单是因为这张合同才进的「已生成合同」，合同删光了就退回「已下单」。
+      // 此前不退：下单→生成合同→发现错了删掉草稿→订单既不能编辑也不能撤回（revert 只认 CONFIRMED），
+      // 提示「先处理下游合同」但已无合同可处理，只能改库。锁订单行，避免与并发生成合同交错
+      if (contract.order_id) {
+        const order = await manager.findOne(OrderMain, {
+          where: { id: contract.order_id, deleted: 0 },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (order && order.status === OrderStatus.CONTRACTED) {
+          const remaining = await manager.count(Contract, { where: { order_id: contract.order_id, deleted: 0 } });
+          if (remaining === 0) {
+            order.status = OrderStatus.CONFIRMED;
+            await manager.save(OrderMain, order);
+          }
+        }
+      }
+    });
   }
 
-  /** 按「未驳回」的批次重算合同累计已发。幂等——多次调用结果一致，不会累加出错。 */
-  private async recalcShippedQty(contractId: number): Promise<number> {
+  /**
+   * 按「未驳回」的批次重算合同累计已发。幂等——多次调用结果一致，不会累加出错。
+   * 公开给门户侧复用（B060 同类：portal.withdrawShipment 目前是做减法，撤回已被驳回的批次会二次扣减）
+   */
+  async recalcShippedQty(contractId: number): Promise<number> {
     const rows = await this.shipmentRepo.find({ where: { contract_id: contractId } });
     const total = +rows
       .filter((r) => r.approval_status !== 'REJECTED')

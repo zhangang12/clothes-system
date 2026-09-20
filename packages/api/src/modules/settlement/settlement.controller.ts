@@ -5,8 +5,9 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { MenuGuard, MenuAccess } from '../../common/guards/menu.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { UserRole, PAYMENT_SLIP_ROLES } from '@i9/types';
+import { UserRole, PAYMENT_SLIP_ROLES, isAdminRole } from '@i9/types';
 import { SettlementService } from './settlement.service';
 import { maskSettlement } from '../../common/masking/field-mask';
 import { CreateSettlementDto } from './dto/create-settlement.dto';
@@ -15,9 +16,21 @@ import { AddReceiptDto } from './dto/add-receipt.dto';
 import { UpdateSettlementDto } from './dto/update-settlement.dto';
 import { QuerySettlementDto } from './dto/query-settlement.dto';
 
+// 成本预览（cost-preview）的脱敏（B080）：它不是结算单形状（rows/paid_tax 而非 costs/goods_amount_tax），
+// maskSettlement 套不上；口径与之完全一致——非财务/管理不见各供应商对账金额与合计，行名/供应商/单号照给。
+const FINANCE_PRIVILEGED = (role: string) => isAdminRole(role) || role === UserRole.FINANCE;
+export function maskCostPreview(payload: any, role: string): any {
+  if (!payload || typeof payload !== 'object' || FINANCE_PRIVILEGED(role)) return payload;
+  (payload.rows ?? []).forEach((r: any) => { if (r && typeof r === 'object') { r.amount = null; r.unit_price = null; } });
+  for (const f of ['paid_tax', 'unpaid_tax', 'unpaid_count']) if (f in payload) payload[f] = null;
+  return payload;
+}
+
+// B079：只读接口此前无任何权限声明（RolesGuard 无声明即放行），版师/打样/船务都能 GET /settlements 拿到净利、毛利率。
+// 按「结算清单」菜单授权（MenuGuard，与侧栏同一份 resolveMenuKeys 口径），不收窄 @Roles；价格泄露靠 maskSettlement。
 @ApiTags('结算管理')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, MenuGuard)
 @Controller('settlements')
 export class SettlementController {
   constructor(private readonly service: SettlementService) {}
@@ -25,11 +38,13 @@ export class SettlementController {
   @Post()
   @Roles(UserRole.ADMIN, UserRole.FINANCE, UserRole.BUSINESS)
   @ApiOperation({ summary: '创建结算单（含费用明细；出货后业务可建·结算串流程 rec）' })
-  create(@Body() dto: CreateSettlementDto, @Request() req: any) {
-    return this.service.create(dto, req.user.id);
+  // B081 同类：业务能建单，响应也是完整实体（goods/毛利），与列表/详情对他脱敏的口径不一致，一并过 maskSettlement
+  async create(@Body() dto: CreateSettlementDto, @Request() req: any) {
+    return maskSettlement(await this.service.create(dto, req.user.id), req.user.role);
   }
 
   @Get()
+  @MenuAccess('settlements')
   @ApiOperation({ summary: '结算单列表（分页；成本/毛利限财务/管理）' })
   async findAll(@Query() query: QuerySettlementDto, @Request() req: any) {
     return maskSettlement(await this.service.findAll(query), req.user.role);
@@ -45,9 +60,9 @@ export class SettlementController {
   // 建单前预览自动聚合的成本行（#91）。只读、不落库；角色与 aggregate 一致。
   @Get('cost-preview')
   @Roles(UserRole.ADMIN, UserRole.FINANCE, UserRole.BUSINESS, UserRole.SUPERVISOR)
-  @ApiOperation({ summary: '新建结算单前预览：该订单会自动聚合成哪些成本行' })
-  costPreview(@Query('order_id', ParseIntPipe) orderId: number) {
-    return this.service.previewCosts(orderId);
+  @ApiOperation({ summary: '新建结算单前预览：该订单会自动聚合成哪些成本行（金额限财务/管理）' })
+  async costPreview(@Query('order_id', ParseIntPipe) orderId: number, @Request() req: any) {
+    return maskCostPreview(await this.service.previewCosts(orderId), req.user.role);
   }
 
   @Get('stats')
@@ -58,6 +73,7 @@ export class SettlementController {
   }
 
   @Get(':id')
+  @MenuAccess('settlements')
   @ApiOperation({ summary: '结算单详情（含费用/回款；成本/毛利限财务/管理）' })
   async findOne(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
     return maskSettlement(await this.service.findOne(id), req.user.role);
@@ -94,8 +110,9 @@ export class SettlementController {
   @Post(':id/receipts')
   @Roles(...PAYMENT_SLIP_ROLES) // #130 老板拍板 B1：业务/船务也可登记回款；删除与结算确认仍归财务/管理员
   @ApiOperation({ summary: '登记回款（可带该笔汇率+银行水单；各笔齐备时结算金额=Σ金额×汇率）' })
-  addReceipt(@Param('id', ParseIntPipe) id: number, @Body() dto: AddReceiptDto) {
-    return this.service.addReceipt(id, dto);
+  // B081：放给了业务/船务，响应却是完整实体（gross_profit/net_profit/goods_amount_tax），绕过了列表/详情的脱敏
+  async addReceipt(@Param('id', ParseIntPipe) id: number, @Body() dto: AddReceiptDto, @Request() req: any) {
+    return maskSettlement(await this.service.addReceipt(id, dto), req.user.role);
   }
 
   @Delete(':id/receipts/:receiptId')

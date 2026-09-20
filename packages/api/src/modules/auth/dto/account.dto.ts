@@ -3,9 +3,11 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole, MENU_REGISTRY } from '@i9/types';
 
 // 口令强度：≥8 位且同时含字母与数字。挡住 123456 / Admin@123 这类弱默认密码延续到用户自设。
-const STRONG =
-  /^(?=.*[A-Za-z])(?=.*\d).{8,64}$/;
-const STRONG_MSG = '密码至少 8 位，且须同时包含字母和数字';
+// 导出给工厂建档的门户初始密码复用（B045）：全系统只此一份口令策略。
+export const STRONG_PASSWORD = /^(?=.*[A-Za-z])(?=.*\d).{8,64}$/;
+export const STRONG_PASSWORD_MSG = '密码至少 8 位，且须同时包含字母和数字';
+const STRONG = STRONG_PASSWORD;
+const STRONG_MSG = STRONG_PASSWORD_MSG;
 
 const MENU_KEYS = MENU_REGISTRY.map((m) => m.key);
 

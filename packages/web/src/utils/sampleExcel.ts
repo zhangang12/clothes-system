@@ -14,9 +14,10 @@
 // 公共事已收进 docExcel —— 合同、报价的导出也在用同一份，别再在这儿复制一遍。
 
 import { toDataUrl, splitDataUrl, numOr, isNumCell } from './docExcel';
+import { fmtDate } from './format';
 import { splitColorGroups, maxColorGroups, colorGroupLabel } from './colorGroups';
 
-const d10 = (v: unknown): string => (v ? String(v).slice(0, 10) : '');
+const d10 = (v: unknown): string => (v ? fmtDate(v) : ''); // datetime 先转本地再取日期（B091）
 const val = (v: unknown): string => (v === null || v === undefined ? '' : String(v));
 
 export async function exportSampleExcel(detail: any): Promise<void> {

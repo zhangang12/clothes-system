@@ -153,9 +153,56 @@ export class FileService implements OnModuleInit {
     return false;
   }
 
-  /** 敏感附件判定：private/ 子目录下的文件读取须签名令牌 */
+  /**
+   * 落盘后兜底（B001）：multer 的 destination 回调在解析到 file 字段那一刻触发，此时只有排在 file **之前**
+   * 的普通字段进了 req.body——FormData 先 append('file') 再 append('sensitive','1') 的上传会落到公共目录，
+   * 从此不需要令牌、还被打上一年期 immutable 缓存头。上传结束后 req.body 已完整，这里再判一次：
+   * 声明了敏感却没落在 private/ 的，搬进 private/YYYY/MM/（文件名不变）。
+   * 现有 web/portal 客户端都用 ?sensitive=1 走 query，destination 阶段就能判到；这里只兜 body 字段顺序这个坑。
+   */
+  relocateIfSensitive(req: any, file: Express.Multer.File): Express.Multer.File {
+    if (!this.isSensitiveUpload(req)) return file;
+    const rel = path.relative(this.uploadRoot, file.path).replace(/\\/g, '/');
+    if (rel.startsWith('private/')) return file;
+    const today = new Date();
+    const dir = path.join(
+      this.uploadRoot, 'private',
+      String(today.getFullYear()), String(today.getMonth() + 1).padStart(2, '0'),
+    );
+    fs.mkdirSync(dir, { recursive: true });
+    const newPath = path.join(dir, path.basename(file.path));
+    fs.renameSync(file.path, newPath);
+    file.path = newPath;
+    file.destination = dir;
+    return file;
+  }
+
+  /**
+   * 把外部传入的相对路径归一成「正斜杠、无前导 /、无空段与 . 段」的形式；含 .. 段（路径穿越）或空路径返回 null。
+   * B002：以前 isPrivate 只剥前导 /，而 resolvePath 走 path.join——`./private/x.pdf` 被 isPrivate 判成公开，
+   * path.join 却把它还原成 private 目录下的同一文件，敏感附件签名校验就这样被绕过。
+   * 现在 isPrivate / canSign / resolvePath 三处都从这一份口径出发，判定与落盘指向的永远是同一个路径。
+   * 允许 URL 解码一次：express 只解一层，`%2e%2fprivate` 这类双重编码变体解开后仍要按同一规则判。
+   * （uuid 文件名 + 日期目录本身不含 %，合法路径不受影响；解码失败按原文处理。）
+   */
+  normalizeRelPath(relativePath: string): string | null {
+    let p = String(relativePath ?? '');
+    if (/%[0-9a-fA-F]{2}/.test(p)) {
+      try { p = decodeURIComponent(p); } catch { /* 非法 % 序列：保持原样 */ }
+    }
+    const segs: string[] = [];
+    for (const seg of p.replace(/\\/g, '/').split('/')) {
+      if (seg === '' || seg === '.') continue;
+      if (seg === '..') return null; // 路径穿越一律拒绝（不做消解，避免与判定口径再分叉）
+      segs.push(seg);
+    }
+    return segs.length ? segs.join('/') : null;
+  }
+
+  /** 敏感附件判定：private/ 子目录下的文件读取须签名令牌（先归一化再判，`./private/`、`/./private/`、`.\private\` 等变体一律算敏感） */
   isPrivate(relativePath: string): boolean {
-    return (relativePath ?? '').replace(/^[/\\]+/, '').startsWith('private/');
+    const p = this.normalizeRelPath(relativePath);
+    return p !== null && p.startsWith('private/');
   }
 
   /**
@@ -164,9 +211,9 @@ export class FileService implements OnModuleInit {
    * 避免借响应差异探测文件是否存在（L9）。
    */
   canSign(relativePath: string): boolean {
-    const p = (relativePath ?? '').replace(/\\/g, '/').replace(/^\/+/, '');
-    if (!p || p.split('/').includes('..')) return false; // 路径穿越一律拒绝
-    if (!this.isPrivate(p)) return false; // 仅 private/ 敏感附件需要（且允许）签发
+    const p = this.normalizeRelPath(relativePath);
+    if (!p) return false; // 空 / 路径穿越一律拒绝
+    if (!p.startsWith('private/')) return false; // 仅 private/ 敏感附件需要（且允许）签发
     return this.resolvePath(p) !== null; // 目标文件必须真实存在
   }
 
@@ -205,12 +252,15 @@ export class FileService implements OnModuleInit {
   }
 
   /**
-   * 将相对路径解析为磁盘绝对路径（防目录穿越）；不存在返回 null
+   * 将相对路径解析为磁盘绝对路径（防目录穿越）；归一化失败（含 ..）/ 越出根目录 / 不存在均返回 null。
+   * 与 isPrivate 用同一份 normalizeRelPath（B002）。
    */
   resolvePath(relativePath: string): string | null {
-    const clean = relativePath.replace(/\.\.[/\\]?/g, '').replace(/^[/\\]+/, '');
-    const full = path.join(this.uploadRoot, clean);
-    if (!full.startsWith(this.uploadRoot)) return null;
+    const clean = this.normalizeRelPath(relativePath);
+    if (!clean) return null;
+    const root = path.resolve(this.uploadRoot);
+    const full = path.resolve(root, clean);
+    if (!full.startsWith(root + path.sep)) return null;
     return fs.existsSync(full) ? full : null;
   }
 

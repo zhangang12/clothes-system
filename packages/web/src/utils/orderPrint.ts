@@ -10,8 +10,10 @@ const esc = (v: unknown): string =>
   String(v ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
-const n2 = (v: unknown): string => { const x = Number(v); return Number.isFinite(x) ? x.toFixed(2) : '—'; };
-const n4 = (v: unknown): string => { const x = Number(v); return Number.isFinite(x) ? x.toFixed(4) : '—'; };
+// 空值一律打「—」（B093 同类）：Number(null) 是 0，未定价订单的对客确认单会印出「单品单价 0.0000」
+const isBlank = (v: unknown): boolean => v === null || v === undefined || v === '';
+const n2 = (v: unknown): string => { if (isBlank(v)) return '—'; const x = Number(v); return Number.isFinite(x) ? x.toFixed(2) : '—'; };
+const n4 = (v: unknown): string => { if (isBlank(v)) return '—'; const x = Number(v); return Number.isFinite(x) ? x.toFixed(4) : '—'; };
 
 export type OrderPrintMode = 'customer' | 'factory' | 'internal';
 

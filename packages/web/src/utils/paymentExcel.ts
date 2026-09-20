@@ -23,14 +23,19 @@ const payMethodLabel = (m: unknown): string =>
 /** 关联/操作人只有裸 ID(列表接口不回用户名),渲染成 #ID,空值出空单元格 */
 const uid = (v: unknown): string => (v ? `#${v}` : '');
 
+/** 应付总额：后端建单时 actual_pay = amount − prepay_offset；老单 actual_pay 为空时按同一口径回退，
+ *  与后端汇总、工厂账单一致——只退回 amount 会把冲抵掉的预付又算成未付（B146）。 */
+export const payableOf = (r: any): number =>
+  (r?.actual_pay != null ? +r.actual_pay : (+(r?.amount ?? 0) - +(r?.prepay_offset ?? 0)));
+
 export function exportPaymentRequestExcel(detail: any): void {
   // 调用方从 GET /payments/requests/:id/records 拉来挂上;列表页里这份数据叫 payRecords
   const records: any[] = detail.records ?? detail.payRecords ?? [];
 
   const no = detail.pr_no ?? '';
   const factory = detail.factory_name || (detail.factory_id ? `工厂#${detail.factory_id}` : '');
-  // 应付总额:后端建单时 actual_pay = amount - prepay_offset,老单可能为空 → 退回申请金额(与列表页 prBalance 同口径)
-  const payable = +(detail.actual_pay ?? detail.amount ?? 0);
+  // 应付总额:老单 actual_pay 可能为空 → 按 amount − prepay_offset 回退(与列表页 prBalance / 工厂账单同口径)
+  const payable = payableOf(detail);
   const paidTotal = +(detail.paid_total ?? 0);
 
   const pairs: Array<[string, unknown]> = [

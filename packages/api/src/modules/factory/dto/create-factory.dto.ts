@@ -1,10 +1,11 @@
 import {
   IsString, IsEnum, IsOptional, IsArray, IsBoolean, IsInt, IsNumber,
-  IsDateString, MaxLength, ValidateNested,
+  IsDateString, MaxLength, ValidateNested, Matches,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { FactoryType } from '@i9/types';
+import { STRONG_PASSWORD, STRONG_PASSWORD_MSG } from '../../auth/dto/account.dto';
 
 export class FactoryContactDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) name?: string;
@@ -67,8 +68,9 @@ export class CreateFactoryDto {
   // 供应商门户账号（可选：填写则建档时开通门户登录账号，用于接收合同推送）
   @ApiPropertyOptional({ description: '门户登录账号（开通后供应商可登录 H5 处理合同）' })
   @IsOptional() @IsString() @MaxLength(50) portalAccount?: string;
-  @ApiPropertyOptional({ description: '门户登录初始密码' })
-  @IsOptional() @IsString() @MaxLength(50) portalPassword?: string;
+  // B045：建档时的门户初始密码也走全系统同一份口令策略（改密/重置接口早已强制 ≥8 位含字母数字，这里曾是唯一缺口）
+  @ApiPropertyOptional({ description: '门户登录初始密码（≥8 位，含字母和数字）' })
+  @IsOptional() @IsString() @MaxLength(50) @Matches(STRONG_PASSWORD, { message: STRONG_PASSWORD_MSG }) portalPassword?: string;
 
   @ApiPropertyOptional({ type: [FactoryContactDto] })
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => FactoryContactDto)
@@ -80,3 +82,8 @@ export class ImportFactoryDto {
   @IsArray() @ValidateNested({ each: true }) @Type(() => CreateFactoryDto)
   rows: CreateFactoryDto[];
 }
+
+// B006：PUT /factories/:id 原来用 Partial<CreateFactoryDto> 接 body，全局 ValidationPipe 整体跳过。
+// PartialType 继承全部校验并逐字段 @IsOptional；前端 FactoryEditView.buildDto 发送的字段已逐个核对都在 CreateFactoryDto 里
+// （developDate/establishedDate 可能是 null：@IsOptional 对 null 同样放行；contacts 前端已映射成 camelCase）。
+export class UpdateFactoryDto extends PartialType(CreateFactoryDto) {}

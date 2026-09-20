@@ -14,11 +14,12 @@
         </template>
         <template v-else>
           <el-button v-if="!readonly && !statusLocked" type="primary" :icon="Check" :loading="saving" @click="save">保存</el-button>
-          <el-button v-if="!readonly && !statusLocked && editId" type="success" :icon="Promotion" @click="pushPatternmaker">推送版师</el-button>
-          <el-button v-if="!readonly && editId && ['SAMPLING', 'SHIPPED'].includes(form.status)" type="warning" plain @click="markShipped">标记已寄出</el-button>
-          <el-button v-if="!readonly && editId && form.status === 'SHIPPED'" plain @click="undoShipped">撤销已寄出</el-button>
-          <el-button v-if="!readonly && editId && ['RECONCILED', 'DONE'].includes(form.status)" type="success" plain @click="markComplete">标记完成</el-button>
-          <el-button v-if="editId" :icon="CopyDocument" @click="copy">复制</el-button>
+          <!-- 状态流转按钮一律带 loading（B110）：这些接口后端多数没有锁，网络慢时用户再点一次就会走两遍 -->
+          <el-button v-if="!readonly && !statusLocked && editId" type="success" :icon="Promotion" :loading="acting === 'push'" @click="pushPatternmaker">推送版师</el-button>
+          <el-button v-if="!readonly && editId && ['SAMPLING', 'SHIPPED'].includes(form.status)" type="warning" plain :loading="acting === 'ship'" @click="markShipped">标记已寄出</el-button>
+          <el-button v-if="!readonly && editId && form.status === 'SHIPPED'" plain :loading="acting === 'undoShip'" @click="undoShipped">撤销已寄出</el-button>
+          <el-button v-if="!readonly && editId && ['RECONCILED', 'DONE'].includes(form.status)" type="success" plain :loading="acting === 'complete'" @click="markComplete">标记完成</el-button>
+          <el-button v-if="editId" :icon="CopyDocument" :loading="acting === 'copy'" @click="copy">复制</el-button>
         </template>
         <el-button v-if="editId" :icon="Printer" @click="print">打印/PDF</el-button>
         <el-button v-if="editId" :icon="Download" @click="exportExcel">导出Excel</el-button>
@@ -135,13 +136,13 @@
               <template #default="{ row }">
                 <!-- 色组动态多列（用户反馈：一款四五个色组要分开看/分开录；存储仍逗号串,UI 按组分列） -->
                 <div class="color-groups">
-                  <span v-for="(g, gi) in row.colorGroups" :key="gi" class="cg-item">
+                  <span v-for="(g, gi) in (row.colorGroups ?? [])" :key="gi" class="cg-item">
                     <el-input :model-value="g" size="small" :disabled="bizDisabled" :placeholder="`色组${gi + 1}`"
                       @update:model-value="(v: string) => setColorGroup(row, gi, v)" />
-                    <el-button v-if="!bizDisabled && row.colorGroups.length > 1" link size="small" class="cg-x" @click="removeColorGroup(row, gi)">✕</el-button>
+                    <el-button v-if="!bizDisabled && (row.colorGroups?.length ?? 0) > 1" link size="small" class="cg-x" @click="removeColorGroup(row, gi)">✕</el-button>
                   </span>
                   <el-button v-if="!bizDisabled" link size="small" class="cg-add" @click="addColorGroup(row)">＋色组</el-button>
-                  <span v-if="!row.colorGroups.length && bizDisabled" class="muted">—</span>
+                  <span v-if="!row.colorGroups?.length && bizDisabled" class="muted">—</span>
                 </div>
               </template>
             </el-table-column>
@@ -179,8 +180,8 @@
             </el-table-column>
             <el-table-column v-if="!patternmaker && editId" label="采购" width="86" align="center">
               <template #default="{ row }">
-                <el-tooltip content="为该行生成无合同费用对账单(打样材料,金额=数量×参考价)" placement="top">
-                  <el-button link type="warning" size="small" :disabled="!row.id || purchasing.has(row.id)" @click="doPurchase(row)">🟠生成采购</el-button>
+                <el-tooltip :content="purchasedNo[row.id] ? `本次已生成 ${purchasedNo[row.id]}，可再生成一张（补料二轮）` : '为该行生成无合同费用对账单(打样材料,金额=数量×参考价)'" placement="top">
+                  <el-button link type="warning" size="small" :loading="purchasing.has(row.id)" :disabled="!row.id" @click="doPurchase(row)">🟠生成采购</el-button>
                 </el-tooltip>
               </template>
             </el-table-column>
@@ -219,7 +220,8 @@
           <el-table-column label="寄回日期" width="150"><template #default="{ row }"><el-date-picker v-model="row.returnDate" type="date" value-format="YYYY-MM-DD" size="small" style="width:100%" :disabled="!pmEnabled" placeholder="版师填" /></template></el-table-column>
           <el-table-column label="工价单价" width="100"><template #default="{ row }"><el-input v-model="row.laborUnitPrice" type="number" :min="0" size="small" :disabled="!pmEnabled" placeholder="版师填" @input="onRoundCalc(row)" /></template></el-table-column>
           <el-table-column label="工价金额" width="100"><template #default="{ row }"><el-input :model-value="roundAmount(row)" size="small" readonly /></template></el-table-column>
-          <el-table-column label="备注" min-width="90"><template #default="{ row }"><el-input v-model="row.remark" size="small" /></template></el-table-column>
+          <!-- B157：这一列原来漏了 :disabled —— 查看页(/samples/:id/view)能改备注，可页面上根本没有保存按钮，刷新即丢 -->
+          <el-table-column label="备注" min-width="90"><template #default="{ row }"><el-input v-model="row.remark" size="small" :disabled="readonly || locked" /></template></el-table-column>
         </el-table>
         <el-row :gutter="16" style="margin-top:12px">
           <el-col :span="24">
@@ -325,6 +327,7 @@ import { parseSheetFile, guessMapping, rowsToMaterials, MATERIAL_FIELDS } from '
 import { useFormDraft } from '@/utils/formDraft';
 import { SAMPLE_CATEGORIES, SAMPLE_STATUS_LABEL, QUOTE_STATUS_LABEL, UserRole, SAMPLE_EDITABLE_STATUSES, SAMPLE_PM_EDITABLE_STATUSES } from '@i9/types';
 import { customerEmptyText } from '@/utils/customerEmptyHint';
+import { todayStr } from '@/utils/format';
 
 const SectionBlock = (props: { title: string; badge?: string }, { slots }: any) =>
   h('div', { class: 'section-block' }, [
@@ -337,7 +340,9 @@ const SectionBlock = (props: { title: string; badge?: string }, { slots }: any) 
 
 const route = useRoute();
 const router = useRouter();
-const readonly = computed(() => !!route.meta.readonly);
+// 单据装载失败（B106）：停在空白表单上还能编辑、能保存，一存就把材料明细清空 —— 并进 readonly，整页只读
+const loadFailed = ref(false);
+const readonly = computed(() => !!route.meta.readonly || loadFailed.value);
 const authStore = useAuthStore();
 const patternmaker = computed(() => !!route.meta.patternmaker);
 const editId = computed(() => (route.params.id ? Number(route.params.id) : null));
@@ -349,14 +354,15 @@ const statusLocked = computed(() => !patternmaker.value && !!editId.value && !!f
   && !(SAMPLE_EDITABLE_STATUSES as readonly string[]).includes(form.status));
 const pmLocked = computed(() => patternmaker.value && !!editId.value && !!form.status
   && !(SAMPLE_PM_EDITABLE_STATUSES as readonly string[]).includes(form.status));
-const locked = computed(() => statusLocked.value || pmLocked.value);
+const locked = computed(() => statusLocked.value || pmLocked.value || loadFailed.value);
 const lockHint = computed(() => {
   const st = statusLabel.value || form.status;
+  if (loadFailed.value) return '样衣没有加载成功，本页只能看——请刷新页面重试。';
   if (pmLocked.value) return `版师保存只在打样中/已寄出/已寄回/已对账阶段开放，样衣当前「${st}」，本页只能看。`;
   if (statusLocked.value) return `样衣已「${st}」，基本信息、材料明细和寄样记录都不能再改（只有待派单、打样中可以改）；寄出/完成等状态动作仍可用。`;
   return '';
 });
-const bizDisabled = computed(() => readonly.value || patternmaker.value || statusLocked.value); // 业务字段：查看/版师视图/状态锁只读
+const bizDisabled = computed(() => readonly.value || patternmaker.value || statusLocked.value); // 业务字段：查看/版师视图/状态锁只读（装载失败已并进 readonly）
 const pmEnabled = computed(() => patternmaker.value && !readonly.value && !pmLocked.value);  // 版师字段：仅版师视图且状态允许时可编辑
 const isAdmin = computed(() => authStore.hasRole(UserRole.ADMIN));
 // 客户下拉为空时说清原因（#141 Amanda 新账号没被授权任何客户，下拉只显示「无数据」）
@@ -373,13 +379,14 @@ const pmLoadFailed = ref(false);      // 加载失败降级为文本输入
 const emptyMaterial = () => ({ itemName: '', arrangeDate: '', width: '', colors: '', colorGroups: [] as string[], part: '', composition: '', codeBand: '', zipperLength: '', puller: '', zipperTeeth: '', qty: '', gramWeight: '', size: '', refPrice: '', actualUsage: '', supplierId: undefined, supplierName: '', image: '', remark: '' });
 // 色组分列（用户反馈：四五个色组要分开录/分开看）：colorGroups 数组是编辑源,colors 逗号串同步存储
 const splitColors = (s: any): string[] => String(s ?? '').split(/[，,]/).map((x) => x.trim()).filter(Boolean);
-function syncColors(row: any) { row.colors = row.colorGroups.map((s: string) => s.trim()).filter(Boolean).join('，'); }
-function setColorGroup(row: any, i: number, v: string) { row.colorGroups[i] = v; syncColors(row); }
-function addColorGroup(row: any) { row.colorGroups.push(''); }
-function removeColorGroup(row: any, i: number) { row.colorGroups.splice(i, 1); syncColors(row); }
+function syncColors(row: any) { row.colors = (row.colorGroups ?? []).map((s: string) => s.trim()).filter(Boolean).join('，'); }
+function setColorGroup(row: any, i: number, v: string) { (row.colorGroups ??= []); row.colorGroups[i] = v; syncColors(row); }
+function addColorGroup(row: any) { (row.colorGroups ??= []).push(''); }
+function removeColorGroup(row: any, i: number) { (row.colorGroups ?? []).splice(i, 1); syncColors(row); }
 const form = reactive<any>({
   sampleNo: '', categories: '', middlemanId: undefined, styleNo: '', sampleSize: '', sampleQty: '', buyerId: undefined,
-  patternmakerId: undefined, patternmakerName: '', maker: authStore.realName || '', makeDate: new Date().toISOString().slice(0, 10),
+  // 本地日期（B097）：toISOString 是 UTC 日期，早 8 点前建的样衣制单日期会是昨天
+  patternmakerId: undefined, patternmakerName: '', maker: authStore.realName || '', makeDate: todayStr(),
   shipSampleDate: '', recipient: '', fileLocation: '', garmentRemark: '', feedbackAttachments: '',
   image1: '', image2: '', image3: '', materialShipNo: '', materialShipDate: '',
   returnNo: '', returnDate: '', pieceCount: '', laborUnitPrice: '', status: '',
@@ -511,6 +518,15 @@ async function onSheetFile(e: Event) {
     ElMessage.success(`已解析 ${rows.length} 行，请核对列映射`);
   } catch (err: any) { errToast(err?.message ?? '文件解析失败'); }
 }
+/** 整行没填过东西＝空占位行（数组/对象要看长度，见 B158；supplierId 跟着 supplierName 走，不单独算） */
+function isBlankMaterial(m: any): boolean {
+  return !Object.entries(m ?? {}).some(([k, v]) => {
+    if (k === 'supplierId' || k === 'id') return false;
+    if (Array.isArray(v)) return v.some((x) => String(x ?? '').trim() !== '');
+    if (v && typeof v === 'object') return Object.keys(v).length > 0;
+    return v !== '' && v != null;
+  });
+}
 function confirmSheetImport() {
   const rows = sheetPreviewRows.value;
   if (!rows.length) { ElMessage.warning('没有可导入的材料行（请检查列映射与品名列）'); return; }
@@ -531,9 +547,10 @@ function confirmSheetImport() {
   if (sheetMode.value === 'replace') {
     form.materials = mapped;
   } else {
-    // 追加：滤掉现存完全空白行，免得空行夹在中间
-    const kept = form.materials.filter((m: any) => Object.entries(m).some(([k, v]) => k !== 'supplierId' && v !== '' && v != null));
-    form.materials = [...kept, ...mapped];
+    // 追加：滤掉现存完全空白行，免得空行夹在中间。
+    // 【空数组也算没填】（B158）emptyMaterial() 的 colorGroups 是 []，而 `[] !== '' && [] != null` 恒为真——
+    // 判据永远成立，于是第一行空占位行永远留着，得手动删
+    form.materials = [...form.materials.filter((m: any) => !isBlankMaterial(m)), ...mapped];
   }
   if (!form.materials.length) form.materials = [emptyMaterial()];
   sheetDialog.value = false;
@@ -576,6 +593,12 @@ async function doPurchase(row: any) {
     ElMessage.success(`已生成对账单 ${d.reconcile_no ?? ''}，可在「对账管理」提交复核`);
   } catch (e: any) {
     errToast(e?.response?.data?.msg ?? e?.response?.data?.msg ?? '生成失败');
+  } finally {
+    // 【必须出集合】（B114）原来只 add 不 delete：点一次（成功或失败）按钮就灰到刷新页面为止，
+    // 连「再生成」的二次确认都走不到。这个集合是 in-flight 守卫，不是"已生成"的标记——
+    // 「本行已生成过」记在 purchasedNo 里，那个才该留着
+    purchasing.value.delete(row.id);
+    purchasing.value = new Set(purchasing.value);   // Set 的增删不是响应式的，换个实例才会重渲染按钮
   }
 }
 
@@ -647,6 +670,9 @@ const docLinks = computed<DocLink[]>(() => {
 async function loadRelatedQuotes() {
   relatedQuotes.value = [];
   if (!editId.value || !form.styleNo || patternmaker.value) return;
+  // 没有「客户报价」菜单的账号调这个接口会被后端挡下，axios 拦截器当场冒红字——
+  // 按「没权限就隐藏，别让后端报错」先判菜单，少一组 chip 即可
+  if (!authStore.canMenu('quotes')) return;
   try {
     const res: any = await quoteApi.list({ style_no: form.styleNo, page: 1, size: 100 });
     relatedQuotes.value = (((res?.data ?? []) as any[]) ?? [])
@@ -655,15 +681,22 @@ async function loadRelatedQuotes() {
   } catch { relatedQuotes.value = []; /* 反查失败就不显示这组 chip,不阻断页面 */ }
 }
 
+/**
+ * 装载参考数据。
+ * 【每一路各自 catch】（B106）原来是裸 Promise.all：客户/工厂接口偶发 500 就整个 reject，
+ * 连带后面的 load() 不执行，编辑页停在空白表单上还能保存 —— 一存就把材料明细清空。
+ */
 async function loadRefs() {
+  const failed: string[] = [];
   const [ms, bs, fs] = await Promise.all([
-    customerApi.list({ page: 1, size: 100, type: 'MIDDLEMAN' }),
-    customerApi.list({ page: 1, size: 100, type: 'BUYER' }),
-    factoryApi.select(),
+    customerApi.list({ page: 1, size: 100, type: 'MIDDLEMAN' }).catch(() => { failed.push('中间商'); return { data: [] }; }),
+    customerApi.list({ page: 1, size: 100, type: 'BUYER' }).catch(() => { failed.push('最终买家'); return { data: [] }; }),
+    factoryApi.select().catch(() => { failed.push('供应商'); return { data: [] }; }),
   ]);
   middlemen.value = (ms as any).data ?? [];
   buyers.value = (bs as any).data ?? [];
   factories.value = (((fs as any).data ?? fs) as any[]) ?? [];
+  if (failed.length) ElMessage.warning(`${failed.join('、')}下拉加载失败，可刷新页面重试；单据内容不受影响`);
   // 制版师下拉(role=PATTERNMAKER);加载失败/无数据 → 降级为文本输入
   try {
     const us: any = await sampleApi.listPatternmakers();
@@ -739,7 +772,9 @@ const MATERIAL_NUM_COLS: Array<[string, string]> = [
   ['qty', '数量'], ['refPrice', '参考价格'], ['actualUsage', '实际耗用'],
 ];
 function checkMaterialNumbers(): string | null {
-  const rows = form.materials.filter((m: any) => m.itemName);
+  // 【整表遍历，别先按品名过滤】（B159）：过滤后的下标不是用户看到的行号——第 1 行是空占位行、
+  // 第 2 行数量填「若干」，报出来却成了「第 1 行」。空行的数值格本来就是空的，下面会跳过
+  const rows = form.materials;
   for (let i = 0; i < rows.length; i++) {
     for (const [key, label] of MATERIAL_NUM_COLS) {
       const raw = (rows[i] as any)[key];
@@ -757,7 +792,10 @@ function buildDto() {
     categories: form.categories, middlemanId: form.middlemanId ?? null, styleNo: form.styleNo,
     sampleSize: txt(form.sampleSize),
     sampleQty: form.sampleQty === '' || form.sampleQty === null ? undefined : Number(form.sampleQty),
-    buyerId: form.buyerId ?? null, patternmakerId: form.patternmakerId || undefined,
+    // 制版师清空要发 null 才清得掉（B029）：原来名字发 ''、id 发 undefined＝不改，于是列表「制版师」列变空，
+    // 样衣却还留在原版师工作台（那边按 patternmaker_id 过滤），换新版师保存还会被指派归属校验拦。
+    // sample_garment.patternmaker_id 可空，service 里 `dto.patternmakerId !== undefined` 才写
+    buyerId: form.buyerId ?? null, patternmakerId: form.patternmakerId ?? null,
     patternmakerName: txt(form.patternmakerName), maker: txt(form.maker),
     // 空串照发：清空寄样日期要能存回去（与材料寄出日期同一处理，#96/#104）
     shipSampleDate: form.shipSampleDate ?? '', recipient: txt(form.recipient),
@@ -836,25 +874,38 @@ async function save() {
   } finally { saving.value = false; }
 }
 
+// 状态流转的进行中标志（B110）：同一时刻只跑一个，按钮 :loading
+const acting = ref<string | null>(null);
+async function runAction(key: string, fn: () => Promise<void>) {
+  if (acting.value) return;
+  acting.value = key;
+  try { await fn(); } finally { acting.value = null; }
+}
 // 标记已寄出 / 标记完成(此前接口在但界面无入口,已寄出/已完成两态在 UI 不可达)
 async function markShipped() {
   if (!editId.value) return;
-  try { await sampleApi.ship(editId.value); ElMessage.success('已标记寄出'); load(); }
-  catch (e: any) { errToast(e?.response?.data?.msg ?? '操作失败'); }
+  await runAction('ship', async () => {
+    try { await sampleApi.ship(editId.value!); ElMessage.success('已标记寄出'); await load(); }
+    catch (e: any) { errToast(e?.response?.data?.msg ?? '操作失败'); }
+  });
 }
 // 误点「标记已寄出」原先无解：状态一进已寄出就退不回来，只能新建一张（#95 nina）
 async function undoShipped() {
-  if (!editId.value) return;
+  if (!editId.value || acting.value) return;
   try {
     await ElMessageBox.confirm('退回「打样中」，并清掉寄样日期。确定吗？', '撤销已寄出', { type: 'warning' });
   } catch { return; }
-  try { await sampleApi.undoShip(editId.value); ElMessage.success('已退回打样中'); load(); }
-  catch (e: any) { errToast(e?.response?.data?.msg ?? '操作失败'); }
+  await runAction('undoShip', async () => {
+    try { await sampleApi.undoShip(editId.value!); ElMessage.success('已退回打样中'); await load(); }
+    catch (e: any) { errToast(e?.response?.data?.msg ?? '操作失败'); }
+  });
 }
 async function markComplete() {
   if (!editId.value) return;
-  try { await sampleApi.complete(editId.value); ElMessage.success('样衣已完成'); load(); }
-  catch (e: any) { errToast(e?.response?.data?.msg ?? '操作失败'); }
+  await runAction('complete', async () => {
+    try { await sampleApi.complete(editId.value!); ElMessage.success('样衣已完成'); await load(); }
+    catch (e: any) { errToast(e?.response?.data?.msg ?? '操作失败'); }
+  });
 }
 // 材料行图片上传(设计稿:每行材料图片)
 async function uploadMatImage(option: any, row: any) {
@@ -866,11 +917,13 @@ async function uploadMatImage(option: any, row: any) {
 }
 async function pushPatternmaker() {
   if (!editId.value) return;
-  try {
-    await sampleApi.push(editId.value, { patternmakerName: txt(form.patternmakerName), materialShipNo: txt(form.materialShipNo), materialShipDate: dateOrNull(form.materialShipDate) });
-    ElMessage.success('已推送版师工作台（状态→打样中）');
-    load();
-  } catch (e: any) { errToast(e?.response?.data?.msg ?? '推送失败'); }
+  await runAction('push', async () => {
+    try {
+      await sampleApi.push(editId.value!, { patternmakerName: txt(form.patternmakerName), materialShipNo: txt(form.materialShipNo), materialShipDate: dateOrNull(form.materialShipDate) });
+      ElMessage.success('已推送版师工作台（状态→打样中）');
+      await load();
+    } catch (e: any) { errToast(e?.response?.data?.msg ?? '推送失败'); }
+  });
 }
 
 async function savePatternmaker() {
@@ -898,8 +951,11 @@ async function savePatternmaker() {
 
 async function copy() {
   if (!editId.value) return;
-  try { const r: any = await sampleApi.copy(editId.value); ElMessage.success('已复制'); router.push({ name: 'SampleEdit', params: { id: (r.data ?? r).id } }); }
-  catch (e: any) { errToast(e?.response?.data?.msg ?? '复制失败'); }
+  // 防连点：后端 copy 无幂等，点几次建几条（8-04 反馈截图里 8 条一模一样的待派单样衣即此类）
+  await runAction('copy', async () => {
+    try { const r: any = await sampleApi.copy(editId.value!); ElMessage.success('已复制'); router.push({ name: 'SampleEdit', params: { id: (r.data ?? r).id } }); }
+    catch (e: any) { errToast(e?.response?.data?.msg ?? '复制失败'); }
+  });
 }
 // 删除(仅管理员;仅待派单可删,被报价引用后端拦截)
 async function removeSample() {
@@ -933,7 +989,18 @@ async function exportExcel() {
 }
 function goBack() { router.push({ name: 'Samples' }); }
 
-onMounted(async () => { await loadRefs(); await load(); await draft.restorePrompt(); });
+onMounted(async () => {
+  await loadRefs();
+  // 单据本体装不进来就转只读（B106）：空白表单还能编辑、能保存，一存就把材料明细清空
+  try {
+    await load();
+  } catch (e: any) {
+    loadFailed.value = true;
+    errToast(`${e?.response?.data?.msg ?? e?.message ?? '样衣装载失败'}——请刷新页面重试，未加载完的单据不能编辑`);
+    return;   // 没装进来就别问草稿了，恢复上去等于往空表单里灌旧数据
+  }
+  await draft.restorePrompt();
+});
 </script>
 
 <style scoped>

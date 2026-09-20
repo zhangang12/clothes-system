@@ -10,11 +10,36 @@ const esc = (v: unknown): string =>
   String(v ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+// 空值（null/undefined/''）一律打「—」，不能打成 0.00——Number(null) 是 0，会把「没填」印成「零元」（B093 同类）
+const isBlank = (v: unknown): boolean => v === null || v === undefined || v === '';
 const n2 = (v: unknown): string => {
+  if (isBlank(v)) return '—';
   const x = Number(v);
   return Number.isFinite(x) ? x.toFixed(2) : '—';
 };
-const d10 = (v: unknown): string => (v ? esc(String(v).slice(0, 10)) : '—');
+// 单价按 4 位（B022）：后端小计、Excel 导出都是 4 位单价，打印若按 2 位，纽扣 0.0350×1000 会印成「0.04 × 1000 = 35.00」，法律文件自相矛盾
+const n4 = (v: unknown): string => {
+  if (isBlank(v)) return '—';
+  const x = Number(v);
+  return Number.isFinite(x) ? x.toFixed(4) : '—';
+};
+// 数量按录入精度原样打（1500 → 1500、12.5 → 12.5），不强行补两位小数
+const nq = (v: unknown): string => {
+  if (isBlank(v)) return '—';
+  const x = Number(v);
+  return Number.isFinite(x) ? String(x) : '—';
+};
+// 只取本地日历日（B091）：DATE 列本来就是 'YYYY-MM-DD' 原样用；盖章时间这类 datetime 下发的是 UTC ISO，
+// 直接 slice(0,10) 会把早 8 点前盖的章印成前一天，须先转本地再取日期
+const d10 = (v: unknown): string => {
+  if (!v) return '—';
+  const s = String(v);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return esc(s);
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return esc(s.slice(0, 10));
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
 const typeLabel = (t: string): string =>
   ({ MATERIAL: '原料/辅料购销协议', PROCESS: '委托加工合同', SUPPLEMENT: '补料合同（原料/辅料购销协议）' } as Record<string, string>)[t] ?? '合同';
 
@@ -81,7 +106,7 @@ export function printContract(
       <th style="width:96px">总价(RMB)</th><th style="width:90px">交期</th></tr>`;
     rows = mats.map((m, i) => `
       <tr><td class="c">${i + 1}</td><td class="c">${esc(m.style_no)}</td><td>${esc(m.item_name)}${m.spec ? ' · ' + esc(m.spec) : ''}</td>
-      <td class="r">${n2(m.qty)}</td><td class="c">${esc(m.unit)}</td><td class="r">${n2(m.unit_price)}</td>
+      <td class="r">${nq(m.qty)}</td><td class="c">${esc(m.unit)}</td><td class="r">${n4(m.unit_price)}</td>
       <td class="r">${n2(m.amount)}</td><td class="c">${d10(m.delivery_date)}</td></tr>`).join('');
   } else {
     // 有任一材料照片时带「照片」列（工厂按图备料，设计稿货物明细末列）
@@ -91,8 +116,8 @@ export function printContract(
       <th style="width:92px">款号</th><th style="width:88px">交货期限</th>${withPhoto ? '<th style="width:70px">照片</th>' : ''}</tr>`;
     rows = mats.map((m, i) => `
       <tr><td class="c">${i + 1}</td><td>${esc(m.item_name)}</td><td>${esc(m.spec)}</td><td class="c">${esc(m.color) || '—'}</td>
-      <td class="c">${esc(m.size) || '—'}</td><td class="c">${esc(m.unit)}</td><td class="r">${n2(m.qty)}</td>
-      <td class="r">${n2(m.unit_price)}</td><td class="r">${n2(m.amount)}</td><td class="c">${esc(m.style_no) || '—'}</td>
+      <td class="c">${esc(m.size) || '—'}</td><td class="c">${esc(m.unit)}</td><td class="r">${nq(m.qty)}</td>
+      <td class="r">${n4(m.unit_price)}</td><td class="r">${n2(m.amount)}</td><td class="c">${esc(m.style_no) || '—'}</td>
       <td class="c">${d10(m.delivery_date)}</td>${withPhoto ? `<td class="c">${m.photo_url ? `<img src="${esc(m.photo_url)}" style="max-width:60px;max-height:45px;object-fit:cover" />` : '—'}</td>` : ''}</tr>`).join('');
   }
   if (!rows) rows = `<tr><td class="c" colspan="13">（无货物明细）</td></tr>`;

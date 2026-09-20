@@ -53,4 +53,32 @@ describe('useRemoteOptions', () => {
     await p;
     expect(loading.value).toBe(false);
   });
+
+  it('B147 慢的先发、快的后发：先发的响应后到也不能覆盖后发的结果', async () => {
+    let releaseSlow!: (v: any[]) => void;
+    const fetch = vi.fn()
+      .mockImplementationOnce(() => new Promise((res) => { releaseSlow = res; }))   // 第一次：慢
+      .mockResolvedValueOnce([{ id: 2, name: '后打的关键字' }]);                    // 第二次：快
+    const { search, options } = useRemoteOptions<any>({ fetch });
+    const p1 = search('M5');
+    const p2 = search('M502');
+    await p2;
+    expect(options.value).toEqual([{ id: 2, name: '后打的关键字' }]);
+    releaseSlow([{ id: 1, name: '先打的关键字' }]);
+    await p1;
+    expect(options.value).toEqual([{ id: 2, name: '后打的关键字' }]); // 没被旧结果盖回去
+  });
+
+  it('B147 旧请求结束也不能把 loading 提前关掉（新请求还在飞）', async () => {
+    let releaseSlow!: (v: any[]) => void;
+    const fetch = vi.fn()
+      .mockImplementationOnce(() => new Promise((res) => { releaseSlow = res; }))
+      .mockImplementationOnce(() => new Promise(() => {}));  // 第二次一直不返回
+    const { search, loading } = useRemoteOptions<any>({ fetch });
+    const p1 = search('a');
+    void search('ab');
+    releaseSlow([]);
+    await p1;
+    expect(loading.value).toBe(true);
+  });
 });

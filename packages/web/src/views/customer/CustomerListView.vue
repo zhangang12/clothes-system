@@ -22,10 +22,10 @@
         </div>
         <div class="tools-right">
           <el-input v-model="query.keyword" placeholder="编号/国别/区域/城市/主页/地址" clearable style="width:260px"
-            @keyup.enter="load" @clear="load">
+            @keyup.enter="search" @clear="search">
             <template #prefix><el-icon><Search /></el-icon></template>
           </el-input>
-          <el-button type="primary" @click="load">搜索</el-button>
+          <el-button type="primary" @click="search">搜索</el-button>
           <el-button @click="reset">清空</el-button>
           <el-button text @click="showAdvanced = !showAdvanced">高级筛选 <el-icon><ArrowDown /></el-icon></el-button>
         </div>
@@ -34,27 +34,27 @@
         <div v-show="showAdvanced" class="advanced">
           <el-form inline>
             <el-form-item label="状态">
-              <el-select v-model="query.status" clearable placeholder="全部" style="width:110px" @change="load">
+              <el-select v-model="query.status" clearable placeholder="全部" style="width:110px" @change="search">
                 <el-option label="启用" :value="1" /><el-option label="停用" :value="0" />
               </el-select>
             </el-form-item>
-            <el-form-item label="贸易国别"><el-input v-model="query.trade_country" clearable style="width:110px" @keyup.enter="load" @clear="load" /></el-form-item>
-            <el-form-item label="合作等级"><el-input v-model="query.cooperation_level" clearable style="width:110px" @keyup.enter="load" @clear="load" /></el-form-item>
-            <el-form-item label="客户来源"><el-input v-model="query.customer_source" clearable style="width:110px" @keyup.enter="load" @clear="load" /></el-form-item>
-            <el-form-item label="外销员"><el-input v-model="query.salesperson" clearable style="width:100px" @keyup.enter="load" @clear="load" /></el-form-item>
-            <el-form-item label="联系人/手机"><el-input v-model="query.contact" clearable style="width:130px" @keyup.enter="load" @clear="load" /></el-form-item>
+            <el-form-item label="贸易国别"><el-input v-model="query.trade_country" clearable style="width:110px" @keyup.enter="search" @clear="search" /></el-form-item>
+            <el-form-item label="合作等级"><el-input v-model="query.cooperation_level" clearable style="width:110px" @keyup.enter="search" @clear="search" /></el-form-item>
+            <el-form-item label="客户来源"><el-input v-model="query.customer_source" clearable style="width:110px" @keyup.enter="search" @clear="search" /></el-form-item>
+            <el-form-item label="外销员"><el-input v-model="query.salesperson" clearable style="width:100px" @keyup.enter="search" @clear="search" /></el-form-item>
+            <el-form-item label="联系人/手机"><el-input v-model="query.contact" clearable style="width:130px" @keyup.enter="search" @clear="search" /></el-form-item>
             <el-form-item label="开发时间">
-              <el-date-picker v-model="query.develop_start" type="date" value-format="YYYY-MM-DD" placeholder="起" style="width:130px" @change="load" />
+              <el-date-picker v-model="query.develop_start" type="date" value-format="YYYY-MM-DD" placeholder="起" style="width:130px" @change="search" />
               <span style="margin:0 4px">—</span>
-              <el-date-picker v-model="query.develop_end" type="date" value-format="YYYY-MM-DD" placeholder="止" style="width:130px" @change="load" />
+              <el-date-picker v-model="query.develop_end" type="date" value-format="YYYY-MM-DD" placeholder="止" style="width:130px" @change="search" />
             </el-form-item>
             <el-form-item label="客户类型">
-              <el-select v-model="query.type" clearable placeholder="全部" style="width:130px" @change="load">
+              <el-select v-model="query.type" clearable placeholder="全部" style="width:130px" @change="search">
                 <el-option label="中间商" value="MIDDLEMAN" /><el-option label="最终买家" value="BUYER" />
               </el-select>
             </el-form-item>
             <el-form-item label="信用等级">
-              <el-select v-model="query.grade" clearable placeholder="全部" style="width:110px" @change="load">
+              <el-select v-model="query.grade" clearable placeholder="全部" style="width:110px" @change="search">
                 <el-option label="A级" value="A" /><el-option label="B级" value="B" /><el-option label="C级" value="C" />
               </el-select>
             </el-form-item>
@@ -150,7 +150,9 @@
         <el-table-column label="用户" min-width="140"><template #default="{ row }">{{ row.real_name || row.username }}（{{ row.username }}）</template></el-table-column>
         <el-table-column prop="role" label="角色" width="110" />
         <el-table-column label="权限" width="100" align="center"><template #default="{ row }"><el-tag size="small" :type="row.can_edit ? 'warning' : 'info'">{{ row.can_edit ? '查看+修改' : '仅查看' }}</el-tag></template></el-table-column>
-        <el-table-column label="有效期至" width="104"><template #default="{ row }">{{ row.expire_at ? String(row.expire_at).slice(0, 10) : '永久' }}</template></el-table-column>
+        <!-- B101：expire_at 来自裸 SQL，mysql2 按 +08:00 返回 Date，JSON 后是前一天 16:00Z，
+             直接 slice(0,10) 显示成前一天（填 09-20 清单显示 09-19）。走 fmtDate 转本地日历日 -->
+        <el-table-column label="有效期至" width="104"><template #default="{ row }">{{ row.expire_at ? fmtDate(row.expire_at) : '永久' }}</template></el-table-column>
         <el-table-column label="备注" min-width="90"><template #default="{ row }">{{ row.remark || '—' }}</template></el-table-column>
         <el-table-column label="操作" width="80" align="center">
           <template #default="{ row }">
@@ -180,6 +182,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { copyText } from '@/utils/clipboard';
 import { Search, Plus, Upload, Download, Delete, Key, ArrowDown } from '@element-plus/icons-vue';
 import { customerApi } from '@/api/customer';
+import { fmtDate } from '@/utils/format';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole, CUSTOMER_TYPE_LABEL } from '@i9/types';
 import type { Customer } from '@i9/types';
@@ -208,6 +211,8 @@ async function load() {
     loading.value = false;
   }
 }
+// 改了搜索条件要回第 1 页（B107）：翻到第 3 页再搜，结果不足 3 页就是一张空表；翻页本身仍走 load
+function search() { query.page = 1; load(); }
 function reset() { query.keyword = ''; query.type = undefined; query.grade = undefined; query.status = undefined; query.page = 1; Object.assign(query, { trade_country: '', cooperation_level: '', customer_source: '', salesperson: '', contact: '', develop_start: '', develop_end: '' }); load(); }
 function goCreate() { router.push({ name: 'CustomerCreate' }); }
 function goEdit(row: Customer) { router.push({ name: 'CustomerEdit', params: { id: row.id } }); }

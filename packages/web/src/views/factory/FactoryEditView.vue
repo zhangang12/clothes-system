@@ -177,6 +177,7 @@ import { ElMessage } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
 import { Back, Check, Plus, Minus, CopyDocument } from '@element-plus/icons-vue';
 import { factoryApi } from '@/api/factory';
+import { todayStr } from '@/utils/format';
 import { FACTORY_TYPE_LABEL } from '@i9/types';
 import { PROVINCES, PROVINCE_CITIES } from '@/constants/regions';
 
@@ -202,7 +203,8 @@ const factoryTypes = Object.entries(FACTORY_TYPE_LABEL).map(([value, label]) => 
 const emptyContact = () => ({ name: '', department: '', title: '', phone: '', mobile: '', email: '', remark: '' });
 const form = reactive<any>({
   factoryNo: '', type: '', extraTypes: [], canInvoice: true, name: '', province: '', city: '',
-  address: '', businessScope: '', grade: '', developDate: new Date().toISOString().slice(0, 10),
+  // 本地日期（B097）：toISOString 是 UTC 日期，早 8 点前建的工厂开发时间会是昨天
+  address: '', businessScope: '', grade: '', developDate: todayStr(),
   bankName: '', bankAccount: '', taxNo: '', invoicePhone: '', invoiceAddress: '',
   bankName2: '', bankAccount2: '', taxNo2: '', invoicePhone2: '', invoiceAddress2: '',
   legalRep: '', registeredCapital: '', establishedDate: '', annualSales: '',
@@ -301,8 +303,10 @@ function buildDto() {
     bankName2: txt(form.bankName2), bankAccount2: txt(form.bankAccount2),
     taxNo2: txt(form.taxNo2), invoicePhone2: txt(form.invoicePhone2),
     invoiceAddress2: txt(form.invoiceAddress2),
-    legalRep: txt(form.legalRep), registeredCapital: num(form.registeredCapital),
-    establishedDate: dateOrNull(form.establishedDate), annualSales: num(form.annualSales),
+    // 数字清空要发 null 才清得掉（B100 同类）：后端 `dto.x !== undefined` 才写，发 undefined = 不改。
+    // factory.registered_capital / annual_sales 都是 nullable，DTO 上 @IsOptional 对 null 同样放行
+    legalRep: txt(form.legalRep), registeredCapital: num(form.registeredCapital) ?? null,
+    establishedDate: dateOrNull(form.establishedDate), annualSales: num(form.annualSales) ?? null,
     representativeCustomers: txt(form.representativeCustomers),
     qualityCerts: txt(form.qualityCerts), remark: txt(form.remark),
     // 门户账号仅新建时开通（编辑不重置）

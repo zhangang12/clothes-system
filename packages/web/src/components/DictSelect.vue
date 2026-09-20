@@ -1,11 +1,13 @@
 <template>
+  <!-- 不加 default-first-option（B138）：加了之后「输入片段 + 回车」选中的是排在第一位的
+       「新建：美」而不是已有的「美国」，还会立刻写进全员字典。现在回车只选高亮项；
+       要新建就点下拉里的新值那一行（或按 ↓ 选中再回车） -->
   <el-select
     :model-value="modelValue"
     filterable
     allow-create
-    default-first-option
     clearable
-    :placeholder="placeholder ?? '选择或直接输入（回车创建新值）'"
+    :placeholder="placeholder ?? '选择，或输入新值后点选创建'"
     style="width: 100%"
     :disabled="disabled"
     :size="size"

@@ -2,7 +2,7 @@ import {
   Injectable, NotFoundException, BadRequestException, ConflictException, ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, Like, Not, In, Between, MoreThanOrEqual, LessThanOrEqual, DataSource } from 'typeorm';
+import { Repository, FindOptionsWhere, Like, Not, In, And, Between, MoreThanOrEqual, LessThanOrEqual, DataSource } from 'typeorm';
 import { Customer } from './customer.entity';
 import { CustomerGrant } from './customer-grant.entity';
 import { CustomerContact } from './customer-contact.entity';
@@ -13,6 +13,7 @@ import { Quotation } from '../quote/quotation.entity';
 import { SampleGarment } from '../sample/sample-garment.entity';
 import { OrderStatus, CustomerType, isAdminRole } from '@i9/types';
 import { NumberingService, NUM_PREFIX } from '../../common/services/numbering.service';
+import { todayLocal, dateColToStr } from '../../common/utils/local-date';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { QueryCustomerDto } from './dto/query-customer.dto';
 
@@ -51,7 +52,7 @@ export class CustomerService {
   // 该用户可见的客户 id 集合；管理级角色 ADMIN/SUPERVISOR（或未传 user 的内部调用）返回 null=不限
   async visibleCustomerIds(user?: { id: number; role?: string }): Promise<number[] | null> {
     if (!user || isAdminRole(user.role)) return null;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocal(); // B061：业务日期取本地日历日，不用 UTC
     const [allGrants, own] = await Promise.all([
       this.grantRepo.find({ where: { user_id: user.id } }),
       this.repo.find({ where: { created_by: user.id, deleted: 0 }, select: ['id'] }),
@@ -83,7 +84,7 @@ export class CustomerService {
   private async assertEditable(entity: Customer, user?: { id: number; role?: string }): Promise<void> {
     if (!user || isAdminRole(user.role) || +entity.created_by === +user.id) return;
     const grant = await this.grantRepo.findOne({ where: { customer_id: entity.id, user_id: user.id } });
-    const expired = grant?.expire_at && String(grant.expire_at).slice(0, 10) < new Date().toISOString().slice(0, 10);
+    const expired = grant?.expire_at && String(grant.expire_at).slice(0, 10) < todayLocal(); // B061
     if (!grant || expired) {
       // 随中间商授权带出来的买家：看得见、不能改（要改得对这家买家单独授权 can_edit）
       const visible = await this.visibleCustomerIds(user);
@@ -100,36 +101,45 @@ export class CustomerService {
     if (!customerIds?.length || !userIds?.length) {
       throw new BadRequestException('请至少选择 1 个客户和 1 个用户');
     }
-    let created = 0; let updated = 0;
-    for (const cid of customerIds) {
-      for (const uid of userIds) {
-        const existing = await this.grantRepo.findOne({ where: { customer_id: cid, user_id: uid } });
-        if (existing) {
-          existing.can_edit = canEdit ? 1 : 0;
-          existing.expire_at = (expireAt ?? null) as any;
-          if (remark !== undefined) existing.remark = remark as any;
-          await this.grantRepo.save(existing);
-          updated++;
+    // B125：原来按 客户×用户 逐对 findOne+save（20 客户×10 人=400 次往返，页面转圈十几秒）。
+    // 改成一次查出已有授权，再把更新/新建各自批量 save；去重防止同一对出现两次撞唯一键 uk_cust_user。
+    const cids = [...new Set(customerIds.map(Number))];
+    const uids = [...new Set(userIds.map(Number))];
+    const existing = await this.grantRepo.find({ where: { customer_id: In(cids), user_id: In(uids) } });
+    const byPair = new Map(existing.map((g) => [`${+g.customer_id}:${+g.user_id}`, g]));
+    const toUpdate: CustomerGrant[] = [];
+    const toCreate: CustomerGrant[] = [];
+    for (const cid of cids) {
+      for (const uid of uids) {
+        const g = byPair.get(`${cid}:${uid}`);
+        if (g) {
+          g.can_edit = canEdit ? 1 : 0;
+          g.expire_at = (expireAt ?? null) as any;
+          if (remark !== undefined) g.remark = remark as any;
+          toUpdate.push(g);
         } else {
-          await this.grantRepo.save(this.grantRepo.create({
+          toCreate.push(this.grantRepo.create({
             customer_id: cid, user_id: uid, can_edit: canEdit ? 1 : 0,
             expire_at: (expireAt ?? null) as any, remark: (remark ?? null) as any, created_by: byUserId,
           }));
-          created++;
         }
       }
     }
-    return { created, updated, customers: customerIds.length, users: userIds.length };
+    if (toUpdate.length) await this.grantRepo.save(toUpdate, { chunk: 200 });
+    if (toCreate.length) await this.grantRepo.save(toCreate, { chunk: 200 });
+    return { created: toCreate.length, updated: toUpdate.length, customers: cids.length, users: uids.length };
   }
 
   // 某客户的授权清单（含用户姓名，供管理界面展示/撤销）
   async getGrants(customerId: number) {
-    return this.dataSource.query(
+    const rows = await this.dataSource.query(
       `SELECT g.id, g.customer_id, g.user_id, g.can_edit, g.expire_at, g.remark, g.created_at,
               u.username, u.real_name, u.role
          FROM customer_grant g LEFT JOIN sys_user u ON u.id = g.user_id
         WHERE g.customer_id = ? ORDER BY g.id`, [customerId],
     );
+    // B101：裸 SQL 回来的 DATE 列是 +08:00 本地零点的 Date，JSON 序列化成 UTC 会早一天（填 09-20 显示 09-19）；归一成字符串
+    return (rows ?? []).map((r: any) => ({ ...r, expire_at: dateColToStr(r.expire_at) }));
   }
 
   async revokeGrant(customerId: number, userId: number) {
@@ -191,6 +201,8 @@ export class CustomerService {
   }
 
   async create(dto: CreateCustomerDto, createdBy: number): Promise<Customer> {
+    // B043：name 列 NOT NULL，DTO 却是可选——不在发号前拦住，INSERT 才报错 → 500 且客户编号白白跳号
+    if (!dto.name || !String(dto.name).trim()) throw new BadRequestException('客户名称不能为空');
     // 注：原「最终买家必须关联中间商」校验已按 2026-07-27 用户反馈取消（直接客户没有中间商，强制校验导致存不了）
     this.assertContacts(dto.contacts);
     if (dto.name) await this.assertNameUnique(dto.name);
@@ -199,7 +211,7 @@ export class CustomerService {
     const customer_no = await this.numbering.nextGlobal(numPrefix);
     const base = this.mapDto(dto);
     if (base.develop_date === undefined || base.develop_date === null) {
-      base.develop_date = new Date().toISOString().slice(0, 10);
+      base.develop_date = todayLocal(); // B061：凌晨建档「编号是今天、开发日期是昨天」
     }
 
     return this.dataSource.transaction(async (manager) => {
@@ -282,8 +294,10 @@ export class CustomerService {
     }
     // 智能搜索：客户编号/贸易国别/国家区域/所在城市/公司主页/详细地址 + 客户名称（设计稿 §2.2）
     const searchable = ['customer_no', 'name', 'trade_country', 'country_region', 'city', 'homepage', 'address'];
+    // B063：关键词的 OR 分支若直接覆盖同名列，会把高级筛选（如 trade_country）挤掉；同名时两者 AND
+    const kw = Like(`%${keyword}%`);
     const where: FindOptionsWhere<Customer> | FindOptionsWhere<Customer>[] = keyword
-      ? searchable.map((f) => ({ ...base, [f]: Like(`%${keyword}%`) }))
+      ? searchable.map((f) => ({ ...base, [f]: (base as any)[f] ? And((base as any)[f], kw) : kw }))
       : base;
 
     const [items, total] = await this.repo.findAndCount({
@@ -318,18 +332,23 @@ export class CustomerService {
       const saved = await manager.save(Customer, entity);
       // C1 实时同步(基础资料稿):客户改名 → 同步 草稿/已报价 单据的名称快照;已成单(ORDERED)不动
       if (nameChanged) {
+        // B041：直接客户（无中间商）建单时 customer_id 挂的是买家、middleman_name 刻意留空（quote.service）；
+        // 同步快照只能改「本来就有中间商名」的行，否则改一次名，报价列表「中间商」列就开始显示买家名
         await manager.query(
-          "UPDATE quotation SET middleman_name = ? WHERE customer_id = ? AND status <> 'ORDERED' AND deleted = 0",
+          "UPDATE quotation SET middleman_name = ? WHERE customer_id = ? AND status <> 'ORDERED' AND deleted = 0"
+          + " AND middleman_name IS NOT NULL AND middleman_name <> ''",
           [nameChanged.to, id]);
         await manager.query(
           "UPDATE quotation SET buyer_name = ? WHERE buyer_id = ? AND status <> 'ORDERED' AND deleted = 0",
           [nameChanged.to, id]);
         await manager.query(
-          "UPDATE sample_garment SET middleman_name = ? WHERE customer_id = ? AND status <> 'ORDERED' AND deleted = 0",
+          "UPDATE sample_garment SET middleman_name = ? WHERE customer_id = ? AND status <> 'ORDERED' AND deleted = 0"
+          + " AND middleman_name IS NOT NULL AND middleman_name <> ''",
           [nameChanged.to, id]);
         // 订单快照同步(总览走查P1#10 决议):草稿/已下单同步,已生成合同(CONTRACTED)起冻结
         await manager.query(
-          "UPDATE order_main SET middleman_name = ? WHERE customer_id = ? AND status IN ('DRAFT','CONFIRMED') AND deleted = 0",
+          "UPDATE order_main SET middleman_name = ? WHERE customer_id = ? AND status IN ('DRAFT','CONFIRMED') AND deleted = 0"
+          + " AND middleman_name IS NOT NULL AND middleman_name <> ''",
           [nameChanged.to, id]);
         await manager.query(
           "UPDATE order_main SET buyer_name = ? WHERE buyer_id = ? AND status IN ('DRAFT','CONFIRMED') AND deleted = 0",
@@ -358,7 +377,7 @@ export class CustomerService {
     if (!entity) throw new NotFoundException(`客户 #${id} 不存在`);
     if (entity.status === 1) {
       const openOrders = await this.orderRepo.count({
-        where: { customer_id: id, status: Not(OrderStatus.DONE) },
+        where: { customer_id: id, deleted: 0, status: Not(OrderStatus.DONE) }, // B042：已软删的订单不算「未完成」
       });
       if (openOrders > 0) {
         throw new BadRequestException(`该客户有 ${openOrders} 个未完成订单，不可停用`);

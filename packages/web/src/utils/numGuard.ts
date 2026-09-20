@@ -14,7 +14,8 @@
 /** '' / null / undefined → undefined（字段不发，后端 @IsOptional 放行）；NaN 同样不外发。
  *  注意别写成 `Number(v) || undefined`——那会把合法的 0 一起吞掉。 */
 export function num(v: any): number | undefined {
-  if (v === '' || v == null) return undefined;
+  // 只剩空格的格子等同留空：Number('  ') 是 0，不拦会把误敲的空格当 0 外发（B145）
+  if (v == null || String(v).trim() === '') return undefined;
   const n = Number(v);
   return Number.isNaN(n) ? undefined : n;
 }
@@ -32,7 +33,7 @@ export function checkNumericCells(rows: any[], cols: NumCol[], tableName: string
   for (let i = 0; i < rows.length; i++) {
     for (const [key, label] of cols) {
       const raw = rows[i]?.[key];
-      if (raw === '' || raw == null) continue;      // 留空是允许的，交给后端默认值
+      if (raw == null || String(raw).trim() === '') continue;      // 留空（含只有空格）是允许的，交给后端默认值
       if (Number.isNaN(Number(raw))) {
         return `${tableName}第 ${i + 1} 行「${label}」填的是「${raw}」，这一列只能填数字`;
       }

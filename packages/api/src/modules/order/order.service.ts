@@ -15,7 +15,9 @@ import { CustomerService } from '../customer/customer.service';
 import { SysConfigService } from '../../common/config/sys-config.service';
 import { OrderStatus, QuoteStatus, ApprovalStatus, APPROVAL_THRESHOLD_KEYS, findSplitDupConflicts, perColorRowErrors, matrixColorsOf, colorPiecesOf } from '@i9/types';
 import { CreateOrderDto, CreateOrderMaterialDto, AddShipmentDto } from './dto/create-order.dto';
+import { UpdateOrderDto } from './dto/update-order.dto';
 import { QueryOrderDto } from './dto/query-order.dto';
+import { todayLocal } from '../../common/utils/local-date';
 
 const STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus> = {
   [OrderStatus.DRAFT]: OrderStatus.CONFIRMED,
@@ -33,7 +35,10 @@ export function calcPurchase(qtyTotal = 0, netUsage = 0, lossRate = 0, unit?: st
   const perUnit = netUsage * (1 + lossRate / 100);
   let total = qtyTotal * perUnit;
   const shouldRound = roundUp !== undefined ? roundUp : !!(unit && INT_UNITS.includes(unit));
-  total = shouldRound ? Math.ceil(total) : +total.toFixed(4);
+  // B050：先抹掉浮点噪声再取整。300×0.07 在 IEEE754 里是 21.000000000000004，直接 ceil 得 22——
+  // 个/条/套类材料每命中一次多买 1 个。输入最多 4 位小数（耗用）×4 位小数（1+损耗%），真值至多 8 位小数，
+  // 按 8 位四舍五入后再 ceil 对合法输入是精确的，只吃掉 1e-12 量级的噪声。
+  total = shouldRound ? Math.ceil(+total.toFixed(8)) : +total.toFixed(4);
   return { perUnit: +perUnit.toFixed(4), total };
 }
 
@@ -96,7 +101,7 @@ export class OrderService {
 
   async create(dto: CreateOrderDto, createdBy: number): Promise<OrderMain> {
     const order_no = await this.numbering.next(NUM_PREFIX.ORDER);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocal(); // B061：toISOString 是 UTC 日期，北京时间 0–8 点建单会写成昨天（单号却是今天）
     // 中间商默认佣金率带出(P3#36/ORD B8):未显式给佣金时取客户档案默认值
     let commissionRate = dto.commission_rate;
     if (commissionRate == null && dto.customer_id) {
@@ -187,7 +192,7 @@ export class OrderService {
     let usage_estimated = false;
     let quote_no: string | null = null; // 上游单据号（关联单据 chip 显示单据号而非裸 ID）；报价已删→null
     if (order.quote_id) {
-      const quote = await this.quoteRepo.findOne({ where: { id: order.quote_id } });
+      const quote = await this.quoteRepo.findOne({ where: { id: order.quote_id, deleted: 0 } }); // B122：已删报价不再被带出
       quote_no = quote?.quote_no ?? null;
       if (quote?.content_updated_at) {
         const baseline = order.quote_synced_at ?? order.created_at;
@@ -226,7 +231,7 @@ export class OrderService {
     };
   }
 
-  async update(id: number, dto: Partial<CreateOrderDto>): Promise<OrderMain> {
+  async update(id: number, dto: UpdateOrderDto): Promise<OrderMain> {
     const order = await this.orderRepo.findOne({ where: { id, deleted: 0 } });
     if (!order) throw new NotFoundException(`订单 #${id} 不存在`);
     if (order.status !== OrderStatus.DRAFT) {
@@ -242,10 +247,25 @@ export class OrderService {
     ];
     for (const [k, col] of map) if (dto[k] !== undefined) (order as any)[col] = dto[k];
     if (dto.delivery_date !== undefined) order.delivery_date = dto.delivery_date as any;
+    // B052：buyer_name 是快照列，改了 buyer_id 必须同步刷新（与 quote.update 同口径）——
+    // 否则列表/详情仍显示旧买家，而机密遮蔽按 buyer_id 判、展示却用 buyer_name，两边对不上
+    if (dto.buyer_id !== undefined) {
+      if (dto.buyer_id) {
+        const [b] = await this.dataSource.query('SELECT name FROM customer WHERE id = ? AND deleted = 0', [dto.buyer_id]);
+        if (!b) throw new BadRequestException(`最终买家客户 #${dto.buyer_id} 不存在`);
+        order.buyer_name = b.name;
+      } else {
+        order.buyer_id = null;
+        order.buyer_name = null;
+      }
+    }
     // 金额与单价/数量始终一致(L5):单价或数量任一被清空(如单价改 null)时同步清空总金额,避免下单审批阈值校验基于陈旧金额
     order.total_amount = order.unit_price && order.qty_total ? +(order.unit_price * order.qty_total).toFixed(4) : null;
     // 编辑会重算金额:清除已有审批状态,避免「审批通过后改高金额再下单」绕过阈值校验
+    // B128：审批人/时间一起清，否则显示「未审批」却仍挂着审批人和时间（与 revertToDraft 同口径）
     order.approval_status = ApprovalStatus.NONE;
+    order.approved_by = null;
+    order.approved_at = null;
     order.content_updated_at = new Date(); // 内容级修改——合同侧「源订单已变更」标记依据(P2#20)
 
     return this.dataSource.transaction(async (manager) => {
@@ -263,6 +283,26 @@ export class OrderService {
           ?? ((await manager.findOne(OrderSizeMatrix, { where: { order_id: id } }))?.matrix_data as any)?.rows ?? [];
         const rows = this.buildMaterials(id, order.qty_total, incoming, mxRows);
         const keep = rows.map((r) => r.id).filter((v): v is number => v != null);
+        // B007：本次没回传的行会被删——先查它们有没有进过未删除的合同。删了合同行的 order_material_id 就悬空
+        // （无外键、无声），订单侧「已订」标记丢失，按行幂等不再认识它，同料重新加行还能再下一张合同。
+        const keepSet = new Set(keep.map(String));
+        const dropped = existing.filter((r) => !keepSet.has(String(r.id)));
+        if (dropped.length) {
+          const linked: Array<{ omid: string | number; contract_no: string }> = await manager.query(
+            `SELECT DISTINCT cm.order_material_id AS omid, c.contract_no AS contract_no
+               FROM contract_material cm
+               JOIN contract c ON c.id = cm.contract_id
+              WHERE c.deleted = 0 AND cm.order_material_id IN (?)`,
+            [dropped.map((r) => r.id)],
+          );
+          if (linked.length) {
+            const nos = [...new Set(linked.map((l) => l.contract_no))];
+            const names = [...new Set(dropped.filter((r) => linked.some((l) => String(l.omid) === String(r.id))).map((r) => r.item_name))];
+            throw new BadRequestException(
+              `材料「${names.join('、')}」已生成合同（${nos.join('、')}），不能从订单里删除；如需调整请先处理相关合同`,
+            );
+          }
+        }
         await manager.delete(OrderMaterial, keep.length ? { order_id: id, id: Not(In(keep)) } : { order_id: id });
         await manager.save(OrderMaterial, rows);
       }
@@ -316,9 +356,14 @@ export class OrderService {
       // 导入默认币种 RMB、报价人民币价→订单单品单价（设计稿 订单 A3/Q3，可改）
       order.currency = 'CNY';
       if (quote.rmb_total != null) order.unit_price = +(+quote.rmb_total).toFixed(4);
+      // B053：单价变了总额必须跟着重算（update/updateMatrix 都重算，这里原来漏了）——否则草稿单
+      // 导入报价后不再保存、直接从列表「下单」，阈值校验拿到的是陈旧/空的 total_amount，大单免审批
+      order.total_amount = order.unit_price && order.qty_total ? +(order.unit_price * order.qty_total).toFixed(4) : null;
       // 图片随单继承(P3#33/ORD C3):报价款图(源自样衣)作订单彩稿候选,已有不覆盖
       if (!order.att_artwork && (quote.image1 || quote.image2)) order.att_artwork = quote.image1 || quote.image2;
       order.approval_status = ApprovalStatus.NONE; // 导入改金额:清审批,避免绕过阈值
+      order.approved_by = null; // B128：审批人/时间一起清
+      order.approved_at = null;
       order.quote_synced_at = new Date(); // 「源报价已变更」= quote.content_updated_at > 此值(P2#20)
       await manager.save(OrderMain, order);
       // 【重导别清掉拆分设置】split_mode/size_specs 是订单侧的决策，报价里没有对应物，
@@ -345,7 +390,10 @@ export class OrderService {
       const materials = this.buildMaterials(id, order.qty_total, items.map((it) => ({
         item_name: it.item_name, part: it.part, width: it.width, color: it.color, supplier: it.supplier,
         puller: it.puller, zipper_teeth: it.zipper_teeth, code_band: it.code_band,
-        unit: it.unit, net_usage: +it.quote_usage || 0, loss_rate: +it.loss_rate || 3, unit_price: +it.rmb_price || undefined,
+        // B054：`+x || 默认值` 会把合法的 0 当成没填——客供辅料损耗 0% 被改成 3%、单价 0 元丢成空。只有空/非数才回退
+        unit: it.unit, net_usage: +it.quote_usage || 0,
+        loss_rate: it.loss_rate == null || !Number.isFinite(+it.loss_rate) ? 3 : +it.loss_rate,
+        unit_price: it.rmb_price == null || !Number.isFinite(+it.rmb_price) ? undefined : +it.rmb_price,
         quote_item_id: it.id,
         split_mode: carry.get(nameOf(it.item_name))?.split_mode,
         size_specs: carry.get(nameOf(it.item_name))?.size_specs ?? undefined,
@@ -405,10 +453,14 @@ export class OrderService {
     if (!src) throw new NotFoundException(`订单 #${id} 不存在`);
     const order_no = await this.numbering.next(NUM_PREFIX.ORDER);
     return this.dataSource.transaction(async (manager) => {
-      const { id: _id, created_at, updated_at, ...rest } = src as any;
+      // B129：制单日期是新单的今天、外部单号（迁移导入的原系统单号）不能重复带出；quote_id 保留（报价→订单是 1:N 关系，
+      // 报价详情靠它列出关联订单，清掉属于口径变化，未拍板不动）
+      const { id: _id, created_at, updated_at, external_no: _ext, make_date: _md, ...rest } = src as any;
       const copy = manager.create(OrderMain, {
         ...rest,
         order_no,
+        make_date: todayLocal(),
+        external_no: null,
         status: OrderStatus.DRAFT,
         approval_status: ApprovalStatus.NONE,
         approved_by: null, approved_at: null,
@@ -484,19 +536,33 @@ export class OrderService {
   async revertToDraft(id: number): Promise<OrderMain> {
     const order = await this.orderRepo.findOne({ where: { id, deleted: 0 } });
     if (!order) throw new NotFoundException(`订单 #${id} 不存在`);
-    if (order.status !== OrderStatus.CONFIRMED) {
-      throw new BadRequestException(
-        order.status === OrderStatus.DRAFT
-          ? '订单本就是草稿，可直接编辑'
-          : '已生成合同的订单不可撤回——请先处理下游合同后再操作',
-      );
+    if (order.status === OrderStatus.DRAFT) throw new BadRequestException('订单本就是草稿，可直接编辑');
+    if (order.status === OrderStatus.CONTRACTED) {
+      // B039（订单侧）：删除合同不回退订单状态，订单会卡在「已生成合同」——按真实存活的合同判，而不是只看状态标签。
+      // 名下已没有未删除合同的，视同「下游合同已处理完」放行撤回；还有合同的仍按原口径拦
+      const live: Array<{ contract_no: string }> = await this.dataSource.query(
+        'SELECT contract_no FROM contract WHERE order_id = ? AND deleted = 0', [id]);
+      if (live.length) throw new BadRequestException('已生成合同的订单不可撤回——请先处理下游合同后再操作');
+    } else if (order.status !== OrderStatus.CONFIRMED) {
+      throw new BadRequestException('已生成合同的订单不可撤回——请先处理下游合同后再操作');
     }
     order.status = OrderStatus.DRAFT;
     // 撤回后可改金额/数量，重新下单须重走阈值审批（与「审批后改金额清审批」同一口径）
     order.approval_status = ApprovalStatus.NONE;
     order.approved_by = null;
     order.approved_at = null;
-    return this.orderRepo.save(order);
+    const saved = await this.orderRepo.save(order);
+    // B130：下单时把报价置「已成单」，撤回后订单是草稿、报价却仍锁着不可编辑。
+    // 没有别的非草稿订单还挂在这张报价上时放回「已报价」（只改 ORDERED，客户调整中等状态不动，与 remove 同口径）
+    if (order.quote_id) {
+      const others = await this.orderRepo.count({
+        where: { quote_id: order.quote_id, deleted: 0, id: Not(id), status: Not(OrderStatus.DRAFT) },
+      });
+      if (!others) {
+        await this.quoteRepo.update({ id: order.quote_id, status: QuoteStatus.ORDERED }, { status: QuoteStatus.QUOTED });
+      }
+    }
+    return saved;
   }
 
   async addShipment(id: number, dto: AddShipmentDto, createdBy: number): Promise<OrderShipment> {
@@ -544,6 +610,8 @@ export class OrderService {
           // 金额与单价/数量始终一致(同 L5 口径);数量变动→清审批,避免「审批通过后改高金额再下单」绕过阈值校验
           order.total_amount = order.unit_price && qtyTotal ? +(order.unit_price * qtyTotal).toFixed(4) : null;
           order.approval_status = ApprovalStatus.NONE;
+          order.approved_by = null; // B128：审批人/时间一起清
+          order.approved_at = null;
         }
         await manager.save(OrderMain, order);
       }
@@ -551,14 +619,26 @@ export class OrderService {
       // 那几行也得跟着变；不拆的行重算结果与原来相同，多算一遍无害
       if (qtyTotal != null && (qtyChanged || matrixChanged)) {
         // 按既有逻辑重算材料(采购量=大货总数×单件耗用×(1+损耗%),与 buildMaterials 同式)
-        const materials = await manager.find(OrderMaterial, { where: { order_id: id } });
+        const materials = await manager.find(OrderMaterial, { where: { order_id: id }, order: { sort_order: 'ASC' } });
+        // B055：按色单行的颜色必须还在矩阵里——矩阵里把「米白」改名「米白色」，该色件数就是 0，
+        // total/final 全变 0 还不报错，合同会带出 qty 0 的行。与 buildMaterials 同一份规则（perColorRowErrors）
+        const pcErr = perColorRowErrors(
+          materials.map((m) => ({ color: m.color ?? '', mode: m.split_mode ?? 'NONE' })), matrixColorsOf(rows ?? []));
+        if (pcErr.length) {
+          const bad = materials[pcErr[0].rowNo - 1];
+          throw new BadRequestException(
+            `材料「${bad?.item_name ?? ''}」（按色单行）：${pcErr[0].reason}，请先在订单编辑页改该行颜色或恢复矩阵颜色`,
+          );
+        }
         for (const m of materials) {
           const roundOverride = m.round_up == null ? undefined : m.round_up === 1;
           const lossRate = m.loss_rate == null ? 3 : +m.loss_rate;
           const pieces = m.split_mode === 'PER_COLOR' ? colorPiecesOf(rows ?? [], m.color ?? '') : qtyTotal;
           const { perUnit, total } = calcPurchase(pieces, m.net_usage == null ? 0 : +m.net_usage, lossRate, m.unit, roundOverride);
           // final_purchase=业务微调值:与系统量一致(未微调)时跟随重算;有偏差(人工微调过)则保留人工值
-          const wasAuto = m.final_purchase == null || +m.final_purchase === +m.total_purchase;
+          // B132：0 也视为未微调（生产 543/800 行存的是 0 而非 NULL；合同侧拆行早已把 0 当未微调退到 total_purchase，
+          // 这里原来把 0 当人工值保留 → 改矩阵后 final 永远 0、预算 0）
+          const wasAuto = m.final_purchase == null || +m.final_purchase === 0 || +m.final_purchase === +m.total_purchase;
           m.loss_usage = perUnit;
           m.qty = pieces;
           m.total_purchase = total;
@@ -581,6 +661,14 @@ export class OrderService {
     if (!order) throw new NotFoundException(`订单 #${id} 不存在`);
     if (order.status !== OrderStatus.DRAFT) {
       throw new BadRequestException('只有草稿状态的订单可以删除');
+    }
+    // B056：草稿也能生成合同。删单不查合同 → 合同悬在已删订单上，详情仍显示已删单号，对账/付款继续走
+    const contracts: Array<{ contract_no: string }> = await this.dataSource.query(
+      'SELECT contract_no FROM contract WHERE order_id = ? AND deleted = 0', [id]);
+    if (contracts.length) {
+      throw new BadRequestException(
+        `该订单已生成合同（${contracts.map((c) => c.contract_no).join('、')}），不能删除；请先删除相关合同`,
+      );
     }
     order.deleted = 1;
     await this.orderRepo.save(order);

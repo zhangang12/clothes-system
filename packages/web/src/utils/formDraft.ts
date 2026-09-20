@@ -7,6 +7,18 @@ import { ElMessageBox } from 'element-plus';
 export interface DraftEntry { t: number; data: Record<string, unknown> }
 
 const DEBOUNCE_MS = 800;
+const DRAFT_PREFIX = 'i9.draft.';
+
+/** 登出时清掉本机所有草稿：同一浏览器换账号登录，不该弹出上一个人的「未保存草稿」（B144） */
+export function clearAllDrafts(): void {
+  try {
+    const ls = localStorage;
+    for (let i = ls.length - 1; i >= 0; i--) {
+      const k = ls.key(i);
+      if (k && k.startsWith(DRAFT_PREFIX)) ls.removeItem(k);
+    }
+  } catch { /* 隐私模式/无 storage：忽略 */ }
+}
 
 /**
  * 为一个大表单挂自动草稿。
@@ -19,16 +31,41 @@ export function useFormDraft(
   form: Record<string, any>,
   hooks?: { snapshot?: () => Record<string, unknown>; restore?: (data: any) => void },
 ) {
-  const storeKey = `i9.draft.${key}`;
+  const storeKey = `${DRAFT_PREFIX}${key}`;
   let stop: WatchStopHandle | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let stopped = false; // clear() 后不再写（保存成功后离开页面不写回草稿）
+  let wroteThisSession = false;
+
+  const snapshotOf = (): Record<string, unknown> =>
+    (hooks?.snapshot ? hooks.snapshot() : JSON.parse(JSON.stringify(form)));
+  const serialize = (): string | null => {
+    try { return JSON.stringify(snapshotOf()); } catch { return null; }
+  };
+
+  // 「干净基线」：表单相对它没有改动就不写草稿（B092）。
+  // 【为什么需要基线】此前 onBeforeUnmount 无条件 write()，打开订单看一眼就返回也会留下草稿，
+  // 下次一进来就弹「检测到未保存草稿」；期间别人改过这张单，点「恢复」再保存就把对方的改动覆盖回去。
+  // 基线在两处校准：挂载时（新建页=空表单）、restorePrompt 时（编辑页都是 load 完再问草稿，
+  // 此刻的表单就是库里的原样）。之后只有用户真改过东西，快照才会与基线不同。
+  let baseline: string | null = serialize();
+  const isDirty = (): boolean => {
+    const cur = serialize();
+    return cur !== null && cur !== baseline;
+  };
+  /** 把当前表单当作「未改动」的基线（页面把库里数据填进表单之后可调用） */
+  function markClean() { baseline = serialize(); }
 
   function write() {
     try {
-      const data = hooks?.snapshot ? hooks.snapshot() : JSON.parse(JSON.stringify(form));
-      const entry: DraftEntry = { t: Date.now(), data };
+      if (!isDirty()) {
+        // 没改过：不写。本次会话里曾写过的草稿（改了又手工改回去）顺手清掉，免得下次白弹一次
+        if (wroteThisSession) { localStorage.removeItem(storeKey); wroteThisSession = false; }
+        return;
+      }
+      const entry: DraftEntry = { t: Date.now(), data: snapshotOf() };
       localStorage.setItem(storeKey, JSON.stringify(entry));
+      wroteThisSession = true;
     } catch { /* 序列化失败/存储满时静默跳过，绝不影响表单 */ }
   }
   function scheduleWrite() {
@@ -55,6 +92,10 @@ export function useFormDraft(
 
   /** 有草稿时弹窗询问：恢复=回填表单并继续监听；丢弃=清除 */
   async function restorePrompt(): Promise<void> {
+    // 编辑页在 load 之后才问草稿：此时表单里是库里的原样，以它为基线；
+    // 同时把 load 触发的那次防抖写入作废（那不是用户的改动）
+    if (timer) { clearTimeout(timer); timer = null; }
+    markClean();
     const entry = read();
     if (!entry) return;
     const time = new Date(entry.t).toLocaleString('zh-CN', { hour12: false });
@@ -76,10 +117,10 @@ export function useFormDraft(
   onBeforeUnmount(() => {
     stop?.();
     if (stopped) return; // 已保存成功，不写回
-    // watch 回调是异步的，卸载时可能有改动尚未落盘——兜底写一次（幂等无害）
+    // watch 回调是异步的，卸载时可能有改动尚未落盘——兜底写一次（没改过时 write 内部会跳过）
     if (timer) { clearTimeout(timer); timer = null; }
     write();
   });
 
-  return { read, clear, restorePrompt, write };
+  return { read, clear, restorePrompt, write, markClean, isDirty };
 }

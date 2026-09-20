@@ -11,10 +11,11 @@
         <el-button v-if="!readonly && !statusLocked" type="primary" :icon="Check" :loading="saving" @click="save">保存</el-button>
         <el-button v-if="editId" :icon="Printer" @click="printDialog = true">打印/PDF</el-button>
         <el-button v-if="editId" :icon="Download" @click="exportExcel">导出Excel</el-button>
-        <el-button v-if="!readonly && !statusLocked && editId" :icon="Download" @click="importDialog = true">从样衣导入</el-button>
-        <el-button v-if="!readonly && editId && ['DRAFT', 'ADJUSTING'].includes(form.status)" type="warning" @click="submitQuote">发出报价</el-button>
-        <el-button v-if="!readonly && editId && form.status === 'QUOTED'" plain @click="adjustQuote">客户调整</el-button>
-        <el-button v-if="!readonly && editId && ['QUOTED', 'ADJUSTING'].includes(form.status)" type="success" :icon="Promotion" @click="toContract">转销售合同</el-button>
+        <el-button v-if="!readonly && !statusLocked && editId" :icon="Download" :loading="importing" @click="importDialog = true">从样衣导入</el-button>
+        <!-- 状态流转按钮一律带 loading（B110）：这些接口后端多数没有锁，网络慢时用户再点一次就会走两遍 -->
+        <el-button v-if="!readonly && editId && ['DRAFT', 'ADJUSTING'].includes(form.status)" type="warning" :loading="acting === 'submit'" @click="submitQuote">发出报价</el-button>
+        <el-button v-if="!readonly && editId && form.status === 'QUOTED'" plain :loading="acting === 'adjust'" @click="adjustQuote">客户调整</el-button>
+        <el-button v-if="!readonly && editId && ['QUOTED', 'ADJUSTING'].includes(form.status)" type="success" :icon="Promotion" :loading="acting === 'contract'" @click="toContract">转销售合同</el-button>
         <el-button v-if="editId" :icon="CopyDocument" :loading="copying" @click="copy">复制</el-button>
       </div>
     </div>
@@ -257,7 +258,7 @@
       <p class="hint" style="margin-top:8px">将把样衣材料明细复制到报价明细（部位/品名/门幅/颜色/供应商/耗用），覆盖现有明细。</p>
       <template #footer>
         <el-button @click="importDialog = false">取消</el-button>
-        <el-button type="primary" :disabled="!importSampleId" @click="doImport">导入</el-button>
+        <el-button type="primary" :loading="importing" :disabled="!importSampleId" @click="doImport">导入</el-button>
       </template>
     </el-dialog>
   </div>
@@ -297,6 +298,7 @@ import { halfFilledRows, halfFilledMessage } from '@/utils/lineCheck';
 const QUOTE_ITEM_TOUCHED = ['part', 'width', 'color', 'supplier', 'unit', 'quoteUsage', 'rmbPrice', 'remark'];
 import { moveItem } from '@/utils/tableRowDrag';
 import { fxPriceLabel } from '@/utils/currency';
+import { todayStr } from '@/utils/format';
 import { num, checkNumericCells, type NumCol } from '@/utils/numGuard';
 
 const SectionBlock = (props: { title: string; badge?: string }, { slots }: any) =>
@@ -320,8 +322,9 @@ const readonly = computed(() => !!route.meta.readonly);
 // 以前页面照样让填、点保存才报 400「只有草稿/客户调整状态的报价单可以编辑」，一个月被撞了 47 次。
 // 现在直接置只读，顶部说清出路；「客户调整」「转销售合同」等状态动作不受影响。
 const statusLocked = computed(() => !!editId.value && !!form.status && !(QUOTE_EDITABLE_STATUSES as readonly string[]).includes(form.status));
-const contentDisabled = computed(() => readonly.value || statusLocked.value);
+const contentDisabled = computed(() => readonly.value || statusLocked.value || loadFailed.value);
 const lockHint = computed(() => {
+  if (loadFailed.value) return '报价单没有加载成功，本页只能看——请刷新页面重试。';
   if (!statusLocked.value) return '';
   const st = statusLabel.value || form.status;
   if (form.status === 'QUOTED') return `报价单已「${st}」，内容不可修改；要改价请点右上角「客户调整」，改完再「发出报价」。`;
@@ -359,7 +362,8 @@ const authStore = useAuthStore();
 // 客户下拉为空时说清原因（#141，非管理员多半是还没被授权客户）
 const customerEmpty = computed(() => customerEmptyText(authStore.hasRole(UserRole.ADMIN)));
 const form = reactive<any>({
-  quoteNo: '', inquiryDate: new Date().toISOString().slice(0, 10), sampleId: undefined,
+  // 本地日期（B097）：toISOString 是 UTC 日期，早 8 点前新建的报价询价日期会是昨天
+  quoteNo: '', inquiryDate: todayStr(), sampleId: undefined,
   middlemanId: undefined, buyerId: undefined, buyerNo: '', styleNo: '', middlemanContact: '',
   // 新建默认值（设计稿字典默认：英国 / T/T 30天 / FOB 上海；汇率/利润率按用户反馈默认 6.5 / 10%；编辑载入会覆盖）
   currency: 'USD', exchangeRate: 6.5, tradeCountry: '英国', settlementMethod: 'T/T 30天', priceTerms: 'FOB 上海',
@@ -396,6 +400,16 @@ const formRef = ref<FormInstance>();
 const saving = ref(false);
 const selItems = ref<any[]>([]); const selFees = ref<any[]>([]);
 const importDialog = ref(false); const importSampleId = ref<number>();
+const importing = ref(false);         // 导入进行中（B110 同类）
+// 状态流转的进行中标志（B110）：同一时刻只跑一个，按钮 :loading
+const acting = ref<string | null>(null);
+async function runAction(key: string, fn: () => Promise<void>) {
+  if (acting.value) return;
+  acting.value = key;
+  try { await fn(); } finally { acting.value = null; }
+}
+// 单据装载失败（B106）：停在空白表单上还能编辑、能保存，一存就把明细清空
+const loadFailed = ref(false);
 const rules: FormRules = {
   inquiryDate: [{ required: true, message: '请选择询价日期', trigger: 'change' }],
   // 中间商/最终买家不再各自硬必填——直接客户没有中间商、只走中间商的单子也可能没具体终端买家。
@@ -599,24 +613,39 @@ async function exportExcel() {
   catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
 }
 
-/** 选样衣的下拉统一走远程搜索（口径与理由见 utils/remoteOptions.ts） */
+/**
+ * 选样衣的下拉统一走远程搜索（口径与理由见 utils/remoteOptions.ts）。
+ * 结果直接写回 samples（三个下拉共用同一份），但要认 useRemoteOptions 的请求序号——
+ * 快速连打几个字时，先发的慢响应后到不能覆盖后发的（B147）。
+ */
+let sampleSeq = 0;
 const { loading: sampleSearching, search: searchSamples } = useRemoteOptions<any>({
   fetch: async (kw) => {
+    const mine = ++sampleSeq;
     const rows = ((await sampleApi.list(listParams(kw))) as any).data ?? [];
-    samples.value = rows;      // 三个下拉共用同一份 samples
+    if (mine !== sampleSeq) return samples.value;   // 已有更新的搜索发出，这批结果作废
+    samples.value = rows;
     return rows;
   },
 });
 
+/**
+ * 装载参考数据。
+ * 【每一路各自 catch】（B106）原来是裸 Promise.all：客户接口偶发 500 就整个 reject，
+ * 连带后面的 load() 不执行，编辑页停在空白表单上还能保存 —— 一存就把明细清空。
+ * 下拉少几个选项是小事，单据本身必须照常装载。
+ */
 async function loadRefs() {
+  const failed: string[] = [];
   const [ms, bs, ss] = await Promise.all([
-    customerApi.list({ page: 1, size: 100, type: 'MIDDLEMAN' }),
-    customerApi.list({ page: 1, size: 100, type: 'BUYER' }),
-    sampleApi.list({ page: 1, size: 100 }),
+    customerApi.list({ page: 1, size: 100, type: 'MIDDLEMAN' }).catch(() => { failed.push('中间商'); return { data: [] }; }),
+    customerApi.list({ page: 1, size: 100, type: 'BUYER' }).catch(() => { failed.push('最终买家'); return { data: [] }; }),
+    sampleApi.list({ page: 1, size: 100 }).catch(() => { failed.push('样衣'); return { data: [] }; }),
   ]);
   middlemen.value = (ms as any).data ?? [];
   buyers.value = (bs as any).data ?? [];
   samples.value = (ss as any).data ?? [];
+  if (failed.length) ElMessage.warning(`${failed.join('、')}下拉加载失败，可刷新页面重试；单据内容不受影响`);
 }
 
 // L24：下拉只拉前 100 条，客户/买家/样衣超量后当前值可能不在选项里 → el-select 回显裸 ID。
@@ -717,8 +746,10 @@ const QUOTE_ITEM_NUM_COLS: NumCol[] = [
 ];
 const QUOTE_FEE_NUM_COLS: NumCol[] = [['rmbPrice', '人民币单价'], ['quoteUsage', '报价耗用']];
 function checkQuoteNumbers(): string | null {
-  return checkNumericCells(form.items.filter((i: any) => i.itemName), QUOTE_ITEM_NUM_COLS, '报价明细')
-    ?? checkNumericCells(form.fees.filter((f: any) => f.feeName), QUOTE_FEE_NUM_COLS, '费用明细');
+  // 【整表传进去，别先按品名过滤】（B159）：过滤后的下标不是用户看到的行号——第 1 行是空占位行、
+  // 第 2 行耗用填「若干」，报出来却成了「第 1 行」。空行的数值格本来就是空的，checkNumericCells 会跳过
+  return checkNumericCells(form.items, QUOTE_ITEM_NUM_COLS, '报价明细')
+    ?? checkNumericCells(form.fees, QUOTE_FEE_NUM_COLS, '费用明细');
 }
 
 function buildDto() {
@@ -729,7 +760,8 @@ function buildDto() {
     buyerId: form.buyerId ?? null, styleNo: txt(form.styleNo), middlemanContact: txt(form.middlemanContact),
     currency: form.currency, exchangeRate: num(form.exchangeRate), tradeCountry: txt(form.tradeCountry),
     settlementMethod: txt(form.settlementMethod), priceTerms: txt(form.priceTerms),
-    salesperson: txt(form.salesperson), profitRate: num(form.profitRate) ?? 0, quoteQty: num(form.quoteQty),
+    // 报价数量清空要发 null 才清得掉（B111）：发 undefined 后端当「不改」，重开数字还在。quotation.quote_qty 可空
+    salesperson: txt(form.salesperson), profitRate: num(form.profitRate) ?? 0, quoteQty: num(form.quoteQty) ?? null,
     totalRemark: txt(form.totalRemark), image1: txt(form.image1), image2: txt(form.image2),
     items: form.items.filter((i: any) => i.itemName).map((i: any, idx: number) => ({
       part: i.part, itemName: i.itemName, width: i.width, color: i.color, supplier: i.supplier, unit: i.unit,
@@ -767,8 +799,14 @@ async function save() {
       const newId = (r.data ?? r).id;
       // 关联了样衣且没填明细 → 自动带入样衣材料并停留在编辑页
       if (form.sampleId && !dto.items.length) {
-        await quoteApi.importFromSample(newId, form.sampleId);
-        ElMessage.success('已自动带入样衣材料');
+        // 【建单已经成功了，导入失败不能笼统报「保存失败」】（B112）原来这句抛到外层 catch，
+        // 用户以为没存、再点一次 → 库里两张草稿报价。这里就地兜住，说清楚已建好、下一步点哪儿
+        try {
+          await quoteApi.importFromSample(newId, form.sampleId);
+          ElMessage.success('已自动带入样衣材料');
+        } catch (e: any) {
+          errToast(`报价已创建，样衣导入失败（${e?.response?.data?.msg ?? e?.message ?? '未知原因'}），可在页面里再点「从样衣导入」`);
+        }
         draft.clear();
         await router.push({ name: 'QuoteEdit', params: { id: newId } });
         await load();
@@ -783,28 +821,34 @@ async function save() {
   } finally { saving.value = false; }
 }
 async function doImport() {
-  if (!editId.value || !importSampleId.value) return;
-  try { await quoteApi.importFromSample(editId.value, importSampleId.value); ElMessage.success('已从样衣导入'); importDialog.value = false; load(); }
+  if (!editId.value || !importSampleId.value || importing.value) return;
+  importing.value = true;
+  try { await quoteApi.importFromSample(editId.value, importSampleId.value); ElMessage.success('已从样衣导入'); importDialog.value = false; await load(); }
   catch (e: any) { errToast(e?.response?.data?.msg ?? '导入失败'); }
+  finally { importing.value = false; }
 }
 // 发出报价（草稿/客户调整→已报价；超阈值转待审批并提示）——此前 UI 缺此入口,状态机断链
 async function submitQuote() {
   if (!editId.value) return;
-  try { await quoteApi.submit(editId.value); ElMessage.success('已发出报价'); load(); }
-  catch (e: any) {
-    const msg = e?.response?.data?.msg ?? '发出失败';
-    if (String(msg).includes('审批')) { ElMessage.warning(msg); load(); }
-    else ElMessage.error(msg);
-  }
+  await runAction('submit', async () => {
+    try { await quoteApi.submit(editId.value!); ElMessage.success('已发出报价'); await load(); }
+    catch (e: any) {
+      const msg = e?.response?.data?.msg ?? '发出失败';
+      if (String(msg).includes('审批')) { ElMessage.warning(msg); await load(); }
+      else ElMessage.error(msg);
+    }
+  });
 }
 // 客户调整（已报价→客户调整，改完可再次发出）
 async function adjustQuote() {
   if (!editId.value) return;
-  try { await quoteApi.adjust(editId.value); ElMessage.success('已进入客户调整，修改后可再次发出'); load(); }
-  catch (e: any) { errToast(e?.response?.data?.msg ?? '操作失败'); }
+  await runAction('adjust', async () => {
+    try { await quoteApi.adjust(editId.value!); ElMessage.success('已进入客户调整，修改后可再次发出'); await load(); }
+    catch (e: any) { errToast(e?.response?.data?.msg ?? '操作失败'); }
+  });
 }
 async function toContract() {
-  if (!editId.value) return;
+  if (!editId.value || acting.value) return;
   // 客户调整状态建单:提示后放行(总览走查P2#28/ORD A7)
   if (form.status === 'ADJUSTING') {
     try {
@@ -814,21 +858,23 @@ async function toContract() {
       );
     } catch { return; }
   }
-  try {
-    const r: any = await quoteApi.toContract(editId.value);
-    const d = r.data ?? r;
-    ElMessage.success('已转销售合同（已成单）');
-    load();
-    // 后端已自动生成订单草稿（含报价明细导入），引导前往编辑
-    if (d?.order_id) {
-      try {
-        await ElMessageBox.confirm(`已生成订单 ${d.order_no ?? `#${d.order_id}`}，是否前往编辑?`, '转销售合同', {
-          confirmButtonText: '前往编辑', cancelButtonText: '留在本页', type: 'success',
-        });
-        router.push(`/orders/${d.order_id}/edit`);
-      } catch { /* 留在本页 */ }
-    }
-  } catch (e: any) { errToast(e?.response?.data?.msg ?? '转合同失败'); }
+  await runAction('contract', async () => {
+    try {
+      const r: any = await quoteApi.toContract(editId.value!);
+      const d = r.data ?? r;
+      ElMessage.success('已转销售合同（已成单）');
+      await load();
+      // 后端已自动生成订单草稿（含报价明细导入），引导前往编辑
+      if (d?.order_id) {
+        try {
+          await ElMessageBox.confirm(`已生成订单 ${d.order_no ?? `#${d.order_id}`}，是否前往编辑?`, '转销售合同', {
+            confirmButtonText: '前往编辑', cancelButtonText: '留在本页', type: 'success',
+          });
+          router.push(`/orders/${d.order_id}/edit`);
+        } catch { /* 留在本页 */ }
+      }
+    } catch (e: any) { errToast(e?.response?.data?.msg ?? '转合同失败'); }
+  });
 }
 async function copy() {
   if (!editId.value) return;
@@ -851,7 +897,18 @@ async function copy() {
   finally { copying.value = false; }
 }
 function goBack() { router.push({ name: 'Quotes' }); }
-onMounted(async () => { await loadRefs(); await load(); await draft.restorePrompt(); });
+onMounted(async () => {
+  await loadRefs();
+  // 单据本体装不进来就转只读（B106）：空白表单还能编辑、能保存，一存就把明细清空
+  try {
+    await load();
+  } catch (e: any) {
+    loadFailed.value = true;
+    errToast(`${e?.response?.data?.msg ?? e?.message ?? '报价单装载失败'}——请刷新页面重试，未加载完的单据不能编辑`);
+    return;   // 没装进来就别问草稿了，恢复上去等于往空表单里灌旧数据
+  }
+  await draft.restorePrompt();
+});
 </script>
 
 <style scoped>

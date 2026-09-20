@@ -15,6 +15,12 @@ describe('numGuard（2026-08-04 反馈 #08 及举一反三）', () => {
     expect(num('若干')).toBeUndefined();
     expect(JSON.stringify({ v: NaN })).toBe('{"v":null}'); // 佐证为何必须拦
   });
+  it('B145 只剩空格的格子当留空，不能当 0——Number(\'  \')===0 会按 0 外发', () => {
+    expect(num('  ')).toBeUndefined();
+    expect(num('\t')).toBeUndefined();
+    expect(Number('  ')).toBe(0); // 佐证为何必须单独挡
+  });
+
   it('正常数值原样转换', () => {
     expect(num('1.25')).toBe(1.25);
     expect(num(' 3 ')).toBe(3);
@@ -28,6 +34,12 @@ describe('numGuard（2026-08-04 反馈 #08 及举一反三）', () => {
   it('留空是允许的，不报错（交给后端默认值）', () => {
     expect(checkNumericCells([{ qty: '', price: null }], COLS, '材料明细')).toBeNull();
   });
+  it('B145 数量格只敲了空格不再放行（原来校验通过、按 0 外发）', () => {
+    const err = checkNumericCells([{ qty: '   ' }], COLS, '材料明细');
+    expect(err).toBeNull();          // 视同留空：不报「只能填数字」
+    expect(num('   ')).toBeUndefined(); // 但也绝不发 0
+  });
+
   it('全部合法返回 null', () => {
     expect(checkNumericCells([{ qty: 1, price: '2.5' }], COLS, '材料明细')).toBeNull();
   });

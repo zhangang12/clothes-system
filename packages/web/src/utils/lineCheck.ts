@@ -30,7 +30,7 @@ export function isEmptyLine(m: GoodsLine): boolean {
  * 返回一句能直接照做的中文提示；全部合格时返回 null。
  * 最多点名 3 行——列全了反而看不过来，先改这几行再存即可。
  */
-export function checkGoodsLines(rows: GoodsLine[]): string | null {
+export function checkGoodsLines(rows: GoodsLine[], opts: { requireUnitPrice?: boolean } = {}): string | null {
   if (!rows?.length) return '货物明细至少 1 行';
 
   const empties: number[] = [];
@@ -41,6 +41,12 @@ export function checkGoodsLines(rows: GoodsLine[]): string | null {
     if (isBlank(m.item_name)) { bads.push(`第 ${no} 行没填品名`); return; }
     if (!(Number(m.qty) > 0)) {
       bads.push(isBlank(m.qty) ? `第 ${no} 行没填数量` : `第 ${no} 行数量「${String(m.qty).trim()}」须大于 0`);
+      return;
+    }
+    // 单价留空保存无提示 → 合同总价 0 照样推给供应商盖章（B098）。默认不开：调用方按单据类型决定
+    // 是否强制（合同页保存时打开；草稿/报价类留空是允许的）
+    if (opts.requireUnitPrice && !(Number(m.unit_price) > 0)) {
+      bads.push(isBlank(m.unit_price) ? `第 ${no} 行没填单价` : `第 ${no} 行单价「${String(m.unit_price).trim()}」须大于 0`);
     }
   });
 

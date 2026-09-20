@@ -5,7 +5,7 @@
       <div class="toolbar">
         <div class="tools-left">
           <el-button v-if="canEdit" type="primary" :icon="Plus" @click="goCreate">新建</el-button>
-          <el-button plain :icon="Download" @click="exportCsv">导出</el-button>
+          <el-button plain :icon="Download" :loading="exporting" @click="exportCsv">导出</el-button>
           <el-button v-if="isAdmin" plain :icon="Upload" @click="importDialog = true">历史导入</el-button>
           <el-button v-if="isAdmin" type="danger" plain :icon="Delete" :disabled="!selected.length" @click="batchRemove">
             删除{{ selected.length ? `(${selected.length})` : '' }}
@@ -13,10 +13,10 @@
         </div>
         <div class="tools-right">
           <el-input v-model="query.keyword" placeholder="订单编号/款号/PO/中间商/买家" clearable style="width:280px"
-            @keyup.enter="load" @clear="load">
+            @keyup.enter="search" @clear="search">
             <template #prefix><el-icon><Search /></el-icon></template>
           </el-input>
-          <el-button type="primary" @click="load">搜索</el-button>
+          <el-button type="primary" @click="search">搜索</el-button>
           <el-button @click="reset">清空</el-button>
           <el-button text @click="showAdvanced = !showAdvanced">高级筛选 <el-icon><ArrowDown /></el-icon></el-button>
         </div>
@@ -25,7 +25,7 @@
         <div v-show="showAdvanced" class="advanced">
           <el-form inline>
             <el-form-item label="状态">
-              <el-select v-model="query.status" clearable placeholder="全部" style="width:140px" @change="load">
+              <el-select v-model="query.status" clearable placeholder="全部" style="width:140px" @change="search">
                 <el-option v-for="s in statuses" :key="s.value" :label="s.label" :value="s.value" />
               </el-select>
             </el-form-item>
@@ -35,9 +35,13 @@
     </div>
 
     <div class="table-card">
-      <el-table ref="colTableRef" :data="list" v-loading="loading" border stripe @header-dragend="onHeaderDragend" :row-class-name="rowClass" @selection-change="(v: any[]) => selected = v" @row-dblclick="goEdit">
+      <!-- 双击进编辑要先看权限与状态（B026）：船务/版师/打样默认带 orders 菜单，双击草稿行进了编辑表单，
+           填完点保存被后端 403，工作白做 -->
+      <el-table ref="colTableRef" :data="list" v-loading="loading" border stripe @header-dragend="onHeaderDragend" :row-class-name="rowClass" @selection-change="(v: any[]) => selected = v" @row-dblclick="onRowDblclick">
         <el-table-column type="selection" width="42" />
-        <el-table-column prop="order_no" label="订单编号" width="150" sortable />
+        <!-- 列头排序只在「本页即全部」时开放（B160）：后端按 id 倒序分页且不收排序参数，
+             跨页时本地排序只是把当前 20 条颠倒一下，第 1 页仍然不是全库最大的那几条 -->
+        <el-table-column prop="order_no" label="订单编号" width="150" :sortable="sortableLocal" />
         <el-table-column prop="style_no" label="客户款号" min-width="120"><template #default="{ row }">{{ row.style_no || row.style_name || '-' }}</template></el-table-column>
         <el-table-column prop="customer_po" label="客户PO" min-width="130"><template #default="{ row }">{{ row.customer_po || '-' }}</template></el-table-column>
         <el-table-column label="中间商/买家" min-width="150"><template #default="{ row }">{{ [row.middleman_name, row.buyer_name].filter(Boolean).join(' / ') || '-' }}</template></el-table-column>
@@ -63,10 +67,11 @@
           <!-- 日常操作统一主色，色彩只留给语义：审批=成功绿。排布交给 .table-ops -->
           <template #default="{ row }">
             <div class="table-ops">
-              <el-button v-if="row.status === 'DRAFT'" link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
-              <el-button v-if="row.status === 'CONFIRMED'" link type="warning" size="small" @click="doRevert(row)">撤回</el-button>
+              <!-- B026：没编辑权限的账号不显示「编辑」（点进去也只会被后端 403），留「查看」 -->
+              <el-button v-if="row.status === 'DRAFT' && canEdit" link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
+              <el-button v-if="row.status === 'CONFIRMED' && canEdit" link type="warning" size="small" :disabled="acting !== null" @click="doRevert(row)">撤回</el-button>
               <el-button link type="primary" size="small" @click="goView(row)">查看</el-button>
-              <el-button v-if="row.approval_status === 'PENDING' && canReview" link type="success" size="small" @click="doApprove(row)">审批</el-button>
+              <el-button v-if="row.approval_status === 'PENDING' && canReview" link type="success" size="small" :disabled="acting !== null" @click="doApprove(row)">审批</el-button>
               <el-dropdown trigger="click" @command="(cmd: string) => onPrint(cmd, row)">
                 <el-button link type="primary" size="small">打印<el-icon><ArrowDown /></el-icon></el-button>
                 <template #dropdown>
@@ -135,6 +140,7 @@ import { parseTableText, rowsPositional } from '@/utils/parseTable';
 import { orderApi } from '@/api/order';
 import { contractApi } from '@/api/contract';
 import { printOrder } from '@/utils/orderPrint';
+import { exportAll } from '@/utils/exportAll';
 import { useAuthStore } from '@/stores/auth';
 import { UserRole, ORDER_STATUS_LABEL } from '@i9/types';
 import { currencySymbol } from '@/utils/currency';
@@ -167,9 +173,25 @@ async function load() {
     total.value = res.data?.total ?? res.total ?? 0;
   } finally { loading.value = false; }
 }
+// 改了搜索条件要回第 1 页（B107 同类）：翻到第 3 页再搜，结果不足 3 页就是一张空表
+function search() { query.page = 1; load(); }
 function reset() { query.keyword = ''; query.status = undefined; query.page = 1; load(); }
+// 列头排序只在「本页即全部」时开放（B160，理由见模板注释）
+const sortableLocal = computed(() => (total.value <= list.value.length ? true : false));
 function goCreate() { router.push({ name: 'OrderCreate' }); }
 function goEdit(row: any) { router.push({ name: 'OrderEdit', params: { id: row.id } }); }
+// 双击行：有权限且是草稿才进编辑，否则进查看（B026）
+function onRowDblclick(row: any) {
+  if (canEdit.value && row.status === 'DRAFT') goEdit(row);
+  else goView(row);
+}
+// 行内状态动作的进行中标志（B110 同类）：同一时刻只跑一个
+const acting = ref<string | null>(null);
+async function runAction(key: string, fn: () => Promise<void>) {
+  if (acting.value) return;
+  acting.value = key;
+  try { await fn(); } finally { acting.value = null; }
+}
 
 // 在产订单迁移导入(P3#43)
 const importDialog = ref(false);
@@ -254,34 +276,58 @@ async function onGenContract(cmd: string, row: any) {
 }
 function goView(row: any) { router.push({ name: 'OrderView', params: { id: row.id } }); }
 async function doApprove(row: any) {
-  try { await orderApi.approve(row.id); ElMessage.success('已审批，订单可下单'); load(); }
-  catch (e: any) { errToast(e?.response?.data?.msg ?? '审批失败'); }
+  await runAction(`approve:${row.id}`, async () => {
+    try { await orderApi.approve(row.id); ElMessage.success('已审批，订单可下单'); load(); }
+    catch (e: any) { errToast(e?.response?.data?.msg ?? '审批失败'); }
+  });
 }
 // 撤回下单（已下单→草稿，可再编辑；已生成合同起后端会拦截）
 async function doRevert(row: any) {
+  if (acting.value) return;
   try {
     await ElMessageBox.confirm(`确认撤回订单「${row.order_no}」？撤回后回到草稿可修改，重新下单需重走审批校验。`, '撤回下单', { type: 'warning' });
   } catch { return; }
-  try { await orderApi.revert(row.id); ElMessage.success('已撤回为草稿'); load(); }
-  catch (e: any) { errToast(e?.response?.data?.msg ?? '撤回失败'); }
+  await runAction(`revert:${row.id}`, async () => {
+    try { await orderApi.revert(row.id); ElMessage.success('已撤回为草稿'); load(); }
+    catch (e: any) { errToast(e?.response?.data?.msg ?? '撤回失败'); }
+  });
 }
+/**
+ * 批量删除。
+ * 【被拦下的要说清为什么】后端不止拦「非草稿」，还会拦「名下还有未删除合同的草稿单」——
+ * 原来 `catch { fail++ }` 把 msg 吞了，用户只看到「拦截 N 条」，完全不知道该去处理什么（同样式见样衣列表）。
+ */
 async function batchRemove() {
   try { await ElMessageBox.confirm(`确认删除选中的 ${selected.value.length} 条记录?此操作不可恢复。`, "批量删除", { type: "warning" }); } catch { return; }
-  let ok = 0, fail = 0;
-  for (const row of selected.value) { try { await orderApi.remove(row.id); ok++; } catch { fail++; } }
-  ElMessage[fail ? 'warning' : 'success'](`删除完成：成功 ${ok} 条${fail ? `，拦截 ${fail} 条(仅草稿可删)` : ''}`);
+  let ok = 0;
+  const reasons: string[] = [];
+  for (const row of selected.value) {
+    try { await orderApi.remove(row.id); ok++; }
+    catch (e: any) { reasons.push(`${row.order_no ?? row.id}：${e?.response?.data?.msg ?? '未知原因'}`); }
+  }
+  if (!reasons.length) ElMessage.success(`删除完成：成功 ${ok} 条`);
+  else {
+    ElMessageBox.alert(reasons.join('<br>'), `删除完成：成功 ${ok} 条，拦截 ${reasons.length} 条`,
+      { dangerouslyUseHTMLString: true, confirmButtonText: '知道了' });
+  }
   load();
 }
-function exportCsv() {
-  const cols = ['order_no', 'style_no', 'customer_po', 'middleman_name', 'buyer_name', 'qty_total', 'unit_price', 'delivery_date', 'status'];
-  const head = ['订单编号', '客户款号', '客户PO', '中间商', '最终买家', '大货总数', '单品单价', '约定交期', '状态'];
-  // CSV 转义与 utils/exportAll.ts 口径一致:字段整体包引号,内嵌双引号成双(否则名称含引号即破列)
-  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const rows = list.value.map((r) => cols.map((c) => esc(r[c])).join(','));
-  const csv = '﻿' + [head.map(esc).join(','), ...rows].join('\n');
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-  const a = document.createElement('a'); a.href = url; a.download = '订单.csv'; a.click();
-  URL.revokeObjectURL(url);
+// 导出：当前筛选下全量、逐页拉取（B152）。原来只导当前一页 20 行，文件却叫「订单.csv」
+const exporting = ref(false);
+const EXPORT_COLS = [
+  { key: 'order_no', title: '订单编号' }, { key: 'style_no', title: '客户款号' }, { key: 'customer_po', title: '客户PO' },
+  { key: 'middleman_name', title: '中间商' }, { key: 'buyer_name', title: '最终买家' }, { key: 'qty_total', title: '大货总数' },
+  { key: 'unit_price', title: '单品单价' }, { key: 'currency', title: '币种' }, { key: 'delivery_date', title: '约定交期' },
+  { key: 'status', title: '状态', format: (r: any) => statusLabel(r.status) },
+];
+async function exportCsv() {
+  if (exporting.value) return;
+  exporting.value = true;
+  try {
+    const n = await exportAll((p, sz) => orderApi.list({ ...query, page: p, size: sz }) as any, EXPORT_COLS, '订单');
+    ElMessage.success(`已导出全部 ${n} 条`);
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
+  finally { exporting.value = false; }
 }
 onMounted(load);
 </script>

@@ -10,6 +10,7 @@ import { UserRole } from '@i9/types';
 import { QuoteService } from './quote.service';
 import { maskQuote } from '../../common/masking/field-mask';
 import { CreateQuoteDto } from './dto/create-quote.dto';
+import { UpdateQuoteDto } from './dto/update-quote.dto';
 import { QueryQuoteDto } from './dto/query-quote.dto';
 
 @ApiTags('客户报价')
@@ -30,7 +31,7 @@ export class QuoteController {
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
   @ApiOperation({ summary: '创建报价单（费用明细自动带6行）' })
   create(@Body() dto: CreateQuoteDto, @Request() req: any) {
-    return this.service.create(dto, req.user.id);
+    return this.service.create(dto, req.user.id, req.user); // 传 user：建单时校验客户可见性(B062)
   }
 
   @Get()
@@ -50,7 +51,7 @@ export class QuoteController {
   @Put(':id')
   @Roles(UserRole.ADMIN, UserRole.BUSINESS)
   @ApiOperation({ summary: '编辑报价单（草稿/客户调整状态，覆盖式）' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: Partial<CreateQuoteDto>, @Request() req: any) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateQuoteDto, @Request() req: any) { // 真 DTO 才过 ValidationPipe(B006 同类)
     return this.service.update(id, dto, req.user);
   }
 

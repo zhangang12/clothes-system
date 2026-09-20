@@ -115,6 +115,31 @@ describe('FactoryEditView', () => {
     });
   });
 
+  // ── B100 同类：工厂的注册资金 / 年销售额清空后发 undefined，清不掉 ──
+  it('B100 清空注册资金/年销售额后保存发 null（发 undefined 后端当「不改」，重开还在）', async () => {
+    mockRoute.params = { id: '5' };
+    mockFactoryGet.mockResolvedValue({ data: makeFactory({ registered_capital: 1000, annual_sales: 250.5 }) });
+    const wrapper: any = mountView();
+    await vi.waitFor(() => expect(wrapper.vm.form.registeredCapital).toBe(1000));
+    expect(wrapper.vm.buildDto().registeredCapital).toBe(1000);
+    expect(wrapper.vm.buildDto().annualSales).toBe(250.5);
+
+    wrapper.vm.form.registeredCapital = '';
+    wrapper.vm.form.annualSales = '';
+    const dto = wrapper.vm.buildDto();
+    expect(dto.registeredCapital).toBeNull();
+    expect(dto.annualSales).toBeNull();
+  });
+
+  // ── B097：默认日期用 toISOString() 取 UTC，早 8 点前打开页面日期是昨天 ──
+  it('B097 新建页「开发时间」默认取本地今天，不是 UTC 日期', async () => {
+    const wrapper: any = mountView();
+    await wrapper.vm.$nextTick();
+    const d = new Date();
+    const p = (n: number) => String(n).padStart(2, '0');
+    expect(wrapper.vm.form.developDate).toBe(`${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`);
+  });
+
   // L17：整页重挂载(router-view 带 :key)落 /new?copy_from= 时，load 重新载入源数据且编号留空
   it('新建页带 copy_from 时载入源数据且编号留空', async () => {
     mockRoute.query = { copy_from: '5' };

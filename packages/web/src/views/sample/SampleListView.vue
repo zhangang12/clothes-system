@@ -6,7 +6,7 @@
         <div class="tools-left">
           <el-button v-if="canEdit" type="primary" :icon="Plus" @click="goCreate">新建</el-button>
           <el-button v-if="canEdit" plain :icon="Upload" @click="showImport = true">导入</el-button>
-          <el-button plain :icon="Download" @click="exportCsv">导出</el-button>
+          <el-button plain :icon="Download" :loading="exporting" @click="exportCsv">导出</el-button>
           <el-button v-if="canEdit" plain :icon="CopyDocument" :loading="copying" :disabled="copying || selected.length !== 1" @click="copyOne">复制</el-button>
           <el-button v-if="isAdmin" type="danger" plain :icon="Delete" :disabled="!selected.length" @click="batchRemove">
             删除{{ selected.length ? `(${selected.length})` : '' }}
@@ -14,10 +14,10 @@
         </div>
         <div class="tools-right">
           <el-input v-model="query.keyword" placeholder="样衣编号/款号/中间商/买家/制版师/制单人" clearable style="width:300px"
-            @keyup.enter="load" @clear="load">
+            @keyup.enter="search" @clear="search">
             <template #prefix><el-icon><Search /></el-icon></template>
           </el-input>
-          <el-button type="primary" @click="load">搜索</el-button>
+          <el-button type="primary" @click="search">搜索</el-button>
           <el-button @click="reset">清空</el-button>
           <el-button text @click="showAdvanced = !showAdvanced">高级筛选 <el-icon><ArrowDown /></el-icon></el-button>
         </div>
@@ -26,37 +26,37 @@
         <div v-show="showAdvanced" class="advanced">
           <el-form inline>
             <el-form-item label="状态">
-              <el-select v-model="query.status" clearable placeholder="全部" style="width:130px" @change="load">
+              <el-select v-model="query.status" clearable placeholder="全部" style="width:130px" @change="search">
                 <el-option v-for="s in statuses" :key="s.value" :label="s.label" :value="s.value" />
               </el-select>
             </el-form-item>
             <el-form-item label="客户款号">
-              <el-input v-model="query.style_no" clearable style="width:140px" @keyup.enter="load" @clear="load" />
+              <el-input v-model="query.style_no" clearable style="width:140px" @keyup.enter="search" @clear="search" />
             </el-form-item>
             <el-form-item label="中间商">
-              <el-input v-model="query.middleman_name" clearable style="width:140px" @keyup.enter="load" @clear="load" />
+              <el-input v-model="query.middleman_name" clearable style="width:140px" @keyup.enter="search" @clear="search" />
             </el-form-item>
             <el-form-item label="类别">
-              <el-select v-model="query.categories" clearable placeholder="全部" style="width:120px" @change="load">
+              <el-select v-model="query.categories" clearable placeholder="全部" style="width:120px" @change="search">
                 <el-option v-for="c in sampleCategories" :key="c" :label="c" :value="c" />
               </el-select>
             </el-form-item>
             <el-form-item label="制版师">
-              <el-input v-model="query.patternmaker_name" clearable style="width:120px" @keyup.enter="load" @clear="load" />
+              <el-input v-model="query.patternmaker_name" clearable style="width:120px" @keyup.enter="search" @clear="search" />
             </el-form-item>
             <el-form-item label="制单人">
-              <el-input v-model="query.maker" clearable style="width:120px" @keyup.enter="load" @clear="load" />
+              <el-input v-model="query.maker" clearable style="width:120px" @keyup.enter="search" @clear="search" />
             </el-form-item>
             <el-form-item label="制单日期">
               <el-date-picker v-model="makeRange" type="daterange" value-format="YYYY-MM-DD"
-                range-separator="~" start-placeholder="起" end-placeholder="止" style="width:240px" @change="load" />
+                range-separator="~" start-placeholder="起" end-placeholder="止" style="width:240px" @change="search" />
             </el-form-item>
             <el-form-item label="寄出日期">
               <el-date-picker v-model="shipRange" type="daterange" value-format="YYYY-MM-DD"
-                range-separator="~" start-placeholder="起" end-placeholder="止" style="width:240px" @change="load" />
+                range-separator="~" start-placeholder="起" end-placeholder="止" style="width:240px" @change="search" />
             </el-form-item>
             <el-form-item>
-              <el-button type="primary" @click="load">筛选</el-button>
+              <el-button type="primary" @click="search">筛选</el-button>
             </el-form-item>
           </el-form>
         </div>
@@ -64,34 +64,37 @@
     </div>
 
     <div class="table-card">
-      <el-table ref="colTableRef" :data="list" v-loading="loading" border stripe @header-dragend="onHeaderDragend" @selection-change="(v: any[]) => selected = v" @row-dblclick="goEdit">
+      <!-- 双击进编辑要先看权限（B026）：版师/打样/船务双击行进了编辑表单，填完点保存被后端 403，工作白做。
+           列头排序只在「本页即全部」时开放（B160）：后端按 id 倒序分页且不收排序参数，跨页本地排序是错的 -->
+      <el-table ref="colTableRef" :data="list" v-loading="loading" border stripe @header-dragend="onHeaderDragend" @selection-change="(v: any[]) => selected = v" @row-dblclick="onRowDblclick">
         <el-table-column type="selection" width="42" />
-        <el-table-column prop="sample_no" label="样衣编号" width="150" sortable />
-        <el-table-column prop="style_no" label="客户款号" min-width="130" show-overflow-tooltip sortable />
-        <el-table-column prop="categories" label="样衣类别" width="120" sortable>
+        <el-table-column prop="sample_no" label="样衣编号" width="150" :sortable="sortableLocal" />
+        <el-table-column prop="style_no" label="客户款号" min-width="130" show-overflow-tooltip :sortable="sortableLocal" />
+        <el-table-column prop="categories" label="样衣类别" width="120" :sortable="sortableLocal">
           <template #default="{ row }">{{ (row.categories || '').split(',').filter(Boolean).join('·') || '-' }}</template>
         </el-table-column>
-        <el-table-column prop="middleman_name" label="中间商" min-width="120" show-overflow-tooltip sortable>
+        <el-table-column prop="middleman_name" label="中间商" min-width="120" show-overflow-tooltip :sortable="sortableLocal">
           <template #default="{ row }">{{ row.middleman_name || '-' }}</template>
         </el-table-column>
-        <el-table-column prop="patternmaker_name" label="制版师" width="100" sortable>
+        <el-table-column prop="patternmaker_name" label="制版师" width="100" :sortable="sortableLocal">
           <template #default="{ row }">{{ row.patternmaker_name || '—' }}</template>
         </el-table-column>
-        <el-table-column prop="maker" label="制单人" width="100" sortable>
+        <el-table-column prop="maker" label="制单人" width="100" :sortable="sortableLocal">
           <template #default="{ row }">{{ row.maker || '—' }}</template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="100" sortable fixed="right">
+        <el-table-column prop="status" label="状态" width="100" :sortable="sortableLocal" fixed="right">
           <template #default="{ row }">
             <span v-if="row.status === 'ORDERED'" class="ordered">{{ statusLabel(row.status) }}</span>
             <el-tag v-else :type="statusTag(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="make_date" label="制单日期" width="110" sortable><template #default="{ row }">{{ row.make_date || '-' }}</template></el-table-column>
-        <el-table-column prop="ship_sample_date" label="寄出日期" width="110" sortable><template #default="{ row }">{{ row.ship_sample_date || '—' }}</template></el-table-column>
-        <el-table-column prop="return_date" label="寄回日期" width="110" sortable><template #default="{ row }">{{ row.return_date || '—' }}</template></el-table-column>
+        <el-table-column prop="make_date" label="制单日期" width="110" :sortable="sortableLocal"><template #default="{ row }">{{ row.make_date || '-' }}</template></el-table-column>
+        <el-table-column prop="ship_sample_date" label="寄出日期" width="110" :sortable="sortableLocal"><template #default="{ row }">{{ row.ship_sample_date || '—' }}</template></el-table-column>
+        <el-table-column prop="return_date" label="寄回日期" width="110" :sortable="sortableLocal"><template #default="{ row }">{{ row.return_date || '—' }}</template></el-table-column>
         <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
+            <!-- B026：没编辑权限的账号不显示「编辑」（点进去也只会被后端 403），留「查看」 -->
+            <el-button v-if="canEdit" link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
             <el-button link size="small" @click="goView(row)">查看</el-button>
             <el-button link size="small" @click="printRow(row)">打印</el-button>
             <el-button link size="small" @click="exportRow(row)">导出Excel</el-button>
@@ -134,6 +137,7 @@ import { useAuthStore } from '@/stores/auth';
 import { printSample } from '@/utils/samplePrint';
 import PrintDesigner from '@/components/PrintDesigner.vue';
 import { exportSampleExcel } from '@/utils/sampleExcel';
+import { exportAll } from '@/utils/exportAll';
 import CsvImportDialog from '@/components/CsvImportDialog.vue';
 import { UserRole, SAMPLE_STATUS_LABEL, SAMPLE_CATEGORIES } from '@i9/types';
 
@@ -197,9 +201,18 @@ function reset() {
   makeRange.value = null; shipRange.value = null;
   load();
 }
+// 改了搜索条件要回第 1 页（B107 同类）：翻到第 3 页再搜，结果不足 3 页就是一张空表
+function search() { query.page = 1; load(); }
+// 列头排序只在「本页即全部」时开放（B160，理由见模板注释）
+const sortableLocal = computed(() => total.value <= list.value.length);
 function goCreate() { router.push({ name: 'SampleCreate' }); }
 function goEdit(row: any) { router.push({ name: 'SampleEdit', params: { id: row.id } }); }
 function goView(row: any) { router.push({ name: 'SampleView', params: { id: row.id } }); }
+// 双击行：有权限才进编辑，否则进查看（B026）
+function onRowDblclick(row: any) {
+  if (canEdit.value) goEdit(row);
+  else goView(row);
+}
 function goPatternmaker(row: any) { router.push({ name: 'SamplePatternmaker', params: { id: row.id } }); }
 
 // 防连点：复制没有任何幂等保护，点 N 次就真建 N 条。8-04 反馈截图里
@@ -278,16 +291,21 @@ async function submitImport(rows: any[]) {
   };
 }
 
-function exportCsv() {
-  const cols = ['sample_no', 'style_no', 'categories', 'middleman_name', 'patternmaker_name', 'status', 'make_date'];
-  const head = ['样衣编号', '客户款号', '样衣类别', '中间商', '制版师', '状态', '制单日期'];
-  // 转义内嵌双引号(" → ""),写法同 utils/exportAll.ts,防名称含引号破列
-  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const rows = list.value.map((r) => cols.map((c) => esc(r[c])).join(','));
-  const csv = '﻿' + [head.join(','), ...rows].join('\n');
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-  const a = document.createElement('a'); a.href = url; a.download = '样衣管理.csv'; a.click();
-  URL.revokeObjectURL(url);
+// 导出：当前筛选下全量、逐页拉取（B152）。原来只导当前一页 20 行，文件却叫「样衣管理.csv」
+const exporting = ref(false);
+const EXPORT_COLS = [
+  { key: 'sample_no', title: '样衣编号' }, { key: 'style_no', title: '客户款号' }, { key: 'categories', title: '样衣类别' },
+  { key: 'middleman_name', title: '中间商' }, { key: 'patternmaker_name', title: '制版师' }, { key: 'maker', title: '制单人' },
+  { key: 'status', title: '状态', format: (r: any) => statusLabel(r.status) }, { key: 'make_date', title: '制单日期' },
+];
+async function exportCsv() {
+  if (exporting.value) return;
+  exporting.value = true;
+  try {
+    const n = await exportAll((p, sz) => sampleApi.list({ ...buildParams(), page: p, size: sz }) as any, EXPORT_COLS, '样衣管理');
+    ElMessage.success(`已导出全部 ${n} 条`);
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
+  finally { exporting.value = false; }
 }
 onMounted(load);
 </script>

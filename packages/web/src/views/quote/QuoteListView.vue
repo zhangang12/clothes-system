@@ -7,7 +7,7 @@
           <el-button v-if="canEdit" type="primary" :icon="Plus" @click="goCreate">新建</el-button>
           <el-button v-if="isAdmin" plain @click="importDialog = true">历史导入</el-button>
           <el-button v-if="canEdit" plain :icon="DocumentAdd" @click="openFromSample">从样衣建报价</el-button>
-          <el-button plain :icon="Download" @click="exportCsv">导出</el-button>
+          <el-button plain :icon="Download" :loading="exporting" @click="exportCsv">导出</el-button>
           <el-button plain :icon="Printer" :disabled="!selected.length" @click="batchPrint">
             批量打印{{ selected.length ? `(${selected.length})` : '' }}
           </el-button>
@@ -18,10 +18,10 @@
         </div>
         <div class="tools-right">
           <el-input v-model="query.keyword" placeholder="报价单号/中间商/最终买家/客户款号/业务员" clearable style="width:300px"
-            @keyup.enter="load" @clear="load">
+            @keyup.enter="search" @clear="search">
             <template #prefix><el-icon><Search /></el-icon></template>
           </el-input>
-          <el-button type="primary" @click="load">搜索</el-button>
+          <el-button type="primary" @click="search">搜索</el-button>
           <el-button @click="reset">清空</el-button>
           <el-button text @click="showAdvanced = !showAdvanced">高级筛选 <el-icon><ArrowDown /></el-icon></el-button>
         </div>
@@ -30,31 +30,31 @@
         <div v-show="showAdvanced" class="advanced">
           <el-form inline>
             <el-form-item label="状态">
-              <el-select v-model="query.status" clearable placeholder="全部" style="width:130px" @change="load">
+              <el-select v-model="query.status" clearable placeholder="全部" style="width:130px" @change="search">
                 <el-option v-for="s in statuses" :key="s.value" :label="s.label" :value="s.value" />
               </el-select>
             </el-form-item>
             <el-form-item label="报价单号">
-              <el-input v-model="query.quote_no" clearable placeholder="模糊匹配" style="width:150px" @keyup.enter="load" @clear="load" />
+              <el-input v-model="query.quote_no" clearable placeholder="模糊匹配" style="width:150px" @keyup.enter="search" @clear="search" />
             </el-form-item>
             <el-form-item label="客户款号">
-              <el-input v-model="query.style_no" clearable placeholder="模糊匹配" style="width:140px" @keyup.enter="load" @clear="load" />
+              <el-input v-model="query.style_no" clearable placeholder="模糊匹配" style="width:140px" @keyup.enter="search" @clear="search" />
             </el-form-item>
             <el-form-item label="中间商">
-              <el-input v-model="query.middleman_name" clearable placeholder="名称" style="width:140px" @keyup.enter="load" @clear="load" />
+              <el-input v-model="query.middleman_name" clearable placeholder="名称" style="width:140px" @keyup.enter="search" @clear="search" />
             </el-form-item>
             <el-form-item label="最终买家">
-              <el-input v-model="query.buyer_name" clearable placeholder="名称" style="width:140px" @keyup.enter="load" @clear="load" />
+              <el-input v-model="query.buyer_name" clearable placeholder="名称" style="width:140px" @keyup.enter="search" @clear="search" />
             </el-form-item>
             <el-form-item label="业务员">
-              <el-input v-model="query.salesperson" clearable placeholder="姓名" style="width:110px" @keyup.enter="load" @clear="load" />
+              <el-input v-model="query.salesperson" clearable placeholder="姓名" style="width:110px" @keyup.enter="search" @clear="search" />
             </el-form-item>
             <el-form-item label="询价日期">
               <el-date-picker v-model="inquiryRange" type="daterange" value-format="YYYY-MM-DD"
-                start-placeholder="起" end-placeholder="止" style="width:240px" @change="load" />
+                start-placeholder="起" end-placeholder="止" style="width:240px" @change="search" />
             </el-form-item>
             <el-form-item>
-              <el-button type="primary" @click="load">筛选</el-button>
+              <el-button type="primary" @click="search">筛选</el-button>
             </el-form-item>
           </el-form>
         </div>
@@ -64,7 +64,7 @@
     <div class="table-card">
       <el-table ref="colTableRef" :data="list" v-loading="loading" border stripe @header-dragend="onHeaderDragend" @selection-change="(v: any[]) => selected = v" @row-dblclick="goEdit">
         <el-table-column type="selection" width="42" />
-        <el-table-column prop="quote_no" label="报价单号" width="150" sortable />
+        <el-table-column prop="quote_no" label="报价单号" width="150" :sortable="sortableLocal" />
         <el-table-column label="中间商" min-width="140" show-overflow-tooltip><template #default="{ row }">{{ row.middleman_name || '-' }}</template></el-table-column>
         <el-table-column label="最终买家" min-width="130" show-overflow-tooltip><template #default="{ row }">{{ row.buyer_name || '—' }}</template></el-table-column>
         <el-table-column prop="style_no" label="客户款号" min-width="120"><template #default="{ row }">{{ row.style_no || '-' }}</template></el-table-column>
@@ -86,12 +86,13 @@
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="goEdit(row)">编辑</el-button>
             <el-button link size="small" @click="goView(row)">查看</el-button>
-            <el-button v-if="canEdit && ['DRAFT', 'ADJUSTING'].includes(row.status)" link type="warning" size="small" @click="doSubmit(row)">发出</el-button>
-            <el-button v-if="canEdit && ['QUOTED', 'ORDERED'].includes(row.status)" link type="warning" size="small" @click="doRevert(row)">撤回调整</el-button>
-            <el-button link size="small" @click="copyRow(row)">复制</el-button>
+            <!-- 状态流转按钮带进行中标志（B110）：后端多数流转没有锁，慢网络下连点会走两遍 -->
+            <el-button v-if="canEdit && ['DRAFT', 'ADJUSTING'].includes(row.status)" link type="warning" size="small" :loading="acting === `submit:${row.id}`" :disabled="!!acting" @click="doSubmit(row)">发出</el-button>
+            <el-button v-if="canEdit && ['QUOTED', 'ORDERED'].includes(row.status)" link type="warning" size="small" :loading="acting === `revert:${row.id}`" :disabled="!!acting" @click="doRevert(row)">撤回调整</el-button>
+            <el-button link size="small" :disabled="copying" @click="copyRow(row)">复制</el-button>
             <el-button link size="small" :icon="Printer" @click="printRow(row)">打印/PDF</el-button>
             <el-button link size="small" @click="exportRow(row)">导出Excel</el-button>
-            <el-button v-if="row.approval_status === 'PENDING' && canReview" link type="success" size="small" @click="doApprove(row)">审批</el-button>
+            <el-button v-if="row.approval_status === 'PENDING' && canReview" link type="success" size="small" :loading="acting === `approve:${row.id}`" :disabled="!!acting" @click="doApprove(row)">审批</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -110,6 +111,7 @@
       <el-select
         v-model="fromSampleId" filterable remote reserve-keyword :remote-method="searchSamples"
         :loading="sampleLoading" placeholder="输入款号 / 样衣编号搜索" style="width:100%"
+        @change="onPickSample"
       >
         <el-option v-for="s in sampleOptions" :key="s.id" :label="`${s.sample_no} · ${s.style_no}`" :value="s.id" />
       </el-select>
@@ -150,6 +152,7 @@ import { Search, Plus, Download, Delete, CopyDocument, ArrowDown, Printer, Docum
 import { parseTableText, rowsPositional } from '@/utils/parseTable';
 import { printQuote, printQuoteBatch } from '@/utils/quotePrint';
 import { exportQuoteExcel } from '@/utils/quoteExcel';
+import { exportAll } from '@/utils/exportAll';
 import { companyApi } from '@/api/company';
 import { quoteApi } from '@/api/quote';
 import { sampleApi } from '@/api/sample';
@@ -202,23 +205,31 @@ const inquiryRange = ref<[string, string] | null>(null);
 useListState('quotes', { query, inquiryRange, showAdvanced });
 const { tableRef: colTableRef, onHeaderDragend } = useColumnWidths('quotes');
 
+// 空串不传（后端 IsDateString/精确筛不吃空值）；导出也用同一份筛选条件
+function buildParams(): Record<string, unknown> {
+  const params: Record<string, unknown> = { page: query.page, size: query.size };
+  for (const k of ['keyword', 'status', 'quote_no', 'style_no', 'middleman_name', 'buyer_name', 'salesperson'] as const) {
+    if (query[k]) params[k] = query[k];
+  }
+  if (inquiryRange.value?.[0]) params.inquiry_start = inquiryRange.value[0];
+  if (inquiryRange.value?.[1]) params.inquiry_end = inquiryRange.value[1];
+  return params;
+}
 async function load() {
   loading.value = true;
   try {
-    // 空串不传（后端 IsDateString/精确筛不吃空值）
-    const params: Record<string, unknown> = { page: query.page, size: query.size };
-    for (const k of ['keyword', 'status', 'quote_no', 'style_no', 'middleman_name', 'buyer_name', 'salesperson'] as const) {
-      if (query[k]) params[k] = query[k];
-    }
-    if (inquiryRange.value?.[0]) params.inquiry_start = inquiryRange.value[0];
-    if (inquiryRange.value?.[1]) params.inquiry_end = inquiryRange.value[1];
-    const res: any = await quoteApi.list(params);
+    const res: any = await quoteApi.list(buildParams());
     list.value = res.data ?? [];
     total.value = res.data?.total ?? res.total ?? 0;
   } finally {
     loading.value = false;
   }
 }
+// 改了搜索条件要回第 1 页（B107 同类）：翻到第 3 页再搜，结果不足 3 页就是一张空表
+function search() { query.page = 1; load(); }
+// 列头排序只在「本页即全部」时开放（B160）：后端按 id 倒序分页且不收排序参数，
+// 跨页时本地排序只是把当前 20 条颠倒一下，第 1 页仍然不是全库最大的那几条
+const sortableLocal = computed(() => total.value <= list.value.length);
 function reset() {
   query.keyword = ''; query.status = undefined; query.page = 1;
   query.quote_no = ''; query.style_no = ''; query.middleman_name = ''; query.buyer_name = ''; query.salesperson = '';
@@ -247,16 +258,26 @@ async function copyRow(row: any) {
   catch (e: any) { errToast(e?.response?.data?.msg ?? '复制失败'); }
   finally { copying.value = false; }
 }
+// 行内状态动作的进行中标志（B110）：同一时刻只跑一个
+const acting = ref<string | null>(null);
+async function runAction(key: string, fn: () => Promise<void>) {
+  if (acting.value) return;
+  acting.value = key;
+  try { await fn(); } finally { acting.value = null; }
+}
 // 发出报价 / 客户调整（此前 UI 缺状态流转入口，草稿无法走到已报价）
 async function doSubmit(row: any) {
-  try { await quoteApi.submit(row.id); ElMessage.success('已发出报价'); load(); }
-  catch (e: any) {
-    const msg = e?.response?.data?.msg ?? '发出失败';
-    if (String(msg).includes('审批')) { ElMessage.warning(msg); load(); } else ElMessage.error(msg);
-  }
+  await runAction(`submit:${row.id}`, async () => {
+    try { await quoteApi.submit(row.id); ElMessage.success('已发出报价'); load(); }
+    catch (e: any) {
+      const msg = e?.response?.data?.msg ?? '发出失败';
+      if (String(msg).includes('审批')) { ElMessage.warning(msg); load(); } else ElMessage.error(msg);
+    }
+  });
 }
 // 撤回调整（用户反馈）：已报价直接回客户调整；已成单须关联订单全为草稿，草稿单随报价一并删除（后端拦截非草稿并报出单号）
 async function doRevert(row: any) {
+  if (acting.value) return;
   if (row.status === 'ORDERED') {
     try {
       await ElMessageBox.confirm(
@@ -269,12 +290,16 @@ async function doRevert(row: any) {
       await ElMessageBox.confirm(`确认把报价「${row.quote_no}」撤回为可调整状态？撤回后可修改并重新发出。`, '撤回调整', { type: 'warning' });
     } catch { return; }
   }
-  try { await quoteApi.revert(row.id); ElMessage.success('已撤回为可调整状态'); load(); }
-  catch (e: any) { errToast(e?.response?.data?.msg ?? '撤回失败'); }
+  await runAction(`revert:${row.id}`, async () => {
+    try { await quoteApi.revert(row.id); ElMessage.success('已撤回为可调整状态'); load(); }
+    catch (e: any) { errToast(e?.response?.data?.msg ?? '撤回失败'); }
+  });
 }
 async function doApprove(row: any) {
-  try { await quoteApi.approve(row.id); ElMessage.success('已审批，报价可发出'); load(); }
-  catch (e: any) { errToast(e?.response?.data?.msg ?? '审批失败'); }
+  await runAction(`approve:${row.id}`, async () => {
+    try { await quoteApi.approve(row.id); ElMessage.success('已审批，报价可发出'); load(); }
+    catch (e: any) { errToast(e?.response?.data?.msg ?? '审批失败'); }
+  });
 }
 let cachedCompany: any = null;
 async function printRow(row: any) {
@@ -312,18 +337,28 @@ async function batchPrint() {
 const fromSampleDialog = ref(false);
 const fromSampleId = ref<number>();
 const fromSampleLoading = ref(false);
+// 选中那一刻就把整条样衣记下来（B113）：选项列表会被下一次远程搜索整体替换
+const selectedSample = ref<any>(null);
 const { options: sampleOptions, loading: sampleLoading, search: searchSamples } = useRemoteOptions<any>({
   fetch: async (kw) => ((await sampleApi.list(listParams(kw))) as any).data ?? [],
 });
+function onPickSample(id?: number) {
+  selectedSample.value = id == null ? null : (sampleOptions.value.find((s: any) => s.id === id) ?? null);
+}
 async function openFromSample() {
   fromSampleId.value = undefined;
+  selectedSample.value = null;
   fromSampleDialog.value = true;
   await searchSamples('');   // 先摆一批最近的，输入时再按关键词去后端搜
 }
 async function createFromSample() {
-  const sample = sampleOptions.value.find((s) => s.id === fromSampleId.value);
-  if (!sample) return;
+  if (fromSampleLoading.value) return;
+  // 【选中的那张样衣要自己留一份】（B113）sampleOptions 每次远程搜索都被整体替换：
+  // 搜 A 选中 → 又搜 B 没选 → 点「创建」时 find 找不到，原来直接 return，页面毫无反应
+  const sample = selectedSample.value ?? sampleOptions.value.find((s) => s.id === fromSampleId.value);
+  if (!sample) { ElMessage.warning('请先在下拉里选一张样衣（搜过别的关键字后要重新选中）'); return; }
   fromSampleLoading.value = true;
+  let newId: number | undefined;
   try {
     // create DTO 是 camelCase；middlemanId 必填（= 样衣的 customer_id）
     const r: any = await quoteApi.create({
@@ -332,9 +367,15 @@ async function createFromSample() {
       styleNo: sample.style_no,
       sampleId: sample.id,
     });
-    const newId = (r.data ?? r).id;
-    await quoteApi.importFromSample(newId, sample.id);
-    ElMessage.success('已从样衣创建报价并导入材料明细');
+    newId = (r.data ?? r).id;
+    // 【建单成功后导入失败不能报「创建失败」】（B112 同型）：报价其实已经建出来了，
+    // 用户以为没建、再点一次就是两张草稿。照样把人送进那张报价，说清楚下一步点哪儿
+    try {
+      await quoteApi.importFromSample(newId!, sample.id);
+      ElMessage.success('已从样衣创建报价并导入材料明细');
+    } catch (e: any) {
+      errToast(`报价已创建，样衣导入失败（${e?.response?.data?.msg ?? e?.message ?? '未知原因'}），可在页面里再点「从样衣导入」`);
+    }
     fromSampleDialog.value = false;
     router.push(`/quotes/${newId}/edit`);
   } catch (e: any) {
@@ -348,16 +389,22 @@ async function batchRemove() {
   ElMessage[fail ? 'warning' : 'success'](`删除完成：成功 ${ok} 条${fail ? `，拦截 ${fail} 条(仅草稿可删)` : ''}`);
   load();
 }
-function exportCsv() {
-  const cols = ['quote_no', 'middleman_name', 'buyer_name', 'style_no', 'inquiry_date', 'quote_qty', 'usd_total', 'status'];
-  const head = ['报价单号', '中间商', '最终买家', '客户款号', '询价日期', '数量', '美金总计', '状态'];
-  // 转义同 utils/exportAll.ts：内嵌双引号翻倍，否则名称含 " 即破列
-  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const rows = list.value.map((r) => cols.map((c) => esc(r[c])).join(','));
-  const csv = '﻿' + [head.map(esc).join(','), ...rows].join('\n');
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-  const a = document.createElement('a'); a.href = url; a.download = '客户报价.csv'; a.click();
-  URL.revokeObjectURL(url);
+// 导出：当前筛选下全量、逐页拉取（B152）。原来只导当前一页 20 行，文件却叫「客户报价.csv」
+const exporting = ref(false);
+const EXPORT_COLS = [
+  { key: 'quote_no', title: '报价单号' }, { key: 'middleman_name', title: '中间商' }, { key: 'buyer_name', title: '最终买家' },
+  { key: 'style_no', title: '客户款号' }, { key: 'inquiry_date', title: '询价日期' }, { key: 'quote_qty', title: '数量' },
+  { key: 'currency', title: '币种' }, { key: 'usd_total', title: '外销总计' },
+  { key: 'status', title: '状态', format: (r: any) => statusLabel(r.status) },
+];
+async function exportCsv() {
+  if (exporting.value) return;
+  exporting.value = true;
+  try {
+    const n = await exportAll((p, sz) => quoteApi.list({ ...buildParams(), page: p, size: sz }) as any, EXPORT_COLS, '客户报价');
+    ElMessage.success(`已导出全部 ${n} 条`);
+  } catch (e: any) { errToast(e?.response?.data?.msg ?? e?.message ?? '导出失败'); }
+  finally { exporting.value = false; }
 }
 onMounted(load);
 </script>

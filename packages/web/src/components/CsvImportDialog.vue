@@ -104,11 +104,15 @@ function onFile(opt: any) {
     opt.file.arrayBuffer().then(async (buf: ArrayBuffer) => {
       try {
         const { parseXlsx } = await import('@/utils/sheetPreview');
-        const sheets = await parseXlsx(buf);
-        const rows = sheets[0]?.rows ?? [];
+        const { IMPORT_MAX_ROWS } = await import('@/utils/sheetImport');
+        // 预览用的 200 行上限对导入不够；导入侧放宽并在被截断时明说（B095）
+        const sheets = await parseXlsx(buf, { maxRows: IMPORT_MAX_ROWS });
+        const first = sheets[0];
+        const rows = first?.rows ?? [];
         if (!rows.length) { ElMessage.warning('未读到任何工作表数据'); return; }
         rawText.value = rows.map((r) => r.map((c) => (/[",\n\t]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join('\t')).join('\n');
-        ElMessage.success(`已解析 ${rows.length} 行，点击「解析并校验」继续`);
+        if (first.truncated) ElMessage.warning(`表格超过 ${IMPORT_MAX_ROWS} 行，只读入了前 ${IMPORT_MAX_ROWS} 行——请拆成多份分别导入`);
+        else ElMessage.success(`已解析 ${rows.length} 行，点击「解析并校验」继续`);
       } catch (e: any) { ElMessage.error(e?.message ?? 'xlsx 解析失败'); }
     });
     return;

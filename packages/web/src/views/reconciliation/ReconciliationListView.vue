@@ -4,17 +4,17 @@
     <el-card class="search-card">
       <el-form :model="query" inline>
         <el-form-item label="关键词">
-          <el-input v-model="query.keyword" placeholder="对账单号 / 款号" clearable style="width:180px" @clear="load" />
+          <el-input v-model="query.keyword" placeholder="对账单号 / 款号" clearable style="width:180px" @clear="search" @keyup.enter="search" />
         </el-form-item>
         <el-form-item label="类型">
-          <el-select v-model="query.type" clearable placeholder="全部" style="width:120px" @change="load">
+          <el-select v-model="query.type" clearable placeholder="全部" style="width:120px" @change="search">
             <el-option label="合同对账" value="CONTRACT" />
             <el-option label="非合同对账" value="NO_CONTRACT" />
             <el-option label="工时对账" value="LABOR" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
-          <el-select v-model="query.status" clearable placeholder="全部" style="width:110px" @change="load">
+          <el-select v-model="query.status" clearable placeholder="全部" style="width:110px" @change="search">
             <el-option label="草稿" value="DRAFT" />
             <el-option label="待复核" value="PENDING" />
             <el-option label="已确认" value="CONFIRMED" />
@@ -22,10 +22,10 @@
           </el-select>
         </el-form-item>
         <el-form-item label="工厂">
-          <div style="width:200px"><factory-select v-model="query.factory_id" placeholder="按名称筛选工厂" @update:model-value="load" /></div>
+          <div style="width:200px"><factory-select v-model="query.factory_id" placeholder="按名称筛选工厂" @update:model-value="search" /></div>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" :icon="Search" @click="load">搜索</el-button>
+          <el-button type="primary" :icon="Search" @click="search">搜索</el-button>
           <el-button :icon="Refresh" @click="reset">重置</el-button>
         </el-form-item>
       </el-form>
@@ -98,16 +98,19 @@
             <el-button
               v-if="row.status === 'DRAFT' && canEdit"
               link type="warning" size="small"
+              :loading="busyKey === `submit:${row.id}`" :disabled="!!busyKey"
               @click="doSubmit(row)"
             >提交复核</el-button>
             <el-button
               v-if="row.status === 'PENDING' && canReview"
               link type="success" size="small"
+              :loading="busyKey === `confirm:${row.id}`" :disabled="!!busyKey"
               @click="doConfirm(row)"
             >复核确认</el-button>
             <el-button
               v-if="row.status === 'PENDING' && canReview"
               link type="danger" size="small"
+              :loading="busyKey === `reject:${row.id}`" :disabled="!!busyKey"
               @click="doReject(row)"
             >整单退回</el-button>
             <!-- 无权复核时也把入口和原因露出来（2026-08-11 群里问「这个待复核从哪复核」）：
@@ -123,8 +126,10 @@
             </el-tooltip>
             <!-- 改草稿（2026-08-11 ZYT：草稿能不能改/删）。只放开发票/税率/说明，
                  批次与费用行是结构性的、改动牵扯占用释放与金额重算，建错了删掉重建更稳 -->
+            <!-- 后端 PATCH /reconciliations/:id 限 ADMIN/SUPERVISOR/FINANCE/BUSINESS，版师/打样/船务点了必 403：
+                 没权限就不显示入口（B156），与 canEdit 同一份口径（hasRole(ADMIN) 已含主管） -->
             <el-button
-              v-if="row.status === 'DRAFT'"
+              v-if="row.status === 'DRAFT' && canEdit"
               link type="primary" size="small"
               @click="openEditDraft(row)"
             >修改</el-button>
@@ -295,8 +300,16 @@
         type="info" :closable="false" show-icon style="margin-bottom:12px"
         title="仅显示「已对账」状态的样衣；一张工时对账单需为同一版师，勾选后合并金额生成待复核对账单。"
       />
+      <el-form inline style="margin-bottom:8px">
+        <el-form-item label="筛选">
+          <el-input v-model="laborKeyword" clearable placeholder="样衣编号 / 款号 / 版师" style="width:240px" />
+        </el-form-item>
+        <el-form-item>
+          <span class="muted" style="font-size:12px">共 {{ laborSamples.length }} 款可选{{ laborKeyword ? `，匹配 ${laborSamplesShown.length} 款` : '' }}</span>
+        </el-form-item>
+      </el-form>
       <el-table
-        :data="laborSamples" v-loading="laborLoading" border size="small"
+        :data="laborSamplesShown" v-loading="laborLoading" border size="small"
         max-height="420" @selection-change="onLaborSelect"
       >
         <el-table-column type="selection" width="46" />
@@ -647,6 +660,8 @@ async function load() {
   } finally { loading.value = false; }
 }
 
+// 点「搜索」/改筛选条件时页码归 1（B107）：翻到第 3 页再搜，结果不足 3 页会得到一张空表
+function search() { query.page = 1; load(); }
 function reset() {
   Object.assign(query, { keyword: '', type: undefined, status: undefined, factory_id: undefined, page: 1 });
   load();
@@ -680,6 +695,10 @@ const detailLinks = computed<DocLink[]>(() =>
 );
 async function loadDetailLinks(reconcileId: number) {
   detailPRs.value = [];
+  // 没有「付款管理」菜单就别查：付款列表接口已挂 @MenuAccess('payments')，无权限的账号
+  // （船务、被自定义 menu_keys 的账号）一查就是 403，拦截器会在详情弹框上冒红字。
+  // 这一块是附加信息，查不了就不显示
+  if (!authStore.canMenu('payments')) return;
   // 反查失败不能带崩详情弹框——关联链接是附加信息，不是主内容
   try {
     const res: any = await paymentRequestApi.list({ reconcile_id: reconcileId, page: 1, size: 50 });
@@ -710,13 +729,21 @@ function exportDetail() {
   catch (e: any) { errToast(e?.message ?? '导出失败'); }
 }
 
+// 状态流转按钮的进行中标志（B110）：双击会发两次请求
+const busyKey = ref<string | null>(null);
 async function doSubmit(row: any) {
-  await reconciliationApi.submit(row.id);
-  ElMessage.success('已提交主管复核');
-  load();
+  if (busyKey.value) return;
+  busyKey.value = `submit:${row.id}`;
+  try {
+    await reconciliationApi.submit(row.id);
+    ElMessage.success('已提交主管复核');
+    load();
+  } finally { busyKey.value = null; }
 }
 
 async function doConfirm(row: any) {
+  if (busyKey.value) return;
+  busyKey.value = `confirm:${row.id}`;
   try {
     await reconciliationApi.confirm(row.id);
     ElMessage.success('主管复核已确认');
@@ -737,10 +764,12 @@ async function doConfirm(row: any) {
       return;
     }
     ElMessage.error(msg || '复核确认失败');
-  }
+  } finally { busyKey.value = null; }
 }
 
 async function doReject(row: any) {
+  if (busyKey.value) return;
+  busyKey.value = `reject:${row.id}`;
   try {
     const { value } = await ElMessageBox.prompt('请填写退回原因（批注）', '整单退回', {
       confirmButtonText: '确认退回', cancelButtonText: '取消', inputType: 'textarea',
@@ -750,7 +779,7 @@ async function doReject(row: any) {
     load();
   } catch (e: any) {
     if (e !== 'cancel') errToast(e?.response?.data?.msg ?? '退回失败');
-  }
+  } finally { busyKey.value = null; }
 }
 
 async function doRemove(id: number) {
@@ -868,18 +897,47 @@ const laborLoading = ref(false);
 const laborSaving = ref(false);
 const laborSamples = ref<any[]>([]);
 const laborSelection = ref<any[]>([]);
+const laborKeyword = ref('');
+// 弹窗内本地筛选：候选池已经是全量（见 openLabor），几百款里找一款靠滚动太慢
+const laborSamplesShown = computed(() => {
+  const kw = laborKeyword.value.trim().toLowerCase();
+  if (!kw) return laborSamples.value;
+  return laborSamples.value.filter((s: any) =>
+    [s.sample_no, s.style_no, s.patternmaker_name].some((v) => String(v ?? '').toLowerCase().includes(kw)));
+});
 const laborTotal = computed(() =>
   laborSelection.value.reduce((s, x) => s + (+x.labor_amount || 0), 0));
+
+/** 已对账样衣分页取完（B028）。后端 size 上限 100 且按 id 倒序、样衣进入 RECONCILED 后不再改状态，
+ *  只取第一页等于「第 101 款起的老样衣永远开不了工时对账单」（生产已 289 件样衣）。
+ *  上限 50 页（5000 款）只是防失控；真到那个量级会提示，而不是悄悄少一截。 */
+const LABOR_MAX_PAGES = 50;
+async function fetchAllReconciledSamples(): Promise<{ items: any[]; truncated: boolean }> {
+  const size = 100;
+  const items: any[] = [];
+  let total = 0;
+  for (let page = 1; page <= LABOR_MAX_PAGES; page++) {
+    const res: any = await sampleApi.list({ status: 'RECONCILED', page, size });
+    const batch: any[] = res?.data ?? [];
+    items.push(...batch);
+    total = Number(res?.total ?? items.length);
+    if (batch.length < size || items.length >= total) return { items, truncated: false };
+  }
+  return { items, truncated: items.length < total };
+}
 
 async function openLabor() {
   laborVisible.value = true;
   laborSelection.value = [];
+  laborKeyword.value = '';
   laborLoading.value = true;
   try {
-    // 仅拉「已对账」样衣（版师已填件数+单价、工时金额生成）
-    const res = await sampleApi.list({ status: 'RECONCILED', page: 1, size: 100 });
-    const items = res?.data ?? [];
+    // 仅拉「已对账」样衣（版师已填件数+单价、工时金额生成）——分页拉全，别只看最近 100 条
+    const { items, truncated } = await fetchAllReconciledSamples();
     laborSamples.value = items.filter((s: any) => +s.labor_amount > 0);
+    if (truncated) ElMessage.warning(`已对账样衣超过 ${LABOR_MAX_PAGES * 100} 款，只加载了前 ${items.length} 款；更早的请联系管理员处理`);
+  } catch (e: any) {
+    errToast(e?.response?.data?.msg ?? '候选样衣加载失败，请重试');
   } finally { laborLoading.value = false; }
 }
 function onLaborSelect(rows: any[]) { laborSelection.value = rows; }

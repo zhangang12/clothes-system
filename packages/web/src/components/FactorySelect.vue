@@ -10,6 +10,11 @@
     @change="onChange"
   >
     <el-option v-for="f in factories" :key="f.id" :label="labelOf(f)" :value="f.id" />
+    <!-- 取不到选项时就地说清原因：工厂选项接口已按「工厂管理」菜单授权，
+         没开这个菜单的账号（如财务）在付款/对账页会取到空列表（同 customerEmptyHint 口径） -->
+    <template #empty>
+      <div class="fs-empty">{{ loadFailed ? '取不到工厂选项——你的账号没有「工厂管理」权限，请让主管在账号管理里开通' : '没有匹配的工厂' }}</div>
+    </template>
   </el-select>
 </template>
 
@@ -30,6 +35,7 @@ const emit = defineEmits<{
 }>();
 
 const factories = ref<any[]>([]);
+const loadFailed = ref(false);
 const labelOf = (f: any) => [f.factory_no, f.name].filter(Boolean).join(' · ') || `工厂#${f.id}`;
 function onChange(v: any) {
   emit('change', factories.value.find((f) => f.id === v));
@@ -44,6 +50,11 @@ onMounted(async () => {
     factories.value = ((res.data ?? res) ?? []).map((f: any) => ({ ...f, id: Number(f.id) }));
   } catch {
     factories.value = [];
+    loadFailed.value = true; // 多半是 403（没有「工厂管理」菜单），下拉里就地说明，不冒全局红字
   }
 });
 </script>
+
+<style scoped>
+.fs-empty { padding: 10px 12px; font-size: 13px; line-height: 1.6; color: var(--el-text-color-secondary); }
+</style>

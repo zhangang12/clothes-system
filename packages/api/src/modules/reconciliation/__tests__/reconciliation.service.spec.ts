@@ -11,6 +11,8 @@ import { ContractShipment } from '../../contract/contract-shipment.entity';
 import { SampleGarment } from '../../sample/sample-garment.entity';
 import { NumberingService, REDIS_CLIENT } from '../../../common/services/numbering.service';
 import { ReconcileType, ReconcileSubType, SampleStatus, ContractType } from '@i9/types';
+import { Contract } from '../../contract/contract.entity';
+import { OrderMain } from '../../order/order-main.entity';
 
 const makeSample = (overrides = {}) => ({
   id: 1, sample_no: 'S001', style_no: 'K-100', patternmaker_id: 7, patternmaker_name: '王版师',
@@ -279,19 +281,177 @@ describe('ReconciliationService', () => {
     await expect(service.confirm(1)).rejects.toThrow(BadRequestException);
   });
 
-  // UT-REC-06: remove logical deletes DRAFT
+  // UT-REC-06: remove logical deletes DRAFT（B135 后走事务：manager 锁行 → 软删 → 释放批次）
   it('UT-REC-06 remove logical-deletes DRAFT reconciliation', async () => {
     const rec = makeReconciliation({ status: ReconciliationStatus.DRAFT });
-    mockReconciliationRepo.findOne.mockResolvedValue(rec);
+    const manager = makeManager(rec);
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await service.remove(1);
-    expect(mockReconciliationRepo.save).toHaveBeenCalledWith(expect.objectContaining({ deleted: 1 }));
+    expect(manager.save).toHaveBeenCalledWith(Reconciliation, expect.objectContaining({ deleted: 1 }));
   });
 
   // UT-REC-07: remove throws if not DRAFT
   it('UT-REC-07 remove throws BadRequestException if status is not DRAFT', async () => {
     const rec = makeReconciliation({ status: ReconciliationStatus.CONFIRMED });
-    mockReconciliationRepo.findOne.mockResolvedValue(rec);
+    const manager = makeManager(rec);
+    mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
     await expect(service.remove(1)).rejects.toThrow(BadRequestException);
+    expect(manager.save).not.toHaveBeenCalled();
+  });
+
+  // ── 2026-09-20 审查回归（B018/B019/B069/B070/B071/B072/B134/B135）──
+  describe('审查回归', () => {
+    const line = (over: any = {}) => ({ shipment_id: 1, item_name: '面料A', snapshot_unit_price: 10, qty: 100, ...over });
+    const batch = (over: any = {}) => ({ id: 1, contract_id: 10, ship_no: 'FH-1', snapshot_unit_price: 10, reconcile_id: null, ...over });
+
+    it('B018 既勾发货批次又加费用行 → 明确拒绝，不再静默丢货款且占批次', async () => {
+      const manager = makeManager(undefined, [batch()]);
+      mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+      await expect(service.create({
+        type: ReconcileType.CONTRACT, factory_id: 5, contract_id: 10,
+        shipments: [line()], expenses: [{ expense_name: '杂费', amount: 1 }],
+      } as any, 1)).rejects.toThrow('同一类型明细');
+      expect(manager.save).not.toHaveBeenCalled();
+    });
+
+    it('B019 建单时发货批次行加悲观写锁再判占用', async () => {
+      const manager = makeManager(undefined, [batch()]);
+      mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+      await service.create({ type: ReconcileType.CONTRACT, factory_id: 5, contract_id: 10, shipments: [line()] } as any, 1);
+      expect(manager.find).toHaveBeenCalledWith(ContractShipment, expect.objectContaining({ lock: { mode: 'pessimistic_write' } }));
+    });
+
+    it('B070 批次未锁价、品名不在合同快照材料中 → 拦下（快照有材料行时不再放任单价随便填）', async () => {
+      const contract = { id: 10, deleted: 0, snapshot_json: { materials: [{ item_name: '面料A', unit_price: 10 }] } };
+      const manager = makeManager(contract, [batch({ snapshot_unit_price: null })]);
+      mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+      await expect(service.create({
+        type: ReconcileType.CONTRACT, factory_id: 5, contract_id: 10,
+        shipments: [line({ item_name: '面料Z', snapshot_unit_price: 99 })],
+      } as any, 1)).rejects.toThrow('不在合同快照材料中');
+      expect(manager.save).not.toHaveBeenCalled();
+    });
+
+    it('B070 快照本身没有材料行（存量无材料合同）无从核对 → 维持放行', async () => {
+      const contract = { id: 10, deleted: 0, snapshot_json: { materials: [] } };
+      const manager = makeManager(contract, [batch({ snapshot_unit_price: null })]);
+      mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+      await service.create({
+        type: ReconcileType.CONTRACT, factory_id: 5, contract_id: 10,
+        shipments: [line({ item_name: '面料Z', snapshot_unit_price: 99 })],
+      } as any, 1);
+      expect(manager.save.mock.calls[0][1]).toMatchObject({ total_amount: 9900 });
+    });
+
+    // B071：合同没有材料行时，合同量回退到订单大货数，超发闸门不再整条跳过
+    const confirmManager = (rec: any, contract: any, order: any) => {
+      const manager = makeManager(rec);
+      manager.findOne.mockImplementation((entity: any) => {
+        if (entity === Reconciliation) return Promise.resolve(rec);
+        if (entity === Contract) return Promise.resolve(contract);
+        if (entity === OrderMain) return Promise.resolve(order);
+        return Promise.resolve(null);
+      });
+      manager.save.mockImplementation((_: any, r: any) => Promise.resolve(r));
+      mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+      return manager;
+    };
+
+    it('B071 contract_material 为空但订单有大货数：累计实发超订单量须填超发原因', async () => {
+      const rec = makeReconciliation({ status: ReconciliationStatus.PENDING, contract_id: 10 });
+      confirmManager(rec, { id: 10, order_id: 100, shipped_qty: 300 }, { id: 100, qty_total: 100 });
+      await expect(service.confirm(1)).rejects.toThrow('OVER_SHIP');
+    });
+
+    it('B071 填了超发原因即放行并留痕', async () => {
+      const rec = makeReconciliation({ status: ReconciliationStatus.PENDING, contract_id: 10 });
+      confirmManager(rec, { id: 10, order_id: 100, shipped_qty: 300 }, { id: 100, qty_total: 100 });
+      const saved = await service.confirm(1, '客户加单，业务已确认');
+      expect(saved.over_reason).toBe('客户加单，业务已确认');
+      expect(saved.status).toBe(ReconciliationStatus.CONFIRMED);
+    });
+
+    it('B071 订单也没有数量 → 无从判断，维持放行不强求原因', async () => {
+      const rec = makeReconciliation({ status: ReconciliationStatus.PENDING, contract_id: 10 });
+      confirmManager(rec, { id: 10, order_id: 100, shipped_qty: 300 }, { id: 100, qty_total: 0 });
+      const saved = await service.confirm(1);
+      expect(saved.status).toBe(ReconciliationStatus.CONFIRMED);
+    });
+
+    it('B072 草稿改发票号撞到别单已用的号 → 中文提示报出占用单，不再 500', async () => {
+      mockReconciliationRepo.findOne
+        .mockResolvedValueOnce({ id: 5, status: 'DRAFT', created_by: 1, total_amount: 1000 })
+        .mockResolvedValueOnce({ id: 77, reconcile_no: 'DZ-77' });
+      await expect(service.updateDraft(5, { invoice_no: 'FP-9' } as any, { id: 1, role: 'ADMIN' }))
+        .rejects.toThrow('已被对账单 DZ-77 使用');
+      expect(mockReconciliationRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('B072 发票号只是自己这张单在用 → 放行', async () => {
+      mockReconciliationRepo.findOne
+        .mockResolvedValueOnce({ id: 5, status: 'DRAFT', created_by: 1, total_amount: 1000 })
+        .mockResolvedValueOnce({ id: 5, reconcile_no: 'DZ-5' });
+      await service.updateDraft(5, { invoice_no: 'FP-9' } as any, { id: 1, role: 'ADMIN' });
+      expect(mockReconciliationRepo.save).toHaveBeenCalledWith(expect.objectContaining({ invoice_no: 'FP-9', has_invoice: 1 }));
+    });
+
+    it('B072 保存时撞唯一索引（并发同号）→ 翻译成中文提示', async () => {
+      mockReconciliationRepo.findOne
+        .mockResolvedValueOnce({ id: 5, status: 'DRAFT', created_by: 1, total_amount: 1000 })
+        .mockResolvedValueOnce(null);
+      mockReconciliationRepo.save.mockRejectedValueOnce(Object.assign(new Error('dup'), {
+        code: 'ER_DUP_ENTRY', sqlMessage: "Duplicate entry 'FP-9' for key 'reconciliation.uk_invoice_no'",
+      }));
+      await expect(service.updateDraft(5, { invoice_no: 'FP-9' } as any, { id: 1, role: 'ADMIN' }))
+        .rejects.toThrow(BadRequestException);
+    });
+
+    it('B134 明细行先各自取整再求和：表头总额 = 明细合计（此前总额对未取整的和取整，可差 0.0001）', async () => {
+      const manager = makeManager(undefined, [batch({ id: 1, snapshot_unit_price: 1.23456 }), batch({ id: 2, snapshot_unit_price: 1.23456 }), batch({ id: 3, snapshot_unit_price: 1.23456 })]);
+      mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+      await service.create({
+        type: ReconcileType.CONTRACT, factory_id: 5, contract_id: 10,
+        shipments: [1, 2, 3].map((id) => line({ shipment_id: id, snapshot_unit_price: 1.23456, qty: 1 })),
+      } as any, 1);
+      const header = manager.save.mock.calls[0][1];
+      const lines = manager.save.mock.calls[1][1];
+      expect(lines.map((l: any) => l.amount)).toEqual([1.2346, 1.2346, 1.2346]);
+      expect(header.total_amount).toBe(3.7038); // 旧算法 = +(3.70368).toFixed(4) = 3.7037，与明细合计差 0.0001
+    });
+
+    it('B135 删对账单：软删与释放批次在同一事务内（manager.update），不再走事务外裸 SQL', async () => {
+      const rec = makeReconciliation({ id: 5, status: ReconciliationStatus.DRAFT });
+      const manager = makeManager(rec);
+      mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+      await service.remove(5);
+      expect(manager.findOne).toHaveBeenCalledWith(Reconciliation, expect.objectContaining({ lock: { mode: 'pessimistic_write' } }));
+      expect(manager.update).toHaveBeenCalledWith(ContractShipment, { reconcile_id: 5 }, { reconcile_id: null });
+      expect(mockDataSource.query).not.toHaveBeenCalled();
+    });
+
+    it('B069 软删时把发票号改写为「原号#del<id>」让出该号；无发票号的不动', async () => {
+      const rec = makeReconciliation({ id: 5, status: ReconciliationStatus.DRAFT, invoice_no: 'FP-1' });
+      const manager = makeManager(rec);
+      mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+      await service.remove(5);
+      expect(manager.save).toHaveBeenCalledWith(Reconciliation, expect.objectContaining({ deleted: 1, invoice_no: 'FP-1#del5' }));
+
+      const rec2 = makeReconciliation({ id: 6, status: ReconciliationStatus.DRAFT, invoice_no: null });
+      const manager2 = makeManager(rec2);
+      mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager2));
+      await service.remove(6);
+      expect(manager2.save).toHaveBeenCalledWith(Reconciliation, expect.objectContaining({ deleted: 1, invoice_no: null }));
+    });
+
+    it('B069 超长发票号改写后仍不超列宽 100', async () => {
+      const rec = makeReconciliation({ id: 12345, status: ReconciliationStatus.DRAFT, invoice_no: 'X'.repeat(100) });
+      const manager = makeManager(rec);
+      mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+      await service.remove(12345);
+      const saved = manager.save.mock.calls[0][1];
+      expect(saved.invoice_no.length).toBeLessThanOrEqual(100);
+      expect(saved.invoice_no.endsWith('#del12345')).toBe(true);
+    });
   });
 
   // UT-REC-08: findOne throws NotFoundException for missing record

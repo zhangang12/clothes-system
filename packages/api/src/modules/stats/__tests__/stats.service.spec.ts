@@ -83,4 +83,21 @@ describe('StatsService', () => {
     expect(jia).toMatchObject({ count: 2, settleAmount: 1500, netProfit: 280 });
     expect(rows.find((r) => r.key === '未指定客户')).toBeTruthy();
   });
+
+  it('B087 利润报表只统计 profit_ready=1 的结算单，且只取聚合用到的列（不整表整行读进内存）', async () => {
+    mockSettlementRepo.find.mockResolvedValue([]);
+    await service.profit('style');
+    expect(mockSettlementRepo.find).toHaveBeenCalledTimes(1);
+    const opts = mockSettlementRepo.find.mock.calls[0][0];
+    expect(opts.where).toEqual({ deleted: 0, profit_ready: 1 });
+    expect(opts.select).toEqual(expect.arrayContaining(['style_no', 'customer_name', 'created_at', 'settle_amount', 'gross_profit', 'net_profit', 'net_profit_ex_refund']));
+    expect(opts.select).not.toContain('cost_rows');
+  });
+
+  it('B087 三个维度都走同一份过滤（month / customer 同样不吃草稿单）', async () => {
+    mockSettlementRepo.find.mockResolvedValue([]);
+    await service.profit('month');
+    await service.profit('customer');
+    for (const c of mockSettlementRepo.find.mock.calls) expect(c[0].where).toMatchObject({ profit_ready: 1 });
+  });
 });

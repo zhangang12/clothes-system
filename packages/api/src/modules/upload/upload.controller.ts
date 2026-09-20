@@ -1,5 +1,5 @@
 import {
-  Controller, Post, Get, Query, Res, UploadedFile, UseInterceptors, UseGuards,
+  Controller, Post, Get, Query, Req, Res, UploadedFile, UseInterceptors, UseGuards,
   BadRequestException, NotFoundException, ForbiddenException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -20,10 +20,12 @@ export class UploadController {
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: '上传文件（图片/PDF/Excel，≤20MB），返回可直接引用的 URL' })
   @UseInterceptors(FileInterceptor('file'))
-  upload(@UploadedFile() file: Express.Multer.File) {
+  upload(@UploadedFile() file: Express.Multer.File, @Req() req: any) {
     if (!file) throw new BadRequestException('未接收到文件');
     // 按真实内容(magic bytes)校验类型,不受支持则删除并拒绝;扩展名与内容对齐
     this.fileService.finalizeUpload(file);
+    // B001：multipart 里 sensitive 字段排在 file 之后时 destination 阶段看不到它；此时 req.body 已完整，补判一次并搬进 private/
+    this.fileService.relocateIfSensitive(req, file);
     const info = this.fileService.buildFileInfo(file);
     return {
       url: `/api/v1/uploads/file?p=${encodeURIComponent(info.relativePath)}`,
@@ -56,6 +58,10 @@ export class UploadController {
   // 安全:强制安全 Content-Type + nosniff + 非图片/PDF 一律附件下载,杜绝浏览器内联执行(存储型 XSS)。
   // 注:上传时已按 magic bytes 限定为图片/PDF/Excel,故此处不会出现可执行类型。
   // 敏感附件(private/ 子目录:身份证/水单/发票等)须携带 /uploads/sign 签发的短时令牌(总览走查P0#7)。
+  // B002：isPrivate/resolvePath 现在共用 normalizeRelPath，`./private/…`、`/./private/…`、`.\private\…`、`%2e/private/…`
+  // 等变体都按 private 判，不再有「判定看到公开、落盘指向私有」的分叉。
+  // B088（未改）：非 private 附件仍不要求登录——样衣图/工艺单等是靠 <img src="/api/v1/uploads/file?p=…"> 裸 URL 显示的，
+  // 浏览器不带 Authorization 头，这里一加 JwtAuthGuard 全站图片就裂；要收口得改成 cookie 会话或全量签名链接（见修复报告 needs）。
   @Get('file')
   @ApiOperation({ summary: '读取已上传文件（敏感附件须带签名令牌）' })
   getFile(@Query('p') relativePath: string, @Query('t') token: string | undefined, @Res() res: Response) {
