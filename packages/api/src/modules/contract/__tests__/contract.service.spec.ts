@@ -1528,4 +1528,14 @@ describe('ContractService', () => {
     await expect(service.generateFromOrder(10, 1, [888, 999])).rejects.toThrow(/不属于该订单/);
     expect(mockDataSource.transaction).not.toHaveBeenCalled();
   });
+  it('UT-CON-50 分批下合同不能绕过同名拆分闸：订单73版型两行分两批、每批只勾一行，仍然拦（2026-09-20 审查回归）', async () => {
+    mockOrderRepo.findOne.mockResolvedValueOnce({ id: 10, currency: 'CNY', deleted: 0 });
+    mockOrderMaterialRepo.find.mockResolvedValueOnce([
+      { id: 201, item_name: '面料', supplier: '面料厂A', color: '米白', split_mode: 'BY_COLOR', unit_price: 8, total_purchase: 100, sort_order: 0 },
+      { id: 202, item_name: '面料', supplier: '面料厂A', color: '咖色', split_mode: 'BY_COLOR', unit_price: 8, total_purchase: 100, sort_order: 1 },
+    ]);
+    mockDataSource.query.mockResolvedValueOnce([]); // 第一批：一行都没下过
+    await expect(service.generateFromOrder(10, 1, [201])).rejects.toThrow(/有 2 行且标了拆分/);
+    expect(mockDataSource.transaction).not.toHaveBeenCalled();
+  });
 });

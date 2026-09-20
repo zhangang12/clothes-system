@@ -362,7 +362,10 @@ export class ContractService {
     // 存量脏数据、复制出来的订单、API 直写都不经过前端保存——必须在这里再拦一次。
     // 规则与前端共用 @i9/types.findSplitDupConflicts：按部位分摊（部位互异非空+颜色全空，
     // 如订单 42 的面料三段式净耗）是正当用法，放行；誊行式（颜色互异或部位相同）才拦。
-    const dupConflicts = findSplitDupConflicts(materials.map((m) => ({
+    // 【必须查 allRows，不是过滤后的 materials】（2026-09-20 审查发现的回归：#128 分批下合同后这里错用了
+    // 过滤集）：翻倍是"同名多行各自把矩阵拆一遍"，两行分两批下、每批看起来都只有一行，闸就空了——
+    // 订单 73 版型勾第一行生成、再勾第二行生成，结果与一次性生成完全一样，都是多签一倍。
+    const dupConflicts = findSplitDupConflicts(allRows.map((m) => ({
       name: m.item_name ?? '', part: m.part ?? '', color: m.color ?? '', mode: m.split_mode ?? 'NONE',
     })));
     if (dupConflicts.length) {
