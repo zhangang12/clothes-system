@@ -79,7 +79,9 @@ export class CreateOrderDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  @MaxLength(50)
+  // 与列宽 varchar(255) 一致。原来写 50：生产有订单的客户 PO 是一长串 PO 号（最长 153 字），
+  // 9-21 更新接口接上校验后这些订单一保存就 400（2026-09-22 真库往返测试发现，尚无人撞到）
+  @MaxLength(255)
   customer_po?: string;
 
   @ApiPropertyOptional()

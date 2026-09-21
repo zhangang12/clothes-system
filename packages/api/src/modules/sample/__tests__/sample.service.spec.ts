@@ -427,6 +427,55 @@ describe('SampleService', () => {
       expect(mockQuoteServiceDep.syncFromSample).toHaveBeenCalledWith(1, mockManager);
     });
 
+    // 2026-09-22 真库往返：样衣原样保存也整表重建关联报价（批次前代码一次改了 48 张报价、议价行被冲掉）
+    describe('只有材料真的变了才同步报价', () => {
+      const dbRows = [
+        { id: '501', sample_id: 1, sort_order: 0, item_name: '面料', part: '大身', width: '150', colors: '黑', supplier_name: '甲', qty: '1.2000', actual_usage: null },
+        { id: '502', sample_id: 1, sort_order: 1, item_name: '拉链', part: null, width: null, colors: null, supplier_name: null, qty: '1.0000', actual_usage: '0.9500' },
+      ];
+      const sameDto = [
+        { id: '501', sortOrder: 0, itemName: '面料', part: '大身', width: '150', colors: '黑', supplierName: '甲', qty: '1.2000', actualUsage: '' },
+        { id: '502', sortOrder: 1, itemName: '拉链 ', qty: 1, actualUsage: 0.95 },
+      ];
+      beforeEach(() => {
+        mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.SAMPLING, version: 1, deleted: 0 });
+        mockManager.find.mockResolvedValue(dbRows);
+      });
+
+      it('原样保存（数值 "1.2000" 对 1.2、空串对 null、品名尾空格）→ 不碰报价，但材料照常落库', async () => {
+        await service.update(1, { materials: sameDto } as any, 10);
+        expect(mockQuoteServiceDep.syncFromSample).not.toHaveBeenCalled();
+        expect(mockManager.save).toHaveBeenCalledWith(SampleMaterial, expect.any(Array));
+      });
+
+      it.each([
+        ['预估用量', { qty: 1.3 }],
+        ['实耗', { actualUsage: 1.1 }],
+        ['品名', { itemName: '面料B' }],
+        ['颜色', { colors: '白' }],
+        ['供应商', { supplierName: '乙' }],
+      ])('改了%s → 同步', async (_label, patch) => {
+        await service.update(1, { materials: [{ ...sameDto[0], ...patch }, sameDto[1]] } as any, 10);
+        expect(mockQuoteServiceDep.syncFromSample).toHaveBeenCalledWith(1, mockManager);
+      });
+
+      it('增删行、调顺序 → 同步', async () => {
+        await service.update(1, { materials: [sameDto[0]] } as any, 10);
+        expect(mockQuoteServiceDep.syncFromSample).toHaveBeenCalledTimes(1);
+        await service.update(1, { materials: [{ ...sameDto[1], sortOrder: 0 }, { ...sameDto[0], sortOrder: 1 }] } as any, 10);
+        expect(mockQuoteServiceDep.syncFromSample).toHaveBeenCalledTimes(2);
+      });
+
+      it('版师只填寄回单号、实耗没变（"0.9500" 对 0.95）→ 不同步；改了实耗 → 同步', async () => {
+        mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.SAMPLING, version: 1, deleted: 0, patternmaker_id: 7 });
+        mockManager.find.mockResolvedValue([{ id: '501', actual_usage: null }, { id: '502', actual_usage: '0.9500' }]);
+        await service.patternmakerSave(1, { materials: [{ id: '501' }, { id: '502', actualUsage: 0.95 }], returnNo: 'SF1' } as any, 7);
+        expect(mockQuoteServiceDep.syncFromSample).not.toHaveBeenCalled();
+        await service.patternmakerSave(1, { materials: [{ id: '501', actualUsage: 1.25 }, { id: '502', actualUsage: 0.95 }] } as any, 7);
+        expect(mockQuoteServiceDep.syncFromSample).toHaveBeenCalledWith(1, mockManager);
+      });
+    });
+
     it('B075 没传材料就不同步', async () => {
       mockRepo.findOne.mockResolvedValue({ id: 1, status: SampleStatus.SAMPLING, version: 1, deleted: 0 });
       await service.update(1, { recipient: '张三' } as any, 10);

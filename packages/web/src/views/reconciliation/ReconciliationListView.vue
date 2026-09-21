@@ -884,7 +884,11 @@ async function doCreate() {
   }
   saving.value = true;
   try {
-    await reconciliationApi.create({ ...createForm, deductions } as any);
+    // 只发当前类型那一组明细：先在另一类型下加过行再切换，隐藏的那组还留在表单里，
+    // 一起发出去会撞后端 B018「不能同时填写」，而用户在页面上根本看不到那组行（2026-09-22 复查）
+    const payload: any = { ...createForm, deductions };
+    if (isNoContract) payload.shipments = []; else payload.expenses = [];
+    await reconciliationApi.create(payload);
     ElMessage.success('创建成功');
     createVisible.value = false;
     load();

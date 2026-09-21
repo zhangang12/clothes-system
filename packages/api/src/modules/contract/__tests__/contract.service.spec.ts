@@ -1673,8 +1673,10 @@ describe('ContractService', () => {
         delete: jest.fn().mockResolvedValue({ affected: 1 }),
         count: jest.fn().mockResolvedValue(0),
         createQueryBuilder: jest.fn().mockReturnValue(b),
-        query: jest.fn().mockImplementation((sql: string) => Promise.resolve(
-          String(sql).includes('contract_material') ? (opts.contracted ?? []).map((omid) => ({ omid }))
+        query: jest.fn().mockImplementation((sql: string, params?: any[]) => Promise.resolve(
+          // B036 存在性查询：默认「请求的订单用料行都真实存在」；要测不存在的用例用 omExists 覆盖
+          /FROM order_material om JOIN order_main/.test(String(sql)) ? (params?.[0] ?? []).map((id: any) => ({ id: String(id) }))
+            : String(sql).includes('contract_material') ? (opts.contracted ?? []).map((omid) => ({ omid }))
             : (String(sql).includes('SELECT DISTINCT f.address') ? (opts.addressRows ?? []) : []),
         )),
       };
@@ -1779,6 +1781,16 @@ describe('ContractService', () => {
       mockDataSource.query.mockResolvedValue([]);
     });
 
+    it('B034 订单本来就没有材料行 → 回到批次前的准确提示「无可带出的用料核算记录，请手动填写」，不再误报「都已生成过合同」', async () => {
+      mockRedis.eval.mockResolvedValue('HT-20260922-001');
+      mockOrderRepo.findOne.mockResolvedValue({ id: 10, style_no: 'M525', delivery_date: null, deleted: 0 });
+      mockOrderMaterialRepo.find.mockResolvedValue([]);
+      mockDataSource.query.mockResolvedValue([]);
+      const err = await service.create({ type: ContractType.MATERIAL, factory_id: 5, order_id: 10 } as any, 1).catch((e) => e);
+      expect(String(err?.message)).toContain('无可带出的用料核算记录');
+      expect(String(err?.message)).not.toContain('都已生成过合同');
+    });
+
     // ── B035：合同总额 = Σ已舍入的行金额（否则原样保存一次就把已过的审批清掉）──
     it('B035 建合同的总额等于明细之和（Σ已舍入，不是 Σ未舍入再舍）', async () => {
       mockRedis.eval.mockResolvedValue('HT-20260920-003');
@@ -1848,46 +1860,57 @@ describe('ContractService', () => {
     });
 
     // ── B036：手建合同带上来的溯源行必须属于本合同的订单 ──
-    it('B036 明细里混进别的订单的用料行 id → 400，不再原样落库（那行会在别处永远显示「已订」）', async () => {
+    // B036 口径（2026-09-22 真库往返测试后修正）：生产上一张衣架/芯片标合同常同时给好几张订单供货，
+    // 明细挂别的订单的材料是「选订单款号带入」的正常结果——只挡编造的 / 所属订单已删除的 ID
+    const omExists = (ids: number[]) => jest.fn().mockImplementation((sql: string, params?: any[]) =>
+      Promise.resolve(/FROM order_material om JOIN order_main/.test(sql)
+        ? (params?.[0] ?? []).filter((id: number) => ids.includes(+id)).map((id: number) => ({ id: String(id) }))
+        : []));
+
+    it('B036 跨订单带入的材料行（真实存在、所属订单未删）照常保存并保留溯源——生产合同 195 的衣架给订单 79/80 供货', async () => {
       mockRedis.eval.mockResolvedValue('HT-20260920-009');
+      mockOrderRepo.findOne.mockResolvedValue({ id: 78, style_no: 'M525', delivery_date: null, deleted: 0 });
+      const savedLines: any[] = [];
+      const m = txManager({ savedLines, factory: { id: 5, name: '辅料厂' } });
+      m.query = omExists([1128, 1115]);
+      mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(m));
+      await service.create(materialDto({
+        order_id: 78,
+        materials: [
+          { item_name: '衣架', unit: '个', unit_price: 0.5, qty: 1000, order_material_id: 1128 },
+          { item_name: '衣架', unit: '个', unit_price: 0.5, qty: 800, order_material_id: 1115 },
+        ],
+      }) as any, 1);
+      expect(savedLines.map((l) => +l.order_material_id)).toEqual([1128, 1115]);
+    });
+
+    it('B036 编造的 / 所属订单已删除的用料行 ID → 400，不落库', async () => {
+      mockRedis.eval.mockResolvedValue('HT-20260920-010');
       mockOrderRepo.findOne.mockResolvedValue({ id: 10, style_no: 'M525', delivery_date: null, deleted: 0 });
       const m = txManager({ factory: { id: 5, name: '面料厂A' } });
-      m.find = jest.fn().mockResolvedValue([{ id: 11 }]); // 本订单只有 11 号行
+      m.query = omExists([11]); // 只有 11 号行真实存在
       mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(m));
       await expect(service.create(materialDto({
         materials: [
           { item_name: '面料A', unit: '米', unit_price: 8, qty: 100, order_material_id: 11 },
-          { item_name: '别家的料', unit: '米', unit_price: 8, qty: 100, order_material_id: 999 },
+          { item_name: '编造的料', unit: '米', unit_price: 8, qty: 100, order_material_id: 999 },
         ],
-      }) as any, 1)).rejects.toThrow(/不属于本合同订单/);
+      }) as any, 1)).rejects.toThrow(/已不存在（或所属订单已删除）.*编造的料/);
       expect(m.save).not.toHaveBeenCalledWith(ContractMaterial, expect.anything());
     });
 
-    it('B036 合同没挂订单时清掉溯源字段（无从校验，留着就是悬空指向）', async () => {
-      mockRedis.eval.mockResolvedValue('HT-20260920-010');
-      mockOrderRepo.findOne.mockResolvedValue(null);
-      const savedLines: any[] = [];
-      const m = txManager({ savedLines, factory: { id: 5, name: '面料厂A' } });
-      mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(m));
-      await service.create(materialDto({
-        order_id: undefined,
-        materials: [{ item_name: '挂卡面料', unit: '米', unit_price: 8, qty: 100, order_material_id: 999 }],
-      }) as any, 1);
-      expect(savedLines[0].order_material_id).toBeNull();
-    });
-
-    it('B036 编辑合同这扇门同样校验（订单侧有越权守卫，合同侧此前没有）', async () => {
-      mockRepo.findOne.mockResolvedValue(makeContract({
+    it('B036 编辑合同这扇门同样只挡不存在的 ID；跨订单的真实行放行', async () => {
+      const draft = () => makeContract({
         id: 3, order_id: 10, portal_status: ContractPortalStatus.DRAFT, approval_status: 'NONE',
         deposit_ratio: 0, mid_ratio: 0, final_ratio: 100,
-      }));
-      const manager = txManager({ factory: { id: 5, name: '面料厂A' } });
-      manager.find = jest.fn().mockImplementation((entity: any) =>
-        Promise.resolve(entity === OrderMaterial ? [{ id: 11 }] : []));
-      mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(manager));
+      });
+      mockRepo.findOne.mockResolvedValue(draft());
+      const bad = txManager({ factory: { id: 5, name: '面料厂A' } });
+      bad.query = omExists([11]);
+      mockDataSource.transaction.mockImplementationOnce((cb: any) => cb(bad));
       await expect(service.update(3, {
-        materials: [{ item_name: '别家的料', unit: '米', unit_price: 8, qty: 1, order_material_id: 999 }],
-      } as any)).rejects.toThrow(/不属于本合同订单/);
+        materials: [{ item_name: '编造的料', unit: '米', unit_price: 8, qty: 1, order_material_id: 999 }],
+      } as any)).rejects.toThrow(/已不存在/);
     });
 
     // ── B050 / B032：拆行取整与口径留痕 ──

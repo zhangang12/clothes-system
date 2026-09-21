@@ -332,6 +332,17 @@ describe('ReconciliationService', () => {
       expect(manager.save).not.toHaveBeenCalled();
     });
 
+    it('B070 品名只差首尾空格不算对不上：照常按快照价核对', async () => {
+      const contract = { id: 10, deleted: 0, snapshot_json: { materials: [{ item_name: '面料A ', unit_price: 10 }] } };
+      const manager = makeManager(contract, [batch({ snapshot_unit_price: null })]);
+      mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+      await service.create({
+        type: ReconcileType.CONTRACT, factory_id: 5, contract_id: 10,
+        shipments: [line({ item_name: ' 面料A', snapshot_unit_price: 10 })],
+      } as any, 1);
+      expect(manager.save).toHaveBeenCalled();
+    });
+
     it('B070 快照本身没有材料行（存量无材料合同）无从核对 → 维持放行', async () => {
       const contract = { id: 10, deleted: 0, snapshot_json: { materials: [] } };
       const manager = makeManager(contract, [batch({ snapshot_unit_price: null })]);
@@ -359,21 +370,28 @@ describe('ReconciliationService', () => {
 
     it('B071 contract_material 为空但订单有大货数：累计实发超订单量须填超发原因', async () => {
       const rec = makeReconciliation({ status: ReconciliationStatus.PENDING, contract_id: 10 });
-      confirmManager(rec, { id: 10, order_id: 100, shipped_qty: 300 }, { id: 100, qty_total: 100 });
+      confirmManager(rec, { id: 10, type: 'PROCESS', order_id: 100, shipped_qty: 300 }, { id: 100, qty_total: 100 });
       await expect(service.confirm(1)).rejects.toThrow('OVER_SHIP');
     });
 
     it('B071 填了超发原因即放行并留痕', async () => {
       const rec = makeReconciliation({ status: ReconciliationStatus.PENDING, contract_id: 10 });
-      confirmManager(rec, { id: 10, order_id: 100, shipped_qty: 300 }, { id: 100, qty_total: 100 });
+      confirmManager(rec, { id: 10, type: 'PROCESS', order_id: 100, shipped_qty: 300 }, { id: 100, qty_total: 100 });
       const saved = await service.confirm(1, '客户加单，业务已确认');
       expect(saved.over_reason).toBe('客户加单，业务已确认');
       expect(saved.status).toBe(ReconciliationStatus.CONFIRMED);
     });
 
+    it('B071 回退只对加工合同：材料合同按米/公斤发货，不拿订单件数去比（2026-09-22 复查）', async () => {
+      const rec = makeReconciliation({ status: ReconciliationStatus.PENDING, contract_id: 10 });
+      confirmManager(rec, { id: 10, type: 'MATERIAL', order_id: 100, shipped_qty: 3000 }, { id: 100, qty_total: 100 });
+      const saved = await service.confirm(1);
+      expect(saved.status).toBe(ReconciliationStatus.CONFIRMED);
+    });
+
     it('B071 订单也没有数量 → 无从判断，维持放行不强求原因', async () => {
       const rec = makeReconciliation({ status: ReconciliationStatus.PENDING, contract_id: 10 });
-      confirmManager(rec, { id: 10, order_id: 100, shipped_qty: 300 }, { id: 100, qty_total: 0 });
+      confirmManager(rec, { id: 10, type: 'PROCESS', order_id: 100, shipped_qty: 300 }, { id: 100, qty_total: 0 });
       const saved = await service.confirm(1);
       expect(saved.status).toBe(ReconciliationStatus.CONFIRMED);
     });

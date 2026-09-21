@@ -124,7 +124,9 @@ export class ReconciliationService {
             const contract = await manager.findOne(Contract, { where: { id: lineContractId, deleted: 0 } });
             const snap = contract?.snapshot_json as any;
             const snapMaterials: any[] = snap?.materials ?? [];
-            const item = snapMaterials.find((m: any) => m.item_name === s.item_name);
+            // 品名两边去空格再比：页面上是手输框，多敲一个空格不该被当成「品名对不上」拦下
+            const nm = (v: unknown) => String(v ?? '').trim();
+            const item = snapMaterials.find((m: any) => nm(m.item_name) === nm(s.item_name));
             // B070：批次没锁价、品名又对不上合同快照时，此前整段跳过、单价随便填就进付款。
             // 快照里有材料行却对不上的拦下，让业务按合同品名填；快照本身没有材料行（存量无材料合同）无从核对，维持放行。
             if (!item && snapMaterials.length) {
@@ -518,7 +520,8 @@ export class ReconciliationService {
           let contractQty = +cq;
           // B071：合同没有材料行时此前整条闸门跳过。加工合同的合同量本就取订单大货数（合同 A4），
           // 材料行为空就回退到订单 qty_total；订单也没数量才视为无从判断、维持放行。
-          if (!(contractQty > 0) && contract.order_id) {
+          // 只对加工合同回退：材料合同按米/公斤发货，拿订单件数当合同量会误报超发
+          if (!(contractQty > 0) && contract.order_id && contract.type === ContractType.PROCESS) {
             const order = await manager.findOne(OrderMain, { where: { id: contract.order_id, deleted: 0 } });
             contractQty = +(order?.qty_total ?? 0);
           }

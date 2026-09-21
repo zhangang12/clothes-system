@@ -37,6 +37,9 @@ export class CreateSettlementDto {
   currency?: string;
 
   @ApiProperty({ description: '订单ID（带出款号/出货件数）' })
+  // 订单下拉的值来自列表接口，mysql2 出 BIGINT 是字符串 "123"：不转就 400（8-12 King「新建结算单连点两次 400」即此）。
+  // 普通外键列，转数字安全（不参与 TypeORM 主键判定）
+  @Type(() => Number)
   @IsInt()
   @IsPositive()
   order_id: number;

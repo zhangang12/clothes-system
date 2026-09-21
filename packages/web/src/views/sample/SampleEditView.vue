@@ -936,12 +936,17 @@ async function savePatternmaker() {
   saving.value = true;
   try {
     await sampleApi.patternmakerSave(editId.value, {
-      materials: form.materials.filter((m: any) => m.id).map((m: any) => ({ id: m.id, actualUsage: m.actualUsage === '' ? undefined : Number(m.actualUsage), zipperLength: m.zipperLength })),
+      // 实耗没填（'' / null）就不发：原来 Number(null) 发成 0，库里「未实测」被写成「实测 0」，还会触发一次报价同步
+      materials: form.materials.filter((m: any) => m.id).map((m: any) => ({
+        id: m.id, actualUsage: m.actualUsage === '' || m.actualUsage == null ? undefined : Number(m.actualUsage), zipperLength: m.zipperLength,
+      })),
       returnNo: txt(form.returnNo),
       // 版师按轮填工价(#5):提交多轮,后端 Σ 回填顶层工价 → 生成对账单
       shipRounds: buildRounds(),
       feedbackAttachments: form.feedbackAttachments ?? '',
     });
+    // 与业务保存一样清掉本地草稿：留着的话下次「恢复草稿」会带回旧行号（业务保存后材料行号会变），被后端按「不属于该样衣」拦下
+    draft.clear();
     ElMessage.success('版师保存成功');
     router.push({ name: 'Samples' });
   } catch (e: any) {

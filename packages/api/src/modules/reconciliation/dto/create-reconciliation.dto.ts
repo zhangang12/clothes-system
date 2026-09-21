@@ -3,12 +3,14 @@ import { Type } from 'class-transformer';
 import { ReconcileType, ReconcileSubType, RECONCILE_SUBTYPE_OPTIONS } from '@i9/types';
 
 // 无合同空白对账单·费用明细行（补充确认v1.1）
+// 全部数值字段带 @Type(() => Number)（2026-09-22 复查）：页面下拉的合同/批次/工厂 ID 来自列表接口，mysql2 出 BIGINT 是字符串，
+// 单价取自批次/快照 DECIMAL 也是字符串——不转换时后台「新建合同对账」一提交就 400。都是普通列赋值，不参与主键判定，转数字安全。
 export class CreateExpenseLineDto {
   @IsString()
   @MaxLength(200) // 对齐列宽：此前无限制，超长直接 500（举一反三 A2）
   expense_name: string; // 费用项目/事由
 
-  @IsNumber() @Min(0)
+  @Type(() => Number) @IsNumber() @Min(0)
   amount: number;
 
   @IsOptional() @IsString()
@@ -34,7 +36,7 @@ export class CreateDeductionLineDto {
   @MaxLength(200) // 对齐 reconciliation_expense_item.expense_name 列宽
   reason: string; // 事由：运费 / 版费（正数，加钱）；次品退货 / 客户打折（负数，减钱）
 
-  @IsNumber()
+  @Type(() => Number) @IsNumber()
   amount: number; // 带符号：加钱为正（运费/版费，#86 #88），减钱为负（打折/退货，#74）
 
   @IsOptional() @IsString()
@@ -45,12 +47,12 @@ export class CreateDeductionLineDto {
 }
 
 export class CreateShipmentLineDto {
-  @IsNumber()
+  @Type(() => Number) @IsNumber()
   shipment_id: number;
 
   // 一单多合同：每条批次可指向各自来源合同/款号（批次明细可点跳，设计稿 对账·一单多合同）
   @IsOptional()
-  @IsNumber()
+  @Type(() => Number) @IsNumber()
   contract_id?: number;
 
   @IsOptional()
@@ -60,11 +62,11 @@ export class CreateShipmentLineDto {
   @IsString()
   item_name: string;
 
-  @IsNumber()
+  @Type(() => Number) @IsNumber()
   @Min(0)
   snapshot_unit_price: number;
 
-  @IsNumber()
+  @Type(() => Number) @IsNumber()
   @Min(0)
   qty: number;
 
@@ -84,7 +86,7 @@ export class CreateReconciliationDto {
   subType?: ReconcileSubType;
 
   @IsOptional()
-  @IsNumber()
+  @Type(() => Number) @IsNumber()
   contract_id?: number;
 
   // 补料对账并入原合同(P3遗留/补充C2·qc E8):补料合同的对账在核算上归并到母合同名下(业务勾选)
@@ -92,11 +94,11 @@ export class CreateReconciliationDto {
   @IsBoolean()
   merge_into_parent?: boolean;
 
-  @IsNumber()
+  @Type(() => Number) @IsNumber()
   factory_id: number;
 
   @IsOptional()
-  @IsNumber()
+  @Type(() => Number) @IsNumber()
   @Min(0)
   @Max(100) // B068 同口径：decimal(5,2) 装不下 ≥1000，前端也只到 100
   tax_rate?: number;
@@ -106,7 +108,7 @@ export class CreateReconciliationDto {
   invoice_no?: string;
 
   @IsOptional()
-  @IsNumber()
+  @Type(() => Number) @IsNumber()
   invoice_amount?: number;
 
   @IsOptional()

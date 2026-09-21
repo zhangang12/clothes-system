@@ -544,9 +544,12 @@ export class SettlementService {
       }
       this.applyDerived(settlement, goodsTax, goodsExtax, receipts, financeFeeRate);
       const saved = await manager.save(Settlement, settlement);
-      // 改值留痕(P2#21):汇率/发票/收汇/费用/退税 原值→新值
+      // 改值留痕(P2#21):汇率/发票/收汇/费用/退税 原值→新值。
+      // 八列都是数值：库里读出来是 "0.0000"、改完是 0，按字符串比会把「没改」记成「改了」——
+      // B085 又拿这张表认「人工定过的期间费用」，结果编辑过一次的结算单期间费用再也不随对账刷新（2026-09-22 复查）
+      const numOrNull = (v: unknown) => (v == null || v === '' ? null : +(v as any));
       await this.changeLog.record('SETTLEMENT', id, (Object.keys(before) as Array<keyof typeof before>)
-        .map((k) => ({ field: k, old: before[k], new: (saved as any)[k] })), userId);
+        .map((k) => ({ field: k, old: numOrNull(before[k]), new: numOrNull((saved as any)[k]) })), userId);
       return saved;
     });
   }
@@ -729,7 +732,9 @@ export class SettlementService {
       const logs = await manager.find(ChangeLog, {
         where: { biz_type: 'SETTLEMENT', biz_id: id, field: In([...PERIOD_FEE_FIELDS]) },
       });
-      const manualFee = new Set(logs.map((l) => l.field));
+      // 只认数值真的变了的痕（旧版本按字符串留过「0.0000→0」这种假痕，不能算人工改过）
+      const sameNum = (x: unknown, y: unknown) => (x == null || x === '' ? null : +(x as any)) === (y == null || y === '' ? null : +(y as any));
+      const manualFee = new Set(logs.filter((l) => !sameNum(l.old_value, l.new_value)).map((l) => l.field));
       if (!manualFee.has('freight_fee')) settlement.freight_fee = aggPeriod.freight;
       if (!manualFee.has('express_fee')) settlement.express_fee = aggPeriod.express;
       if (!manualFee.has('sample_fee')) settlement.sample_fee = aggPeriod.sample;

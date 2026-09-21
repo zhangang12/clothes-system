@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { mount, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import ElementPlus, { ElMessage } from 'element-plus';
 import FactoryEditView from '../FactoryEditView.vue';
@@ -68,6 +68,19 @@ describe('FactoryEditView', () => {
     mockRoute.query = {};
     mockRoute.meta = {};
     mockCurrentRoute.value.path = '/factories/new';
+  });
+
+  // 2026-09-22 复查：B045 后端要求门户初始密码 ≥8 位含字母数字，页面原来不拦，整张档案提交才被 400 退回
+  it('新建工厂：门户初始密码不合规在页面上就提示，留空或合规放行', async () => {
+    mockRoute.params = {};
+    const w = mountView();
+    await flushPromises();
+    const rule = (w.vm as any).rules.portalPassword[0];
+    const check = (v: string) => new Promise<string | null>((res) => rule.validator({}, v, (e?: Error) => res(e ? e.message : null)));
+    expect(await check('123456')).toContain('至少 8 位');
+    expect(await check('abcdefgh')).toContain('字母和数字');
+    expect(await check('abc12345')).toBeNull();
+    expect(await check('')).toBeNull();
   });
 
   // L25：设计稿占位标签「一般 etGeneral」不得残留

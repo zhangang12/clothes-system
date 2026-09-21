@@ -270,24 +270,28 @@ export class ContractService {
    */
   private async assertOwnOrderMaterials(
     m: EntityManager,
-    orderId: number | null,
+    _orderId: number | null,
     rows: Array<{ item_name?: string; order_material_id?: number | null }>,
     clientSupplied: Set<number>,
   ): Promise<void> {
+    // 【只校验「这行订单材料真实存在、所属订单没删」，不要求属于本合同的订单】
+    // 2026-09-22 真库往返测试发现：生产上 19 张合同、93 行明细挂的是**别的订单**的材料——一张衣架/芯片标合同
+    // 同时给好几张订单供货（合同页「选订单款号带入」本来就支持跨订单带入，合同的 order_id 只是主订单）。
+    // 9-21 这里按「必须属于本合同订单」拦，这 19 张合同一保存就被拒。现在只挡编造/已删除的 ID。
     if (!clientSupplied.size) return;
     const mine = (r: { order_material_id?: number | null }) =>
       r.order_material_id != null && clientSupplied.has(+r.order_material_id);
-    if (!orderId) {
-      rows.forEach((r) => { if (mine(r)) r.order_material_id = null; });
-      return;
-    }
-    const own = await m.find(OrderMaterial, { where: { order_id: orderId, id: In([...clientSupplied]) }, select: ['id'] });
-    const ownIds = new Set(own.map((o) => +o.id));
-    const bad = rows.filter((r) => mine(r) && !ownIds.has(+r.order_material_id!));
+    const found: Array<{ id: string | number }> = await m.query(
+      `SELECT om.id FROM order_material om JOIN order_main o ON o.id = om.order_id
+        WHERE om.id IN (?) AND o.deleted = 0`,
+      [[...clientSupplied]],
+    );
+    const okIds = new Set(found.map((o) => +o.id));
+    const bad = rows.filter((r) => mine(r) && !okIds.has(+r.order_material_id!));
     if (bad.length) {
       const names = [...new Set(bad.map((r) => r.item_name ?? ''))].filter(Boolean).slice(0, 3).join('、');
       throw new BadRequestException(
-        `材料明细里有不属于本合同订单的用料行${names ? `（${names}）` : ''}，请重新从订单带出明细后再保存`,
+        `材料明细里有已不存在（或所属订单已删除）的订单用料行${names ? `（${names}）` : ''}，请重新从订单带出明细后再保存`,
       );
     }
   }
@@ -641,7 +645,9 @@ export class ContractService {
       // 此前手建路径不跳：已分批下过面料，再手建一张挂该订单、不填明细 → 面料再次进合同
       const contracted = await this.contractedOrderMaterialIds(this.dataSource, dto.order_id);
       const pendingRows = orderMaterials.filter((om) => !contracted.has(+om.id));
-      if (!pendingRows.length) {
+      // 只在「订单有材料、且全都进过合同」时拦（2026-09-22 复查）：订单本来就没有材料行时批次前可以照建一张空明细合同、
+      // 事后再填，B034 把这种也拦了，提示还说成「都已生成过合同」
+      if (orderMaterials.length && !pendingRows.length) {
         throw new BadRequestException('该订单的材料都已生成过合同，没有可带出的行（如需重建请先删除原有草稿合同，或手工填写明细）');
       }
       const matrixRows = await this.getMatrixRows(dto.order_id);

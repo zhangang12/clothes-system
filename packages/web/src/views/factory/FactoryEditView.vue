@@ -160,7 +160,7 @@
       <section-block v-if="!editId" title="6. 供应商门户账号（可选·新建时开通）" badge="接收合同推送">
         <el-row :gutter="16">
           <el-col :span="8"><el-form-item label="门户账号"><el-input v-model="form.portalAccount" placeholder="开通后供应商可登录 H5 处理合同" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="初始密码"><el-input v-model="form.portalPassword" placeholder="供应商首次登录密码" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="初始密码" prop="portalPassword"><el-input v-model="form.portalPassword" placeholder="至少 8 位，含字母和数字" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label=" "><span style="color:#999;font-size:13px">未开通账号的工厂，合同无法推送门户</span></el-form-item></el-col>
         </el-row>
       </section-block>
@@ -234,9 +234,15 @@ const mainContactPhone = computed({
 const formRef = ref<FormInstance>();
 const saving = ref(false);
 const selectedContacts = ref<any[]>([]);
+const PORTAL_PWD = /^(?=.*[A-Za-z])(?=.*\d).{8,64}$/;
 const rules: FormRules = {
   name: [{ required: true, message: '请输入厂商名称', trigger: 'blur' }],
   type: [{ required: true, message: '请选择工厂类型', trigger: 'change' }],
+  // 与后端 B045 同一条规则（STRONG_PASSWORD）：原来页面不拦，填 123456 要等整张档案提交才被后端 400 退回
+  portalPassword: [{
+    validator: (_r, v, cb) => (!v || editId.value || PORTAL_PWD.test(v) ? cb() : cb(new Error('至少 8 位，且须同时包含字母和数字'))),
+    trigger: 'blur',
+  }],
 };
 
 function onProvinceChange() {

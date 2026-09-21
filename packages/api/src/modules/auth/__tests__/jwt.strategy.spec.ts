@@ -97,6 +97,14 @@ describe('JwtStrategy.validate()（M5：停用即 401，库内角色为准）', 
       expect(mockRedis.get).not.toHaveBeenCalledWith('auth:pwdts:admin:10');
     });
 
+    it('Redis 断线（get 一直不返回）→ 300ms 内跳过校验放行，不把请求卡住', async () => {
+      mockUserRepo.findOne.mockResolvedValue({ id: 1, username: 'admin', role: 'ADMIN', status: 1 });
+      mockRedis.get.mockReturnValue(new Promise(() => { /* 断线时 ioredis 离线队列里挂着 */ }));
+      const t0 = Date.now();
+      await expect(strategy.validate({ sub: 1, username: 'admin', role: 'ADMIN', type: 'admin', iat: 1 } as any)).resolves.toMatchObject({ id: 1 });
+      expect(Date.now() - t0).toBeLessThan(2000);
+    });
+
     it('B031 从未改过密（Redis 无记录）→ 照常放行；有记录但 token 没有 iat → 拒绝', async () => {
       mockUserRepo.findOne.mockResolvedValue({ id: 2, username: 'u', role: 'BUSINESS', status: 1 });
       mockRedis.get.mockResolvedValue(null);

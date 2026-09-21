@@ -33,6 +33,9 @@ vi.mock('@/api/quote', () => ({
 }));
 vi.mock('@/api/sample', () => ({ sampleApi: { list: vi.fn() } }));
 vi.mock('@/api/company', () => ({ companyApi: { getDefault: vi.fn() } }));
+// 客户可见性探测（建报价前）：默认都看得见；个别用例把某个 id 设成「未授权」
+const hiddenCustomers = new Set<number>();
+vi.mock('@/api/customer', () => ({ customerApi: { get: vi.fn((id: number) => (hiddenCustomers.has(id) ? Promise.reject(new Error('404')) : Promise.resolve({ data: { id } }))) } }));
 
 // 抓取写入 Blob 的 CSV 内容（套路同 utils/__tests__/sampleExcel.spec.ts）。
 // 导出改成「当前筛选下全量、逐页拉取」（B152）后是异步的，这里要 await
@@ -135,6 +138,25 @@ describe('QuoteListView 导出 CSV', () => {
     wrapper.vm.sampleOptions = [{ id: 9, sample_no: 'S-9', style_no: 'ST-9', customer_id: 99 }]; // 又搜了别的关键字
     await wrapper.vm.createFromSample();
     expect(mockQuoteCreate).toHaveBeenCalledWith(expect.objectContaining({ sampleId: 7, middlemanId: 42 }));
+  });
+
+  it('样衣上的买家没授权给自己 → 不带买家照样建，并提示；中间商没授权 → 不发请求，说清找谁授权', async () => {
+    const wrapper: any = mountView();
+    await vi.waitFor(() => expect(mockList).toHaveBeenCalled());
+    const warn = vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({ id: '' } as any));
+    hiddenCustomers.add(45);
+    wrapper.vm.sampleOptions = [{ id: 7, style_no: 'ST-7', customer_id: '31', buyer_id: '45' }];
+    wrapper.vm.onPickSample(7);
+    await wrapper.vm.createFromSample();
+    expect(mockQuoteCreate).toHaveBeenCalledWith(expect.objectContaining({ middlemanId: '31', buyerId: undefined, sampleId: 7 }));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('最终买家还没授权'));
+    mockQuoteCreate.mockClear();
+    hiddenCustomers.add(31);
+    await wrapper.vm.createFromSample();
+    expect(mockQuoteCreate).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('客户还没授权给你'));
+    hiddenCustomers.clear();
+    warn.mockRestore();
   });
 
   it('B113 一张都没选就点「创建」时给一句提示，而不是毫无反应', async () => {

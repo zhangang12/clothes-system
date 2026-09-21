@@ -58,6 +58,18 @@ export class SampleService {
     }));
   }
 
+  // 报价同步只读这几列（与 QuoteService.syncOneQuote 取值一致）。前后签名一样 = 这次保存没动材料，不必同步。
+  // 2026-09-22 真库往返实证：原来样衣「打开→原样保存」也整表重建关联报价，批次前的代码一次就把 48 张报价改了，
+  // 其中议价行被冲成零价行（如报价 105 总额 144.34→96.07）。业务改寄样/状态/图片时每存一次都在悄悄改报价。
+  private quoteSyncSignature(rows: SampleMaterial[]): string {
+    const n = (v: unknown) => (v == null || v === '' ? '' : String(+(v as any)));
+    const s = (v: unknown) => String(v ?? '');
+    return rows.map((r, i) => ({ r, i }))
+      .sort((a, b) => (Number(a.r.sort_order ?? 0) - Number(b.r.sort_order ?? 0)) || (a.i - b.i))
+      .map(({ r }) => [s(r.item_name).trim(), s(r.part), s(r.width), s(r.colors), s(r.supplier_name), n(r.actual_usage), n(r.qty)].join('\u0001'))
+      .join('\u0002');
+  }
+
   private buildShipRounds(sampleId: number, rounds: CreateSampleDto['shipRounds']): SampleShipRound[] {
     return (rounds ?? [])
       .filter((r) => r.size || r.qty != null || r.shipDate || r.shipNo || r.laborUnitPrice != null || r.laborAmount != null)
@@ -294,11 +306,16 @@ export class SampleService {
       }
       const updated = await manager.save(SampleGarment, entity);
       if (dto.materials !== undefined) {
+        const before = await manager.find(SampleMaterial, { where: { sample_id: id }, order: { sort_order: 'ASC', id: 'ASC' } });
+        const rows = this.buildMaterials(id, dto.materials);
         await manager.delete(SampleMaterial, { sample_id: id });
-        await manager.save(SampleMaterial, this.buildMaterials(id, dto.materials));
+        await manager.save(SampleMaterial, rows);
         // 样衣材料修改→同步未成单报价(P1#11 已拍板):品名匹配保留议价,已成单不动。
         // 放进同一事务(B075)：原来在提交之后裸调，同步中途失败就「样衣已改、报价改了一半、接口 500」，重试又再删一遍明细
-        await this.quoteService.syncFromSample(id, manager);
+        // 只在材料真的变了时同步（见 quoteSyncSignature）：拍板的是「样衣材料修改」触发，不是「样衣保存」触发
+        if (this.quoteSyncSignature(before ?? []) !== this.quoteSyncSignature(rows)) {
+          await this.quoteService.syncFromSample(id, manager);
+        }
       }
       if (dto.shipRounds !== undefined) {
         await manager.delete(SampleShipRound, { sample_id: id });
@@ -456,15 +473,20 @@ export class SampleService {
 
     const saved = await this.dataSource.transaction(async (manager) => {
       if (materialRows.length) {
-        const own = new Set((await manager.find(SampleMaterial, { where: { sample_id: id }, select: ['id'] as any })).map((r) => Number(r.id)));
+        const ownRows = await manager.find(SampleMaterial, { where: { sample_id: id }, select: ['id', 'actual_usage'] as any });
+        const own = new Map((ownRows ?? []).map((r) => [Number(r.id), r.actual_usage] as const));
         const alien = materialRows.find((m) => !own.has(Number(m.id)));
         if (alien) throw new BadRequestException(`材料行 #${alien.id} 不属于该样衣，请刷新页面后重新保存`);
         // 逐行 update 收进同一事务(B077)：原来第 5 行失败前 4 行已落库，且半截状态被推给报价
         for (const m of materialRows) {
           await manager.update(SampleMaterial, { id: m.id, sample_id: id }, { actual_usage: m.actualUsage, zipper_length: m.zipperLength });
         }
-        // 版师实测耗用落库→同步未成单报价的报价耗用(P1#11:实耗替换预估)，与材料更新同一事务(B075)
-        await this.quoteService.syncFromSample(id, manager);
+        // 版师实测耗用落库→同步未成单报价的报价耗用(P1#11:实耗替换预估)，与材料更新同一事务(B075)。
+        // 只有实耗真的改了才同步：版师只填寄回单号/工价时页面也会把全部材料行带上，原来每存一次都重建报价
+        const n = (v: unknown) => (v == null || v === '' ? '' : String(+(v as any)));
+        if (materialRows.some((m) => m.actualUsage !== undefined && n(m.actualUsage) !== n(own.get(Number(m.id))))) {
+          await this.quoteService.syncFromSample(id, manager);
+        }
       }
       if (dto.returnNo) {
         entity.return_no = dto.returnNo;

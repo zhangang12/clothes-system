@@ -283,3 +283,22 @@ describe('QuoteEditView 选到未授权客户的样衣（2026-09-21 Amanda：报
   });
 });
 
+describe('QuoteEditView 样衣上的最终买家未授权（生产上 Dean/Nina 建出了自己打不开的报价）', () => {
+  it('中间商可用、买家未授权：带入中间商，不带入买家并提示', async () => {
+    const { ElMessage } = await import('element-plus');
+    const warn = vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({}) as any);
+    mockQuoteGet.mockResolvedValue({ data: { ...detail, customer_id: 1, buyer_id: null, sample_id: null, items: [] } });
+    const wrapper = mountView();
+    const vm: any = wrapper.vm;
+    await vi.waitFor(() => expect(vm.form.middlemanId).toBe(1));
+    vm.form.middlemanId = undefined;
+    mockSampleGet.mockResolvedValueOnce({ data: { id: 160, customer_id: 31, middleman_name: 'DATEX', buyer_id: 27, buyer_name: 'LRS', style_no: 'X' } });
+    mockCustomerGet.mockImplementation((id: number) => (id === 27 ? Promise.reject({ response: { status: 404 } }) : Promise.resolve({ data: { id, customer_no: `C-${id}`, name: `客户${id}` } })));
+    await vm.onSample(160);
+    expect(String(vm.form.middlemanId)).toBe('31');
+    expect(vm.form.buyerId).toBeFalsy();
+    expect(String(warn.mock.calls.at(-1)?.[0])).toContain('LRS');
+    warn.mockRestore();
+  });
+});
+

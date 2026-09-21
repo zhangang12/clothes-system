@@ -415,6 +415,17 @@ describe('SettlementListView', () => {
     expect(mockOrderList).toHaveBeenLastCalledWith(expect.objectContaining({ keyword: 'DD-2026' }));
   });
 
+  // 2026-09-22 复查：B080 对业务把预览金额置 null，页面原来把 null 显示成 ¥0.00
+  it('成本预览金额被脱敏（业务账号）→ 认出是脱敏，不显示成 0.00；财务看到的照常', async () => {
+    const wrapper = mountView(UserRole.ADMIN);
+    await vi.waitFor(() => expect(mockList).toHaveBeenCalled());
+    const vm = wrapper.vm as any;
+    vm.costPreview = { rows: [{ cost_name: 'A', amount: null }], paid_tax: null, unpaid_tax: null, unpaid_count: null };
+    expect(vm.previewMasked).toBe(true);
+    vm.costPreview = { rows: [{ cost_name: 'A', amount: '100.0000' }], paid_tax: 100, unpaid_tax: 0, unpaid_count: 0 };
+    expect(vm.previewMasked).toBe(false);
+  });
+
   it('B108 连切两个订单：先发的慢响应不能盖掉后发的成本预览', async () => {
     const wrapper = mountView(UserRole.ADMIN);
     await vi.waitFor(() => expect(mockList).toHaveBeenCalled());

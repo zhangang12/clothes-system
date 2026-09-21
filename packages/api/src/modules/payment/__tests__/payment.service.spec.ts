@@ -112,6 +112,19 @@ describe('PaymentService', () => {
     expect(balance).toBe(800);
   });
 
+  // 2026-09-22 复查：余额是 DECIMAL 字符串，浮点直接相加 0.7+0.1=0.7999…，页面「一键冲抵」填 0.80 被自己的余额拦下
+  it('多笔余额求和没有浮点尾差；一键冲抵全额（两位小数）能过闸门', async () => {
+    mockPrepayRepo.find.mockResolvedValue([makePrepayment({ balance: '0.7000' }), makePrepayment({ balance: '0.1000' })]);
+    expect(await service.getAvailablePrepayBalance(5)).toBe(0.8);
+    mockPrepayRepo.find.mockResolvedValue([
+      makePrepayment({ balance: '1234.5600' }), makePrepayment({ balance: '100.1000' }), makePrepayment({ balance: '0.0300' }),
+    ]);
+    expect(await service.getAvailablePrepayBalance(5)).toBe(1334.69);
+    mockManager.find.mockResolvedValue([makePrepayment({ balance: '0.7000' }), makePrepayment({ balance: '0.1000' })]);
+    await expect((service as any)._assertPrepayOffset(5, 100, 0.8, mockManager)).resolves.toBeUndefined();
+    await expect((service as any)._assertPrepayOffset(5, 100, 0.81, mockManager)).rejects.toThrow('超过可用余额');
+  });
+
   // UT-PAY-03: createPaymentRequest calculates actual_pay = amount - prepay_offset
   it('UT-PAY-03 createPaymentRequest computes actual_pay correctly', async () => {
     const dto = { type: ReconcileType.CONTRACT, factory_id: 5, amount: 3000, prepay_offset: 500 };
@@ -248,6 +261,15 @@ describe('PaymentService', () => {
       armUpdate(draft(), { prepays: [makePrepayment({ balance: 100 })] });
       await expect(service.updatePaymentRequest(9, { prepay_offset: 500 } as any, ADMIN))
         .rejects.toThrow(BadRequestException);
+    });
+
+    it('清空「冲抵预付」（页面发 null）= 冲抵归零，不再沿用旧值；不传 = 不改', async () => {
+      armUpdate(draft({ prepay_offset: '300.0000' }), { prepays: [makePrepayment({ balance: 1000 })] });
+      await service.updatePaymentRequest(9, { prepay_offset: null } as any, ADMIN);
+      expect(savedPr()).toEqual(expect.objectContaining({ prepay_offset: 0, actual_pay: 1000 }));
+      armUpdate(draft({ prepay_offset: '300.0000' }), { prepays: [makePrepayment({ balance: 1000 })] });
+      await service.updatePaymentRequest(9, { description: '改备注' } as any, ADMIN);
+      expect(savedPr()).toEqual(expect.objectContaining({ prepay_offset: 300, actual_pay: 700 }));
     });
 
     it('金额必须大于 0', async () => {

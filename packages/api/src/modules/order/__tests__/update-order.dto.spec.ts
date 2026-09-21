@@ -57,7 +57,9 @@ describe('B006 订单更新类接口的 body 校验', () => {
     await expect(pipe.transform({ status: 'DONE' }, bodyOf(UpdateOrderDto))).rejects.toThrow(BadRequestException);
     await expect(pipe.transform({ unit_price: 'abc' }, bodyOf(UpdateOrderDto))).rejects.toThrow(BadRequestException);
     await expect(pipe.transform({ split_mode: 'BY_COLOR_SIZE' }, bodyOf(UpdateOrderDto))).rejects.toThrow(BadRequestException);
-    await expect(pipe.transform({ customer_po: 'x'.repeat(51) }, bodyOf(UpdateOrderDto))).rejects.toThrow(BadRequestException);
+    // 上限跟列宽 varchar(255) 走；生产里真有 153 字的客户 PO（9-22 真库往返发现原先 50 的上限挡住了 12 张订单）
+    await expect(pipe.transform({ customer_po: 'x'.repeat(256) }, bodyOf(UpdateOrderDto))).rejects.toThrow(BadRequestException);
+    await expect(pipe.transform({ customer_po: 'x'.repeat(153) }, bodyOf(UpdateOrderDto))).resolves.toBeDefined();
     await expect(pipe.transform({ materials: [{ item_name: 'A', net_usage: -1 }] }, bodyOf(UpdateOrderDto))).rejects.toThrow(BadRequestException);
   });
 

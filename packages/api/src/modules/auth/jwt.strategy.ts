@@ -10,6 +10,9 @@ import { SysUser } from './sys-user.entity';
 import { SupplierAccount } from './supplier-account.entity';
 import { REDIS_CLIENT } from '../../common/services/numbering.service';
 
+// 改密吊销校验读 Redis 的时限；本机 Redis 正常 1ms 内返回
+const REVOKE_CHECK_TIMEOUT_MS = 300;
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   private readonly logger = new Logger(JwtStrategy.name);
@@ -35,11 +38,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
    */
   private async assertNotRevoked(type: 'admin' | 'supplier', id: number, iat?: number): Promise<void> {
     let ts: string | null;
+    // 限时读：ioredis 断线时命令默认进离线队列、重试 20 次，一条 get 要十几秒才报错——
+    // 这里每个请求都要读，不限时的话 Redis 一断全站请求一起卡住（前端 15 秒超时），与上面「读失败就放行」的本意相反
+    let timer: NodeJS.Timeout | undefined;
     try {
-      ts = await this.redis.get(pwdTsKey(type, id));
+      ts = await Promise.race([
+        this.redis.get(pwdTsKey(type, id)),
+        new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`超过 ${REVOKE_CHECK_TIMEOUT_MS}ms`)), REVOKE_CHECK_TIMEOUT_MS); }),
+      ]);
     } catch (e) {
       this.logger.warn(`读取改密时间失败(${type}#${id})，本次跳过校验: ${(e as Error)?.message}`);
       return;
+    } finally {
+      if (timer) clearTimeout(timer);
     }
     if (!ts) return;
     if (!iat || iat < Number(ts)) throw new UnauthorizedException('密码已修改，请重新登录');

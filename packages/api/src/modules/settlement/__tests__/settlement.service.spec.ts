@@ -535,6 +535,37 @@ describe('SettlementService', () => {
       expect(settleSave[1]).toMatchObject({ freight_fee: 0, express_fee: 0, sample_fee: 0, other_fee: 0 });
     });
 
+    // 2026-09-22 复查：库里读出 "0.0000"、页面回传 0，按字符串比每次编辑都给四项费用留「改过」的痕 → 从此不再随对账刷新
+    it('只改备注、四项费用原样回传（库里是 "0.0000"/"300.0000" 字符串）→ 不留费用痕', async () => {
+      const s = makeSettlement({ status: SettlementStatus.DRAFT, freight_fee: '0.0000', express_fee: '300.0000', sample_fee: '0.0000', other_fee: '0.0000', exchange_rate: '7.1000' });
+      const manager = makeManager(s, { receipts: [], costs: [] });
+      mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+      await service.update(1, { description: '补备注', freight_fee: 0, express_fee: 300, sample_fee: 0, other_fee: 0, exchange_rate: 7.1 } as any, 7);
+      const diffs: any[] = mockChangeLogDep.record.mock.calls.at(-1)![2];
+      const changed = diffs.filter((d) => String(d.old ?? '') !== String(d.new ?? ''));
+      expect(changed).toEqual([]);
+    });
+
+    it('真改了运杂费 → 留痕，且记的是数值', async () => {
+      const s = makeSettlement({ status: SettlementStatus.DRAFT, freight_fee: '0.0000' });
+      const manager = makeManager(s, { receipts: [], costs: [] });
+      mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));
+      await service.update(1, { freight_fee: 800 } as any, 7);
+      const diffs: any[] = mockChangeLogDep.record.mock.calls.at(-1)![2];
+      expect(diffs.find((d) => d.field === 'freight_fee')).toEqual({ field: 'freight_fee', old: 0, new: 800 });
+    });
+
+    it('旧版本留下的「0.0000→0」假痕不算人工改过，刷新照常按归集值覆盖', async () => {
+      const s = makeSettlement({ status: SettlementStatus.DRAFT, order_id: 10, freight_fee: 8000, express_fee: 300 });
+      const manager = arm(s, [
+        { field: 'freight_fee', old_value: '0.0000', new_value: '0' },
+        { field: 'express_fee', old_value: '300.0000', new_value: '300' },
+      ]);
+      await service.refreshCost(1);
+      const settleSave = manager.save.mock.calls.find((c: any[]) => c[0] === Settlement);
+      expect(settleSave[1]).toMatchObject({ freight_fee: 0, express_fee: 0 });
+    });
+
     it('建单时手填的期间费用留痕（字段名=列名），刷新据此认出是人工定的', async () => {
       const manager = makeManager();
       mockDataSource.transaction.mockImplementationOnce((cb) => cb(manager));

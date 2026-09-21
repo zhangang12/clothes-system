@@ -23,6 +23,7 @@ const mockVersionHistory = vi.fn().mockResolvedValue({ data: [] });
 const mockListPatternmakers = vi.fn();
 const mockPurchase = vi.fn();
 const mockShip = vi.fn();
+const mockPmSave = vi.fn().mockResolvedValue({ data: {} });
 vi.mock('@/api/sample', () => ({
   sampleApi: {
     get: (...a: any[]) => mockSampleGet(...a),
@@ -30,6 +31,7 @@ vi.mock('@/api/sample', () => ({
     listPatternmakers: (...a: any[]) => mockListPatternmakers(...a),
     purchaseMaterial: (...a: any[]) => mockPurchase(...a),
     ship: (...a: any[]) => mockShip(...a),
+    patternmakerSave: (...a: any[]) => mockPmSave(...a),
   },
 }));
 // 生成采购要过两道确认框；这里一律放行，焦点留在「守卫有没有复位」上
@@ -105,6 +107,22 @@ describe('SampleEditView', () => {
     vi.clearAllMocks();
     mockRoute.params = { id: '7' };
     mockRoute.query = {};
+  });
+
+  // 2026-09-22 复查：实耗没填的行原来 Number(null) 发成 0，库里「未实测」被写成「实测 0」
+  it('版师保存：没填实耗的行不发 actualUsage（不再写成 0），填了的照发数字，行 ID 原样', async () => {
+    mockSampleGet.mockResolvedValue({ data: { ...makeDetail(), status: 'SAMPLING', materials: [
+      { id: '501', item_name: '面料', actual_usage: null, sort_order: 0 },
+      { id: '502', item_name: '拉链', actual_usage: '0.9500', sort_order: 1 },
+    ] } });
+    const w = mountView();
+    await flushPromises();
+    await (w.vm as any).savePatternmaker();
+    await flushPromises();
+    const mats = mockPmSave.mock.calls.at(-1)![1].materials;
+    expect(mats[0].id).toBe('501');
+    expect(mats[0].actualUsage).toBeUndefined();
+    expect(mats[1]).toMatchObject({ id: '502', actualUsage: 0.95 });
   });
 
   // ── L12:制版师下拉选项 id 归一成数字,与 Number(patternmaker_id) 回显值同型 ──

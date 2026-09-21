@@ -7,6 +7,8 @@ import { CreateExportInvoiceDto } from '../../modules/invoice/dto/create-export-
 import { UpdateReconciliationDraftDto } from '../../modules/reconciliation/dto/update-reconciliation-draft.dto';
 import { UpdateQuoteDto } from '../../modules/quote/dto/update-quote.dto';
 import { UpdateCustomerDto } from '../../modules/customer/dto/update-customer.dto';
+import { CreateReconciliationDto } from '../../modules/reconciliation/dto/create-reconciliation.dto';
+import { CreateSettlementDto } from '../../modules/settlement/dto/create-settlement.dto';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -95,6 +97,25 @@ describe('真实请求体过全局校验管道（2026-09-21 生产回归）', ()
       banks: [], expresses: [],
     };
     expect(await messagesOf(UpdateCustomerDto, body)).toEqual([]);
+  });
+
+  // 2026-09-22 复查补：这两个新建入口批次前就 400（下拉值是字符串 ID），一直没人发现——8-12 King 建结算单连点两次 400
+  it('POST /reconciliations 后台新建合同对账：合同/批次/工厂 ID 与单价取自下拉和批次（字符串）→ 放行并转成数字', async () => {
+    const body = {
+      type: 'CONTRACT', subType: 'EXPENSE', factory_id: '36', contract_id: '237', merge_into_parent: false,
+      invoice_no: '', description: '', expenses: [], deductions: [],
+      shipments: [{ shipment_id: '42', contract_id: '237', style_no: 'M26DWCP087', item_name: '面料', snapshot_unit_price: '12.5000', qty: '100' }],
+    };
+    expect(await messagesOf(CreateReconciliationDto, body)).toEqual([]);
+    const out: any = await run(CreateReconciliationDto, body);
+    expect(out.contract_id).toBe(237);
+    expect(out.shipments[0]).toMatchObject({ shipment_id: 42, contract_id: 237, snapshot_unit_price: 12.5, qty: 100 });
+  });
+
+  it('POST /settlements 新建结算：订单 ID 来自下拉（字符串）→ 放行并转成数字', async () => {
+    const body = { order_id: '120', shipment_ids: ['51', '52'], description: '', costs: [], currency: 'USD' };
+    expect(await messagesOf(CreateSettlementDto, body)).toEqual([]);
+    expect(((await run(CreateSettlementDto, body)) as any).order_id).toBe(120);
   });
 
   it('怪值仍然拦得住：行 ID 为负数/带字母/小数 → 400', async () => {

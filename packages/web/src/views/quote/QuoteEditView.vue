@@ -507,8 +507,11 @@ async function onSample(id?: number) {
     }
     if (!form.styleNo && s.style_no) form.styleNo = s.style_no;
     if (!form.buyerId && s.buyer_id) {
-      if (sameMiddleman) form.buyerId = s.buyer_id;
-      else ElMessage.info('这件样衣的中间商和报价不同，样衣上的最终买家没有带入');
+      if (!sameMiddleman) ElMessage.info('这件样衣的中间商和报价不同，样衣上的最终买家没有带入');
+      // 最终买家同样按授权可见：生产上 Dean/Nina 就是这样建出了自己打不开的报价（买家 LRS 没授权给他们）
+      else if (!(await canUseCustomer(s.buyer_id, 'buyer'))) {
+        ElMessage.warning(`样衣上的最终买家「${s.buyer_name || `#${s.buyer_id}`}」还没授权给你，没有带入；需要的话请主管在「客户管理」授权`);
+      } else form.buyerId = s.buyer_id;
     }
     // 样衣带出的中间商/买家同样可能不在前 100 条选项里 → 按需补拉
     await ensureSelectedOptions();
@@ -517,8 +520,9 @@ async function onSample(id?: number) {
 
 // 这个客户当前账号能不能用：已在下拉选项里 = 能；不在（可能只是没排进前 100 条）就静默查一次详情，
 // 查不到（未授权，后端与「不存在」同响应）= 不能。管理员后端不限，下拉里一定有
-async function canUseCustomer(id: number | string): Promise<boolean> {
-  if (middlemen.value.some((m: any) => String(m.id) === String(id))) return true;
+async function canUseCustomer(id: number | string, kind: 'middleman' | 'buyer' = 'middleman'): Promise<boolean> {
+  const opts = kind === 'buyer' ? buyers.value : middlemen.value;
+  if (opts.some((m: any) => String(m.id) === String(id))) return true;
   try { await customerApi.get(Number(id), { silent: true }); return true; } catch { return false; }
 }
 

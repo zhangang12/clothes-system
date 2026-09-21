@@ -455,7 +455,7 @@
                 <template #default="{ row }">{{ row.qty != null ? row.qty : '—' }}</template>
               </el-table-column>
               <el-table-column prop="amount" label="金额(含税)" width="116" align="right">
-                <template #default="{ row }">{{ (+row.amount).toFixed(2) }}</template>
+                <template #default="{ row }">{{ row.amount != null ? (+row.amount).toFixed(2) : '—' }}</template>
               </el-table-column>
               <el-table-column label="状态" width="132">
                 <template #default="{ row }">
@@ -464,7 +464,9 @@
                 </template>
               </el-table-column>
             </el-table>
-            <div class="labor-sum">
+            <!-- 金额对非财务脱敏（B080，后端置 null）：原来 null 被显示成 ¥0.00，业务会以为这单没有成本 -->
+            <div v-if="previewMasked" class="labor-sum">自动聚合 {{ costPreview.rows.length }} 条（金额仅财务可见）</div>
+            <div v-else class="labor-sum">
               自动聚合 {{ costPreview.rows.length }} 条，合计 ¥{{ previewTotal.toFixed(2) }}；
               其中<b>已付款计入成本 ¥{{ (+costPreview.paid_tax).toFixed(2) }}</b>
               <span v-if="costPreview.unpaid_count">，另有 {{ costPreview.unpaid_count }} 条已确认未付 ¥{{ (+costPreview.unpaid_tax).toFixed(2) }} 暂不计入</span>
@@ -879,6 +881,7 @@ function toggleBatch(id: number, on: boolean) {
 // 业务只能理解成坏了（生产实证：该款号有 6 张已确认/已付款对账单、合计 3.7 万，界面一片空白）。
 // 这里不改任何计算口径，只是把同一份聚合结果提前展示。
 const costPreview = ref<any>(null);
+const previewMasked = computed(() => costPreview.value?.paid_tax === null);
 const previewLoading = ref(false);
 const previewTotal = computed(() => (costPreview.value?.rows ?? [])
   .reduce((s: number, r: any) => s + (+r.amount || 0), 0));

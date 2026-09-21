@@ -154,6 +154,7 @@ import { printQuote, printQuoteBatch } from '@/utils/quotePrint';
 import { exportQuoteExcel } from '@/utils/quoteExcel';
 import { exportAll } from '@/utils/exportAll';
 import { companyApi } from '@/api/company';
+import { customerApi } from '@/api/customer';
 import { quoteApi } from '@/api/quote';
 import { sampleApi } from '@/api/sample';
 import { useRemoteOptions, listParams } from '@/utils/remoteOptions';
@@ -360,10 +361,26 @@ async function createFromSample() {
   fromSampleLoading.value = true;
   let newId: number | undefined;
   try {
+    // 【先看样衣上的客户有没有授权给自己】（2026-09-22 复查，与报价编辑页同口径）：
+    // 后端只许用自己看得见的客户建报价（原来能建但建完自己打不开）。样衣是公共的、客户资料是机密的——
+    // 中间商没授权：直接说清楚找谁，不发请求撞 400；买家没授权：不带买家照样建，提示一句
+    const canUse = async (id: unknown) => {
+      try { await customerApi.get(Number(id), { silent: true }); return true; } catch { return false; }
+    };
+    const mainId = sample.customer_id || sample.buyer_id;
+    if (mainId && !(await canUse(mainId))) {
+      ElMessage.warning('这张样衣挂的客户还没授权给你，建不了报价；请主管在「客户管理」里给你授权后再建');
+      return;
+    }
+    let buyerId = sample.buyer_id || undefined;
+    if (buyerId && sample.customer_id && !(await canUse(buyerId))) {
+      buyerId = undefined;
+      ElMessage.warning('样衣上的最终买家还没授权给你，报价里没有带入买家；需要的话请主管在「客户管理」授权');
+    }
     // create DTO 是 camelCase；middlemanId 必填（= 样衣的 customer_id）
     const r: any = await quoteApi.create({
       middlemanId: sample.customer_id,
-      buyerId: sample.buyer_id || undefined,
+      buyerId,
       styleNo: sample.style_no,
       sampleId: sample.id,
     });

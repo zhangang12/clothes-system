@@ -434,19 +434,40 @@ export class QuoteService {
       byName.get(k)!.push(i);
     }
     const seen = new Map<string, number>();
-    const items = this.buildItems(quote.id, materials.map((m) => {
+    const matched = new Set<QuotationItem>();
+    // 【三处数据丢失修复】（2026-09-22 真库往返测试发现，批次前的代码就是这样）：
+    // 只是把样衣打开原样保存，约 50 张关联报价的明细被改——①样衣没填用量时报价用量被写成 0、金额归零；
+    // ②报价里单独加的行（如客人要求加的拉链）被整行删掉；③报价行上的拉链三件套被清空。
+    // 修法只「多保留数据」，不改同步本身的口径：样衣有实耗用实耗、有预估用预估（与原来一致），
+    // 两者都没有时保留报价原用量；配不上样衣行的报价行原样留在后面；三件套沿用报价行上的值。
+    const synced: CreateQuoteItemDto[] = materials.map((m) => {
       const k = String(m.item_name || '').trim();
       const idx = seen.get(k) ?? 0;
       seen.set(k, idx + 1);
       const old = k ? byName.get(k)?.[idx] : undefined;
+      if (old) matched.add(old);
+      const sampleUsage = +m.actual_usage > 0 ? +m.actual_usage : (+m.qty > 0 ? +m.qty : null);
       return {
         part: m.part, itemName: m.item_name, width: m.width, color: m.colors,
-        supplier: m.supplier_name, quoteUsage: +m.actual_usage || +m.qty || 0,
+        supplier: m.supplier_name,
+        quoteUsage: sampleUsage ?? (old ? +old.quote_usage : 0),
         rmbPrice: old ? +old.rmb_price : undefined,
         lossRate: old != null ? +old.loss_rate : 3,
         unit: old?.unit, remark: old?.remark,
+        puller: old?.puller ?? undefined, zipperTeeth: old?.zipper_teeth ?? undefined, codeBand: old?.code_band ?? undefined,
       } as CreateQuoteItemDto;
-    }), rate);
+    });
+    const quoteOnly: CreateQuoteItemDto[] = oldItems.filter((i) => !matched.has(i)).map((i) => ({
+      part: i.part, itemName: i.item_name, width: i.width, color: i.color, supplier: i.supplier,
+      quoteUsage: i.quote_usage as any, rmbPrice: i.rmb_price as any, lossRate: i.loss_rate != null ? +i.loss_rate : 3,
+      unit: i.unit, remark: i.remark,
+      puller: i.puller ?? undefined, zipperTeeth: i.zipper_teeth ?? undefined, codeBand: i.code_band ?? undefined,
+    } as CreateQuoteItemDto));
+    const items = this.buildItems(quote.id, [...synced, ...quoteOnly], rate);
+    // 没有任何变化就一行都不写：拍板口径是「金额变化才清审批」，原来每次保存样衣都清审批、整表重建
+    const sig = (r: any) => [r.item_name, r.part, r.width, r.color, r.supplier, r.unit, r.remark, r.puller, r.zipper_teeth, r.code_band]
+      .map((v) => String(v ?? '')).concat([r.quote_usage, r.rmb_price, r.loss_rate].map((v) => (v == null || v === '' ? '' : String(+v)))).join('|');
+    if (items.length === oldItems.length && items.every((it, i) => sig(it) === sig(oldItems[i]))) return;
     await manager.delete(QuotationItem, { quote_id: quote.id });
     if (items.length) await manager.save(QuotationItem, items);
     const fees = await manager.find(QuotationFee, { where: { quote_id: quote.id } });

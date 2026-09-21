@@ -407,6 +407,51 @@ describe('报价机密行级安全 (H4/H6)', () => {
       expect(mockSampleMaterialRepo.find).toHaveBeenCalledWith(expect.objectContaining({ order: { sort_order: 'ASC', id: 'ASC' } }));
     });
 
+    it('2026-09-22 真库往返发现：样衣没填用量时保留报价原用量，不再写成 0 把金额清零', async () => {
+      mockQuoteRepo.find.mockResolvedValue([quote()]);
+      // 里料那行版师录了实测耗用（0.9≠0.8）→ 触发写入；面料那行样衣没填用量 → 必须保留报价原用量
+      mockSampleMaterialRepo.find.mockResolvedValue([{ item_name: '面料', qty: null, actual_usage: null }, { item_name: '里料', qty: 0.8, actual_usage: 0.9 }]);
+      txFind(new Map<any, any[]>([[QuotationItem, [
+        { id: 9, sort_order: 0, item_name: '面料', quote_usage: 1.42, rmb_price: 9.9, loss_rate: 3 },
+        { id: 10, sort_order: 1, item_name: '里料', quote_usage: 0.8, rmb_price: 2.7, loss_rate: 3 },
+      ]], [QuotationFee, []]]));
+      await service.syncFromSample(109);
+      expect(savedItems()[0]).toMatchObject({ item_name: '面料', quote_usage: 1.42, rmb_price: 9.9 });
+      expect(savedItems()[1]).toMatchObject({ item_name: '里料', quote_usage: 0.9, rmb_price: 2.7 });
+    });
+
+    it('2026-09-22 真库往返发现：报价里单独加的行（样衣上没有）原样保留在后面，不再被删', async () => {
+      mockQuoteRepo.find.mockResolvedValue([quote()]);
+      mockSampleMaterialRepo.find.mockResolvedValue([{ item_name: '主标', qty: 1, actual_usage: 1.2 }]); // 实测耗用变了 → 触发写入
+      txFind(new Map<any, any[]>([[QuotationItem, [
+        { id: 1, sort_order: 0, item_name: '主标', quote_usage: 1, rmb_price: 0.33, loss_rate: 3 },
+        { id: 2, sort_order: 1, item_name: '5#树脂拉链开尾', quote_usage: 1, rmb_price: 1.1, loss_rate: 3, unit: '条', remark: '客人要求加' },
+      ]], [QuotationFee, []]]));
+      await service.syncFromSample(109);
+      expect(savedItems().map((i: any) => [i.item_name, i.quote_usage, i.rmb_price, i.remark])).toEqual([
+        ['主标', 1.2, 0.33, undefined],
+        ['5#树脂拉链开尾', 1, 1.1, '客人要求加'],
+      ]);
+    });
+
+    it('2026-09-22 真库往返发现：同步不再清空报价行上的拉链三件套', async () => {
+      mockQuoteRepo.find.mockResolvedValue([quote()]);
+      mockSampleMaterialRepo.find.mockResolvedValue([{ item_name: '拉链', qty: 1, actual_usage: 1.5 }]); // 实测耗用变了 → 触发写入
+      txFind(new Map<any, any[]>([[QuotationItem, [{ id: 5, sort_order: 0, item_name: '拉链', quote_usage: 1, rmb_price: 2, loss_rate: 3, puller: '葫芦头', zipper_teeth: '5#尼龙', code_band: '黑色' }]], [QuotationFee, []]]));
+      await service.syncFromSample(109);
+      expect(savedItems()[0]).toMatchObject({ puller: '葫芦头', zipper_teeth: '5#尼龙', code_band: '黑色' });
+    });
+
+    it('2026-09-22 真库往返发现：样衣原样保存、报价没有任何变化时一行都不写，也不清审批', async () => {
+      mockQuoteRepo.find.mockResolvedValue([{ ...quote(), approval_status: 'APPROVED' }]);
+      mockSampleMaterialRepo.find.mockResolvedValue([{ item_name: '主标', qty: 1, actual_usage: null, part: null, width: null, colors: null, supplier_name: null }]);
+      txFind(new Map<any, any[]>([[QuotationItem, [{ id: 1, sort_order: 0, item_name: '主标', part: null, width: null, color: null, supplier: null, quote_usage: '1.0000', rmb_price: '0.3300', loss_rate: '3.00', unit: null, remark: null }]], [QuotationFee, []]]));
+      mockTxManager.save.mockClear(); mockTxManager.delete.mockClear();
+      await service.syncFromSample(109);
+      expect(mockTxManager.delete).not.toHaveBeenCalled();
+      expect(mockTxManager.save).not.toHaveBeenCalled();
+    });
+
     it('B075 传入 manager 时在调用方事务里跑：读写都走该 manager，不另开事务', async () => {
       const mgr: any = {
         find: jest.fn((e: any) => Promise.resolve(e === Quotation ? [quote()] : e === SampleMaterial ? mats : e === QuotationItem ? oldItems : [])),

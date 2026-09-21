@@ -128,7 +128,9 @@ export class PaymentService {
     const rows = manager
       ? await manager.find(Prepayment, { where })
       : await this.prepayRepo.find({ where });
-    return rows.reduce((sum, r) => sum + (+r.balance), 0);
+    // 余额是 DECIMAL(…,4)：按万分位整数累加再还原。直接浮点相加 0.7+0.1=0.7999…，页面「一键冲抵」按两位小数填 0.80，
+    // 反被自己的余额拦下（「冲抵 0.8 超过可用余额 0.80」）；两笔以上有余额的工厂都可能撞上（2026-09-22 复查）
+    return rows.reduce((sum, r) => sum + Math.round(+r.balance * 10000), 0) / 10000;
   }
 
   // ===== 付款申请的闸门（建单 / 改草稿共用，B009/B010/B011）=====
@@ -140,13 +142,14 @@ export class PaymentService {
     factoryId: number, amount: number, prepayOffset: number, manager?: EntityManager,
   ): Promise<void> {
     if (!(prepayOffset >= 0)) throw new BadRequestException('预付款冲抵金额不能为负数');
-    if (prepayOffset > amount) {
+    const w = (v: number) => Math.round(v * 10000); // 金额比较一律按万分位整数，免得浮点尾差误拦
+    if (w(prepayOffset) > w(amount)) {
       throw new BadRequestException('预付款冲抵金额不能超过付款申请金额');
     }
     // Overpayment guard: prepay_offset cannot exceed available balance
     if (prepayOffset > 0) {
       const availableBalance = await this.getAvailablePrepayBalance(factoryId, manager);
-      if (prepayOffset > availableBalance) {
+      if (w(prepayOffset) > w(availableBalance)) {
         throw new BadRequestException(
           `预付款冲抵金额 ${prepayOffset} 超过可用余额 ${availableBalance.toFixed(2)}`,
         );
@@ -645,7 +648,8 @@ export class PaymentService {
         throw new ForbiddenException('只能修改自己创建的付款申请草稿');
       }
       const factoryId = Number(dto.factory_id ?? pr.factory_id);
-      const offset = Number(dto.prepay_offset ?? pr.prepay_offset ?? 0);
+      // undefined = 不改、null = 清空（B115 口径）：页面把「冲抵预付」清空发的是 null，原来 ?? 回落到旧值，清不掉
+      const offset = dto.prepay_offset === undefined ? Number(pr.prepay_offset ?? 0) : Number(dto.prepay_offset ?? 0);
       const amount = Number(dto.amount ?? pr.amount);
       if (!(amount > 0)) throw new BadRequestException('申请金额须大于 0');
       // 冲抵预付：不能为负、不超申请额、不超该工厂可用余额——与创建时同一道闸门，改单同样要过
