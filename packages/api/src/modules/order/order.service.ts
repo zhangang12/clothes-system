@@ -86,8 +86,10 @@ export class OrderService {
       const finalPurchase = m.final_purchase ?? total;
       const budget = m.unit_price ? +(finalPurchase * m.unit_price).toFixed(4) : null;
       return this.materialRepo.create({
-        // 带 id 即原地更新（保住行 ID，合同侧 contract_material.order_material_id 才不会悬空）
-        ...(m.id ? { id: m.id } : {}),
+        // 带 id 即原地更新（保住行 ID，合同侧 contract_material.order_material_id 才不会悬空）。
+        // 【必须 String()】bigint 从库里读出来是字符串，TypeORM save 按严格相等判「行是否已存在」：
+        // 给它数字 1669 会认不出库里的 "1669"，当新行 INSERT → Duplicate entry for key PRIMARY（2026-09-21 生产 500）
+        ...(m.id ? { id: String(m.id) as any } : {}),
         order_id: orderId, quote_item_id: m.quote_item_id, item_name: m.item_name,
         part: m.part, width: m.width, color: m.color, composition: m.composition, supplier: m.supplier,
         puller: m.puller ?? null, zipper_teeth: m.zipper_teeth ?? null, code_band: m.code_band ?? null,

@@ -512,4 +512,10 @@ describe('报价机密行级安全 (H4/H6)', () => {
       expect(mockSampleMaterialRepo.find).toHaveBeenCalledWith(expect.objectContaining({ order: { sort_order: 'ASC', id: 'ASC' } }));
     });
   });
+
+  it('2026-09-21 Amanda：不可见客户的提示要说清出路（仍不确认客户是否存在）', async () => {
+    mockCustomerService.visibleCustomerIds.mockResolvedValue([29, 30]);
+    await expect(service.create({ middlemanId: 31, styleNo: 'I27.115.08581' } as any, 20, { id: 20, role: 'BUSINESS' }))
+      .rejects.toThrow(/不存在或未授权给你.*客户管理.*授权/);
+  });
 });

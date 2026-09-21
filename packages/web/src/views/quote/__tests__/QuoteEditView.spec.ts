@@ -247,3 +247,39 @@ describe('QuoteEditView · 2026-09-20 审查', () => {
   });
 });
 
+describe('QuoteEditView 选到未授权客户的样衣（2026-09-21 Amanda：报价存不上，提示「客户 #31 不存在」）', () => {
+  it('样衣挂在未授权的中间商下：不带入中间商，当场弹窗说明要找主管授权', async () => {
+    const { ElMessageBox } = await import('element-plus');
+    const alertSpy = vi.spyOn(ElMessageBox, 'alert').mockResolvedValue('confirm' as any);
+    mockQuoteGet.mockResolvedValue({ data: { ...detail, customer_id: 1, buyer_id: null, sample_id: null, items: [] } });
+    const wrapper = mountView();
+    const vm: any = wrapper.vm;
+    await vi.waitFor(() => expect(vm.form.middlemanId).toBe(1));
+    vm.form.middlemanId = undefined; // 模拟新建：还没选中间商
+    mockSampleGet.mockResolvedValueOnce({ data: { id: 298, customer_id: 31, middleman_name: 'DATEX', buyer_id: 32, style_no: 'I27.115.08581' } });
+    mockCustomerGet.mockImplementation((id: number) => (id === 31 ? Promise.reject({ response: { status: 404 } }) : Promise.resolve({ data: { id, customer_no: `C-${id}`, name: `客户${id}` } })));
+    await vm.onSample(298);
+    expect(vm.form.middlemanId).toBeFalsy();
+    expect(vm.form.buyerId).toBeFalsy();
+    expect(vm.form.styleNo).toBe('I27.115.08581'); // 款号照常带入
+    expect(alertSpy).toHaveBeenCalled();
+    expect(String(alertSpy.mock.calls[0][0])).toContain('DATEX');
+    expect(String(alertSpy.mock.calls[0][0])).toContain('授权');
+    // 探测是否可见要静默，不能再冒一条「客户不存在」红字
+    expect(mockCustomerGet).toHaveBeenCalledWith(31, { silent: true });
+    alertSpy.mockRestore();
+  });
+
+  it('中间商可用（在下拉里或能查到详情）时照常带入', async () => {
+    mockQuoteGet.mockResolvedValue({ data: { ...detail, customer_id: 1, buyer_id: null, sample_id: null, items: [] } });
+    const wrapper = mountView();
+    const vm: any = wrapper.vm;
+    await vi.waitFor(() => expect(vm.form.middlemanId).toBe(1));
+    vm.form.middlemanId = undefined;
+    mockSampleGet.mockResolvedValueOnce({ data: { id: 150, customer_id: 30, middleman_name: 'RIACHUELO', buyer_id: null, style_no: 'X' } });
+    mockCustomerGet.mockImplementation((id: number) => Promise.resolve({ data: { id, customer_no: `C-${id}`, name: `客户${id}` } }));
+    await vm.onSample(150);
+    expect(String(vm.form.middlemanId)).toBe('30');
+  });
+});
+

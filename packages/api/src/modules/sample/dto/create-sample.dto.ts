@@ -1,11 +1,13 @@
 import {
   IsString, IsNotEmpty, IsOptional, IsInt, IsNumber, IsArray, MaxLength, ValidateNested,
 } from 'class-validator';
+import { IsIdLike } from '../../../common/validators/is-id-like';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class SampleMaterialDto {
-  @ApiPropertyOptional() @IsOptional() @IsInt() id?: number;
+  // 前端回传的行 ID 是字符串（mysql2 出 bigint 是字符串）；只写 @IsInt 会把整张样衣打成 400（2026-09-21 生产 74 次）
+  @ApiPropertyOptional() @IsOptional() @IsIdLike() id?: number | string;
   @ApiPropertyOptional() @IsOptional() @IsInt() sortOrder?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() arrangeDate?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) itemName?: string;

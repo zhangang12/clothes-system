@@ -201,6 +201,8 @@ const formRef = ref<FormInstance>();
 const saving = ref(false);
 const selContacts = ref<any[]>([]); const selBanks = ref<any[]>([]); const selExpress = ref<any[]>([]);
 const rules: FormRules = {
+  // 名称必填：此前前端不拦，空名称发到后端（2026-09-21 Helen 撞到「客户名称不能为空」）
+  name: [{ required: true, whitespace: true, message: '请填写客户名称', trigger: 'blur' }],
   type: [{ required: true, message: '请选择客户类型', trigger: 'change' }],
   // 关联中间商不再强制（用户反馈：直接客户没有中间商，选不到也无法手填，导致整个客户存不了）
 };

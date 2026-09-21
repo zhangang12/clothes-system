@@ -87,7 +87,9 @@ describe('UpdatePaymentRequestDto（改草稿）', () => {
   });
 
   it('amount 非数字 / ≤0 → 校验失败', async () => {
-    for (const bad of ['5000', 0]) {
+    // 纯数字字符串（如列表行回填的 "5000"）会被 @Type 转成数字、正常放行——那正是编辑草稿的真实形态
+    //（2026-09-21 生产回归：编辑草稿的 factory_id/reconcile_id 是字符串，不转就整单 400）。这里只拦真正的怪值
+    for (const bad of ['abc', 0, '-5']) {
       const { fields } = await errorsOf(UpdatePaymentRequestDto, { amount: bad });
       expect(fields).toContain('amount');
     }

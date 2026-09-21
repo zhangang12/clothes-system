@@ -353,7 +353,8 @@ describe('OrderService', () => {
       materials: [{ id: 11, item_name: '面料A' }, { item_name: '新增料C' }],
     } as any);
     const saved = manager.save.mock.calls.find((c) => Array.isArray(c[1]))?.[1];
-    expect(saved[0]).toMatchObject({ id: 11, item_name: '面料A' }); // 原地更新，ID 不变
+    // 原地更新，ID 不变；统一成库里读出来的字符串形态，TypeORM 才认得出是老行（2026-09-21 生产 500）
+    expect(saved[0]).toMatchObject({ id: '11', item_name: '面料A' });
     expect(saved[1].id).toBeUndefined();                            // 新增行不带 ID
     // 12 号行本次没提交 → 只删它，不再整表删
     expect(manager.delete).toHaveBeenCalledWith(OrderMaterial, expect.objectContaining({ order_id: 1 }));
@@ -807,5 +808,21 @@ describe('OrderService', () => {
     mockQuoteRepo.findOne.mockResolvedValue(null);
     await service.findOne(1);
     expect(mockQuoteRepo.findOne).toHaveBeenCalledWith({ where: { id: 55, deleted: 0 } });
+  });
+});
+
+describe('订单材料行 ID 落库前统一成字符串（2026-09-21 生产 500 回归）', () => {
+  it('行 ID 不论是数字还是字符串，交给 TypeORM 的都是库里读出来的字符串形态', () => {
+    const svc: any = Object.create(OrderService.prototype);
+    svc.materialRepo = { create: (v: any) => v };
+    const rows = svc.buildMaterials(120, 100, [
+      { id: 1669, item_name: '面料A', net_usage: 1, unit: '米' },
+      { id: '1670', item_name: '面料B', net_usage: 1, unit: '米' },
+      { item_name: '新加的料', net_usage: 1, unit: '米' },
+    ], []);
+    // 给 TypeORM 数字 1669，它按严格相等认不出库里的 "1669"，当新行 INSERT → Duplicate entry for key PRIMARY
+    expect(rows[0].id).toBe('1669');
+    expect(rows[1].id).toBe('1670');
+    expect('id' in rows[2]).toBe(false); // 新行不带 id，由库自增
   });
 });

@@ -4,15 +4,14 @@ import {
   MaxLength, Min, ValidateNested, IsIn, IsObject,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { IsIdLike } from '../../../common/validators/is-id-like';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateOrderMaterialDto {
   @ApiPropertyOptional({ description: '已有行ID：编辑时回传则原地更新，行ID保持不变（合同侧行级关联依赖它）；不传=新增行' })
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  id?: number;
+  @IsIdLike() // 别改回 @Type(Number)+@IsInt：转成数字后 TypeORM 认不出老行，INSERT 撞主键 500（见 is-id-like.ts）
+  id?: number | string;
 
   @ApiProperty()
   @IsString()

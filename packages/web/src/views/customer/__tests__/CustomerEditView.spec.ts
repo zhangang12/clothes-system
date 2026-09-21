@@ -170,3 +170,14 @@ describe('CustomerEditView', () => {
     expect(wrapper.text()).not.toContain('CN005');
   });
 });
+
+describe('CustomerEditView 客户名称必填（2026-09-21 Helen：空名称发到后端才被拦）', () => {
+  it('名称为空或只有空格：前端表单校验就拦下，不发请求', async () => {
+    const wrapper: any = mountView();
+    await wrapper.vm.$nextTick();
+    const rule = (wrapper.vm.rules?.name ?? [])[0];
+    expect(rule?.required).toBe(true);
+    expect(rule?.whitespace).toBe(true);
+  });
+});
+

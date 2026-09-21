@@ -98,7 +98,9 @@ export class QuoteService {
   private async assertCustomerVisible(customerId: number, user: { id: number; role?: string } | undefined, label: string): Promise<void> {
     const visible = await this.customerService.visibleCustomerIds(user);
     if (visible !== null && !visible.map(Number).includes(+customerId)) {
-      throw new BadRequestException(`${label} #${customerId} 不存在`);
+      // 2026-09-21 Amanda 选了别人建的样衣（挂在她没被授权的 DATEX 下）建报价，原提示「客户 #31 不存在」让人摸不着头脑。
+      // 改成说清出路；「不存在或未授权」并列，不向未授权者确认该客户存在（防枚举口径不变）
+      throw new BadRequestException(`${label} #${customerId} 不存在或未授权给你：客户资料需主管在「客户管理」里授权后才能用于报价`);
     }
   }
 

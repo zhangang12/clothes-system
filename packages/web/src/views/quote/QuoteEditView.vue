@@ -8,7 +8,8 @@
         <el-tag v-if="statusLabel" size="small" :type="form.status === 'ORDERED' ? 'success' : 'warning'">{{ statusLabel }}</el-tag>
       </div>
       <div class="ops">
-        <el-button v-if="!readonly && !statusLocked" type="primary" :icon="Check" :loading="saving" @click="save">保存</el-button>
+        <!-- 编辑已有报价时，状态加载出来之前不给保存：那一瞬间 statusLocked 还算不出来，点了会把空表单存上去 -->
+        <el-button v-if="!readonly && !statusLocked && (!editId || !!form.status)" type="primary" :icon="Check" :loading="saving" @click="save">保存</el-button>
         <el-button v-if="editId" :icon="Printer" @click="printDialog = true">打印/PDF</el-button>
         <el-button v-if="editId" :icon="Download" @click="exportExcel">导出Excel</el-button>
         <el-button v-if="!readonly && !statusLocked && editId" :icon="Download" :loading="importing" @click="importDialog = true">从样衣导入</el-button>
@@ -488,6 +489,17 @@ async function onSample(id?: number) {
     const s = res.data ?? res;
     // 最终买家挂在中间商名下：报价已经选了别的中间商时，样衣上的买家不是这张报价的买家，不带
     // （2026-09-15 #142 Nina：报价中间商是晋江必迪斯，导入的样衣挂在 BDS 下，带出了 BDS 的买家 SV）
+    // 样衣可能是别人建的、挂在你没被授权的中间商下（2026-09-21 Amanda 选了 ZYT 建的 DATEX 样衣）。
+    // 客户资料按授权可见，这种中间商带进来也存不上——当场说清楚，而不是等点保存才报错
+    if (!form.middlemanId && s.customer_id && !(await canUseCustomer(s.customer_id))) {
+      ElMessageBox.alert(
+        `这件样衣挂在中间商「${s.middleman_name || `#${s.customer_id}`}」名下，这个客户还没授权给你，所以不能用它建报价。`
+        + '请联系主管在「客户管理」里给你授权该客户后再建。',
+        '客户未授权', { type: 'warning' },
+      ).catch(() => {});
+      if (!form.styleNo && s.style_no) form.styleNo = s.style_no;
+      return;
+    }
     const sameMiddleman = !form.middlemanId || String(form.middlemanId) === String(s.customer_id ?? '');
     if (!form.middlemanId && s.customer_id) {
       form.middlemanId = s.customer_id;
@@ -501,6 +513,13 @@ async function onSample(id?: number) {
     // 样衣带出的中间商/买家同样可能不在前 100 条选项里 → 按需补拉
     await ensureSelectedOptions();
   } catch { /* 样衣详情失败不阻断 */ }
+}
+
+// 这个客户当前账号能不能用：已在下拉选项里 = 能；不在（可能只是没排进前 100 条）就静默查一次详情，
+// 查不到（未授权，后端与「不存在」同响应）= 不能。管理员后端不限，下拉里一定有
+async function canUseCustomer(id: number | string): Promise<boolean> {
+  if (middlemen.value.some((m: any) => String(m.id) === String(id))) return true;
+  try { await customerApi.get(Number(id), { silent: true }); return true; } catch { return false; }
 }
 
 // 切换币种：从 currency 字典带出默认汇率（字典 value=默认汇率）

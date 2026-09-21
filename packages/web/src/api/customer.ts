@@ -7,8 +7,9 @@ export const customerApi = {
     http.get<unknown, { data: PageResult<Customer> }>('/customers', { params }),
   select: (grade?: string) =>
     http.get<unknown, { data: Customer[] }>('/customers/select', { params: grade ? { grade } : {} }),
-  get: (id: number) =>
-    http.get<unknown, { data: Customer }>(`/customers/${id}`),
+  // config.silent：只用来探测「这个客户我能不能用」时传，失败不冒全局红字（见 api/index.ts）
+  get: (id: number, config?: Record<string, unknown>) =>
+    http.get<unknown, { data: Customer }>(`/customers/${id}`, config as any),
   create: (dto: CreateCustomerDto) =>
     http.post<unknown, { data: Customer }>('/customers', dto),
   importBatch: (rows: any[]) =>

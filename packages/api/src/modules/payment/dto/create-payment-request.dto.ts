@@ -7,18 +7,25 @@ export class CreatePaymentRequestDto {
   @IsEnum(ReconcileType)
   type: ReconcileType;
 
+  // 以下四个都加 @Type(() => Number)：编辑草稿时前端从列表行取值回填（openEditPR），
+  // bigint/decimal 从库里读出来是字符串，不转就是「factory_id must be a number」整单 400。
+  // 这几列都是普通列赋值，不参与 TypeORM 的主键判定，转成数字是安全的
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   reconcile_id?: number;
 
+  @Type(() => Number)
   @IsNumber()
   factory_id: number;
 
+  @Type(() => Number)
   @IsNumber()
   @Min(0.0001)
   amount: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   prepay_offset?: number;
